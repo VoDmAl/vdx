@@ -4,6 +4,18 @@
 
 ## 2026-05-23
 
+### Шаг L: CI workflow для vdx (ci axis L0 → L3)
+Добавлен `.github/workflows/ci.yml` (push main + pull_request → setup-node@v4,
+`cd cli && npm ci && npm test`). В `cli/package.json` добавлен alias
+`"test": "tsc --noEmit"` (нужен и для regex `npm test` в L2-предикате, и для
+семантики «npm test = quality gate»). Effect: `ci` ось v0.2.2 поднялась с
+**L0 до L3** в один Write — workflow есть (L1), regex `npm test` совпадает
+(L2), `pull_request` trigger без `|| true` (L3). L4 требует matrix/sentry —
+пока не делаем. Overall vdx остался L0 — теперь capping переехал на 4
+supporting-оси (reproducibility/secrets-config/shared-infra/shared-infra-drift),
+которые у meta-репо буквально пустые. Это правдивая оценка, не lying-L0.
+См. [docs/decisions.md](docs/decisions.md) N22.
+
 ### Шаг K: primary_subpackage в манифесте (O31 закрыт)
 Добавлено optional поле `[vdx].primary_subpackage` в `VdxManifest`
 (`cli/src/manifest.ts`). В `cli/src/audit.ts` функция `resolveSubpackageCtx`

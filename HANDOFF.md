@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter + K primary_subpackage)
+# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter + K primary_subpackage + L CI workflow)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,7 +12,7 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 11 шагов (A–K) пройдены. Owner-рубрика на
+**Где мы сейчас**: 12 шагов (A–L) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег ⚠️ ещё локальный, на
 GitHub НЕ push'нут). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
 MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
@@ -25,24 +25,36 @@ auto-detect на vdx без декларации: `unknown` → `node` чере�
 не учитываются в overall. **Шаг K**: `[vdx].primary_subpackage` в манифесте +
 `resolveSubpackageCtx` в `audit.ts` — для осей с `applies_to` evaluator
 подменяет projectRoot на subpackage (explicit или auto-resolve через
-`findSubPackages` когда ровно один subpackage совпадает с stack). vdx сейчас:
-stack=meta (по-прежнему), 5 осей excluded, L0 по реальной причине (ci L0).
-Для node/php-проектов с manifest в subpackage (типичный паттерн `cli/`,
-`api/`, `web/`) evaluator теперь даёт реальные L-уровни вместо false-L0.
+`findSubPackages` когда ровно один subpackage совпадает с stack).
+**Шаг L**: `.github/workflows/ci.yml` + `npm test` в `cli/package.json` —
+ci-ось v0.2.2 поднялась L0 → **L3** (workflow + npm test regex +
+pull_request trigger без `\|\| true`).
 
-**Следующий шаг** (приоритеты после K):
+vdx сейчас: stack=meta, 5 stack-осей excluded, lifecycle L2, **ci L3**,
+overall **L0** (capping переехал на 4 supporting-оси: reproducibility/
+secrets-config/shared-infra/shared-infra-drift — у meta-репо буквально
+нет docker/.env/compose, это правдивая оценка).
+
+**Следующий шаг** (приоритеты после L):
 - **Тег v0.2.2 в canonical-репо** — `git tag -a v0.2.2`, push. Без тега
-  manifest-ссылки `@v0.2.2` не резолвятся на GitHub. (Шаг K не требует
+  manifest-ссылки `@v0.2.2` не резолвятся на GitHub. (Шаги K/L не требуют
   bump'а — формат рубрики не менялся.)
-- **O29** — поведение `vdx init` при unknown/meta (теперь редкий случай
-  благодаря I — actually unknown стало почти невозможно).
+- **Push workflow на GitHub** — пока локально, нужно `git push` чтобы
+  Actions tab активировался.
+- **L4 на ci-оси** — matrix [node 20, 22] либо sentry-release / deploy-check.
+  Лёгкий wins, но не критичный.
+- **L1 overall для vdx** — самая близкая планка. Нужно поднять 2 из 4
+  supporting-L0: либо Dockerfile/Makefile (reproducibility L1), либо
+  `.env.example` (secrets-config L2), либо override через
+  `.vdx-overrides.yml` для shared-infra (meta не имеет shared-infra).
+  Альтернатива (по N22): принять L0 как честную meta-оценку и зафиксировать
+  в README.
+- **O29** — поведение `vdx init` при unknown/meta (редкий случай).
 - **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
   (реальный shared-infra precheck) — известны ранее.
-- **O32** (новое) — multi-subpackage monorepo (разные стеки в разных
-  папках). Реальных пользователей пока нет, отложено.
-- Альтернативы: настоящие тесты для vdx (vitest), CI workflow для
-  vdx (закрывает реальный L0 на ci), вынос CLI в npm package для
-  marketplace-релиза плагина.
+- **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
+- Альтернативы: настоящие тесты для vdx (vitest на evaluator), вынос CLI в
+  npm package для marketplace-релиза плагина.
 
 ---
 
@@ -239,6 +251,29 @@ auto-resolve через `findSubPackages()` когда ровно один subpa
   как после Шага J.
 
 Остаточный кейс multi-subpackage monorepo выделен как **O32**.
+
+### Шаг L — CI workflow для vdx (ci axis L0 → L3) ✅ (2026-05-23)
+
+Создан `.github/workflows/ci.yml` (push на main + pull_request → setup-node@v4 +
+`cd cli && npm ci && npm test`). В `cli/package.json` добавлен alias
+`"test": "tsc --noEmit"` — нужен и для regex L2 рубрики, и для семантики
+«npm test = quality gate».
+
+Эффект на vdx audit (без изменений в evaluator/рубрике):
+
+| Ось | До Шага L | После Шага L |
+|-----|:--:|:--:|
+| ci | L0 | **L3** |
+| overall | L0 | L0 |
+
+`ci` прошёл все три уровня в один Write — L1 (workflow exists), L2 (`npm test`
+matches regex), L3 (`pull_request` trigger без `\|\| true`). Overall остался
+L0, но capping переехал на 4 supporting-L0 (reproducibility, secrets-config,
+shared-infra, shared-infra-drift). Это правдиво — meta-репо без
+docker/.env/compose. См. N22.
+
+⚠️ Workflow пока локальный, не push'нут на GitHub — Actions tab активируется
+после push'а.
 
 ---
 

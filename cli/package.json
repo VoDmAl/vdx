@@ -13,7 +13,8 @@
     "vdx-mcp": "tsx src/mcp-server.ts",
     "audit": "tsx src/index.ts audit",
     "smoke": "bash smoke.sh",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

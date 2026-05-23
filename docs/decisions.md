@@ -491,3 +491,45 @@ evaluator даёт **реальные** уровни вместо false-L0. Эт
 
 ⚠️ **GitHub state** (по-прежнему): тег `v0.2.2` локальный, не push'нут.
 Шаг K не требует bump'а рубрики — формат рубрики не менялся.
+
+**N22 — Шаг L: CI workflow для vdx (2026-05-23).** Добавлен
+`.github/workflows/ci.yml` (push на main + pull_request → setup-node@v4 +
+`npm ci` + `npm test` в `cli/`). В `cli/package.json` добавлен alias
+`"test": "tsc --noEmit"` — нужен и для regex L2 рубрики, и для семантики
+«npm test = quality gate».
+
+Effect на vdx audit:
+
+| Ось | До Шага L | После Шага L |
+|-----|:--:|:--:|
+| ci | L0 | **L3** |
+| overall | L0 | L0 |
+
+`ci` поднялся через все три уровня в один Write:
+- **L1**: `has_file .github/workflows` ✓
+- **L2**: regex `(phpstan\|phpunit\|composer test\|npm test\|jest\|pytest)`
+  совпадает с `run: npm test` в yml ✓
+- **L3**: `gh_workflow_blocks_pr` (есть workflow с `pull_request` trigger) +
+  отсутствие `\|\| true` в yml ✓
+- **L4**: требует matrix/sentry-release/check_name=deploy — пока нет.
+
+Overall остался L0, но capping переехал. До Шага J: lying-L0 на критических
+осях (5 stack-specific врали). После Шага J: реальный L0 на critical `ci`.
+После Шага L: critical всё в порядке (lifecycle L2, ci L3, 3 excluded), но
+overall L0 из-за supporting — 4 из 7 на L0 (reproducibility, secrets-config,
+shared-infra, shared-infra-drift). Это **правда**: vdx сам не имеет
+docker-compose / Dockerfile / Makefile / `.env.example` / traefik-конфига —
+он meta-репо с документацией и nested CLI. Рубрика честно это показывает.
+
+Для подъёма vdx до L1 overall нужно либо:
+- (a) добавить Dockerfile/Makefile (reproducibility L1) + .env.example
+  (secrets-config L2) — это даст 5/7 supporting ≥ L1 = 71%, всё ещё < 80%;
+- (b) override-логика: пометить shared-infra/shared-infra-drift как
+  suppressed для meta-стека через `.vdx-overrides.yml` (semантически:
+  «у meta нет shared-infra, не учитывайте»);
+- (c) принять L0 как честную оценку meta-стека и зафиксировать в README.
+
+(c) — наиболее в духе принципа «честный аудит». Откладываем.
+
+⚠️ **GitHub state**: workflow появится в Actions tab только после push'а.
+Локальный аудит уже видит файл и оценивает корректно.
