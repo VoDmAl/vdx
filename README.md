@@ -45,8 +45,8 @@ vdx собирается как **«комбайн»** из готовых ин�
 |------|-----------|---------|
 | Раннер задач | **mise** | [D3](docs/decisions.md) |
 | Манифест возможностей | `mise.toml` + vdx-метаблок; проекция в `AGENTS.md ## Commands` | [D4](docs/decisions.md) |
-| Сбор фактов для аудита | OpenSSF Scorecard · Qlty CLI · MegaLinter | [D5](docs/decisions.md) |
-| Scaffold-fix на своих | copier (`copier update`, 3-way merge) | [D5](docs/decisions.md) |
+| Сбор фактов для аудита | OpenSSF Scorecard · Qlty CLI · MegaLinter (планово) | [D5](docs/decisions.md) |
+| Scaffold-fix на своих | copier (`copier update`, 3-way merge) — планово | [D5](docs/decisions.md) |
 | Упаковка для Claude Code | плагин: MCP-сервер + skill + hook | [D6](docs/decisions.md) |
 
 Полные обоснования и открытые вопросы — в [docs/decisions.md](docs/decisions.md).
@@ -68,31 +68,68 @@ success path в `mise.toml` через hook — следующий запуск 
 проектом. На своих — `copier update` накатывает шаблонные исправления;
 на чужих — read-only отчёт.
 
-## Текущий статус: спека ядра в процессе
+## Двух-репо структура
 
-Решения **D1–D11** приняты. Главный сигнал калибровки рубрики на 3 референсах:
-все упираются в ось `ci` (нет реального PR-гейтования) — самый высокий рычаг для
-роста зрелости портфеля. Спека ядра выложена; следующая фаза — реализация.
+| Репо | Что | Релиз |
+|------|-----|-------|
+| **[vdx](https://github.com/VoDmAl/vdx)** (этот) | dev-hub: research, спека, evaluator (`cli/`), Claude Code плагин (`plugin/`) | меняется часто |
+| **[vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal)** | canonical owner-baseline рубрики (`vdx-rubric.yaml`) | semver-теги (`v0.2.2`+) |
+
+Manifest-ссылки в проектах вида `baseline: github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2`
+ведут на конкретный semver-тег canonical-репо. Правила синхронизации между двумя
+репо — в [CLAUDE.md](CLAUDE.md) («Внешний репо»).
+
+## Текущий статус: ядро работает, рубрика v0.2.2
+
+Спека D1–D11 принята, ядро реализовано шагами A–J за одну сессию (см.
+[PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
+
+- **Шаг A** — рубрика v0.2 + draft спеки (формат, predicate DSL, drift-алгоритм).
+- **Шаг B** — canonical-репо `vdx-rubric-vodmal` опубликован на GitHub.
+- **Шаг C** — нативный evaluator (TypeScript, ~600 LOC в `cli/src/`).
+- **Шаг D** — evaluator дотюнен по smoke-тестам на 3 референсах.
+- **Шаг E** — `vdx init`: автодетект стека → mapping нативных задач в 6 глаголов
+  → генерация `mise.toml` + `AGENTS.md ## Commands`.
+- **Шаг F** — MCP-сервер `vdx-mcp` на stdio с 9 tools.
+- **Шаг G** — Claude Code плагин `vdx/plugin/` (`.claude-plugin/`, `.mcp.json`,
+  skill, hook).
+- **Шаг H** — догфудинг: vdx сам имеет корневой `mise.toml`, baseline-аудит.
+- **Шаг I** — stack-detector видит depth-1 sub-packages (monorepo / dev-hub).
+- **Шаг J** — `applies_to` filter в рубрике v0.2.2: stack-нерелевантные оси
+  получают `drift_kind: excluded`, не учитываются в overall.
 
 ### Research-артефакты
 | Артефакт | Файл | Статус |
 |----------|------|--------|
-| Research-журнал | [docs/decisions.md](docs/decisions.md) | актуален |
+| Onboarding для новой сессии | [HANDOFF.md](HANDOFF.md) | актуален |
+| Research-журнал (Decided / Open / Observed) | [docs/decisions.md](docs/decisions.md) | актуален |
 | Обзор аналогов (что делает / не делает) | [docs/landscape.md](docs/landscape.md) | актуален |
 | Рубрика зрелости v0.2 (калибровано) | [docs/maturity-rubric.md](docs/maturity-rubric.md) | актуален |
 | Решение build-vs-adopt | [docs/decision.md](docs/decision.md) | актуален |
 | Журнал изменений | [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md) | ведётся |
 
-### Спека ядра (draft v0.2)
+### Спека ядра (v0.2.2)
 | Документ | Что специфицирует |
 |----------|-------------------|
-| [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Формат `vdx-rubric.yaml` owner-baseline + predicate DSL |
+| [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Формат `vdx-rubric.yaml` owner-baseline + predicate DSL + `applies_to` |
 | [docs/specs/manifest-format.md](docs/specs/manifest-format.md) | `[vdx]` блок в `mise.toml` + проекция `AGENTS.md` |
 | [docs/specs/overrides-format.md](docs/specs/overrides-format.md) | `.vdx-overrides.yml` для per-project переопределений |
 | [docs/specs/mcp-api.md](docs/specs/mcp-api.md) | Контракт MCP-сервера vdx |
 | [docs/specs/drift-algorithm.md](docs/specs/drift-algorithm.md) | Алгоритм расчёта уровня + drift |
+| [docs/specs/vdx-rubric.example.yaml](docs/specs/vdx-rubric.example.yaml) | Mirror canonical-инстанса (для документации) |
 
-## Принцип догфудинга
+## Догфудинг
 
-vdx обязан сам соответствовать своей рубрике на уровне L4. Если рубрика требует
-mock-сервер, CI-гейт или phpstan-level — vdx это имеет первым.
+vdx сам аудитится своей же рубрикой. Декларация в [mise.toml](mise.toml):
+`stack = "meta"` (документация + nested CLI в `cli/`).
+
+Текущая позиция: **overall L0**. Реальный блокер — ось `ci` (vdx не имеет
+GitHub Actions). 5 stack-специфичных осей (tests, static-analysis, code-style,
+dependency-hygiene, mock-infra) корректно получают `drift_kind: excluded` для
+meta-стека и не учитываются в overall. Lifecycle-interface = L2 (3 глагола из
+6: build, test, check — up/down/fix отсутствуют преднамеренно, vdx — не сервис).
+
+Следующие шаги в `vdx`: настоящие тесты (vitest), CI-workflow, sub-package-aware
+predicates (O31) для аудита nested `cli/` как Node-проекта. Полный список
+открытых вопросов — в [docs/decisions.md](docs/decisions.md) и
+[HANDOFF.md](HANDOFF.md).
