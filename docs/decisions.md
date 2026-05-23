@@ -127,14 +127,6 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   реальной проверки `is_running` (всегда false). По спеке `vdx_up` должен
   poднять shared infra (например Traefik) если `precheck: true`. Нужен механизм:
   HTTP-curl до `healthcheck_url`, либо `mise run up` в директории provider'a.
-- **O28** — Stack-detector в monorepo / meta-репо. `autoDetectStack` смотрит
-  только в корень проекта; если manifest (`package.json`/`composer.json`/`go.mod`)
-  лежит в sub-пакете (как `vdx/cli/package.json`), детектор возвращает
-  `unknown` и downstream init/audit теряют 70% сигнала. Опции: (a) глубина-1
-  scan под корнем с агрегатом stack=mixed; (b) флаг `--manifest-root <path>`
-  или поле в `.vdx-overrides.yml`; (c) поддержать особый stack=`meta` для
-  документационных/dev-hub репо (vdx сам, docs-only репо), где конвенциональные
-  предикаты не применяются. Открыт догфудингом на vdx (N18).
 - **O29** — Поведение `vdx init` при stack=unknown. Сейчас генерится почти
   пустой `mise.toml` (`stack="unknown"`, `verbs=[]`) — корректно, но не полезно
   пользователю: нет mapping'а нативных задач, нет шансов поднять
@@ -172,6 +164,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O22 | Шаг D 2026-05-23 — `config_value` реализован в `predicates.ts` (JSON/TOML/YAML + ops `present`/`equals`/`gte`/`matches`) |
 | O23 | Шаг D 2026-05-23 — regex `mock-infra` L3 расширен до `mock[-_]?[a-zA-Z0-9_-]*(server\|api\|service)` |
 | O24 | Шаг D 2026-05-23 — флаг `phpstan_present` обёрнут в `any_of` с fallback на наличие `phpstan*.neon` |
+| O28 | Шаг I 2026-05-23 — `autoDetectStack` в `facts.ts` теперь делает root-first + depth-1 scan; новая функция `findSubPackages` возвращает массив `{relPath, stack}`. См. N19. **Частично**: для оценки nested manifest'ов в предикатах нужен O30 (sub-package-aware predicates). |
 
 ---
 
@@ -389,3 +382,32 @@ hook пока пассивный (логирование). См. `plugin/README.
 **Решение: остановить догфудинг на L0-overall, зафиксировать O30 как
 открытый, идти решать O28 в следующей итерации.** Дальнейшие инвестиции в
 infra vdx (vitest/eslint/CI) — после того как O28/O30 определятся.
+
+**N19 — Шаг I: stack-detector видит depth-1 sub-packages (2026-05-23).**
+`autoDetectStack` в `cli/src/facts.ts` теперь делает root-first scan, и если
+manifest в корне не найден — ищет в директориях глубины 1 (с игнор-листом
+`node_modules`/`vendor`/`dist`/`build`/`out`/`target`/`.git`/`.next`/
+`__pycache__`/`.venv`/`venv`/`.cache`/`coverage` + всех скрытых). Если ровно
+один тип стека найден — возвращает его (`php`/`node`/`go`/`python`); если
+несколько разных — `monorepo`; если ничего — старое `unknown`. Доступна
+новая функция `findSubPackages(projectRoot): SubPackage[]` для будущих
+sub-package-aware предикатов.
+
+Контрольные точки:
+- `npx tsc --noEmit` — чисто.
+- Smoke на 3 референсах (telegram/t23b/bookmap) — **никаких регрессий**, все
+  три остались на тех же уровнях (L2/L1/L1) и тех же stack'ах (php/php/node).
+  Detector root-first гарантирует backward compat для проектов с корневым
+  manifest.
+- Догфудинг (без `[vdx].stack` декларации в vdx mise.toml): detector
+  возвращает **`stack=node`** через `cli/package.json` — раньше было
+  `unknown`. Overall остался L0, потому что предикаты всё ещё root-only:
+  rubric ищет `eslint.config.*`/`vitest.config.*`/`tsconfig.json` в корне
+  vdx, а они в `cli/`. Это **граница O28 ↔ O30**: detector знает, что vdx —
+  node-monorepo; предикаты ещё не умеют это использовать.
+
+O28 закрыт частично — detection-сторона работает; sub-package-aware
+predicate evaluation остаётся под O30. В текущем `mise.toml` декларация
+`[vdx].stack = "meta"` оставлена — это сознательный выбор пользователя
+(meta-семантика лучше чем «node» для проекта типа «документация + nested
+CLI»), и evaluator её всё равно уважает поверх auto-detect.

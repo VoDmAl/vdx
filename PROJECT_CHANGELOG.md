@@ -4,6 +4,16 @@
 
 ## 2026-05-23
 
+### Шаг I: monorepo/subpackage stack detection (O28 закрыт)
+`autoDetectStack` в `cli/src/facts.ts` теперь делает root-first scan +
+depth-1 fallback под игнор-листом (`node_modules`/`vendor`/`dist`/...).
+Новая функция `findSubPackages(projectRoot): SubPackage[]` для будущих
+sub-package-aware предикатов. Smoke на 3 референсах без регрессий
+(telegram L2, t23b L1, bookmap L1). Auto-detect на vdx (без `[vdx].stack`):
+было `unknown`, стало **`node`** через `cli/package.json`. Overall у vdx
+остаётся L0 потому что предикаты пока root-only — это уже территория O30.
+См. [docs/decisions.md](docs/decisions.md) N19 + закрытие O28.
+
 ### Шаг H: догфудинг vdx на самом vdx
 Baseline `vdx audit` на `/Users/vdm/AI Projects/vdx`: stack=`unknown`,
 achieved **L0**, 14/14 осей в gap. Положен корневой `mise.toml` (написан

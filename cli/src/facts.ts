@@ -208,11 +208,55 @@ export function readTsconfig(ctx: Ctx): any {
   return cfg;
 }
 
+const MANIFEST_TO_STACK: Array<[string, string]> = [
+  ['composer.json', 'php'],
+  ['package.json', 'node'],
+  ['go.mod', 'go'],
+  ['pyproject.toml', 'python'],
+  ['requirements.txt', 'python'],
+];
+
+function stackForDir(dir: string): string | null {
+  for (const [manifest, stack] of MANIFEST_TO_STACK) {
+    if (fs.existsSync(path.join(dir, manifest))) return stack;
+  }
+  return null;
+}
+
+const SUBPACKAGE_SCAN_IGNORE = new Set([
+  'node_modules', 'vendor', 'dist', 'build', 'out', 'target',
+  '.git', '.next', '__pycache__', '.venv', 'venv', '.cache', 'coverage',
+]);
+
+export interface SubPackage {
+  relPath: string;
+  stack: string;
+}
+
+export function findSubPackages(projectRoot: string): SubPackage[] {
+  const found: SubPackage[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(projectRoot, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.')) continue;
+    if (SUBPACKAGE_SCAN_IGNORE.has(entry.name)) continue;
+    const stack = stackForDir(path.join(projectRoot, entry.name));
+    if (stack) found.push({ relPath: entry.name, stack });
+  }
+  return found;
+}
+
 export function autoDetectStack(projectRoot: string): string {
-  const has = (p: string) => fs.existsSync(path.join(projectRoot, p));
-  if (has('composer.json')) return 'php';
-  if (has('package.json')) return 'node';
-  if (has('go.mod')) return 'go';
-  if (has('pyproject.toml') || has('requirements.txt')) return 'python';
-  return 'unknown';
+  const rootStack = stackForDir(projectRoot);
+  if (rootStack) return rootStack;
+  const subs = findSubPackages(projectRoot);
+  if (subs.length === 0) return 'unknown';
+  const stacks = new Set(subs.map((s) => s.stack));
+  if (stacks.size === 1) return subs[0]!.stack;
+  return 'monorepo';
 }

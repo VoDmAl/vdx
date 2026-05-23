@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после Шагов A–G + git init + H догфудинг)
+# vdx — Handoff (2026-05-23, после A–G + git init + H догфудинг + I detector monorepo)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,23 +12,30 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: все 8 шагов (A–H) пройдены. Owner-рубрика опубликована на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator дотюнен (D), `vdx init`
-атакует N13 (E), MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+
-skill+hook (G), догфудинг на самом vdx запущен (H): vdx сейчас имеет корневой
-`mise.toml` (stack=meta), achieved L0 (lifecycle L2, остальные критические L0).
-vdx под git.
+**Где мы сейчас**: 9 шагов (A–I) пройдены. Owner-рубрика опубликована на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator дотюнен (D),
+`vdx init` атакует N13 (E), MCP-сервер на stdio с 9 tools (F), Claude Code
+плагин с MCP+skill+hook (G), догфудинг на самом vdx (H): vdx имеет корневой
+`mise.toml` (stack=meta), achieved L0 (lifecycle L2). **Шаг I**: monorepo/
+subpackage stack detection — `autoDetectStack` теперь root-first + depth-1
+fallback, новый `findSubPackages()`; auto-detect на vdx без декларации:
+`unknown` → **`node`** через `cli/`; smoke на 3 референсах без регрессий.
+**O28 закрыт частично** (detection-сторона); sub-package-aware predicate
+evaluation остаётся под O30.
 
-**Следующий шаг** (приоритеты после H):
-- **O28** — monorepo/subpackage stack detector (vdx сам слепнет на nested
-  `cli/package.json`). Открывает корректный аудит для любого dev-hub репо.
-- **O30** — стек-нейтральные предикаты или `applies_to` filter для меta-стека
-  (сейчас meta capped L0 на tests/static/ci).
-- **O29** — поведение `vdx init` при unknown/meta — сейчас бесполезно.
-- **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27** (реальный
-  shared-infra precheck) — известны ранее.
-- Альтернативы: настоящие тесты для vdx (vitest), CI workflow, вынос CLI в npm
-  package для marketplace-релиза плагина.
+**Следующий шаг** (приоритеты после I):
+- **O30** — sub-package-aware предикаты ИЛИ `applies_to` filter для
+  meta-стека. Сейчас даже зная `stack=node`, рубрика всё ещё ищет
+  `eslint.config.*`/`vitest.config.*`/`tsconfig.json` в корне и vdx
+  остаётся L0 на тех осях. Главное узкое место портфеля dev-hub'ов.
+- **O29** — поведение `vdx init` при unknown/meta (теперь редкий случай
+  благодаря I — actually unknown стало почти невозможно).
+- **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
+  (реальный shared-infra precheck) — известны ранее.
+- **README rewrite** — поддерживающие docs готовы (decisions/changelog/
+  handoff). См. гочу 6 ниже.
+- Альтернативы: настоящие тесты для vdx (vitest), CI workflow, вынос CLI
+  в npm package для marketplace-релиза плагина.
 
 ---
 
@@ -118,6 +125,9 @@ Push на GitHub НЕ делали — требует авторизации п�
    manifest (O28), init бесполезен при stack=unknown (O29), meta-стек capped
    на критических осях из-за stack-специфичных предикатов (O30). vdx сейчас
    stack=meta, lifecycle L2, overall L0.
+8. **N19 — Шаг I закрыл O28-A (detection)**. `autoDetectStack` теперь
+   root-first + depth-1 fallback; vdx auto-detect: `unknown` → `node`. Но
+   предикаты пока root-only — sub-package-aware evaluation остаётся под O30.
 
 ---
 
@@ -169,6 +179,16 @@ Baseline-аудит → положен корневой `mise.toml` (напис�
 Открыты три задачи: **O28** (monorepo detector), **O29** (init при unknown/
 meta), **O30** (стек-нейтральные предикаты для meta). См. N18 +
 расширение O28/O29/O30 в [docs/decisions.md](docs/decisions.md).
+
+### Шаг I — Monorepo/subpackage stack detection ✅ (2026-05-23)
+
+`autoDetectStack` в `cli/src/facts.ts` теперь root-first + depth-1 fallback
+с игнор-листом (`node_modules`/`vendor`/`dist`/...). Новая функция
+`findSubPackages(projectRoot): SubPackage[]` для будущих sub-package-aware
+предикатов. Smoke без регрессий (telegram L2, t23b L1, bookmap L1).
+Auto-detect на vdx без декларации: `unknown` → **`node`** через `cli/`.
+**O28 закрыт частично** — detection-сторона работает; predicate-evaluation
+sub-package-aware остаётся под O30. См. N19.
 
 ---
 
