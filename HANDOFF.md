@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после Шагов D+E+F+G + git init)
+# vdx — Handoff (2026-05-23, после Шагов A–G + git init + H догфудинг)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,16 +12,23 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: все 7 шагов (A–G) пройдены за одну сессию. Owner-рубрика
-опубликована на **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator
-дотюнен (D), `vdx init` атакует N13 (E), MCP-сервер на stdio с 9 tools (F),
-Claude Code плагин с MCP+skill+hook (G). vdx сам под git.
+**Где мы сейчас**: все 8 шагов (A–H) пройдены. Owner-рубрика опубликована на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator дотюнен (D), `vdx init`
+атакует N13 (E), MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+
+skill+hook (G), догфудинг на самом vdx запущен (H): vdx сейчас имеет корневой
+`mise.toml` (stack=meta), achieved L0 (lifecycle L2, остальные критические L0).
+vdx под git.
 
-**Следующий шаг** (открыто): доводка O25 (mock-infra delta-trap), O26 (TOML
-round-trip с комментариями), O27 (shared-infra precheck), либо подвинуть
-`static-analysis`/`ci`/`tests` оси у проектов в портфеле. Также возможно:
-догфудинг — запустить `vdx init` и `vdx_audit` на самом vdx; публикация
-плагина в marketplace (требует выноса CLI в npm package).
+**Следующий шаг** (приоритеты после H):
+- **O28** — monorepo/subpackage stack detector (vdx сам слепнет на nested
+  `cli/package.json`). Открывает корректный аудит для любого dev-hub репо.
+- **O30** — стек-нейтральные предикаты или `applies_to` filter для меta-стека
+  (сейчас meta capped L0 на tests/static/ci).
+- **O29** — поведение `vdx init` при unknown/meta — сейчас бесполезно.
+- **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27** (реальный
+  shared-infra precheck) — известны ранее.
+- Альтернативы: настоящие тесты для vdx (vitest), CI workflow, вынос CLI в npm
+  package для marketplace-релиза плагина.
 
 ---
 
@@ -30,10 +37,11 @@ round-trip с комментариями), O27 (shared-infra precheck), либо
 ### Основной проект (этот репо)
 ```
 vdx/
-├── README.md                   ← публичное описание проекта (vision + статус)
+├── README.md                   ← публичное описание проекта (vision + статус) ⚠️ устарел
 ├── CLAUDE.md                   ← правила для агента (ограничения + ссылки)
 ├── HANDOFF.md                  ← ЭТОТ ФАЙЛ
 ├── PROJECT_CHANGELOG.md        ← хронология (свежее сверху)
+├── mise.toml                   ← догфудинг (stack=meta, 3 verbs → cli/) ← Шаг H
 ├── docs/
 │   ├── decisions.md            ← ⭐ ИСТОЧНИК ПРАВДЫ: Decided D1–D11, Open O6/7/9/13–24, Observed N1–N13
 │   ├── landscape.md            ← обзор аналогов (делает/не делает) — верифицирован 2026-05-22
@@ -106,6 +114,10 @@ Push на GitHub НЕ делали — требует авторизации п�
 5. **N12 — Smoke evaluator на 3 референсах**: telegram L1, t23b L0, bookmap L1.
 6. **⭐ N13 — Главный leverage point — `lifecycle-interface`, не `ci`**. Все три
    проекта capped из-за отсутствия bare-глаголов. Это именно то, что vdx решает.
+7. **N18 — Догфудинг показал три новые ямы**: detector слепнет на nested
+   manifest (O28), init бесполезен при stack=unknown (O29), meta-стек capped
+   на критических осях из-за stack-специфичных предикатов (O30). vdx сейчас
+   stack=meta, lifecycle L2, overall L0.
 
 ---
 
@@ -144,6 +156,20 @@ precheck). См. N16.
 Marketplace-release требует выноса CLI в npm package. См. N17 +
 [plugin/README.md](plugin/README.md).
 
+### Шаг H — Догфудинг на самом vdx ✅ (2026-05-23)
+
+Baseline-аудит → положен корневой `mise.toml` (написан руками, stack=meta,
+3 verbs → `cli/`) → второй аудит. Результаты:
+
+| Этап | stack | lifecycle-interface | overall |
+|------|:-----:|:-------------------:|:-------:|
+| baseline | unknown | L0 | L0 |
+| после mise.toml | **meta** | **L2** | L0 |
+
+Открыты три задачи: **O28** (monorepo detector), **O29** (init при unknown/
+meta), **O30** (стек-нейтральные предикаты для meta). См. N18 +
+расширение O28/O29/O30 в [docs/decisions.md](docs/decisions.md).
+
 ---
 
 ## Гочи, которых не видно из файлов
@@ -173,7 +199,16 @@ Marketplace-release требует выноса CLI в npm package. См. N17 +
    нужно. Если предложение «давай напишем свой X» — это, скорее всего, ошибка.
    Сначала ищем готовое.
 
-6. **Все правила/конвенции работы зафиксированы как claude-smart skills.**
+6. **README отстаёт от реального состояния.** В нём (а) утверждается, что
+   главное узкое место — ось `ci` (это пересмотрено в N13: главный leverage —
+   `lifecycle-interface`); (б) статус «спека ядра в процессе / следующая
+   фаза — реализация» — реализация по сути проделана за шаги B–G; (в)
+   декларация принципа догфудинга обещает «vdx соответствует своей рубрике
+   на L4» — догфудинг (Шаг H) показал реальный L0. README надо переписать
+   отдельным заходом, **после** того как O28/O30 решатся (s55: README пишется
+   после supporting docs).
+
+7. **Все правила/конвенции работы зафиксированы как claude-smart skills.**
    Полезные:
    - s1 («research journal»): держать `decisions.md` синхронизированным.
    - s55 («README downstream»): README пишется ПОСЛЕ supporting docs.

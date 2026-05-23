@@ -108,7 +108,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   предложить включить в baseline.
 - **O21** — Бюджет аудита на крупном репо (<30 сек цель). Стратегии кэширования.
 
-### Активные (от smoke v0.1 evaluator)
+### Активные (от smoke v0.1 evaluator + догфудинг)
 - **O25** — Mock-infra delta-style ловушка. Node-проекты, у которых mock
   сделан как отдельный docker-сервис (bookmap: `mock-bookmap-api`, директория
   `mock-server/`, `Dockerfile.mock-server`), технически реализуют L3-подход, но
@@ -127,6 +127,36 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   реальной проверки `is_running` (всегда false). По спеке `vdx_up` должен
   poднять shared infra (например Traefik) если `precheck: true`. Нужен механизм:
   HTTP-curl до `healthcheck_url`, либо `mise run up` в директории provider'a.
+- **O28** — Stack-detector в monorepo / meta-репо. `autoDetectStack` смотрит
+  только в корень проекта; если manifest (`package.json`/`composer.json`/`go.mod`)
+  лежит в sub-пакете (как `vdx/cli/package.json`), детектор возвращает
+  `unknown` и downstream init/audit теряют 70% сигнала. Опции: (a) глубина-1
+  scan под корнем с агрегатом stack=mixed; (b) флаг `--manifest-root <path>`
+  или поле в `.vdx-overrides.yml`; (c) поддержать особый stack=`meta` для
+  документационных/dev-hub репо (vdx сам, docs-only репо), где конвенциональные
+  предикаты не применяются. Открыт догфудингом на vdx (N18).
+- **O29** — Поведение `vdx init` при stack=unknown. Сейчас генерится почти
+  пустой `mise.toml` (`stack="unknown"`, `verbs=[]`) — корректно, но не полезно
+  пользователю: нет mapping'а нативных задач, нет шансов поднять
+  `lifecycle-interface` без ручной правки. Опции: (a) явно прервать с
+  подсказкой передать `--stack <id>`; (b) интерактивный prompt (выбивается из
+  «нет TTY» сценариев MCP); (c) ничего не делать (status quo) — пусть user
+  правит `mise.toml` руками; (d) для stack=meta заюзать специальные `description-only`
+  плейсхолдеры, чтобы хоть verb-имена были видны в AGENTS.md. Связан с O28.
+- **O30** — Стек-нейтральные предикаты для `stack: meta`. Текущая рубрика
+  v0.2.1 на критических осях (`tests`, `static-analysis`, `ci`) и большинстве
+  supporting опирается на stack-специфичные артефакты (`vitest`/`phpunit`/
+  `tsconfig.json`/`.github/workflows/*.yml`). Meta-проекты типа vdx —
+  документация + nested CLI — на таких осях всегда L0 даже когда инструмент
+  внутри cli/ полностью покрыт. Опции: (a) добавить меta-специфичные level-
+  предикаты (e.g. `tests`: «есть исполняемый `cli/smoke.sh` ИЛИ test runner
+  в любом sub-package»); (b) рекурсивная агрегация — оценить cli/ как
+  sub-проект и поднять scores наверх; (c) принять как фичу — meta-проекты
+  capped на нейтральных осях, это правильное сообщение про инвестицию в
+  собственную инфру; (d) ввести `applies_to: [php, node, go]` фильтр на ось,
+  чтобы для meta-стека ось `excluded` а не «L0». Догфудинг N18 показал, что
+  опция (c) самая дешёвая и не размывает рубрику; (d) даёт более честный
+  отчёт без false-L0; (a) и (b) усложняют логику движка.
 
 ### Закрытые
 
@@ -283,3 +313,79 @@ watermark в `~/.cache/vdx/last-success-path.log`). Установка лока�
 подключения. v0.1 ограничения: `.mcp.json` хардкодит абсолютный путь до
 `cli/src/mcp-server.ts` (для marketplace релиза нужен npm-пакет `vdx-cli`);
 hook пока пассивный (логирование). См. `plugin/README.md`.
+
+### Из догфудинга 2026-05-23
+
+**N18 — Baseline-аудит vdx на самом vdx.** Запущен `vdx audit` против
+`/Users/vdm/AI Projects/vdx`. Результат: **stack=`unknown`**, achieved
+**L0**, 14/14 осей в gap-режиме. Распределение per-axis:
+
+| Axis | Class | Achieved |
+|------|:-----:|:--------:|
+| lifecycle-interface | C | L0 |
+| tests | C | L0 |
+| static-analysis | C | L0 |
+| ci | C | L0 |
+| reproducibility | s | L0 |
+| code-style | s | L0 |
+| dependency-hygiene | s | L0 |
+| secrets-config | s | L0 |
+| git-hygiene | s | L1 |
+| observability | s | L1 |
+| docs | s | **L3** |
+| mock-infra | s | L1 |
+| shared-infra | s | L0 |
+| shared-infra-drift | s | L0 |
+
+Содержательные находки:
+
+1. **Stack=unknown — структурная проблема, не баг.** vdx имеет
+   `cli/package.json`, но детектор смотрит только в корень. Открыто как O28.
+   Косвенно бьёт по всем supporting-осям, чьи предикаты опираются на
+   `package.json`/`composer.json` (reproducibility, dependency-hygiene, code-style).
+2. **`vdx init` на vdx бесполезен в текущем виде** — со stack=unknown
+   mapping'ит 0/6 verbs, генерит `mise.toml` с `verbs=[]`. Открыто как O29.
+3. **Единственная высокая ось — `docs` L3**, благодаря набору
+   `README.md` + `CLAUDE.md` + `HANDOFF.md` + `PROJECT_CHANGELOG.md` + `docs/`.
+   Это и единственная неконвенциональная ось — она основана на наличии
+   markdown-файлов, не на manifest'ах.
+4. **`lifecycle-interface` L0 на самом vdx** — буквальное подтверждение N13.
+   Vdx — собственный leverage-кейс: нет нормализованного словаря команд →
+   агент не знает что запускать.
+5. **Догфудинг как метод подтвердил себя на первом же шаге** — за один
+   baseline-аудит появились две новые открытые задачи (O28, O29) и
+   калибровочное знание о meta-проектах как отдельном классе.
+
+Следующие действия для самого vdx, в порядке цены/эффекта:
+- (1) ручной `mise.toml` с tasks указывающими в `cli/` — закрывает
+  lifecycle-interface до L2-L3 и даёт второй аудит для сравнения;
+- (2) решить O28 (monorepo detector) — открывает корректный аудит для
+  любого dev-hub проекта в будущем;
+- (3) решить O29 (init при unknown).
+
+**Вторая итерация: ручной `mise.toml` (stack=meta).** Положен корневой
+`mise.toml` с тремя tasks (`build`/`test`/`check`) указывающими в `cli/`,
+`[vdx].stack = "meta"`. Аудит после:
+
+| Ось | До | После |
+|-----|:--:|:--:|
+| stack | unknown | **meta** (из `[vdx]`блока) |
+| lifecycle-interface | L0 | **L2** (3 verbs из 6 → at_least_n_of=3) |
+| overall | L0 | L0 (capped критическими tests/static/ci) |
+
+Подтверждения и сюрпризы:
+- **Evaluator честно читает `[vdx].stack`**, не настаивает на auto-detect.
+  Это значит, что декларация stack — валидный механизм override'а
+  детектора (полезно для O28).
+- **Lifecycle-interface +2 в один Write** — N13 буквально подтверждён ещё
+  раз: словарь глаголов это рычаг с самым высоким соотношением
+  затрат/эффект на portfolio.
+- **Все 3 критических supporting-оси (tests/static-analysis/ci) остались
+  L0**. Рубрика для них опирается на stack-специфичные предикаты
+  (`vitest`/`jest`/`phpunit`/`tsconfig.json`/`.github/workflows`). На
+  meta-проекте без node/php-конвенциональных артефактов в корне они
+  никогда не сдвинутся. Открыто как O30.
+
+**Решение: остановить догфудинг на L0-overall, зафиксировать O30 как
+открытый, идти решать O28 в следующей итерации.** Дальнейшие инвестиции в
+infra vdx (vitest/eslint/CI) — после того как O28/O30 определятся.

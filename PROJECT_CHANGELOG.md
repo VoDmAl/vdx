@@ -4,6 +4,19 @@
 
 ## 2026-05-23
 
+### Шаг H: догфудинг vdx на самом vdx
+Baseline `vdx audit` на `/Users/vdm/AI Projects/vdx`: stack=`unknown`,
+achieved **L0**, 14/14 осей в gap. Положен корневой `mise.toml` (написан
+руками — `vdx init` бесполезен при unknown, см. O29) со `stack="meta"` и
+тремя tasks (`build`/`test`/`check`) указывающими в `cli/`. Второй
+аудит: stack→**`meta`** (evaluator подхватил из `[vdx]`-блока),
+lifecycle-interface L0→**L2**, overall остаётся L0 (capped tests/static/
+ci — meta-стек на этих осях слепой, см. O30). Открыты три задачи:
+**O28** (monorepo/subpackage stack detection), **O29** (init при
+unknown), **O30** (стек-нейтральные предикаты для meta).
+См. [docs/decisions.md](docs/decisions.md) N18 + O28/O29/O30,
+[mise.toml](mise.toml).
+
 ### Шаг G: Claude Code плагин v0.1
 `vdx/plugin/`: `.claude-plugin/plugin.json`, `.mcp.json` (регистрирует MCP
 server из cli/), `skills/vdx-discover/SKILL.md` (discover-and-record

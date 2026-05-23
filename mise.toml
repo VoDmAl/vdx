@@ -1,0 +1,25 @@
+# vdx сам — meta-репо (документация + nested CLI в `cli/`).
+# Корневой стек не определяется детектором (см. O28 в docs/decisions.md),
+# поэтому mise.toml написан руками, без `vdx init`.
+# Используем bare-глаголы как фасад к командам внутри cli/.
+
+[tools]
+node = "20"
+
+[tasks.build]
+description = "Install CLI dependencies"
+run = "npm --prefix cli install"
+
+[tasks.test]
+description = "Run smoke audit on the three calibration projects"
+run = "bash cli/smoke.sh"
+
+[tasks.check]
+description = "Typecheck the CLI sources"
+run = "npm --prefix cli run typecheck"
+
+[vdx]
+schema_version = "0.2"
+baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1"
+stack = "meta"
+verbs = ["build", "test", "check"]
