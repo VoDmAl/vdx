@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после Шагов D+E)
+# vdx — Handoff (2026-05-23, после Шагов D+E+F + git init)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -13,15 +13,15 @@
 (см. [README.md](README.md)).
 
 **Где мы сейчас**: research завершён, спека ядра выложена, owner-рубрика
-**опубликована на GitHub: github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**.
-Evaluator v0.1 дотюнен (Шаг D, см. N14). **Шаг E `vdx init` реализован**
-(см. N15) — `lifecycle-interface` поднимается до L2/L4 на референсах.
-Текущий smoke: telegram L2, t23b L1, bookmap L1 (capping ушёл на
-`static-analysis`/`ci`/`tests`).
+опубликована на **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**.
+Evaluator v0.1 дотюнен (Шаг D, см. N14). `vdx init` реализован (Шаг E, N15).
+**Шаг F MCP-сервер работает** (см. N16) — 9 tools, smoke прошёл.
+Сам vdx теперь под git (commit `119b15b`).
 
-**Следующий шаг** (рекомендованный): **F — MCP-сервер обёртка** (выставить
-6 глаголов + `vdx_audit` как MCP tools), либо доводка осей `tests`/`ci`/`static`
-если хочется ещё подвинуть overall.
+**Следующий шаг** (рекомендованный): **G — Claude Code плагин** (бандл MCP +
+skill + hook как `.claude/` плагин для marketplace). Альтернатива: доводка
+открытых вопросов O25/O26/O27 (mock-infra delta-trap, TOML round-trip,
+shared-infra precheck), или подвинуть `static-analysis`/`ci` оси.
 
 ---
 
@@ -124,19 +124,18 @@ mock-infra L2 предиката (delta-style ловушка). См. N14 в deci
 t23b lifecycle L2→**L4**, bookmap lifecycle L1→**L2**, reproducibility
 L2→**L4**. См. N15 в decisions.md.
 
-### Шаг F — MCP-сервер обёртка (D6)
+### Шаг F — MCP-сервер ✅ (2026-05-23)
 
-**Цель**: выставить 6 глаголов + `list_capabilities` + `vdx_audit` как MCP tools.
-
-Файлы: `vdx/cli/src/mcp-server.ts`, добавить зависимость
-`@modelcontextprotocol/sdk` в `package.json`.
-
-Контракт — в [`docs/specs/mcp-api.md`](docs/specs/mcp-api.md). Минимум:
-- `list_capabilities` — `{verbs, stack, baseline, last_verified}`
-- `vdx_up/down/build/test/check/fix` — wrapper над `mise run <verb>` +
-  shared-infra precheck (когда есть)
-- `vdx_audit` — JSON-форма отчёта от evaluator
-- `vdx_record_success_path` — записать обнаруженные команды в `mise.toml`
+Реализован в `cli/src/mcp-server.ts`. 9 tools: `list_capabilities`,
+`vdx_up/down/build/test/check/fix`, `vdx_audit`, `vdx_record_success_path`.
+Запуск: `vdx-mcp --project <path>` (или из cwd). Конфиг в Claude Code:
+```json
+{ "mcpServers": { "vdx": { "command": "npx", "args": ["-y", "tsx",
+  "/Users/vdm/AI Projects/vdx/cli/src/mcp-server.ts",
+  "--project", "/path/to/project"] } } }
+```
+Открыто: O26 (TOML round-trip с комментариями), O27 (реальный shared-infra
+precheck). См. N16.
 
 ### Шаг G — Claude Code плагин (закрывает D6)
 

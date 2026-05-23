@@ -118,6 +118,15 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   паттерн; (b) пересмотреть L2 для Node так, чтобы он отражал «есть хоть какая-
   то изоляция внешних API»; (c) принять как фичу — Node-стек прыгает через
   in-process mock.
+- **O26** — TOML round-trip с сохранением комментариев. `vdx_record_success_path`
+  переписывает `mise.toml` через `smol-toml.stringify`, теряя комментарии и
+  возможный порядок ключей. Это окей для bootstrap (когда файл вновь созданный),
+  но плохо для update existing manifests. Кандидаты: `@iarna/toml` с custom
+  patcher, или скриптовый patch-only подход (regex замена `[tasks.X]` блоков).
+- **O27** — Shared-infra precheck в MCP. Lifecycle-tools сейчас не делают
+  реальной проверки `is_running` (всегда false). По спеке `vdx_up` должен
+  poднять shared infra (например Traefik) если `precheck: true`. Нужен механизм:
+  HTTP-curl до `healthcheck_url`, либо `mise run up` в директории provider'a.
 
 ### Закрытые
 
@@ -249,3 +258,16 @@ Bookmap reproducibility прыгнул сразу L2→L4 потому что RE
 Overall у обоих остался L1 — capping переехал на `static-analysis`/`ci`/`tests`,
 ровно как и предсказывалось. `vdx init` подтвердил статус **главного
 leverage-инструмента** портфеля.
+
+**N16 — Шаг F: MCP-сервер работает (2026-05-23).** `cli/src/mcp-server.ts`
+на `@modelcontextprotocol/sdk@1.29` + `zod@4`, ~200 LOC. Зарегистрированы
+9 tools: `list_capabilities`, `vdx_up/down/build/test/check/fix`, `vdx_audit`,
+`vdx_record_success_path`. Транспорт — stdio. Запуск: `vdx-mcp --project <path>`
+(или из cwd по умолчанию). Smoke на копии t23b прошёл: initialize → tools/list
+→ list_capabilities возвращает stack=php, baseline=
+`github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1`, все 6 verbs с native commands;
+vdx_audit возвращает per_axis JSON по контракту mcp-api.md (lifecycle L4
+aligned, остальные gap). Lifecycle-tools — `spawn('mise', ['run', verb])` с
+capture stdout/stderr/exit_code/duration_ms. Shared-infra precheck — заглушка
+(is_running всегда false). `vdx_record_success_path` использует
+`smol-toml.stringify` — round-trip без сохранения комментариев (см. новый O26).

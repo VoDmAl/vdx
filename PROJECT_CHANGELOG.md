@@ -4,6 +4,22 @@
 
 ## 2026-05-23
 
+### Шаг F: MCP-сервер vdx (9 tools) работает
+`cli/src/mcp-server.ts` (~200 LOC) на @modelcontextprotocol/sdk@1.29 +
+zod@4: stdio-транспорт + 9 зарегистрированных tools (list_capabilities,
+6×lifecycle vdx_*, vdx_audit, vdx_record_success_path). Smoke на t23b-копии:
+initialize+tools/list+list_capabilities+vdx_audit все вернули корректный
+JSON по контракту mcp-api.md. Запуск: `vdx-mcp --project <path>` или из
+cwd. Открыты O26 (TOML round-trip без потери комментариев), O27 (реальный
+shared-infra precheck). См. [docs/decisions.md](docs/decisions.md) N16,
+[cli/src/mcp-server.ts](cli/src/mcp-server.ts).
+
+### Инициализирован git-репо vdx + workflow для двух репо
+`git init` в `/Users/vdm/AI Projects/vdx` (commit 119b15b, 30 файлов).
+В CLAUDE.md добавлена секция «Внешний репо: vdx-rubric-vodmal» с правилами
+синхронизации: canonical-файл правится в vdx-rubric-vodmal, mirror в
+docs/specs/vdx-rubric.example.yaml, semver-bump при изменении canonical.
+
 ### Шаг E: реализован `vdx init` — главный leverage-инструмент (N13)
 Новый модуль `cli/src/init.ts` (~280 LOC): автодетект стека + три-уровневая
 эвристика маппинга composer/npm/Makefile-задач в стандартные 6 глаголов
