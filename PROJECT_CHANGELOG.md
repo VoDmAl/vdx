@@ -4,6 +4,20 @@
 
 ## 2026-05-23
 
+### Шаг J: applies_to filter в рубрике (O30 закрыт, v0.2.2)
+Добавлено optional `applies_to: [<stack-id>, ...]` поле на ось. Если задан и
+текущий stack не в списке — ось получает `drift_kind: excluded`, не учитывается
+в overall scoring. Помечены 5 stack-specific осей `[php, node, go, python]`:
+critical (tests, static-analysis) + supporting (code-style, dependency-hygiene,
+mock-infra). Canonical rubric bumped: `vdx-rubric-vodmal@v0.2.2` (тег ещё НЕ
+push'нут на GitHub, см. ⚠️ в N20). Изменения evaluator: `Axis.applies_to`,
+новый `drift_kind: 'excluded'`, `projectLevel` фильтрует excluded из visible.
+Smoke без регрессий (telegram L2, t23b L1, bookmap L1). Аудит vdx: 5 осей
+excluded; overall L0 теперь по реальной причине — отсутствие CI у vdx (lying
+L0 на 3 критических осях устранено). Spec: `docs/specs/rubric-format.md`
+обновлён. См. [docs/decisions.md](docs/decisions.md) N20 + закрытие O30,
+[docs/specs/rubric-format.md](docs/specs/rubric-format.md) секция applies_to.
+
 ### Шаг I: monorepo/subpackage stack detection (O28 закрыт)
 `autoDetectStack` в `cli/src/facts.ts` теперь делает root-first scan +
 depth-1 fallback под игнор-листом (`node_modules`/`vendor`/`dist`/...).

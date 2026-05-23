@@ -41,6 +41,16 @@ export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineR
       });
       continue;
     }
+    if (axis.applies_to && !axis.applies_to.includes(ctx.stack)) {
+      perAxis.push({
+        axis_id: axis.id,
+        class: axis.class,
+        achieved: 'L0',
+        target: axis.default_target,
+        drift_kind: 'excluded',
+      });
+      continue;
+    }
     const achieved = evalAxis(axis, ctx);
     const ov = overrideByAxis.get(axis.id);
     const target = (ov?.target as LevelName) ?? axis.default_target;

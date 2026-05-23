@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–G + git init + H догфудинг + I detector monorepo)
+# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,30 +12,36 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 9 шагов (A–I) пройдены. Owner-рубрика опубликована на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator дотюнен (D),
-`vdx init` атакует N13 (E), MCP-сервер на stdio с 9 tools (F), Claude Code
-плагин с MCP+skill+hook (G), догфудинг на самом vdx (H): vdx имеет корневой
-`mise.toml` (stack=meta), achieved L0 (lifecycle L2). **Шаг I**: monorepo/
-subpackage stack detection — `autoDetectStack` теперь root-first + depth-1
-fallback, новый `findSubPackages()`; auto-detect на vdx без декларации:
-`unknown` → **`node`** через `cli/`; smoke на 3 референсах без регрессий.
-**O28 закрыт частично** (detection-сторона); sub-package-aware predicate
-evaluation остаётся под O30.
+**Где мы сейчас**: 10 шагов (A–J) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег ⚠️ ещё локальный, на
+GitHub НЕ push'нут). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
+MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
+догфудинг на самом vdx (H): vdx имеет корневой `mise.toml` (stack=meta),
+achieved L0 (lifecycle L2). **Шаг I**: monorepo/subpackage stack detection
+— `autoDetectStack` root-first + depth-1 fallback, `findSubPackages()`;
+auto-detect на vdx без декларации: `unknown` → `node` через `cli/`.
+**Шаг J**: `applies_to` filter — 5 stack-specific осей помечены
+`[php, node, go, python]`; для stack=meta получают `drift_kind: excluded`,
+не учитываются в overall. vdx сейчас: 5 осей excluded, L0 теперь по
+**реальной** причине (ci L0) — lying-L0 устранён.
 
-**Следующий шаг** (приоритеты после I):
-- **O30** — sub-package-aware предикаты ИЛИ `applies_to` filter для
-  meta-стека. Сейчас даже зная `stack=node`, рубрика всё ещё ищет
-  `eslint.config.*`/`vitest.config.*`/`tsconfig.json` в корне и vdx
-  остаётся L0 на тех осях. Главное узкое место портфеля dev-hub'ов.
+**Следующий шаг** (приоритеты после J):
+- **Тег v0.2.2 в canonical-репо** — `git tag -a v0.2.2`, push. Без тега
+  manifest-ссылки `@v0.2.2` не резолвятся на GitHub.
+- **O31** (новое) — sub-package-aware predicate evaluation. Случай
+  `stack=node + manifest в cli/` остаётся false-L0: predicates всё ещё
+  смотрят в корень. Решение — либо `for_subpackage: <path>` на ось, либо
+  optional `path` на конкретные `has_file`/`config_value`/`package_present`.
+  Уже есть `findSubPackages()` из Шага I — это половина инфры.
 - **O29** — поведение `vdx init` при unknown/meta (теперь редкий случай
   благодаря I — actually unknown стало почти невозможно).
 - **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
   (реальный shared-infra precheck) — известны ранее.
 - **README rewrite** — поддерживающие docs готовы (decisions/changelog/
   handoff). См. гочу 6 ниже.
-- Альтернативы: настоящие тесты для vdx (vitest), CI workflow, вынос CLI
-  в npm package для marketplace-релиза плагина.
+- Альтернативы: настоящие тесты для vdx (vitest), CI workflow для
+  vdx (закрывает реальный L0 на ci), вынос CLI в npm package для
+  marketplace-релиза плагина.
 
 ---
 
@@ -128,6 +134,11 @@ Push на GitHub НЕ делали — требует авторизации п�
 8. **N19 — Шаг I закрыл O28-A (detection)**. `autoDetectStack` теперь
    root-first + depth-1 fallback; vdx auto-detect: `unknown` → `node`. Но
    предикаты пока root-only — sub-package-aware evaluation остаётся под O30.
+9. **N20 — Шаг J закрыл O30 (applies_to filter, рубрика v0.2.2)**. 5
+   stack-specific осей помечены `[php, node, go, python]`; stack=meta
+   получает `excluded` на них. Lying-L0 устранён, остался реальный L0 у
+   vdx из-за отсутствия CI. Sub-package-aware predicate evaluation
+   переехал в **O31**.
 
 ---
 
@@ -189,6 +200,21 @@ meta), **O30** (стек-нейтральные предикаты для meta).
 Auto-detect на vdx без декларации: `unknown` → **`node`** через `cli/`.
 **O28 закрыт частично** — detection-сторона работает; predicate-evaluation
 sub-package-aware остаётся под O30. См. N19.
+
+### Шаг J — applies_to filter (O30 закрыт, рубрика v0.2.2) ✅ (2026-05-23)
+
+В `Axis` добавлено optional поле `applies_to: [<stack-id>, ...]`. Если задан
+и `ctx.stack` не в списке — ось получает `drift_kind: excluded`, не
+учитывается в overall scoring. В canonical-рубрике v0.2.2 помечены 5 осей
+`[php, node, go, python]`: critical (tests, static-analysis) + supporting
+(code-style, dependency-hygiene, mock-infra). Аудит vdx (stack=meta): 5
+осей корректно excluded; overall L0 теперь по реальной причине (`ci L0`,
+у vdx буквально нет GitHub Actions). Lying-L0 на 3 критических осях
+устранён. Sub-package-aware predicate evaluation для stack=node + nested
+manifest — переехало в **O31**. См. N20.
+
+⚠️ Тег `v0.2.2` локальный, не push'нут на GitHub. Manifest-ссылки
+`@v0.2.2` пока разрешаются только через file://.
 
 ---
 

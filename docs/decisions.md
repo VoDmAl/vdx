@@ -135,20 +135,16 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   «нет TTY» сценариев MCP); (c) ничего не делать (status quo) — пусть user
   правит `mise.toml` руками; (d) для stack=meta заюзать специальные `description-only`
   плейсхолдеры, чтобы хоть verb-имена были видны в AGENTS.md. Связан с O28.
-- **O30** — Стек-нейтральные предикаты для `stack: meta`. Текущая рубрика
-  v0.2.1 на критических осях (`tests`, `static-analysis`, `ci`) и большинстве
-  supporting опирается на stack-специфичные артефакты (`vitest`/`phpunit`/
-  `tsconfig.json`/`.github/workflows/*.yml`). Meta-проекты типа vdx —
-  документация + nested CLI — на таких осях всегда L0 даже когда инструмент
-  внутри cli/ полностью покрыт. Опции: (a) добавить меta-специфичные level-
-  предикаты (e.g. `tests`: «есть исполняемый `cli/smoke.sh` ИЛИ test runner
-  в любом sub-package»); (b) рекурсивная агрегация — оценить cli/ как
-  sub-проект и поднять scores наверх; (c) принять как фичу — meta-проекты
-  capped на нейтральных осях, это правильное сообщение про инвестицию в
-  собственную инфру; (d) ввести `applies_to: [php, node, go]` фильтр на ось,
-  чтобы для meta-стека ось `excluded` а не «L0». Догфудинг N18 показал, что
-  опция (c) самая дешёвая и не размывает рубрику; (d) даёт более честный
-  отчёт без false-L0; (a) и (b) усложняют логику движка.
+- **O31** — Sub-package-aware predicate evaluation. После Шага J `stack=meta`
+  получает корректный excluded на 5 осях, но остаётся открытым кейс
+  «stack=node + manifest в cli/». Сейчас рубрика читает `package.json` в
+  корне; если он в `cli/`, predicate-evaluation для tests/static-analysis/
+  code-style/dependency-hygiene/mock-infra возвращает L0, хотя реальный код
+  есть. Решение требует расширения predicate DSL: либо `for_subpackage: <path>`
+  на ось, либо опциональный `path` параметр на конкретные `has_file`/
+  `config_value`/`package_present` predicates. Связано с `findSubPackages()`
+  из Шага I — directly answers «где искать manifest». Решает «реальный аудит»
+  кейс O30 опции (b), который applies_to filter не закрыл.
 
 ### Закрытые
 
@@ -165,6 +161,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O23 | Шаг D 2026-05-23 — regex `mock-infra` L3 расширен до `mock[-_]?[a-zA-Z0-9_-]*(server\|api\|service)` |
 | O24 | Шаг D 2026-05-23 — флаг `phpstan_present` обёрнут в `any_of` с fallback на наличие `phpstan*.neon` |
 | O28 | Шаг I 2026-05-23 — `autoDetectStack` в `facts.ts` теперь делает root-first + depth-1 scan; новая функция `findSubPackages` возвращает массив `{relPath, stack}`. См. N19. **Частично**: для оценки nested manifest'ов в предикатах нужен O30 (sub-package-aware predicates). |
+| O30 | Шаг J 2026-05-23 — Добавлен `applies_to: [stack-id, ...]` filter на ось в спеке рубрики (v0.2.2). Если задан и `ctx.stack` не в списке — ось получает `drift_kind: excluded`, не учитывается в overall scoring. 5 осей помечены `[php, node, go, python]`: tests, static-analysis, code-style, dependency-hygiene, mock-infra. См. N20. **Частично**: остаётся (b) — sub-package-aware predicate evaluation для случая stack=node + nested manifest. Открыто как **O31**. |
 
 ---
 
@@ -411,3 +408,39 @@ predicate evaluation остаётся под O30. В текущем `mise.toml` 
 `[vdx].stack = "meta"` оставлена — это сознательный выбор пользователя
 (meta-семантика лучше чем «node» для проекта типа «документация + nested
 CLI»), и evaluator её всё равно уважает поверх auto-detect.
+
+**N20 — Шаг J: `applies_to` filter в рубрике v0.2.2 (2026-05-23).** Closed
+O30 (опция d из issue). Изменения:
+- `Axis.applies_to?: string[]` в `cli/src/rubric.ts`.
+- В `cli/src/audit.ts`: перед `evalAxis` проверка — если `applies_to` задан
+  и `ctx.stack` не входит, ось получает `drift_kind: 'excluded'`.
+- `scoring.projectLevel` filter'ит excluded из visible (как suppressed).
+- Новый drift_kind type union в `AxisResult`; symbol `➖` в `report.ts`.
+- В canonical-рубрике v0.2.2 помечены `[php, node, go, python]`: tests,
+  static-analysis (critical) + code-style, dependency-hygiene, mock-infra
+  (supporting). Не помечены: lifecycle-interface, ci, reproducibility,
+  secrets-config, git-hygiene, observability, docs, shared-infra,
+  shared-infra-drift — они семантически универсальные.
+- `metadata.version` приведён к тегу: `"0.2.0"` → `"0.2.2"` (был
+  unaligned с v0.2.1 tag, заодно поправлено).
+- Bump `DEFAULT_BASELINE` в `cli/src/init.ts` до `@v0.2.2`. Bump
+  `baseline` в самом `vdx/mise.toml`.
+
+Контрольные точки:
+- `npx tsc --noEmit` — чисто.
+- Smoke на 3 референсах: telegram L2, t23b L1, bookmap L1 — **никаких
+  регрессий**. applies_to их охватывает (stack=php/node).
+- Аудит vdx (stack=meta): 5 осей теперь `excluded` (tests, static-analysis,
+  code-style, dependency-hygiene, mock-infra). Overall остался **L0** —
+  блокер теперь `ci L0` (vdx буквально не имеет GitHub Actions). Это
+  семантически правильный сигнал, а не дефект рубрики: до Шага J L0
+  был лживым (3 критические оси врали), теперь L0 показывает реальное
+  узкое место — отсутствие CI.
+
+Следующий шаг — реальные тесты + CI для vdx, либо открытое **O31**
+(sub-package-aware predicate evaluation), либо переписать README.
+
+⚠️ **GitHub state**: canonical-репо тегнут v0.2.0+v0.2.1; **v0.2.2
+тег ещё НЕ создан** и не push'нут на GitHub. Manifest-ссылки
+`@v0.2.2` будут резолвиться неполно для downstream-проектов до этого
+момента. Локально evaluator грузит из `file:///`, поэтому работает.

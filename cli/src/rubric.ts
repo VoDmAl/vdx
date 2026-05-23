@@ -29,6 +29,7 @@ export interface Axis {
   fact_sources?: string[];
   levels?: Partial<Record<LevelName, { requires: Predicate }>>;
   stack_implementations?: Record<string, StackImpl>;
+  applies_to?: string[];
 }
 
 export interface Rubric {

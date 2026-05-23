@@ -43,6 +43,7 @@ axes:                             # массив осей (см. ниже)
 - id: <kebab-case>
   class: critical | supporting    # D7
   description: "..."
+  applies_to: [<stack-id>, ...]   # optional, v0.2.2+ — см. ниже
   storage: level | flags          # default: level
   default_target: L4              # целевое значение для этой оси в этой версии
   fact_sources: [<path>...]       # подсказка движку
@@ -76,6 +77,34 @@ for L in [L1, L2, L3, L4]:
 
 Это позволяет писать каждый уровень компактно (только то, что добавляется), без
 повторения нижних условий. L0 не описывается — это «всегда true», fallback.
+
+### `applies_to` — stack-фильтр (v0.2.2+)
+
+Опциональное поле `applies_to: [<stack-id>, ...]` на оси ограничивает
+применимость оси набором стеков. Если задан и `ctx.stack` не входит в список,
+ось получает `drift_kind: excluded`, `achieved: L0` (placeholder), и
+**не учитывается в `projectLevel`** (как `suppressed`).
+
+```yaml
+- id: tests
+  class: critical
+  applies_to: [php, node, go, python]
+  ...
+```
+
+Пример: `tests` опирается на phpunit/jest/vitest/pytest — для проекта со
+`stack: meta` (документация + nested CLI без manifest в корне) ось становится
+excluded, а не лживым L0.
+
+Семантика и инварианты:
+- Отсутствие `applies_to` ≡ ось применима ко всем стекам (универсальная).
+- Список перечисляет конкретные stack id'ы из `autoDetectStack`: `php`,
+  `node`, `go`, `python`; `monorepo`, `meta`, `unknown` обычно НЕ
+  включаются.
+- `excluded` ось не блокирует критический gate в `projectLevel`.
+- Не пересекается с `suppress` из `.vdx-overrides.yml` (применяются независимо).
+- Override в `.vdx-overrides.yml` с явным `target` НЕ обходит `applies_to`:
+  axis всё равно `excluded` если stack не в списке.
 
 ## Predicate-выражение
 

@@ -1,19 +1,17 @@
-# vdx-rubric.yaml — Personal maturity rubric (vodmal, v0.2)
+# vdx-rubric.yaml — Personal maturity rubric (vodmal)
 #
-# Полный инстанс рубрики по спеке docs/specs/rubric-format.md.
-# Этот файл — РАБОЧИЙ ДРАФТ; на шаге B будет вынесен в отдельный репо
-# `vdx-rubric-vodmal` и тегирован v0.2.0 (см. decisions.md D11).
+# Canonical published rubric. Format specification:
+#   https://github.com/vodmal/vdx/blob/main/docs/specs/rubric-format.md
 #
-# Семантика уровней — delta-style: `levels.LN.requires` описывает ТОЛЬКО
+# Семантика уровней — delta-style: levels.LN.requires описывает ТОЛЬКО
 # дельту относительно L(N-1). Уровень оси = max L, для которого истинны
-# requires(L1), requires(L2), ..., requires(L) подряд (без разрывов).
-# См. drift-algorithm.md и уточнение в rubric-format.md.
+# requires(L1), ..., requires(L) подряд (без разрывов).
 
 schema_version: "0.2"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "0.2.0"
+  version: "0.2.2"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -79,6 +77,7 @@ axes:
   - id: tests
     class: critical
     description: "Наличие, разделение по типам, coverage, threshold"
+    applies_to: [php, node, go, python]
     storage: level
     default_target: L4
     fact_sources:
@@ -123,6 +122,7 @@ axes:
   - id: static-analysis
     class: critical
     description: "Эффективная строгость (не nominal level) — D2 уточнение"
+    applies_to: [php, node, go, python]
     storage: flags
     default_target: L4
     stack_implementations:
@@ -258,6 +258,7 @@ axes:
 
   - id: code-style
     class: supporting
+    applies_to: [php, node, go, python]
     storage: level
     default_target: L4
     fact_sources: [ecs.php, .php-cs-fixer.php, phpcs.xml.dist, .prettierrc, biome.json, eslint.config.js]
@@ -293,6 +294,7 @@ axes:
 
   - id: dependency-hygiene
     class: supporting
+    applies_to: [php, node, go, python]
     storage: level
     default_target: L4
     fact_sources:
@@ -446,6 +448,7 @@ axes:
 
   - id: mock-infra
     class: supporting
+    applies_to: [php, node, go, python]
     storage: level
     default_target: L4
     fact_sources: [composer.json, package.json, docker-compose.yml, mock-server/]

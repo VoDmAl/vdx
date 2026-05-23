@@ -4,6 +4,7 @@ const SYMBOL: Record<string, string> = {
   aligned: '✅',
   gap: '⚠️ ',
   over: '🔵',
+  excluded: '➖',
 };
 
 export function reportMarkdown(r: AuditResult): string {
