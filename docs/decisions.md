@@ -489,8 +489,8 @@ subpackage (типичный паттерн — `cli/`, `api/`, `web/`, `server/
 evaluator даёт **реальные** уровни вместо false-L0. Это и был последний
 блокер «реалистичного аудита» из cycle'а N18→N19→N20→N21.
 
-⚠️ **GitHub state** (по-прежнему): тег `v0.2.2` локальный, не push'нут.
 Шаг K не требует bump'а рубрики — формат рубрики не менялся.
+Тег `v0.2.2` push'нут на GitHub 2026-05-23.
 
 **N22 — Шаг L: CI workflow для vdx (2026-05-23).** Добавлен
 `.github/workflows/ci.yml` (push на main + pull_request → setup-node@v4 +
@@ -531,5 +531,5 @@ docker-compose / Dockerfile / Makefile / `.env.example` / traefik-конфига
 
 (c) — наиболее в духе принципа «честный аудит». Откладываем.
 
-⚠️ **GitHub state**: workflow появится в Actions tab только после push'а.
-Локальный аудит уже видит файл и оценивает корректно.
+Workflow push'нут на GitHub 2026-05-23 — Actions tab активен. Локальный
+аудит видит файл независимо от push'а.

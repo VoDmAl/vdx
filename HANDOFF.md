@@ -13,8 +13,8 @@
 (см. [README.md](README.md)).
 
 **Где мы сейчас**: 12 шагов (A–L) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег ⚠️ ещё локальный, на
-GitHub НЕ push'нут). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег push'нут на GitHub
+2026-05-23). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
 MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
 догфудинг на самом vdx (H): vdx имеет корневой `mise.toml` (stack=meta),
 achieved L0 (lifecycle L2). **Шаг I**: monorepo/subpackage stack detection
@@ -36,11 +36,6 @@ secrets-config/shared-infra/shared-infra-drift — у meta-репо буквал
 нет docker/.env/compose, это правдивая оценка).
 
 **Следующий шаг** (приоритеты после L):
-- **Тег v0.2.2 в canonical-репо** — `git tag -a v0.2.2`, push. Без тега
-  manifest-ссылки `@v0.2.2` не резолвятся на GitHub. (Шаги K/L не требуют
-  bump'а — формат рубрики не менялся.)
-- **Push workflow на GitHub** — пока локально, нужно `git push` чтобы
-  Actions tab активировался.
 - **L4 на ci-оси** — matrix [node 20, 22] либо sentry-release / deploy-check.
   Лёгкий wins, но не критичный.
 - **L1 overall для vdx** — самая близкая планка. Нужно поднять 2 из 4
@@ -226,8 +221,8 @@ sub-package-aware остаётся под O30. См. N19.
 устранён. Sub-package-aware predicate evaluation для stack=node + nested
 manifest — переехало в **O31**. См. N20.
 
-⚠️ Тег `v0.2.2` локальный, не push'нут на GitHub. Manifest-ссылки
-`@v0.2.2` пока разрешаются только через file://.
+Тег `v0.2.2` push'нут на GitHub 2026-05-23 — manifest-ссылки `@v0.2.2`
+резолвятся.
 
 ### Шаг K — `primary_subpackage` (O31 закрыт) ✅ (2026-05-23)
 
@@ -272,8 +267,7 @@ L0, но capping переехал на 4 supporting-L0 (reproducibility, secrets
 shared-infra, shared-infra-drift). Это правдиво — meta-репо без
 docker/.env/compose. См. N22.
 
-⚠️ Workflow пока локальный, не push'нут на GitHub — Actions tab активируется
-после push'а.
+Workflow push'нут на GitHub 2026-05-23 — Actions tab активен.
 
 ---
 
