@@ -69,7 +69,7 @@ function cmdAudit(opts: ParsedArgs): void {
   };
 
   const baselineRef = manifest?.baseline ?? `file://${rubricPath}`;
-  const result = audit(rubric, ctx, overrides, baselineRef);
+  const result = audit(rubric, ctx, overrides, baselineRef, manifest);
 
   if (opts.flags.json) {
     process.stdout.write(reportJson(result) + '\n');

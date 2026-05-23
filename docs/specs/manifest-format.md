@@ -34,8 +34,9 @@ run = "composer test"
 [vdx]
 schema_version = "0.2"
 baseline = "github.com/vodmal/vdx-rubric@v0.2.0"
-stack = "php"                        # php | node | python | go | mixed
+stack = "php"                        # php | node | python | go | meta | mixed
 primary_language = "PHP"
+primary_subpackage = "api"           # optional: stack-specific предикаты идут в эту папку
 verbs = ["up", "down", "build", "test", "check", "fix"]
 
 [vdx.shared_infra]
@@ -62,6 +63,15 @@ acknowledged_drift = []              # axis_ids, дрейф осознанно �
 - `baseline` — ссылка на owner-рубрику + версия. Формат `host/owner/repo@tag`
   (как Go modules). Аудит загружает **именно эту** версию (D11).
 - `stack` — общая характеристика; влияет на стек-специфичные оси.
+- `primary_subpackage` *(optional)* — относительный путь до subpackage, в
+  котором живёт основной manifest стека (`package.json`/`composer.json`/...).
+  Для осей с `applies_to: [<stack>]` evaluator меняет `projectRoot` на эту
+  папку — предикаты `has_file`/`package_present`/`tsc_flag`/`config_value`
+  смотрят в subpackage. Оси без `applies_to` (lifecycle-interface, ci,
+  reproducibility, secrets-config, git-hygiene, observability, docs,
+  shared-infra*) всегда работают от корня. Если поле не задано — evaluator
+  пробует auto-resolve через `findSubPackages()`: использует subpackage,
+  если ровно один совпадает с `stack`. См. O31 в `../decisions.md`.
 - `verbs` — список стандартных глаголов, которые проект **обязуется** выставить.
   Если задача `up` определена в `[tasks]`, она должна быть в `verbs`. vdx-audit
   падает при расхождении.

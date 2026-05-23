@@ -135,16 +135,15 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   «нет TTY» сценариев MCP); (c) ничего не делать (status quo) — пусть user
   правит `mise.toml` руками; (d) для stack=meta заюзать специальные `description-only`
   плейсхолдеры, чтобы хоть verb-имена были видны в AGENTS.md. Связан с O28.
-- **O31** — Sub-package-aware predicate evaluation. После Шага J `stack=meta`
-  получает корректный excluded на 5 осях, но остаётся открытым кейс
-  «stack=node + manifest в cli/». Сейчас рубрика читает `package.json` в
-  корне; если он в `cli/`, predicate-evaluation для tests/static-analysis/
-  code-style/dependency-hygiene/mock-infra возвращает L0, хотя реальный код
-  есть. Решение требует расширения predicate DSL: либо `for_subpackage: <path>`
-  на ось, либо опциональный `path` параметр на конкретные `has_file`/
-  `config_value`/`package_present` predicates. Связано с `findSubPackages()`
-  из Шага I — directly answers «где искать manifest». Решает «реальный аудит»
-  кейс O30 опции (b), который applies_to filter не закрыл.
+- **O32** — Multi-subpackage monorepo (разные стеки в разных папках). Шаг K
+  закрыл O31 одним полем `primary_subpackage` — но это **одно** subpackage на
+  проект. Для гибрида типа `php-api/ + node-web/` (где tests/static-analysis
+  должны оценивать оба) текущая модель даёт уровень только одного. Опции:
+  (a) расширить поле до массива `primary_subpackages: ["php-api", "node-web"]`
+  с aggregate-стратегией (`min`/`max`/`avg`); (b) per-axis маппинг в манифесте
+  `[vdx.subpackages] tests = "php-api"`; (c) принять как ограничение —
+  multi-stack monorepo использует override на оси. Реальных пользователей с
+  таким раскладом пока нет — отложено до появления.
 
 ### Закрытые
 
@@ -162,6 +161,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O24 | Шаг D 2026-05-23 — флаг `phpstan_present` обёрнут в `any_of` с fallback на наличие `phpstan*.neon` |
 | O28 | Шаг I 2026-05-23 — `autoDetectStack` в `facts.ts` теперь делает root-first + depth-1 scan; новая функция `findSubPackages` возвращает массив `{relPath, stack}`. См. N19. **Частично**: для оценки nested manifest'ов в предикатах нужен O30 (sub-package-aware predicates). |
 | O30 | Шаг J 2026-05-23 — Добавлен `applies_to: [stack-id, ...]` filter на ось в спеке рубрики (v0.2.2). Если задан и `ctx.stack` не в списке — ось получает `drift_kind: excluded`, не учитывается в overall scoring. 5 осей помечены `[php, node, go, python]`: tests, static-analysis, code-style, dependency-hygiene, mock-infra. См. N20. **Частично**: остаётся (b) — sub-package-aware predicate evaluation для случая stack=node + nested manifest. Открыто как **O31**. |
+| O31 | Шаг K 2026-05-23 — Добавлено поле `[vdx].primary_subpackage` в манифест проекта. В `audit.ts` для осей с `applies_to` evaluator подменяет `ctx.projectRoot` на subpackage (explicit-from-manifest или auto-resolve через `findSubPackages()` когда ровно один subpackage совпадает с `ctx.stack`). Owner-рубрика остаётся stack-agnostic. См. N21. **Полностью**: остаточный кейс multi-subpackage monorepo (разные стеки в разных папках) выделен в **O32**. |
 
 ---
 
@@ -444,3 +444,50 @@ O30 (опция d из issue). Изменения:
 тег ещё НЕ создан** и не push'нут на GitHub. Manifest-ссылки
 `@v0.2.2` будут резолвиться неполно для downstream-проектов до этого
 момента. Локально evaluator грузит из `file:///`, поэтому работает.
+
+**N21 — Шаг K: `primary_subpackage` закрывает O31 (2026-05-23).** Добавлено
+optional поле `[vdx].primary_subpackage` в `VdxManifest` (`cli/src/manifest.ts`).
+В `cli/src/audit.ts` функция `resolveSubpackageCtx(ctx, manifest)` строит
+derived `Ctx` с заменённым `projectRoot`:
+
+1. **Explicit**: если `manifest.primary_subpackage` задан и папка существует —
+   использует её. Если не существует — warning на stderr + fallback на root.
+2. **Auto-resolve**: иначе `findSubPackages(projectRoot)` — если ровно один
+   subpackage совпадает с `ctx.stack` (например stack=node + ровно один
+   subpackage с `package.json`) — берёт его. Иначе fallback на root.
+3. **Применение**: в основном loop по осям — для оси с `applies_to` используется
+   `subpackageCtx`, для остальных — `ctx`. Оси без `applies_to`
+   (lifecycle-interface, ci, reproducibility, docs, shared-infra, ...) всегда
+   работают от корня — потому что эти артефакты (`.github/workflows/`,
+   `README.md`, `docker-compose.yml`) живут в корне даже у monorepo-проектов.
+4. **AuditResult**: новое optional поле `primary_subpackage: string` —
+   возвращается клиенту (полезно для отчётов).
+
+Owner-рубрика **не меняется** (schema_version=0.2, v0.2.2 актуальна) —
+изменение чисто на стороне evaluator + манифеста.
+
+Контрольные точки:
+- `npx tsc --noEmit` — чисто.
+- Smoke на 3 референсах: telegram L2, t23b L1, bookmap L1 — никаких регрессий
+  (у них manifest в корне, `findSubPackages` возвращает пусто → fallback root).
+- Dogfooding на копии vdx (`/tmp/vdx-o31-test`): два варианта.
+  - `stack=node + primary_subpackage="cli"` (explicit): 5 stack-осей оценены
+    через `cli/`. `static-analysis` L2 (tsc strict + tsconfig.json),
+    `dependency-hygiene` L1 (package-lock.json), `mock-infra` L1 (always_true),
+    `tests` L0 (нет vitest/tests/), `code-style` L0 (нет eslint/prettier
+    конфига). Overall остался L0 (capped критическим `tests` + `ci`).
+  - `stack=node` без `primary_subpackage` (auto-resolve):
+    **идентичный результат** — `findSubPackages()` нашёл единственный `cli/`
+    с stack=node, `resolveSubpackageCtx` подхватил его.
+- Оригинальный `vdx/mise.toml` (stack=meta) не трогается — для meta-проектов
+  5 осей остаются excluded (как после Шага J). Это сознательный выбор:
+  vdx сам по себе — meta-репо «документация + nested CLI», и оценивать его
+  как обычный node-проект через cli/ — натяжка.
+
+**Семантический результат**: для node/php/go/python-проектов с manifest в
+subpackage (типичный паттерн — `cli/`, `api/`, `web/`, `server/`) теперь
+evaluator даёт **реальные** уровни вместо false-L0. Это и был последний
+блокер «реалистичного аудита» из cycle'а N18→N19→N20→N21.
+
+⚠️ **GitHub state** (по-прежнему): тег `v0.2.2` локальный, не push'нут.
+Шаг K не требует bump'а рубрики — формат рубрики не менялся.

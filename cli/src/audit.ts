@@ -1,6 +1,8 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { Rubric, LevelName } from './rubric.ts';
-import type { Ctx } from './facts.ts';
-import type { Override } from './manifest.ts';
+import { findSubPackages, type Ctx } from './facts.ts';
+import type { Override, VdxManifest } from './manifest.ts';
 import { evalAxis, projectLevel, type AxisResult } from './scoring.ts';
 
 function levelToInt(L: LevelName): number {
@@ -14,9 +16,60 @@ export interface AuditResult {
   per_axis: Array<AxisResult & { suppressed?: boolean; override_target?: LevelName }>;
   overrides: Override[];
   expired_overrides: string[];
+  primary_subpackage?: string;
 }
 
-export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineRef: string): AuditResult {
+/**
+ * Резолвит ctx для stack-specific осей (с `applies_to`). Источник subpackage:
+ *   1. manifest.primary_subpackage (explicit) — если папка существует.
+ *   2. findSubPackages() auto-detect — если ровно один subpackage совпадает с ctx.stack.
+ *   3. fallback на root ctx.
+ *
+ * Возвращает `{ ctx, relPath }` где relPath — относительный путь либо null
+ * (если subpackage не разрезолвился — будем использовать root).
+ */
+function resolveSubpackageCtx(
+  ctx: Ctx,
+  manifest: VdxManifest | null,
+): { ctx: Ctx; relPath: string | null } {
+  let relPath: string | null = null;
+
+  if (manifest?.primary_subpackage) {
+    const p = manifest.primary_subpackage;
+    const abs = path.join(ctx.projectRoot, p);
+    if (fs.existsSync(abs)) {
+      relPath = p;
+    } else {
+      process.stderr.write(
+        `warning: primary_subpackage "${p}" does not exist — falling back to root\n`,
+      );
+    }
+  } else {
+    const subs = findSubPackages(ctx.projectRoot);
+    const matching = subs.filter((s) => s.stack === ctx.stack);
+    if (matching.length === 1) {
+      relPath = matching[0]!.relPath;
+    }
+  }
+
+  if (!relPath) return { ctx, relPath: null };
+  return {
+    ctx: {
+      projectRoot: path.join(ctx.projectRoot, relPath),
+      stack: ctx.stack,
+      cache: new Map(),
+    },
+    relPath,
+  };
+}
+
+export function audit(
+  rubric: Rubric,
+  ctx: Ctx,
+  overrides: Override[],
+  baselineRef: string,
+  manifest: VdxManifest | null = null,
+): AuditResult {
   const suppressed = new Set<string>();
   const overrideByAxis = new Map<string, Override>();
   const expired: string[] = [];
@@ -27,6 +80,8 @@ export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineR
     if (ov.suppress) suppressed.add(ov.axis);
     if (ov.until && ov.until < today) expired.push(ov.axis);
   }
+
+  const { ctx: subpackageCtx, relPath: subpackagePath } = resolveSubpackageCtx(ctx, manifest);
 
   const perAxis: AuditResult['per_axis'] = [];
   for (const axis of rubric.axes) {
@@ -51,7 +106,8 @@ export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineR
       });
       continue;
     }
-    const achieved = evalAxis(axis, ctx);
+    const evalCtx = axis.applies_to ? subpackageCtx : ctx;
+    const achieved = evalAxis(axis, evalCtx);
     const ov = overrideByAxis.get(axis.id);
     const target = (ov?.target as LevelName) ?? axis.default_target;
     const drift: 'aligned' | 'gap' | 'over' =
@@ -73,7 +129,7 @@ export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineR
 
   const overall = projectLevel(perAxis, rubric, suppressed);
 
-  return {
+  const result: AuditResult = {
     baseline: baselineRef,
     stack: ctx.stack,
     achieved_level: overall,
@@ -81,4 +137,6 @@ export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineR
     overrides,
     expired_overrides: expired,
   };
+  if (subpackagePath) result.primary_subpackage = subpackagePath;
+  return result;
 }

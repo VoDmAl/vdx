@@ -127,7 +127,7 @@ function buildAuditPayload(baselineOverride: string | undefined, fmt: 'json' | '
   const manifest = loadManifest(PROJECT_ROOT);
   const overrides = loadOverrides(PROJECT_ROOT);
   const baselineRef = baselineOverride ?? manifest?.baseline ?? `file://${rubricPath}`;
-  const result = audit(rubric, ctx, overrides, baselineRef);
+  const result = audit(rubric, ctx, overrides, baselineRef, manifest);
   if (fmt === 'markdown') return reportMarkdown(result);
   return reportJson(result);
 }

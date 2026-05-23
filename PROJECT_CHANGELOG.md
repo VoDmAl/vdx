@@ -4,6 +4,22 @@
 
 ## 2026-05-23
 
+### Шаг K: primary_subpackage в манифесте (O31 закрыт)
+Добавлено optional поле `[vdx].primary_subpackage` в `VdxManifest`
+(`cli/src/manifest.ts`). В `cli/src/audit.ts` функция `resolveSubpackageCtx`
+строит derived `Ctx` с заменённым `projectRoot` для осей с `applies_to`:
+explicit-from-manifest либо auto-resolve через `findSubPackages()` когда
+ровно один subpackage совпадает с `ctx.stack`. Owner-рубрика не менялась.
+Smoke на 3 референсах без регрессий (telegram L2, t23b L1, bookmap L1 —
+manifest в корне, fallback на root). Dogfooding на копии vdx
+(stack=node+subpkg=cli): 5 stack-осей теперь оценены реально вместо
+excluded — `static-analysis` L2 (tsc strict), `dependency-hygiene` L1
+(lockfile), `mock-infra` L1, `tests`/`code-style` остались L0 (правдиво:
+нет vitest/eslint). Оригинальный `vdx/mise.toml` остаётся `stack=meta`
+(сознательный выбор). Остаточный кейс multi-subpackage monorepo выделен
+как **O32**. См. [docs/decisions.md](docs/decisions.md) N21 + закрытие O31,
+[docs/specs/manifest-format.md](docs/specs/manifest-format.md) описание поля.
+
 ### README rewrite под текущее состояние (A–J)
 Снят устаревший статус «спека ядра в процессе / следующая фаза — реализация».
 Добавлены: секция «Двух-репо структура» (vdx + vdx-rubric-vodmal с ссылками на

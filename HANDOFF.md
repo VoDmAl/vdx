@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter)
+# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter + K primary_subpackage)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,7 +12,7 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 10 шагов (A–J) пройдены. Owner-рубрика на
+**Где мы сейчас**: 11 шагов (A–K) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег ⚠️ ещё локальный, на
 GitHub НЕ push'нут). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
 MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
@@ -22,21 +22,24 @@ achieved L0 (lifecycle L2). **Шаг I**: monorepo/subpackage stack detection
 auto-detect на vdx без декларации: `unknown` → `node` через `cli/`.
 **Шаг J**: `applies_to` filter — 5 stack-specific осей помечены
 `[php, node, go, python]`; для stack=meta получают `drift_kind: excluded`,
-не учитываются в overall. vdx сейчас: 5 осей excluded, L0 теперь по
-**реальной** причине (ci L0) — lying-L0 устранён.
+не учитываются в overall. **Шаг K**: `[vdx].primary_subpackage` в манифесте +
+`resolveSubpackageCtx` в `audit.ts` — для осей с `applies_to` evaluator
+подменяет projectRoot на subpackage (explicit или auto-resolve через
+`findSubPackages` когда ровно один subpackage совпадает с stack). vdx сейчас:
+stack=meta (по-прежнему), 5 осей excluded, L0 по реальной причине (ci L0).
+Для node/php-проектов с manifest в subpackage (типичный паттерн `cli/`,
+`api/`, `web/`) evaluator теперь даёт реальные L-уровни вместо false-L0.
 
-**Следующий шаг** (приоритеты после J):
+**Следующий шаг** (приоритеты после K):
 - **Тег v0.2.2 в canonical-репо** — `git tag -a v0.2.2`, push. Без тега
-  manifest-ссылки `@v0.2.2` не резолвятся на GitHub.
-- **O31** (новое) — sub-package-aware predicate evaluation. Случай
-  `stack=node + manifest в cli/` остаётся false-L0: predicates всё ещё
-  смотрят в корень. Решение — либо `for_subpackage: <path>` на ось, либо
-  optional `path` на конкретные `has_file`/`config_value`/`package_present`.
-  Уже есть `findSubPackages()` из Шага I — это половина инфры.
+  manifest-ссылки `@v0.2.2` не резолвятся на GitHub. (Шаг K не требует
+  bump'а — формат рубрики не менялся.)
 - **O29** — поведение `vdx init` при unknown/meta (теперь редкий случай
   благодаря I — actually unknown стало почти невозможно).
 - **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
   (реальный shared-infra precheck) — известны ранее.
+- **O32** (новое) — multi-subpackage monorepo (разные стеки в разных
+  папках). Реальных пользователей пока нет, отложено.
 - Альтернативы: настоящие тесты для vdx (vitest), CI workflow для
   vdx (закрывает реальный L0 на ci), вынос CLI в npm package для
   marketplace-релиза плагина.
@@ -213,6 +216,29 @@ manifest — переехало в **O31**. См. N20.
 
 ⚠️ Тег `v0.2.2` локальный, не push'нут на GitHub. Manifest-ссылки
 `@v0.2.2` пока разрешаются только через file://.
+
+### Шаг K — `primary_subpackage` (O31 закрыт) ✅ (2026-05-23)
+
+Добавлено optional поле `[vdx].primary_subpackage` в `VdxManifest`
+(`cli/src/manifest.ts`). В `cli/src/audit.ts` новая функция
+`resolveSubpackageCtx(ctx, manifest)` строит derived `Ctx` с заменённым
+`projectRoot` для осей с `applies_to`. Приоритет: explicit-from-manifest →
+auto-resolve через `findSubPackages()` когда ровно один subpackage с
+`stack === ctx.stack` → fallback на root. Owner-рубрика без изменений
+(формат не менялся, v0.2.2 актуальна).
+
+Контрольные точки:
+- `npx tsc --noEmit` — чисто.
+- Smoke на 3 референсах: L2/L1/L1 — никаких регрессий (у них manifest в
+  корне, `findSubPackages` пустой → fallback на root).
+- Dogfooding (копия vdx, stack=node + primary_subpackage=cli):
+  `static-analysis` L2 (tsc strict), `dependency-hygiene` L1 (lockfile),
+  `mock-infra` L1, `tests`/`code-style` L0 (правдиво — нет vitest/eslint).
+  Без `primary_subpackage` поля — идентичный результат через auto-resolve.
+- Оригинальный `vdx/mise.toml` (stack=meta) не трогался — 5 осей excluded,
+  как после Шага J.
+
+Остаточный кейс multi-subpackage monorepo выделен как **O32**.
 
 ---
 

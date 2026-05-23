@@ -8,6 +8,7 @@ export interface VdxManifest {
   baseline?: string;
   stack?: string;
   primary_language?: string;
+  primary_subpackage?: string;
   verbs?: string[];
   shared_infra?: {
     provider?: string;
