@@ -4,6 +4,13 @@
 
 ## 2026-05-23
 
+### Шаг M: ci L4 через matrix node [20, 22]
+В `.github/workflows/ci.yml` добавлен `strategy.matrix.node-version: [20, 22]`
+с `fail-fast: false`. Typecheck гоняется на двух LTS-версиях node параллельно.
+Audit на vdx: `ci` L3 → **L4** (предикат `file_contains: matrix:` совпадает) —
+первая ось vdx на max. Overall L0 без изменений (4 supporting на L0 — meta-репо).
+См. [docs/decisions.md](docs/decisions.md) N23.
+
 ### Шаг L: CI workflow для vdx (ci axis L0 → L3)
 Добавлен `.github/workflows/ci.yml` (push main + pull_request → setup-node@v4,
 `cd cli && npm ci && npm test`). В `cli/package.json` добавлен alias

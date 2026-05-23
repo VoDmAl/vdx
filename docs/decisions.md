@@ -533,3 +533,10 @@ docker-compose / Dockerfile / Makefile / `.env.example` / traefik-конфига
 
 Workflow push'нут на GitHub 2026-05-23 — Actions tab активен. Локальный
 аудит видит файл независимо от push'а.
+
+**N23 — Шаг M: ci L4 через matrix (2026-05-23).** В `.github/workflows/ci.yml`
+добавлен `strategy.matrix.node-version: [20, 22]` + `fail-fast: false`.
+Workflow прогоняет typecheck на двух LTS-версиях node. Audit на vdx: `ci`
+L3 → **L4** (предикат L4 `file_contains: matrix:` ✓). Overall vdx остался L0
+по той же причине (4 supporting-оси на L0 — meta-репо без docker/.env/compose).
+**ci — первая ось vdx на max**.

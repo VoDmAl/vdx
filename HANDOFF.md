@@ -12,7 +12,7 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 12 шагов (A–L) пройдены. Owner-рубрика на
+**Где мы сейчас**: 13 шагов (A–M) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег push'нут на GitHub
 2026-05-23). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
 MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
@@ -28,22 +28,19 @@ auto-detect на vdx без декларации: `unknown` → `node` чере�
 `findSubPackages` когда ровно один subpackage совпадает с stack).
 **Шаг L**: `.github/workflows/ci.yml` + `npm test` в `cli/package.json` —
 ci-ось v0.2.2 поднялась L0 → **L3** (workflow + npm test regex +
-pull_request trigger без `\|\| true`).
+pull_request trigger без `\|\| true`). **Шаг M**: добавлен `matrix.node-version: [20, 22]` в workflow — ci-ось дотянулась до **L4** (первая ось vdx на max).
 
-vdx сейчас: stack=meta, 5 stack-осей excluded, lifecycle L2, **ci L3**,
+vdx сейчас: stack=meta, 5 stack-осей excluded, lifecycle L2, **ci L4**,
 overall **L0** (capping переехал на 4 supporting-оси: reproducibility/
 secrets-config/shared-infra/shared-infra-drift — у meta-репо буквально
 нет docker/.env/compose, это правдивая оценка).
 
-**Следующий шаг** (приоритеты после L):
-- **L4 на ci-оси** — matrix [node 20, 22] либо sentry-release / deploy-check.
-  Лёгкий wins, но не критичный.
+**Следующий шаг** (приоритеты после M):
 - **L1 overall для vdx** — самая близкая планка. Нужно поднять 2 из 4
   supporting-L0: либо Dockerfile/Makefile (reproducibility L1), либо
   `.env.example` (secrets-config L2), либо override через
   `.vdx-overrides.yml` для shared-infra (meta не имеет shared-infra).
-  Альтернатива (по N22): принять L0 как честную meta-оценку и зафиксировать
-  в README.
+  Альтернатива: принять L0 как честную meta-оценку и зафиксировать в README.
 - **O29** — поведение `vdx init` при unknown/meta (редкий случай).
 - **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
   (реальный shared-infra precheck) — известны ранее.
@@ -268,6 +265,13 @@ shared-infra, shared-infra-drift). Это правдиво — meta-репо б�
 docker/.env/compose. См. N22.
 
 Workflow push'нут на GitHub 2026-05-23 — Actions tab активен.
+
+### Шаг M — ci L4 через matrix ✅ (2026-05-23)
+
+В `.github/workflows/ci.yml` добавлен `strategy.matrix.node-version: [20, 22]`
++ `fail-fast: false`. Typecheck гоняется параллельно на двух LTS. Audit на
+vdx: `ci` L3 → **L4** (предикат `file_contains: matrix:` совпадает). Это
+первая ось vdx, достигшая max. Overall L0 без изменений. См. N23.
 
 ---
 
