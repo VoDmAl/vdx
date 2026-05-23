@@ -1,0 +1,74 @@
+import type { Rubric, LevelName } from './rubric.ts';
+import type { Ctx } from './facts.ts';
+import type { Override } from './manifest.ts';
+import { evalAxis, projectLevel, type AxisResult } from './scoring.ts';
+
+function levelToInt(L: LevelName): number {
+  return parseInt(L.slice(1), 10);
+}
+
+export interface AuditResult {
+  baseline: string;
+  stack: string;
+  achieved_level: LevelName;
+  per_axis: Array<AxisResult & { suppressed?: boolean; override_target?: LevelName }>;
+  overrides: Override[];
+  expired_overrides: string[];
+}
+
+export function audit(rubric: Rubric, ctx: Ctx, overrides: Override[], baselineRef: string): AuditResult {
+  const suppressed = new Set<string>();
+  const overrideByAxis = new Map<string, Override>();
+  const expired: string[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const ov of overrides) {
+    overrideByAxis.set(ov.axis, ov);
+    if (ov.suppress) suppressed.add(ov.axis);
+    if (ov.until && ov.until < today) expired.push(ov.axis);
+  }
+
+  const perAxis: AuditResult['per_axis'] = [];
+  for (const axis of rubric.axes) {
+    if (suppressed.has(axis.id)) {
+      perAxis.push({
+        axis_id: axis.id,
+        class: axis.class,
+        achieved: 'L0',
+        target: axis.default_target,
+        drift_kind: 'aligned',
+        suppressed: true,
+      });
+      continue;
+    }
+    const achieved = evalAxis(axis, ctx);
+    const ov = overrideByAxis.get(axis.id);
+    const target = (ov?.target as LevelName) ?? axis.default_target;
+    const drift: 'aligned' | 'gap' | 'over' =
+      levelToInt(achieved) === levelToInt(target)
+        ? 'aligned'
+        : levelToInt(achieved) < levelToInt(target)
+          ? 'gap'
+          : 'over';
+    const entry: AuditResult['per_axis'][number] = {
+      axis_id: axis.id,
+      class: axis.class,
+      achieved,
+      target,
+      drift_kind: drift,
+    };
+    if (ov?.target) entry.override_target = ov.target as LevelName;
+    perAxis.push(entry);
+  }
+
+  const overall = projectLevel(perAxis, rubric, suppressed);
+
+  return {
+    baseline: baselineRef,
+    stack: ctx.stack,
+    achieved_level: overall,
+    per_axis: perAxis,
+    overrides,
+    expired_overrides: expired,
+  };
+}

@@ -1,0 +1,533 @@
+# vdx-rubric.yaml — Personal maturity rubric (vodmal, v0.2)
+#
+# Полный инстанс рубрики по спеке docs/specs/rubric-format.md.
+# Этот файл — РАБОЧИЙ ДРАФТ; на шаге B будет вынесен в отдельный репо
+# `vdx-rubric-vodmal` и тегирован v0.2.0 (см. decisions.md D11).
+#
+# Семантика уровней — delta-style: `levels.LN.requires` описывает ТОЛЬКО
+# дельту относительно L(N-1). Уровень оси = max L, для которого истинны
+# requires(L1), requires(L2), ..., requires(L) подряд (без разрывов).
+# См. drift-algorithm.md и уточнение в rubric-format.md.
+
+schema_version: "0.2"
+
+metadata:
+  name: vdx-rubric-vodmal
+  version: "0.2.0"
+  description: "Personal maturity rubric for multi-stack projects (vodmal)"
+  owner: vodmal
+  homepage: "https://github.com/vodmal/vdx-rubric"
+
+scoring:
+  formula: weighted_two_class
+  supporting_threshold: 0.8
+
+levels:
+  L0: { name: chaos,        description: "Не поднимается, знание в голове" }
+  L1: { name: reproducible, description: "Поднимается одной задокументированной командой" }
+  L2: { name: testable,     description: "Тесты есть; единый словарь up/test/build" }
+  L3: { name: gated,        description: "Статанализ + стиль + CI-гейты на PR (реальные!)" }
+  L4: { name: exemplar,     description: "Полная глубина: хуки, mock-инфра, observability, версионированная общая инфра" }
+
+axes:
+
+  # =========================================================================
+  # CRITICAL
+  # =========================================================================
+
+  - id: lifecycle-interface
+    class: critical
+    description: "Стандартный словарь глаголов up/down/build/test/check/fix"
+    storage: level
+    default_target: L4
+    fact_sources: [mise.toml, composer.json, package.json, Makefile]
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: docker-compose.yml
+            - has_file: docker-compose.yaml
+            - has_file: Makefile
+            - has_task_matching: ".+"
+      L2:
+        requires:
+          at_least_n_of:
+            n: 3
+            predicates:
+              - has_task: up
+              - has_task: down
+              - has_task: build
+              - has_task: test
+              - has_task: check
+              - has_task: fix
+      L3:
+        requires:
+          all_of:
+            - has_task: up
+            - has_task: down
+            - has_task: build
+            - has_task: test
+            - has_task: check
+            - has_task: fix
+      L4:
+        requires:
+          any_of:
+            - has_task_matching: "check:before:.*"
+            - has_task_matching: "build:.*"
+            - has_task_matching: "test:.*"
+
+  - id: tests
+    class: critical
+    description: "Наличие, разделение по типам, coverage, threshold"
+    storage: level
+    default_target: L4
+    fact_sources:
+      - phpunit.xml.dist
+      - phpunit.xml
+      - jest.config.js
+      - vitest.config.ts
+      - package.json
+      - composer.json
+      - tests/
+      - playwright.config.ts
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: tests
+            - has_file: __tests__
+            - package_present: { name: phpunit/phpunit, ecosystem: composer }
+            - package_present: { name: jest, ecosystem: npm }
+            - package_present: { name: vitest, ecosystem: npm }
+      L2:
+        requires:
+          any_of:
+            - has_file: tests/Unit
+            - has_file: tests/unit
+            - file_contains: { path: phpunit.xml.dist, pattern: "<testsuite" }
+            - has_task: test:unit
+      L3:
+        requires:
+          any_of:
+            - file_contains: { path: phpunit.xml.dist, pattern: "<coverage>" }
+            - has_task: coverage
+            - file_contains: { path: package.json, pattern: "\"coverage\":" }
+      L4:
+        requires:
+          any_of:
+            - file_contains: { path: phpunit.xml.dist, pattern: "coverageMinimum|<report.+threshold" }
+            - has_task: test:mutation
+            - has_task: test:e2e
+            - has_file: playwright.config.ts
+
+  - id: static-analysis
+    class: critical
+    description: "Эффективная строгость (не nominal level) — D2 уточнение"
+    storage: flags
+    default_target: L4
+    stack_implementations:
+      php:
+        flags:
+          - id: phpstan_present
+            weight: 1.0
+            predicate:
+              any_of:
+                - package_present: { name: phpstan/phpstan, ecosystem: composer }
+                - has_file: phpstan.neon
+                - has_file: phpstan.neon.dist
+                - has_file: phpstan.dist.neon
+          - id: phpstan_bleeding_edge
+            weight: 0.5
+            predicate: { file_contains: { path: phpstan.neon, pattern: "bleedingEdge.neon" } }
+          - id: phpstan_strict_rules
+            weight: 1.0
+            predicate: { package_present: { name: phpstan/phpstan-strict-rules, ecosystem: composer } }
+          - id: phpstan_symplify_rules
+            weight: 0.5
+            predicate: { package_present: { name: symplify/phpstan-rules, ecosystem: composer } }
+          - id: psalm_present
+            weight: 1.0
+            predicate: { package_present: { name: vimeo/psalm, ecosystem: composer } }
+          - id: type_coverage_active
+            weight: 0.5
+            predicate: { package_present: { name: tomasvotruba/type-coverage, ecosystem: composer } }
+        level_thresholds: { L4: 0.85, L3: 0.65, L2: 0.35, L1: 0.10 }
+      node:
+        flags:
+          - id: tsc_strict
+            weight: 1.0
+            predicate: { tsc_flag: { name: strict, equals: true } }
+          - id: no_unchecked_indexed_access
+            weight: 1.0
+            predicate: { tsc_flag: { name: noUncheckedIndexedAccess, equals: true } }
+          - id: exact_optional_property_types
+            weight: 0.5
+            predicate: { tsc_flag: { name: exactOptionalPropertyTypes, equals: true } }
+          - id: no_implicit_override
+            weight: 0.3
+            predicate: { tsc_flag: { name: noImplicitOverride, equals: true } }
+          - id: eslint_flat
+            weight: 1.0
+            predicate:
+              any_of:
+                - has_file: eslint.config.js
+                - has_file: eslint.config.mjs
+                - has_file: eslint.config.ts
+          - id: eslint_type_checked
+            weight: 1.0
+            predicate:
+              file_contains:
+                paths: [eslint.config.js, eslint.config.mjs, eslint.config.ts]
+                pattern: "recommended-type-checked"
+        level_thresholds: { L4: 0.85, L3: 0.65, L2: 0.35, L1: 0.10 }
+
+  - id: ci
+    class: critical
+    description: "Реальное гейтование PR (no `|| true`!)"
+    storage: level
+    default_target: L4
+    fact_sources:
+      - .github/workflows/
+      - .gitlab-ci.yml
+      - .circleci/config.yml
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: .github/workflows
+            - has_file: .gitlab-ci.yml
+            - has_file: .circleci/config.yml
+      L2:
+        requires:
+          any_of:
+            - file_contains:
+                paths: [.github/workflows/*.yml, .gitlab-ci.yml]
+                pattern: "(phpstan|phpunit|composer test|npm test|jest|pytest)"
+      L3:
+        requires:
+          all_of:
+            - any_of:
+                - gh_workflow_blocks_pr: {}
+                - file_contains: { path: .gitlab-ci.yml, pattern: "rules:.+merge_request" }
+            - not:
+                file_contains:
+                  paths: [.github/workflows/*.yml, .gitlab-ci.yml]
+                  pattern: "\\|\\| true"
+      L4:
+        requires:
+          any_of:
+            - file_contains: { path: .github/workflows/*.yml, pattern: "matrix:" }
+            - file_contains: { path: .github/workflows/*.yml, pattern: "sentry-release|action-release" }
+            - gh_workflow_blocks_pr: { check_name: "deploy" }
+
+  # =========================================================================
+  # SUPPORTING
+  # =========================================================================
+
+  - id: reproducibility
+    class: supporting
+    description: "Onboarding одной командой + pinned tool versions"
+    storage: level
+    default_target: L4
+    fact_sources: [docker-compose.yml, mise.toml, .tool-versions, .nvmrc, composer.json, package.json, README.md, flake.nix]
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: docker-compose.yml
+            - has_file: Dockerfile
+            - has_file: Makefile
+      L2:
+        requires:
+          any_of:
+            - config_value: { path: package.json, jsonpath: "engines.node", op: present }
+            - config_value: { path: composer.json, jsonpath: "require.php", op: present }
+      L3:
+        requires:
+          any_of:
+            - has_file: mise.toml
+            - has_file: .tool-versions
+            - has_file: .nvmrc
+            - has_file: flake.nix
+            - has_file: devbox.json
+      L4:
+        requires:
+          file_contains:
+            path: README.md
+            pattern: "(one-command|one command|vdx up|mise run up|\\bdocker compose up\\b)"
+
+  - id: code-style
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [ecs.php, .php-cs-fixer.php, phpcs.xml.dist, .prettierrc, biome.json, eslint.config.js]
+    levels:
+      L1:
+        requires:
+          has_file: .editorconfig
+      L2:
+        requires:
+          any_of:
+            - has_file: ecs.php
+            - has_file: .php-cs-fixer.php
+            - has_file: phpcs.xml.dist
+            - has_file: .prettierrc
+            - has_file: biome.json
+            - has_file: eslint.config.js
+      L3:
+        requires:
+          any_of:
+            - has_task: check:code:style
+            - has_task: lint
+            - has_task: check
+            - has_task: fix
+      L4:
+        requires:
+          any_of:
+            - all_of:
+                - has_file: ecs.php
+                - has_file: phpcs.xml.dist
+            - all_of:
+                - any_of: [{ has_file: .prettierrc }, { has_file: biome.json }]
+                - has_file: eslint.config.js
+
+  - id: dependency-hygiene
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources:
+      - composer.json
+      - composer.lock
+      - package.json
+      - package-lock.json
+      - pnpm-lock.yaml
+      - .github/dependabot.yml
+      - renovate.json
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: composer.lock
+            - has_file: package-lock.json
+            - has_file: pnpm-lock.yaml
+            - has_file: yarn.lock
+            - has_file: go.sum
+      L2:
+        requires:
+          any_of:
+            - package_present: { name: roave/security-advisories, ecosystem: composer }
+            - has_task: check:code:security
+            - file_contains: { path: .github/workflows/*.yml, pattern: "(composer audit|npm audit|pnpm audit)" }
+      L3:
+        requires:
+          any_of:
+            - has_file: renovate.json
+            - has_file: .github/dependabot.yml
+            - has_file: .renovaterc
+            - has_file: .renovaterc.json
+      L4:
+        requires:
+          any_of:
+            - package_present: { name: maglnet/composer-require-checker, ecosystem: composer }
+            - package_present: { name: deptrac/deptrac, ecosystem: composer }
+            - package_present: { name: knip, ecosystem: npm }
+            - package_present: { name: depcheck, ecosystem: npm }
+
+  - id: secrets-config
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [.env.example, lintnet.jsonnet, .sops.yaml, .vault.yml]
+    levels:
+      L1:
+        requires:
+          any_of:
+            - has_file: .env
+            - has_file: .env.dev
+      L2:
+        requires:
+          has_file: .env.example
+      L3:
+        requires:
+          any_of:
+            - package_present: { name: dotenv-linter, ecosystem: any }
+            - has_file: lintnet.jsonnet
+            - has_task: check:config:env
+      L4:
+        requires:
+          any_of:
+            - has_file: .sops.yaml
+            - has_file: .vault.yml
+            - file_contains: { path: .gitlab-ci.yml, pattern: "(vault|sops)" }
+
+  - id: git-hygiene
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [.husky/, .lefthook.yml, lefthook.yml, composer.json, package.json]
+    levels:
+      L1:
+        requires:
+          has_file: .gitignore
+      L2:
+        requires:
+          any_of:
+            - has_file: .husky
+            - has_file: .lefthook.yml
+            - has_file: lefthook.yml
+            - package_present: { name: brainmaestro/composer-git-hooks, ecosystem: composer }
+            - package_present: { name: husky, ecosystem: npm }
+      L3:
+        requires:
+          any_of:
+            - file_contains: { path: composer.json, pattern: "\"pre-push\"" }
+            - file_contains: { paths: [.lefthook.yml, lefthook.yml], pattern: "pre-push:" }
+            - has_file: .husky/pre-push
+      L4:
+        requires:
+          any_of:
+            - file_contains: { path: composer.json, pattern: "\"(post-commit|commit-msg|post-merge)\"" }
+            - file_contains: { paths: [.lefthook.yml, lefthook.yml], pattern: "(post-commit|commit-msg|post-merge):" }
+
+  - id: observability
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [composer.json, package.json, .github/workflows/]
+    levels:
+      L1:
+        requires: { fn: always_true }    # есть кодовая база — хотя бы print/console.log
+      L2:
+        requires:
+          any_of:
+            - package_present: { name: monolog/monolog, ecosystem: composer }
+            - package_present: { name: winston, ecosystem: npm }
+            - package_present: { name: pino, ecosystem: npm }
+      L3:
+        requires:
+          any_of:
+            - package_present: { name: sentry/sentry,         ecosystem: composer }
+            - package_present: { name: sentry/sentry-symfony, ecosystem: composer }
+            - package_present: { name: '@sentry/node',        ecosystem: npm }
+            - package_present: { name: '@sentry/browser',     ecosystem: npm }
+      L4:
+        requires:
+          any_of:
+            - file_contains: { path: .github/workflows/*.yml, pattern: "(sentry.release|sentry-release|action-release)" }
+            - package_present: { name: cronitor/cronitor-php, ecosystem: composer }
+
+  - id: docs
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [README.md, docs/, CHANGELOG.md, PROJECT_CHANGELOG.md, CLAUDE.md, AGENTS.md, docs/adr/]
+    levels:
+      L1:
+        requires:
+          has_file: README.md
+      L2:
+        requires:
+          has_file: docs
+      L3:
+        requires:
+          all_of:
+            - any_of:
+                - has_file: CLAUDE.md
+                - has_file: AGENTS.md
+            - any_of:
+                - has_file: CHANGELOG.md
+                - has_file: PROJECT_CHANGELOG.md
+      L4:
+        requires:
+          any_of:
+            - has_file: docs/adr
+            - has_file: docs/architecture.md
+            - has_file: docs/onboarding.md
+
+  - id: mock-infra
+    class: supporting
+    storage: level
+    default_target: L4
+    fact_sources: [composer.json, package.json, docker-compose.yml, mock-server/]
+    levels:
+      L1:
+        requires: { fn: always_true }
+      L2:
+        requires:
+          any_of:
+            - package_present: { name: msw, ecosystem: npm }
+            - package_present: { name: nock, ecosystem: npm }
+            - package_present: { name: mcustiel/phiremock-client, ecosystem: composer }
+            - has_file: tests/Fixtures
+      L3:
+        requires:
+          any_of:
+            - all_of:
+                - has_file: docker-compose.yml
+                - file_contains: { path: docker-compose.yml, pattern: "mock[-_]?[a-zA-Z0-9_-]*(server|api|service)" }
+            - has_file: mock-server
+            - package_present: { name: mcustiel/phiremock-server, ecosystem: composer }
+      L4:
+        requires:
+          any_of:
+            - file_contains: { path: .gitlab-ci.yml,           pattern: "(validate.*production-config|prod.*mock)" }
+            - file_contains: { path: .github/workflows/*.yml, pattern: "(validate-no-mock-in-prod|prod-mock-check)" }
+
+  - id: shared-infra
+    class: supporting
+    description: "Качество подхода + автопровижининг (D8)"
+    storage: level
+    default_target: L4
+    fact_sources: [docker-compose.yml, misc/traefik-global/, scripts/, mise.toml]
+    levels:
+      L1:
+        requires:
+          file_contains: { path: docker-compose.yml, pattern: "ports:" }
+      L2:
+        requires:
+          any_of:
+            - has_file: misc/traefik-global
+            - file_contains: { path: docker-compose.yml, pattern: "traefik" }
+            - file_contains: { path: docker-compose.yml, pattern: "networks:.+external" }
+      L3:
+        requires:
+          any_of:
+            - file_contains: { path: scripts/docker-up.sh, pattern: "(traefik|nginx-proxy)" }
+            - config_value: { path: mise.toml, jsonpath: "vdx.shared_infra.precheck", equals: true }
+      L4:
+        requires:
+          any_of:
+            - config_value:
+                path: mise.toml
+                jsonpath: "vdx.shared_infra.provider"
+                op: matches
+                pattern: "github.com/.+@v\\d+"
+            - file_contains:
+                paths: [scripts/*.sh]
+                pattern: "git clone.+traefik|mise install.+traefik"
+
+  - id: shared-infra-drift
+    class: supporting
+    description: "Подось shared-infra. Применимо только если shared-infra ≤ L3 (есть локальная копия)"
+    storage: level
+    default_target: L3
+    fact_sources: [misc/traefik-global/README.md, misc/traefik-global/start.sh]
+    levels:
+      L1:
+        requires:
+          has_file: misc/traefik-global
+      L2:
+        requires:
+          file_contains:
+            paths: [misc/traefik-global/README.md, misc/traefik-global/start.sh]
+            pattern: "Based on:"
+      L3:
+        requires:
+          file_contains:
+            paths: [misc/traefik-global/README.md, misc/traefik-global/start.sh]
+            pattern: "Based on:.+@[a-f0-9]{7,40}"   # commit hash pointer
+      L4:
+        requires:
+          file_contains:
+            paths: [misc/traefik-global/README.md, misc/traefik-global/start.sh]
+            pattern: "@v\\d+\\.\\d+\\.\\d+"          # semver pin

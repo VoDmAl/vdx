@@ -1,0 +1,29 @@
+{
+  "name": "vdx-cli",
+  "version": "0.1.0",
+  "description": "vdx — unified lifecycle interface + maturity audit (v0.1 evaluator)",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "vdx": "src/index.ts"
+  },
+  "scripts": {
+    "vdx": "tsx src/index.ts",
+    "audit": "tsx src/index.ts audit",
+    "smoke": "bash smoke.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "smol-toml": "^1.3.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
