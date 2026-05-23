@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vdx": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/vdm/AI Projects/vdx/cli/src/mcp-server.ts",
+        "--project",
+        "${CLAUDE_PROJECT_DIR}"
+      ]
+    }
+  }
+}

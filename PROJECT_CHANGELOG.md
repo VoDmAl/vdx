@@ -4,6 +4,14 @@
 
 ## 2026-05-23
 
+### Шаг G: Claude Code плагин v0.1
+`vdx/plugin/`: `.claude-plugin/plugin.json`, `.mcp.json` (регистрирует MCP
+server из cli/), `skills/vdx-discover/SKILL.md` (discover-and-record
+workflow для агента), `hooks/hooks.json` + `scripts/record-success-path.sh`
+(PostToolUse hook на `vdx_up`). Установка: `--plugin-dir` или
+`extraKnownMarketplaces` в `~/.claude/settings.json`. Инструкция —
+`plugin/README.md`. См. [docs/decisions.md](docs/decisions.md) N17.
+
 ### Шаг F: MCP-сервер vdx (9 tools) работает
 `cli/src/mcp-server.ts` (~200 LOC) на @modelcontextprotocol/sdk@1.29 +
 zod@4: stdio-транспорт + 9 зарегистрированных tools (list_capabilities,

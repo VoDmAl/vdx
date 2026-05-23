@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после Шагов D+E+F + git init)
+# vdx — Handoff (2026-05-23, после Шагов D+E+F+G + git init)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,16 +12,16 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: research завершён, спека ядра выложена, owner-рубрика
-опубликована на **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**.
-Evaluator v0.1 дотюнен (Шаг D, см. N14). `vdx init` реализован (Шаг E, N15).
-**Шаг F MCP-сервер работает** (см. N16) — 9 tools, smoke прошёл.
-Сам vdx теперь под git (commit `119b15b`).
+**Где мы сейчас**: все 7 шагов (A–G) пройдены за одну сессию. Owner-рубрика
+опубликована на **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1**, evaluator
+дотюнен (D), `vdx init` атакует N13 (E), MCP-сервер на stdio с 9 tools (F),
+Claude Code плагин с MCP+skill+hook (G). vdx сам под git.
 
-**Следующий шаг** (рекомендованный): **G — Claude Code плагин** (бандл MCP +
-skill + hook как `.claude/` плагин для marketplace). Альтернатива: доводка
-открытых вопросов O25/O26/O27 (mock-infra delta-trap, TOML round-trip,
-shared-infra precheck), или подвинуть `static-analysis`/`ci` оси.
+**Следующий шаг** (открыто): доводка O25 (mock-infra delta-trap), O26 (TOML
+round-trip с комментариями), O27 (shared-infra precheck), либо подвинуть
+`static-analysis`/`ci`/`tests` оси у проектов в портфеле. Также возможно:
+догфудинг — запустить `vdx init` и `vdx_audit` на самом vdx; публикация
+плагина в marketplace (требует выноса CLI в npm package).
 
 ---
 
@@ -137,14 +137,12 @@ L2→**L4**. См. N15 в decisions.md.
 Открыто: O26 (TOML round-trip с комментариями), O27 (реальный shared-infra
 precheck). См. N16.
 
-### Шаг G — Claude Code плагин (закрывает D6)
+### Шаг G — Claude Code плагин ✅ (2026-05-23)
 
-**Цель**: бандл MCP-server + skill + hook как .claude/ плагин для marketplace.
-
-Структура (см. Claude Code plugin docs):
-- `plugin.json` или `.claude/plugin.toml`
-- skill для discover-and-record workflow
-- hook на PostToolUse для записи success-path
+`vdx/plugin/`: manifest, MCP config, skill, hook. Установка локально через
+`--plugin-dir` либо `extraKnownMarketplaces` в `~/.claude/settings.json`.
+Marketplace-release требует выноса CLI в npm package. См. N17 +
+[plugin/README.md](plugin/README.md).
 
 ---
 

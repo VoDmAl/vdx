@@ -271,3 +271,15 @@ aligned, остальные gap). Lifecycle-tools — `spawn('mise', ['run', ver
 capture stdout/stderr/exit_code/duration_ms. Shared-infra precheck — заглушка
 (is_running всегда false). `vdx_record_success_path` использует
 `smol-toml.stringify` — round-trip без сохранения комментариев (см. новый O26).
+
+**N17 — Шаг G: Claude Code плагин v0.1 (2026-05-23).** `vdx/plugin/`
+содержит: `.claude-plugin/plugin.json` (manifest), `.mcp.json` (регистрирует
+vdx-mcp stdio server с `${CLAUDE_PROJECT_DIR}`), `skills/vdx-discover/SKILL.md`
+(discover-and-record workflow для агента в новом проекте), `hooks/hooks.json`
++ `scripts/record-success-path.sh` (PostToolUse hook на `vdx_up` — пишет
+watermark в `~/.cache/vdx/last-success-path.log`). Установка локальная:
+`--plugin-dir` для one-shot или `extraKnownMarketplaces` в
+`~/.claude/settings.json` + `/plugin install vdx@vdx-local` для постоянного
+подключения. v0.1 ограничения: `.mcp.json` хардкодит абсолютный путь до
+`cli/src/mcp-server.ts` (для marketplace релиза нужен npm-пакет `vdx-cli`);
+hook пока пассивный (логирование). См. `plugin/README.md`.

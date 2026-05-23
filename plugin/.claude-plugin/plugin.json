@@ -1,0 +1,9 @@
+{
+  "name": "vdx",
+  "displayName": "vdx — Lifecycle Interface",
+  "version": "0.1.0",
+  "description": "Unified lifecycle interface (up/down/build/test/check/fix) + versioned maturity audit. Pairs with the vdx-cli evaluator and a personal owner-rubric.",
+  "repository": "https://github.com/VoDmAl/vdx",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
