@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: typecheck cli (node ${{ matrix.node-version }})
+    name: cli (node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,5 +24,8 @@ jobs:
         working-directory: cli
         run: npm ci
       - name: Typecheck
+        working-directory: cli
+        run: npm run typecheck
+      - name: Unit tests
         working-directory: cli
         run: npm test

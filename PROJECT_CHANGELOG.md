@@ -2,6 +2,36 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-05-24
+
+### External-facing docs переведены на английский
+`README.md` (главный), `vdx-rubric-vodmal/README.md` и
+`vdx-rubric-vodmal/CHANGELOG.md` переведены на английский — для npm/GitHub
+discoverability. Внутренние документы (`HANDOFF.md`, `CLAUDE.md`,
+`docs/*`, `PROJECT_CHANGELOG.md`) остаются на русском. `cli/README.md` и
+`plugin/README.md` уже были на английском.
+
+### Шаг P: vitest на evaluator (tests axis L0 → L3, ось `release-artifact` остаётся открытой как O34)
+В `cli/` добавлен vitest + 47 unit-тестов на `scoring.ts` и `predicates.ts`
+(plus фикстуры в `tests/fixtures/`). `package.json` scripts: `test`
+теперь = `vitest run` (раньше `tsc --noEmit`), `typecheck` отдельно
+= `tsc --noEmit`, добавлены `test:unit` и `coverage`. CI workflow
+обновлён: typecheck + unit tests как раздельные шаги.
+
+Эффект на vdx audit (stack=meta, primary_subpackage=cli):
+
+| Ось | До Шага P | После Шага P |
+|-----|:--:|:--:|
+| tests (C) | L0 | **L3** |
+| overall | L0 | L0 |
+
+`tests` прошёл L1 (`package_present: vitest`), L2 (`has_task: test:unit`),
+L3 (`has_task: coverage`) в один commit. L4 (e2e/mutation) — overkill для CLI.
+Overall остаётся L0 — теперь capping на supporting (5 из 10 supporting L0:
+reproducibility, code-style, secrets-config, shared-infra,
+shared-infra-drift). Smoke на 3 референсах без регрессий (L2/L1/L1).
+См. [docs/decisions.md](docs/decisions.md) N26.
+
 ## 2026-05-23
 
 ### Шаг O: O33 закрыт — subpackage stack lift для applies_to-осей (@vodmal/vdx-cli@0.2.1)

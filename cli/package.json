@@ -39,7 +39,9 @@
     "audit": "tsx src/index.ts audit",
     "smoke": "bash smoke.sh",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -51,7 +53,9 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
+    "@vitest/coverage-v8": "^4.1.7",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.7"
   },
   "publishConfig": {
     "access": "public"

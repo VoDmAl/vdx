@@ -1,0 +1,16 @@
+{
+  "name": "fixture-node-with-vitest",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run unit",
+    "lint": "echo lint"
+  },
+  "dependencies": {
+    "lodash": "^4.17.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–O: O33 закрыт, CLI v0.2.1)
+# vdx — Handoff (2026-05-24, после A–P: vitest добавлен, tests L0→L3)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,41 +12,41 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 15 шагов (A–O) пройдены. Owner-рубрика на
+**Где мы сейчас**: 16 шагов (A–P) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2**, CLI на npm как
-**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(Шаг N — публикация v0.2.0 marketplace-ready, Шаг O — O33-фикс v0.2.1).
+**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
+External-facing docs (главный README, vdx-rubric-vodmal README/CHANGELOG)
+переведены на английский 2026-05-24; внутренние (HANDOFF, CLAUDE,
+PROJECT_CHANGELOG, docs/) — русский.
 
-**Шаг O / O33-fix**: `stackForDir` экспортирован из `facts.ts`. В
-`resolveSubpackageCtx` для explicit `primary_subpackage` detect actual stack
-subpackage'a; для auto-resolve "если ровно один subpackage с любым стеком —
-adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (не
-наследуется). Проверка `applies_to` в audit loop сравнивается с
-`evalCtx.stack`. Это **fix integrity**, не лифт оценки.
+**Шаг P / vitest**: добавлен vitest + 47 unit-тестов на `scoring.ts` и
+`predicates.ts` (через фикстуры `tests/fixtures/`). `package.json` scripts:
+`test` = `vitest run`, `typecheck` отдельно, `test:unit` + `coverage`
+добавлены. CI workflow обновлён — typecheck и тесты как раздельные шаги.
 
-vdx сейчас: stack=meta, lifecycle L2, **ci L4**, overall **L0**. Per-axis
-после O33:
-- tests **L0** (раньше excluded — теперь правдивая критическая планка)
+vdx сейчас: stack=meta, lifecycle L2, **tests L3**, **ci L4**, overall
+**L0**. Per-axis после P:
+- tests **L3** (vitest dep + test:unit task + coverage task — раньше L0)
+- ci L4 (matrix node 20/22 — Шаг M)
+- lifecycle-interface L2 (3 verb'а: build/test/check)
 - static-analysis **L2** (tsc strict через cli/)
 - dependency-hygiene **L1** (lockfile)
-- mock-infra **L1**
+- mock-infra **L1**, observability **L1**, git-hygiene **L1**, docs **L3**
 - code-style L0, reproducibility L0, secrets-config L0, shared-infra L0,
   shared-infra-drift L0 — supporting-L0 без real artefacts.
 
-Overall capping переехал с "4 supporting-L0" на "tests=C L0 + supporting" —
-после Шага N оценка vdx стала **жёстче и честнее**: чтобы поднять до L1,
-нужны реальные тесты (vitest), а не 1-2 supporting-фикса.
+Overall capping переехал с "tests=C L0" на supporting (5 из 10 на L0 =
+0.5 < 0.8 threshold). Чтобы поднять overall до L1, теперь нужно добить
+**supporting** оси (`.env.example`, eslint+prettier, Dockerfile/Makefile),
+не критические.
 
-**Следующий шаг** (приоритеты после O):
-- **vitest на evaluator** — теперь критический для L1 overall (с O33 он
-  будет считаться). Цель: tests L0 → L1 (наличие `tests/` или
-  `package_present: vitest` в cli/).
+**Следующий шаг** (приоритеты после P):
+- **supporting лифт** — `.env.example` (secrets-config L2), eslint+prettier
+  (code-style L1+), Dockerfile/Makefile (reproducibility L1), override
+  через `.vdx-overrides.yml` для shared-infra (meta не имеет).
 - **O34** — новая ось рубрики `release-artifact` (publish-readiness:
   name/version/license/repository/bin/publishConfig/registry-resolves).
   vdx сам бы выиграл от этой оси. Bump до v0.3.0.
-- **supporting лифт** — `.env.example` (secrets-config L2), Dockerfile/
-  Makefile (reproducibility L1), override через `.vdx-overrides.yml` для
-  shared-infra (meta не имеет).
 - **O29** — поведение `vdx init` при unknown/meta (редкий случай).
 - **O25/O26/O27** — известны ранее (mock-infra delta-trap, TOML round-trip,
   shared-infra precheck).
@@ -349,6 +349,55 @@ Open после Шага O:
 - **O34** — release-artifact ось (см. N24).
 - **vitest** — критический для L1 (раньше excluded, теперь tests=C L0).
 - **supporting лифт** — .env.example / Dockerfile / shared-infra override.
+- **O25/O26/O27/O29** — ранее известные.
+- **O32** — multi-subpackage (отложено).
+
+### Шаг P — vitest на evaluator (tests L0→L3) ✅ (2026-05-24)
+
+Добавлен vitest + 47 unit-тестов: `tests/unit/scoring.test.ts` (16 кейсов
+на pure scoring: delta-style levels с break-семантикой, weighted flags по
+`level_thresholds`, projectLevel weighted_two_class с excluded/suppressed)
+и `tests/unit/predicates.test.ts` (31 кейс через фикстуры
+`tests/fixtures/node-with-vitest`, `php-with-phpstan`, `empty`).
+
+Изменения в `cli/`:
+- `vitest.config.ts` — include `tests/**/*.test.ts`, coverage v8 на
+  `src/**/*.ts` минус CLI entry-points.
+- `package.json` scripts: `test` теперь `vitest run` (раньше `tsc
+  --noEmit`); `typecheck` отдельно = `tsc --noEmit`; новые `test:unit`
+  (`vitest run tests/unit`) и `coverage` (`vitest run --coverage`).
+- `devDependencies`: `vitest`, `@vitest/coverage-v8`.
+- `.github/workflows/ci.yml`: добавлен шаг "Typecheck" (`npm run
+  typecheck`) перед "Unit tests" (`npm test`). Job переименован
+  `typecheck cli` → `cli`.
+
+Vitest и его deps только в `devDependencies`, в `files: [src, rubric,
+bin, README.md, LICENSE]` не входят — npm-bundle не толстеет.
+Опубликованный CLI остаётся v0.2.1 — package surface не менялся.
+
+**vdx-self-audit ДО → ПОСЛЕ:**
+
+| Ось | До P | После P |
+|-----|:--:|:--:|
+| tests (C) | L0 | **L3** (vitest + test:unit + coverage scripts) |
+| overall | L0 | L0 |
+
+L1: `package_present: { name: vitest, ecosystem: npm }` ✓
+L2: `has_task: test:unit` ✓ (script в `package.json`)
+L3: `has_task: coverage` ✓
+L4: e2e/mutation/playwright — overkill для CLI, не идём.
+
+**Семантика**: capping переехал с `tests=C L0` (Шаг O) на supporting
+(5 из 10 на L0: reproducibility, code-style, secrets-config,
+shared-infra, shared-infra-drift). Чтобы L1 overall теперь нужно
+добить три-четыре supporting оси, не критические. Smoke на 3 референсах
+без регрессий (telegram L2 / t23b L1 / bookmap L1). См. N26.
+
+Open после Шага P:
+- **supporting лифт** — `.env.example` (secrets-config L2),
+  eslint+prettier (code-style L1+), Dockerfile/Makefile (reproducibility
+  L1), override через `.vdx-overrides.yml` для shared-infra (meta не имеет).
+- **O34** — release-artifact ось (см. N24).
 - **O25/O26/O27/O29** — ранее известные.
 - **O32** — multi-subpackage (отложено).
 

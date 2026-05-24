@@ -109,6 +109,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 - **O21** — Бюджет аудита на крупном репо (<30 сек цель). Стратегии кэширования.
 
 ### Активные (от smoke v0.1 evaluator + догфудинг)
+- ~~**vitest для evaluator**~~ — закрыто 2026-05-24 (Шаг P). См. N26.
 - **O25** — Mock-infra delta-style ловушка. Node-проекты, у которых mock
   сделан как отдельный docker-сервис (bookmap: `mock-bookmap-api`, директория
   `mock-server/`, `Dockerfile.mock-server`), технически реализуют L3-подход, но
@@ -632,3 +633,40 @@ nested subpackage с другим стеком. До O33: applies_to-оси оц
 на root (где manifest есть). После O33: всё ещё на root (так как `matching
 === 1` срабатывает первым — есть match по ctx.stack). Логика "adopt
 single non-matching subpackage" работает только когда matching пуст. ОК.
+
+**N26 — Шаг P: vitest на evaluator, tests axis L0 → L3 (2026-05-24).**
+Добавлен vitest + 47 unit-тестов на pure-модули `scoring.ts` (16 кейсов:
+delta-style levels, weighted flags, projectLevel weighted_two_class) и
+`predicates.ts` (31 кейс через фикстуры `tests/fixtures/node-with-vitest`,
+`php-with-phpstan`, `empty`). Конфиг: `cli/vitest.config.ts` + scripts
+`test`, `test:unit`, `coverage` в `package.json`. `test` теперь = `vitest
+run` (вместо `tsc --noEmit`), typecheck вынесен отдельной командой.
+`.github/workflows/ci.yml` обновлён: typecheck и unit tests как два
+раздельных шага в CI.
+
+**vdx-self-audit ДО → ПОСЛЕ (stack=meta, primary_subpackage=cli):**
+
+| Ось | До Шага P | После Шага P |
+|-----|:--:|:--:|
+| tests (C) | L0 (нет vitest) | **L3** |
+| overall | L0 | L0 |
+
+`tests` прошёл три уровня одним коммитом:
+- L1: `package_present: { name: vitest, ecosystem: npm }` ✓
+- L2: `has_task: test:unit` ✓
+- L3: `has_task: coverage` ✓
+- L4: e2e/mutation/playwright — overkill для CLI, не идём.
+
+**Семантический сдвиг overall L0 (без изменения числа)**: capping
+переехал с `tests=C L0` на supporting. После Шага P 5 из 10 supporting
+осей остаются на L0 (reproducibility, code-style, secrets-config,
+shared-infra, shared-infra-drift) — 5/10 = 0.5 < 0.8 supporting_threshold
+→ overall L0. Чтобы поднять до L1 теперь нужно добить 3 supporting
+оси (`.env.example` → secrets-config; eslint+prettier → code-style;
+Makefile/Dockerfile → reproducibility), а не критические — это сильно
+другая работа, чем добивать tests.
+
+Smoke на 3 референсах без регрессий (telegram L2 / t23b L1 / bookmap L1).
+Vitest добавлен только в `cli/devDependencies`, в `files`-whitelist
+не входит (только `src`, `rubric`, `bin`, `README.md`, `LICENSE`) —
+published npm-пакет не толстеет.

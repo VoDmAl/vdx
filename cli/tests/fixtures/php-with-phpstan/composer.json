@@ -1,0 +1,9 @@
+{
+  "name": "fixture/php-with-phpstan",
+  "require": {
+    "php": "^8.2"
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^1.10"
+  }
+}
