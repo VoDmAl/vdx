@@ -216,7 +216,7 @@ const MANIFEST_TO_STACK: Array<[string, string]> = [
   ['requirements.txt', 'python'],
 ];
 
-function stackForDir(dir: string): string | null {
+export function stackForDir(dir: string): string | null {
   for (const [manifest, stack] of MANIFEST_TO_STACK) {
     if (fs.existsSync(path.join(dir, manifest))) return stack;
   }
