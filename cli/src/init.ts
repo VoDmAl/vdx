@@ -12,7 +12,7 @@ import {
 export const STANDARD_VERBS = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 export type Verb = (typeof STANDARD_VERBS)[number];
 
-export const DEFAULT_BASELINE = 'github.com/VoDmAl/vdx-rubric-vodmal@v0.3.0';
+export const DEFAULT_BASELINE = 'github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1';
 
 const VERB_ALIASES: Record<Verb, string[]> = {
   up: ['docker:up', 'docker-up', 'docker:up:detached', 'start'],

@@ -110,17 +110,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 
 ### Активные (от smoke v0.1 evaluator + догфудинг)
 - ~~**vitest для evaluator**~~ — закрыто 2026-05-24 (Шаг P). См. N26.
-- **O35** — `release-artifact` ось применяется ко всем
-  node/php/ruby/python-проектам, включая приложения без publish-lifecycle.
-  Это даёт fair, но шумный сигнал — apps получают L1-L2 вместо exclusion.
-  Нужен `applies_when: <predicate>` или auto-skip когда:
-  (a) `package.json.private == true`, или
-  (b) `composer.json.type` отсутствует/равен "project" (не "library"),
-  или (c) нет `bin`/`main`/`exports`/`autoload` ключей вовсе.
-  Тип "app vs library" — это onthological detection, который полезен и
-  для других осей (например, mock-infra). Возможно стоит ввести
-  ось-агностичный `project_kind` факт. Workaround сейчас: апп-проекты
-  suppress'ят `release-artifact` через `.vdx-overrides.yml`. См. N28.
+- ~~**O35**~~ — закрыто Шагом S 2026-05-24 (см. N29, рубрика v0.3.1).
 - **O25** — Mock-infra delta-style ловушка. Node-проекты, у которых mock
   сделан как отдельный docker-сервис (bookmap: `mock-bookmap-api`, директория
   `mock-server/`, `Dockerfile.mock-server`), технически реализуют L3-подход, но
@@ -177,6 +167,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O31 | Шаг K 2026-05-23 — Добавлено поле `[vdx].primary_subpackage` в манифест проекта. В `audit.ts` для осей с `applies_to` evaluator подменяет `ctx.projectRoot` на subpackage (explicit-from-manifest или auto-resolve через `findSubPackages()` когда ровно один subpackage совпадает с `ctx.stack`). Owner-рубрика остаётся stack-agnostic. См. N21. **Полностью**: остаточный кейс multi-subpackage monorepo (разные стеки в разных папках) выделен в **O32**. |
 | O33 | Шаг O 2026-05-23 — `stackForDir` экспортирован из `facts.ts`. В `resolveSubpackageCtx` (`audit.ts`): для explicit `primary_subpackage` теперь detect actual stack subpackage'a; для auto-resolve добавлен fallback "если ровно один subpackage с любым стеком — adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (а не наследуется от root). В audit loop проверка `applies_to` сравнивается с `evalCtx.stack` (не `ctx.stack`). Эффект на vdx: 5 stack-осей больше не `excluded` — оцениваются по cli/ (static-analysis L0→**L2**, dependency-hygiene/mock-infra L0→**L1**, tests/code-style правдиво L0). Overall vdx L0→L0 (теперь capping на tests=C L0, не маска). Smoke на 3 референсах без регрессий. См. N25. |
 | O34 | Шаг R 2026-05-24 — Добавлена ось `release-artifact` (supporting, `applies_to: [node, php, ruby, python]`) в canonical-рубрику v0.3.0. L1: required-поля (name+version+license / name+license). L2: + description+repository+LICENSE. L3: + files+entry-point / autoload+type. L4: + publishConfig+homepage+bugs / extra.publish. Эффект на vdx: release-artifact L4 на cli subpackage (cli уже publish-ready). Эффект на референсы: telegram L2→L1 регрессия (PHP app не publish-ready) — fair signal, design issue открыт как O35. См. N28. |
+| O35 | Шаг S 2026-05-24 — В `Axis` добавлено optional поле `applies_when: <Predicate>`. В `audit.ts` после `applies_to`-фильтра evaluator проверяет `applies_when` относительно `evalCtx`; если predicate=false → `drift_kind: excluded` (та же семантика, что и `applies_to`-non-match). Применено к `release-artifact` в canonical-рубрике v0.3.1: any_of [Node lib signal (НЕ private + bin/main/exports/module/publishConfig), PHP lib signal (composer.json + name + type≠project)]. Эффект на референсы: telegram восстановлен L1→**L2** (release-artifact теперь excluded, capping вернулся к ci), t23b/bookmap unchanged. Эффект на vdx-cli (subpackage): release-artifact остаётся L4. См. N29. |
 
 ---
 
@@ -791,3 +782,82 @@ Smoke на 3 референсах **выявил design issue (telegram regressi
 до публикации тега — это правильный workflow: concrete instance
 ловит abstract flaw (паттерн s1-72). Тег `v0.3.0` push'ится после
 коммита.
+
+**N29 — Шаг S: O35 закрыт через `applies_when`, рубрика v0.3.1 (2026-05-24).**
+
+Изменения в evaluator (`cli/src/`):
+
+- `rubric.ts`: в `Axis` добавлено optional поле
+  `applies_when?: Predicate`. Тип `Predicate = unknown` (тот же DSL,
+  что и `levels.LN.requires`), парсер не трогался.
+- `audit.ts`: в audit loop после `applies_to`-фильтра новый шаг —
+  `if (axis.applies_when && !evalPredicate(axis.applies_when, evalCtx))
+  → drift_kind: excluded`. Использует `evalCtx` (тот же, что для
+  предикатов оси), а не root ctx — это важно для проектов с
+  subpackage'ем (vdx).
+
+Изменения в canonical-рубрике v0.3.1:
+
+```yaml
+- id: release-artifact
+  applies_to: [node, php, ruby, python]
+  applies_when:
+    any_of:
+      # Node lib: НЕ private + entry-point/publish-signal
+      - all_of:
+          - has_file: package.json
+          - not: { config_value: { path: package.json, jsonpath: private, equals: true } }
+          - any_of:
+              - config_value: { path: package.json, jsonpath: publishConfig, op: present }
+              - config_value: { path: package.json, jsonpath: bin,           op: present }
+              - config_value: { path: package.json, jsonpath: main,          op: present }
+              - config_value: { path: package.json, jsonpath: exports,       op: present }
+              - config_value: { path: package.json, jsonpath: module,        op: present }
+      # PHP lib: composer.json + name + type ≠ project
+      - all_of:
+          - has_file: composer.json
+          - config_value: { path: composer.json, jsonpath: name, op: present }
+          - not: { config_value: { path: composer.json, jsonpath: type, op: equals, equals: project } }
+```
+
+**Эффект на калибровочные референсы (smoke verified)**:
+
+| project | release-artifact до v0.3.1 | после v0.3.1 | overall |
+|---------|:--:|:--:|:--:|
+| telegram (PHP app, `type: project`) | L1 | **excluded** | L1 → **L2** (восстановлен) |
+| t23b (PHP app, `type: project`) | L1 | **excluded** | L1 (unchanged) |
+| bookmap (Node app, `private: true`) | L1 | **excluded** | L1 (unchanged) |
+| vdx (meta, subpkg=cli, Node lib) | L4 | **L4** aligned | L1 (unchanged) |
+
+Telegram восстановлен — `release-artifact` excluded возвращает
+overall к L2 (capping снова на ci). Это закрывает регрессию из N28.
+vdx-cli держит L4: имеет `bin`+`publishConfig`+`!private` — все
+сигналы lib-intent присутствуют.
+
+**Semver**: patch (0.3.0 → 0.3.1) — bugfix design issue из N28, без
+breaking change. Manifest-ссылки `@v0.3.0` продолжают работать без
+applies_when (apps получают L1 как раньше); проекты могут поднять
+ссылку до `@v0.3.1` чтобы получить чистый excluded.
+
+**Дизайн-выбор positive signals only**: applies_when формулирован
+как detection lib-intent (имеется ли намерение публиковать), а не
+detection app-state. Преимущество: новые сигналы (например
+`module` для ESM-only) легко добавлять `any_of`-веткой;
+недостатки — проекты без явных сигналов (PHP lib без `type`
+declaration — default library) корректно проходят через
+`type ≠ project` (negation, не equality).
+
+**Тестирование**: 5 новых unit-тестов в `cli/tests/unit/audit.test.ts`
++ 2 новые фикстуры (`node-publishable-lib`, `php-app-project`).
+Покрытие: Node lib evaluated, Node app excluded, PHP lib evaluated,
+PHP app excluded, `applies_to` срабатывает раньше `applies_when`
+(unrelated stack остаётся excluded). Все 52 теста (47 старых + 5 новых)
+проходят.
+
+**O35 (alternative considered)**: введение ось-агностичного факта
+`project_kind: 'app' | 'lib' | 'meta'` через `facts.ts` (как
+`autoDetectStack`). Это было бы полезно и для других осей (mock-infra,
+secrets-config). Решено НЕ делать сейчас по принципу YAGNI: пока
+только одна ось требует app/lib различения, predicate-based
+гейтинг компактнее. Если появится 2+ оси с тем же требованием —
+вынести в `project_kind` факт.

@@ -44,6 +44,7 @@ axes:                             # массив осей (см. ниже)
   class: critical | supporting    # D7
   description: "..."
   applies_to: [<stack-id>, ...]   # optional, v0.2.2+ — см. ниже
+  applies_when: <predicate-expr>  # optional, v0.3.1+ — см. ниже
   storage: level | flags          # default: level
   default_target: L4              # целевое значение для этой оси в этой версии
   fact_sources: [<path>...]       # подсказка движку
@@ -105,6 +106,57 @@ excluded, а не лживым L0.
 - Не пересекается с `suppress` из `.vdx-overrides.yml` (применяются независимо).
 - Override в `.vdx-overrides.yml` с явным `target` НЕ обходит `applies_to`:
   axis всё равно `excluded` если stack не в списке.
+
+### `applies_when` — predicate-фильтр (v0.3.1+)
+
+Опциональное поле `applies_when: <predicate-expr>` даёт более точный
+гейтинг, чем `applies_to`: ось применяется только если предикат истинен
+относительно того же `evalCtx`, что используется для уровней. Если ложен —
+ось получает `drift_kind: excluded` (та же семантика).
+
+Применяется **после** `applies_to`: stack-фильтр срабатывает первым, и
+если ось уже `excluded` по стеку, `applies_when` не вычисляется.
+
+```yaml
+- id: release-artifact
+  applies_to: [node, php, ruby, python]
+  applies_when:
+    any_of:
+      - all_of:                            # Node lib intent
+          - has_file: package.json
+          - not: { config_value: { path: package.json, jsonpath: private, equals: true } }
+          - any_of:
+              - config_value: { path: package.json, jsonpath: publishConfig, op: present }
+              - config_value: { path: package.json, jsonpath: bin,           op: present }
+              - config_value: { path: package.json, jsonpath: main,          op: present }
+              - config_value: { path: package.json, jsonpath: exports,       op: present }
+              - config_value: { path: package.json, jsonpath: module,        op: present }
+      - all_of:                            # PHP lib intent
+          - has_file: composer.json
+          - config_value: { path: composer.json, jsonpath: name, op: present }
+          - not: { config_value: { path: composer.json, jsonpath: type, op: equals, equals: "project" } }
+```
+
+Семантика и инварианты:
+- Отсутствие `applies_when` ≡ ось применима ко всем проектам в пределах
+  `applies_to` (текущее поведение для большинства осей).
+- DSL предиката идентичен `levels.LN.requires`: `all_of`/`any_of`/`not`/
+  `at_least_n_of` + базовая библиотека предикатов.
+- Evaluator использует тот же `evalCtx`, что и для уровней: для осей с
+  `applies_to` это `resolveSubpackageCtx(ctx, manifest)` (т.е.
+  subpackage-aware), что важно для проектов вроде vdx с
+  `primary_subpackage: cli`.
+- `excluded`-по-`applies_when` не блокирует критический gate в
+  `projectLevel` — как и `excluded`-по-`applies_to`.
+- Не пересекается с `suppress` из `.vdx-overrides.yml`: override
+  применяется только если ось не `excluded`.
+
+**Когда использовать `applies_when` вместо просто `applies_to`**: когда
+применимость зависит от характеристик проекта внутри стека (lib vs app,
+наличие docker-compose, размер кодовой базы), не только от языка/манифеста.
+Альтернатива — вынести "тип проекта" в `facts.ts` как агностичный факт
+(`project_kind`) и использовать через предикат — мы не делаем это пока
+только одна ось требует различения (YAGNI).
 
 ## Predicate-выражение
 

@@ -1,0 +1,12 @@
+{
+  "name": "fixture-node-publishable-lib",
+  "version": "0.0.0",
+  "license": "MIT",
+  "bin": {
+    "demo": "bin/demo.js"
+  },
+  "files": ["bin/"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

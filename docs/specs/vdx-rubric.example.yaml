@@ -11,7 +11,7 @@ schema_version: "0.2"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "0.3.0"
+  version: "0.3.1"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -537,8 +537,30 @@ axes:
 
   - id: release-artifact
     class: supporting
-    description: "Publish-readiness: metadata completeness + entry points + registry signals (O34, v0.3.0)"
+    description: "Publish-readiness: metadata completeness + entry points + registry signals (O34, v0.3.0). Применяется только к проектам, заявляющим publish-intent (O35, v0.3.1) — иначе excluded."
     applies_to: [node, php, ruby, python]
+    # O35 (v0.3.1): ось применяется только если проект декларирует намерение
+    # публиковать артефакт. Чистые app'ы (private:true в package.json или
+    # composer type:project) → excluded.
+    applies_when:
+      any_of:
+        # Node-сторона: НЕ private И есть хоть один entry-point/publish-signal.
+        - all_of:
+            - has_file: package.json
+            - not:
+                config_value: { path: package.json, jsonpath: "private", equals: true }
+            - any_of:
+                - config_value: { path: package.json, jsonpath: "publishConfig", op: present }
+                - config_value: { path: package.json, jsonpath: "bin",           op: present }
+                - config_value: { path: package.json, jsonpath: "main",          op: present }
+                - config_value: { path: package.json, jsonpath: "exports",       op: present }
+                - config_value: { path: package.json, jsonpath: "module",        op: present }
+        # PHP-сторона: composer.json есть, name задан, type ≠ project (project = app).
+        - all_of:
+            - has_file: composer.json
+            - config_value: { path: composer.json, jsonpath: "name", op: present }
+            - not:
+                config_value: { path: composer.json, jsonpath: "type", op: equals, equals: "project" }
     storage: level
     default_target: L4
     fact_sources:

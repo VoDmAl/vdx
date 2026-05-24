@@ -4,6 +4,30 @@
 
 ## 2026-05-24
 
+### Шаг S: O35 закрыт — `applies_when`, рубрика v0.3.1
+В `Axis` добавлено optional поле `applies_when: <Predicate>` (`cli/src/rubric.ts`).
+Evaluator (`cli/src/audit.ts`) после `applies_to`-фильтра проверяет
+`applies_when` относительно `evalCtx`; если ложен → `drift_kind: excluded`
+(та же семантика, что и `applies_to`-non-match).
+
+В canonical-рубрике v0.3.1 ось `release-artifact` получила
+`applies_when` с двумя ветками: Node lib intent (`!private` +
+publishConfig/bin/main/exports/module) и PHP lib intent (composer.json
++ name + `type ≠ project`). Bundled rubric + docs/specs mirror обновлены,
+`DEFAULT_BASELINE` → `@v0.3.1`.
+
+Эффект на референсы:
+- **telegram L1 → L2** (восстановлен): release-artifact теперь excluded
+  для PHP apps (`type: project`), capping вернулся к ci.
+- **t23b L1**, **bookmap L1** — unchanged (release-artifact был на L1,
+  стал excluded; счёт supporting не изменился по threshold).
+- **vdx-cli (subpackage)**: release-artifact **L4** держится — `bin` +
+  `publishConfig` + `!private` запускают Node-ветку applies_when.
+
+47+5 unit-тестов прошли (новый `audit.test.ts` + фикстуры
+`node-publishable-lib`, `php-app-project`). См. N29 в
+[docs/decisions.md](docs/decisions.md).
+
 ### Шаг R: O34 закрыт — ось `release-artifact`, рубрика v0.3.0
 Новая ось `release-artifact` (supporting, `applies_to: [node, php, ruby,
 python]`) добавлена в canonical-рубрику + bumpнута до **v0.3.0**:

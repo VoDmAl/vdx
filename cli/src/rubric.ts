@@ -30,6 +30,7 @@ export interface Axis {
   levels?: Partial<Record<LevelName, { requires: Predicate }>>;
   stack_implementations?: Record<string, StackImpl>;
   applies_to?: string[];
+  applies_when?: Predicate;
 }
 
 export interface Rubric {

@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–R: рубрика v0.3.0 + release-artifact)
+# vdx — Handoff (2026-05-24, после A–S: рубрика v0.3.1 + applies_when)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,11 +12,12 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 17 шагов (A–R) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.0** (новая ось
-`release-artifact`), CLI на npm как
+**Где мы сейчас**: 18 шагов (A–S) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1** (Шаг S — `applies_when`
+predicate, lib vs app detection для release-artifact). CLI на npm как
 **[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(bundled rubric обновится при следующей публикации).
+(bundled rubric в опубликованном пакете всё ещё v0.2.2 — не критично,
+DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub).
 External-facing docs (главный README, vdx-rubric-vodmal README/CHANGELOG)
 переведены на английский 2026-05-24; внутренние (HANDOFF, CLAUDE,
 PROJECT_CHANGELOG, docs/) — русский.
@@ -48,19 +49,16 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после R):
-- **O35** — `applies_when` для `release-artifact` (lib vs app detection).
-  Текущая ось ловит и приложения, и библиотеки — fair-but-noisy сигнал
-  для апов (telegram упал L2→L1). Workaround: апп-проекты suppress'ят
-  через `.vdx-overrides.yml`. См. N28.
+**Следующий шаг** (приоритеты после S):
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O29** — поведение `vdx init` при unknown/meta.
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
 - **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
 - **republish CLI** — bundled rubric в опубликованном пакете всё ещё
-  v0.2.2; чтобы клиенты получали v0.3.0 ось, нужен bump cli версии и
-  npm publish. Не критично — DEFAULT_BASELINE уже на @v0.3.0.
+  v0.2.2; чтобы клиенты получали v0.3.1 ось `release-artifact` +
+  `applies_when`, нужен bump cli версии и npm publish. Не критично —
+  DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub.
 
 ---
 
@@ -473,6 +471,66 @@ Open после Шага Q:
 - **O25/O26/O27/O29** — ранее известные.
 - **O32** — multi-subpackage (отложено).
 - **supporting L2** — отложено, см. TL;DR.
+
+### Шаг R — release-artifact ось, рубрика v0.3.0 ✅ (2026-05-24)
+
+Подробно — N28 в [docs/decisions.md](docs/decisions.md). Кратко: новая
+ось `release-artifact` (supporting, `applies_to: [node, php, ruby,
+python]`) с лестницей L1 (name+version+license) → L2 (description+
+repository+LICENSE) → L3 (files+entry-point / autoload+type) → L4
+(publishConfig+homepage+bugs / extra.publish). Рубрика → **v0.3.0**.
+Эффект: vdx-cli получил `release-artifact L4` (уже publish-ready),
+overall vdx L1 сохранился; telegram **L2 → L1 регрессия** —
+release-artifact L1 без publish metadata. Это fair signal (telegram
+это app), но noisy; design issue открыт как O35.
+
+### Шаг S — `applies_when` predicate, рубрика v0.3.1 (O35 закрыт) ✅ (2026-05-24)
+
+В `Axis` (`cli/src/rubric.ts`) добавлено optional поле
+`applies_when?: Predicate`. В `audit.ts` audit loop после
+`applies_to`-фильтра новый шаг: `if (axis.applies_when &&
+!evalPredicate(axis.applies_when, evalCtx)) → drift_kind: excluded`.
+Использует `evalCtx` (subpackage-aware), не root ctx.
+
+В canonical-рубрике v0.3.1 ось `release-artifact` получила
+`applies_when` с двумя ветками (Node lib intent: `!private` +
+publishConfig/bin/main/exports/module; PHP lib intent: composer.json +
+name + `type ≠ project`). Mirror'нуто в `cli/rubric/vdx-rubric.yaml` +
+`docs/specs/vdx-rubric.example.yaml`. `DEFAULT_BASELINE` в
+`cli/src/init.ts` → `@v0.3.1`. CHANGELOG.md в canonical-репо обновлён.
+
+**Эффект на калибровочные референсы (smoke verified)**:
+
+| project | release-artifact до S | после S | overall |
+|---------|:--:|:--:|:--:|
+| telegram (PHP app, `type: project`) | L1 | **excluded** | L1 → **L2** (восстановлен) |
+| t23b (PHP app, `type: project`) | L1 | **excluded** | L1 (unchanged) |
+| bookmap (Node app, `private: true`) | L1 | **excluded** | L1 (unchanged) |
+| vdx (meta, subpkg=cli, Node lib) | L4 | **L4** | L1 (unchanged) |
+
+Регрессия из N28 закрыта: telegram восстановлен. vdx-cli держит L4
+через Node-ветку applies_when (`bin` + `publishConfig` + `!private`).
+
+**Тестирование**: 5 новых unit-тестов в `cli/tests/unit/audit.test.ts`
+(Node lib evaluated, Node app excluded, PHP lib evaluated, PHP app
+excluded, applies_to gate fires before applies_when). Новые фикстуры:
+`tests/fixtures/node-publishable-lib`, `tests/fixtures/php-app-project`.
+Все 52 теста (47 старых + 5 новых) проходят. `npx tsc --noEmit` чистый.
+
+**Semver**: patch (0.3.0 → 0.3.1) — bugfix design issue из N28, не
+breaking. Старые ссылки `@v0.3.0` продолжают работать без
+applies_when (apps получают L1 как раньше); ссылка `@v0.3.1` даёт
+чистый excluded.
+
+Open после Шага S:
+- **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
+- **O29** — `vdx init` при unknown/meta.
+- **O26/O27** — TOML round-trip, shared-infra precheck.
+- **O32** — multi-subpackage (отложено).
+- **supporting L2** — отложено, см. TL;DR.
+- **republish CLI** — bundled rubric в опубликованном пакете всё ещё
+  v0.2.2; для прямого доступа клиентов через `npx -y -p @vodmal/vdx-cli`
+  без сети нужен bump cli и npm publish.
 
 ---
 

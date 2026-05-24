@@ -1,0 +1,7 @@
+{
+  "name": "fixture/php-app-project",
+  "type": "project",
+  "require": {
+    "php": "^8.2"
+  }
+}

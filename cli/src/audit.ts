@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Rubric, LevelName } from './rubric.ts';
 import { findSubPackages, stackForDir, type Ctx } from './facts.ts';
+import { evalPredicate } from './evaluator.ts';
 import type { Override, VdxManifest } from './manifest.ts';
 import { evalAxis, projectLevel, type AxisResult } from './scoring.ts';
 
@@ -106,6 +107,16 @@ export function audit(
     }
     const evalCtx = axis.applies_to ? subpackageCtx : ctx;
     if (axis.applies_to && !axis.applies_to.includes(evalCtx.stack)) {
+      perAxis.push({
+        axis_id: axis.id,
+        class: axis.class,
+        achieved: 'L0',
+        target: axis.default_target,
+        drift_kind: 'excluded',
+      });
+      continue;
+    }
+    if (axis.applies_when && !evalPredicate(axis.applies_when, evalCtx)) {
       perAxis.push({
         axis_id: axis.id,
         class: axis.class,
