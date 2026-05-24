@@ -4,6 +4,43 @@
 
 ## 2026-05-24
 
+### Шаг W: `vdx init` transparency + monorepo fallback (O39 закрыт)
+Догфудинг на 3 калибровочных проектах показал три гочи в init verb-mapping:
+эвристика **работала**, но (а) не показывала почему выбран тот или иной
+скрипт; (б) у bookmap не подхватывались скрипты из `server/package.json`
+(`server:test`); (в) Node-эвристика была беднее PHP (нет `vitest`/`tsc`/
+`prettier:fix`/...).
+
+Изменения в `cli/src/init.ts`:
+- Новый `selectVerbTask(verb, tasks): { task, reason, alternatives }` —
+  exact → alias → prefix-group → **suffix-group** (новый шаг, ловит
+  monorepo-style `server:test`, `api:lint`).
+- `VerbMapping` обогащён полями `reason: 'exact'|'alias'|'prefix-group'|
+  'suffix-group'|'not-found'` и `alternatives: string[]` (другие
+  совпавшие кандидаты).
+- Расширены `VERB_ALIASES` для Node: `vitest`, `tsc`, `typecheck`,
+  `eslint`, `prettier:check`, `format:check`, `prettier:fix` и т.п.
+- Plan-output: новая колонка `Reason` + блок `Alternatives considered`.
+- mise.toml: перед каждым `[tasks.X]` комментарий
+  `# vdx: matched "<task>" via <reason>; alt: <list>` если alt непустые
+  или reason ≠ exact.
+- `mapVerb` сохранён как back-compat wrapper.
+
+Эффект на калибровочные проекты (dry-run, без записи в чужие репо):
+- telegram: 6/6 → 6/6 mapped, теперь видны alternatives (`build` chose
+  `build`; alt: `build-dev`, `build-prod`).
+- t23b: 6/6 → 6/6 mapped, видны 13 build:* siblings как alt.
+- bookmap: **3/6 → 4/6** (test через suffix-group `server:test`); check/fix
+  остаются not-found — у проекта реально нет lint/format скриптов.
+
+8 новых unit-тестов в `cli/tests/unit/init.test.ts` + новая фикстура
+`tests/fixtures/node-monorepo-with-server/{package.json, server/package.json}`.
+Все 65 тестов проходят. Smoke на 3 референсах без регрессий (L2/L1/L1).
+Bundled rubric не менялась — semver bump CLI не нужен до Шага X.
+
+Следующий шаг — **Шаг X: D12 MVP implementation** (publish для Node на
+@vodmal/vdx-cli).
+
 ### Шаг V: D12 принято — `publish` как 7-й lifecycle verb (research-финализация)
 После запроса пользователя на `vdx publish` поднят полный landscape research
 в 3 параллельных агентах (Node / PHP+Python / cross-stack+deploy). Все 7

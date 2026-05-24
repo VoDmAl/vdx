@@ -17,12 +17,62 @@ export type Verb = (typeof STANDARD_VERBS)[number];
 export const DEFAULT_BASELINE = 'github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1';
 
 const VERB_ALIASES: Record<Verb, string[]> = {
-  up: ['docker:up', 'docker-up', 'docker:up:detached', 'start'],
+  up: ['docker:up', 'docker-up', 'docker:up:detached', 'start', 'dev', 'serve'],
   down: ['docker:down', 'docker-down', 'stop'],
-  build: ['docker:build', 'build:prod', 'build-prod', 'build:dev', 'build-dev', 'build:assets'],
-  test: ['phpunit', 'test:unit', 'test-unit', 'test:unit:phpunit', 'jest', 'vitest'],
-  check: ['lint', 'check:config', 'check:before:commit', 'check:code:static', 'check:code:lint'],
-  fix: ['fix:ecs', 'format', 'lint:fix'],
+  build: [
+    'docker:build',
+    'build:prod',
+    'build-prod',
+    'build:dev',
+    'build-dev',
+    'build:assets',
+    'compile',
+    'dist',
+  ],
+  test: [
+    'phpunit',
+    'pest',
+    'test:unit',
+    'test-unit',
+    'test:unit:phpunit',
+    'tests',
+    'unit',
+    'jest',
+    'vitest',
+    'mocha',
+    'ava',
+    'spec',
+    'coverage',
+  ],
+  check: [
+    'lint',
+    'check:before:commit',
+    'check:before:push',
+    'check:config',
+    'check:code:static',
+    'check:code:lint',
+    'typecheck',
+    'tsc',
+    'eslint',
+    'prettier:check',
+    'format:check',
+    'qa',
+    'phpstan',
+    'psalm',
+  ],
+  fix: [
+    'fix:ecs',
+    'fix:rector',
+    'format',
+    'lint:fix',
+    'eslint:fix',
+    'prettier',
+    'prettier:write',
+    'prettier:fix',
+    'format:write',
+    'cs-fix',
+    'cs:fix',
+  ],
 };
 
 const VERB_PREFIX_GROUPS: Record<Verb, string[]> = {
@@ -34,10 +84,32 @@ const VERB_PREFIX_GROUPS: Record<Verb, string[]> = {
   fix: ['fix:', 'fix-'],
 };
 
+// Suffix-based monorepo fallback: lets us pick up `server:test`, `api:lint`, etc.
+// when no exact/alias/prefix-group match exists.
+const VERB_SUFFIX_GROUPS: Record<Verb, string[]> = {
+  up: [':up', '-up'],
+  down: [':down', '-down'],
+  build: [':build', '-build'],
+  test: [':test', '-test'],
+  check: [':check', '-check', ':lint', ':typecheck'],
+  fix: [':fix', '-fix', ':format'],
+};
+
+export type MatchReason = 'exact' | 'alias' | 'prefix-group' | 'suffix-group' | 'not-found';
+
 export interface VerbMapping {
   verb: Verb;
   nativeTask: string | null;
   runCommand: string | null;
+  reason: MatchReason;
+  /** Other candidate tasks that also matched but weren't chosen — useful for tuning. */
+  alternatives: string[];
+}
+
+export interface VerbMatch {
+  task: string | null;
+  reason: MatchReason;
+  alternatives: string[];
 }
 
 export interface InitPlan {
@@ -106,12 +178,74 @@ function pickPrefixGroup(prefixes: string[], tasks: Set<string>, verb: Verb): st
   return candidates[0] ?? null;
 }
 
-export function mapVerb(verb: Verb, tasks: Set<string>): string | null {
-  if (tasks.has(verb)) return verb;
-  for (const alt of VERB_ALIASES[verb]) {
-    if (tasks.has(alt)) return alt;
+function collectPrefixCandidates(prefixes: string[], tasks: Set<string>, verb: Verb): string[] {
+  if (prefixes.length === 0) return [];
+  const candidates: string[] = [];
+  for (const t of tasks) {
+    if (t === verb) continue;
+    for (const pfx of prefixes) {
+      if (t.startsWith(pfx)) {
+        candidates.push(t);
+        break;
+      }
+    }
   }
-  return pickPrefixGroup(VERB_PREFIX_GROUPS[verb], tasks, verb);
+  return candidates;
+}
+
+function collectSuffixCandidates(suffixes: string[], tasks: Set<string>, verb: Verb): string[] {
+  if (suffixes.length === 0) return [];
+  const candidates: string[] = [];
+  for (const t of tasks) {
+    if (t === verb) continue;
+    for (const sfx of suffixes) {
+      if (t.endsWith(sfx)) {
+        candidates.push(t);
+        break;
+      }
+    }
+  }
+  return candidates;
+}
+
+export function selectVerbTask(verb: Verb, tasks: Set<string>): VerbMatch {
+  // 1) exact match wins; siblings (aliases / prefix-group) reported as alternatives.
+  if (tasks.has(verb)) {
+    const alts = new Set<string>();
+    for (const a of VERB_ALIASES[verb]) if (tasks.has(a)) alts.add(a);
+    for (const c of collectPrefixCandidates(VERB_PREFIX_GROUPS[verb], tasks, verb)) alts.add(c);
+    return { task: verb, reason: 'exact', alternatives: [...alts].sort() };
+  }
+
+  // 2) alias hit (curated common alternates per stack).
+  const aliasHits = VERB_ALIASES[verb].filter((a) => tasks.has(a));
+  if (aliasHits.length > 0) {
+    const [chosen, ...rest] = aliasHits;
+    return { task: chosen!, reason: 'alias', alternatives: rest.slice().sort() };
+  }
+
+  // 3) prefix-group with canonical hint (prod/release/all preferred, then shortest).
+  const prefixCandidates = collectPrefixCandidates(VERB_PREFIX_GROUPS[verb], tasks, verb);
+  if (prefixCandidates.length > 0) {
+    const chosen = pickPrefixGroup(VERB_PREFIX_GROUPS[verb], tasks, verb)!;
+    const alts = prefixCandidates.filter((c) => c !== chosen).sort();
+    return { task: chosen, reason: 'prefix-group', alternatives: alts };
+  }
+
+  // 4) suffix-group (monorepo fallback: `server:test` -> verb 'test').
+  const suffixCandidates = collectSuffixCandidates(VERB_SUFFIX_GROUPS[verb], tasks, verb);
+  if (suffixCandidates.length > 0) {
+    suffixCandidates.sort((a, b) => a.length - b.length);
+    const [chosen, ...rest] = suffixCandidates;
+    return { task: chosen!, reason: 'suffix-group', alternatives: rest.slice().sort() };
+  }
+
+  return { task: null, reason: 'not-found', alternatives: [] };
+}
+
+/** Kept for back-compat with potential external callers; prefer `selectVerbTask`. */
+export function mapVerb(verb: Verb, tasks: Set<string>): string | null {
+  return selectVerbTask(verb, tasks).task;
 }
 
 function collectTools(ctx: Ctx): Record<string, string> {
@@ -179,6 +313,10 @@ export function renderMiseToml(
 
   for (const m of mappings) {
     if (!m.runCommand) continue;
+    if (m.reason !== 'exact' || m.alternatives.length > 0) {
+      const altPart = m.alternatives.length > 0 ? `; alt: ${m.alternatives.join(', ')}` : '';
+      out.push(`# vdx: matched "${m.nativeTask}" via ${m.reason}${altPart}`);
+    }
     out.push(`[tasks.${m.verb}]`);
     out.push(`description = ${quoteToml(VERB_DESCRIPTIONS[m.verb])}`);
     out.push(`run = ${quoteToml(m.runCommand)}`);
@@ -300,15 +438,21 @@ export function planInit(
   const tasks = listAllTasks(scanCtx);
 
   const mappings: VerbMapping[] = STANDARD_VERBS.map((verb) => {
-    const native = mapVerb(verb, tasks);
+    const sel = selectVerbTask(verb, tasks);
     let runCommand: string | null = null;
-    if (native) {
+    if (sel.task) {
       runCommand =
         primarySubpackage !== null
-          ? renderRunCommandInSubpackage(native, scanStack, scanRoot, primarySubpackage)
-          : renderRunCommand(native, stack, projectRoot);
+          ? renderRunCommandInSubpackage(sel.task, scanStack, scanRoot, primarySubpackage)
+          : renderRunCommand(sel.task, stack, projectRoot);
     }
-    return { verb, nativeTask: native, runCommand };
+    return {
+      verb,
+      nativeTask: sel.task,
+      runCommand,
+      reason: sel.reason,
+      alternatives: sel.alternatives,
+    };
   });
 
   // tools читаем из root независимо: для PHP/Node корневой manifest часто
@@ -387,19 +531,33 @@ export function renderPlanSummary(plan: InitPlan): string {
   lines.push('');
   lines.push('## Verb mappings');
   lines.push('');
-  lines.push('| Verb | Native task | Generated `run` |');
-  lines.push('|------|-------------|-----------------|');
+  lines.push('| Verb | Native task | Reason | Generated `run` |');
+  lines.push('|------|-------------|--------|-----------------|');
   for (const m of plan.mappings) {
     if (m.runCommand) {
-      lines.push(`| \`${m.verb}\` | \`${m.nativeTask}\` | \`${m.runCommand}\` |`);
+      lines.push(
+        `| \`${m.verb}\` | \`${m.nativeTask}\` | ${m.reason} | \`${m.runCommand}\` |`,
+      );
     } else {
-      lines.push(`| \`${m.verb}\` | _(not found)_ | _(skipped)_ |`);
+      lines.push(`| \`${m.verb}\` | _(not found)_ | not-found | _(skipped)_ |`);
     }
   }
   lines.push('');
+  const withAlts = plan.mappings.filter((m) => m.alternatives.length > 0);
+  if (withAlts.length > 0) {
+    lines.push('### Alternatives considered');
+    lines.push('');
+    for (const m of withAlts) {
+      const alts = m.alternatives.map((a) => `\`${a}\``).join(', ');
+      lines.push(
+        `- \`${m.verb}\` chose \`${m.nativeTask}\` (${m.reason}); also matched: ${alts}`,
+      );
+    }
+    lines.push('');
+  }
   const unmatched = plan.mappings.filter((m) => !m.runCommand).map((m) => m.verb);
   if (unmatched.length > 0) {
-    lines.push(`> Not mapped: ${unmatched.join(', ')}. Add тиски в \`mise.toml\` вручную.`);
+    lines.push(`> Not mapped: ${unmatched.join(', ')}. Добавь тиски в \`mise.toml\` вручную.`);
     lines.push('');
   }
   lines.push('## Generated mise.toml');

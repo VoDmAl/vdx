@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–V: D12 принято — `vdx publish` как 7-й verb)
+# vdx — Handoff (2026-05-24, после A–W: O39 закрыт — `vdx init` transparency + monorepo fallback)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,10 +12,27 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 21 шаг (A–V) пройден. Owner-рубрика на
+**Где мы сейчас**: 22 шага (A–W) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
 **[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
 (Шаг U). DEFAULT_BASELINE `@v0.3.1`.
+
+**Шаг W (2026-05-24)** — `vdx init` transparency + monorepo fallback
+(O39 закрыт). Догфудинг на 3 калибровочных проектах показал что эвристика
+mapVerb **работала**, но не показывала почему/из чего выбран скрипт, и
+не подхватывала monorepo-style `server:test`. Изменения:
+- `selectVerbTask(verb, tasks): { task, reason, alternatives }`:
+  exact → alias → prefix-group → **suffix-group** (новый шаг для
+  `<dir>:test` / `:lint`).
+- `VerbMapping` обогащён `reason` + `alternatives[]`.
+- Расширены Node-aliases (`vitest`, `tsc`, `typecheck`, `eslint`,
+  `prettier:check`, `prettier:fix`, etc).
+- Plan-output: колонка `Reason` + блок `Alternatives considered`.
+- `mise.toml`: комментарий `# vdx: matched "<task>" via <reason>; alt: ...`
+  перед каждым `[tasks.X]` если reason ≠ exact или alt непустые.
+Эффект: telegram/t23b 6/6 (видны альтернативы), bookmap **3/6 → 4/6**
+(`test` через suffix-group). 8 новых тестов; 65/65 проходят.
+Smoke L2/L1/L1 без регрессий.
 
 **Шаг V (2026-05-24)** — research-финализация **D12** (publish verb):
 3 параллельных landscape-агента (Node / PHP+Python / cross-stack+deploy),
@@ -67,13 +84,13 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после V):
-- **Шаг W — D12 MVP implementation**: `vdx publish [patch|minor|major]`
+**Следующий шаг** (приоритеты после W):
+- **Шаг X — D12 MVP implementation**: `vdx publish [patch|minor|major]`
   для **Node only** (dogfooding на @vodmal/vdx-cli). Включает: subverb
   registry, pre-flight gating через рубрику, transactional pipeline,
   warning-default `git.head_commit != tag` check, `--force` opt-out.
-- **Шаг X — D12 Phase 2**: PHP + Python implementations.
-- **Шаг Y — D12 Phase 3**: Cargo/Ruby/Go/Java.
+- **Шаг Y — D12 Phase 2**: PHP + Python implementations.
+- **Шаг Z — D12 Phase 3**: Cargo/Ruby/Go/Java.
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
@@ -685,6 +702,62 @@ resolutions в [docs/research/publish-deploy.md](docs/research/publish-deploy.md
 - Phase 3 (Шаг Y) — Cargo/Ruby/Go/Java.
 
 Open после Шага V: см. "Следующий шаг" в TL;DR.
+
+### Шаг W — `vdx init` transparency + monorepo fallback (O39 закрыт) ✅ (2026-05-24)
+
+Догфудинг init на 3 калибровочных проектах (telegram/t23b/bookmap) перед
+Шагом X показал три гочи: (а) plan-таблица не объясняет почему выбран
+скрипт — выглядит «coincidental»; (б) bookmap не подхватывает
+`server:test` из nested `server/package.json`; (в) Node-эвристика беднее
+PHP — нет `vitest`/`tsc`/`prettier:fix`/etc.
+
+Изменения в `cli/src/init.ts`:
+
+- `selectVerbTask(verb, tasks): { task, reason, alternatives }` — новая
+  основная функция с 4-уровневой эвристикой: **exact** → **alias** →
+  **prefix-group** → **suffix-group** (новый шаг). Suffix-group ловит
+  `<dir>:test`, `<dir>-test`, `<dir>:lint`, `<dir>:fix` — monorepo
+  fallback, когда listAllTasks префиксирует subpkg-name.
+- `VerbMapping` обогащён: `reason: 'exact'|'alias'|'prefix-group'|
+  'suffix-group'|'not-found'` + `alternatives: string[]` (другие
+  совпавшие кандидаты, отсортированные).
+- Расширены `VERB_ALIASES`:
+  - up: + `dev`, `serve`
+  - build: + `compile`, `dist`
+  - test: + `pest`, `tests`, `unit`, `mocha`, `ava`, `spec`, `coverage`
+  - check: + `check:before:push`, `typecheck`, `tsc`, `eslint`,
+    `prettier:check`, `format:check`, `qa`, `phpstan`, `psalm`
+  - fix: + `fix:rector`, `eslint:fix`, `prettier`, `prettier:write`,
+    `prettier:fix`, `format:write`, `cs-fix`, `cs:fix`
+- `renderPlanSummary`: новая колонка `Reason` + блок
+  `### Alternatives considered` под таблицей.
+- `renderMiseToml`: комментарий `# vdx: matched "<task>" via <reason>;
+  alt: <list>` перед каждым `[tasks.X]` если `reason ≠ exact` или
+  alternatives непустые.
+- `mapVerb` сохранён как back-compat wrapper над `selectVerbTask`.
+
+**Эффект на калибровочные референсы (dry-run, без записи в чужие репо):**
+
+| Проект | До W | После W |
+|--------|:--:|:--:|
+| telegram (PHP, deep) | 6/6 mapped | 6/6 mapped + alt видны (e.g. `build`: build-dev, build-prod) |
+| t23b (PHP, mid) | 6/6 mapped | 6/6 mapped + 13 alt у `build:*` siblings |
+| bookmap (Node, mono) | **3/6** mapped | **4/6** mapped (`test` → `server:test` via suffix-group) |
+
+bookmap-`check`/`fix` остались not-found — у проекта реально нет lint/
+format скриптов. Это правдивый сигнал.
+
+**Тестирование**: 8 новых unit-тестов в `cli/tests/unit/init.test.ts`
+(exact с alt, alias fallback, prefix-group canonical hint, suffix-group
+monorepo, shortest-wins, not-found, integration на новой фикстуре
+`node-monorepo-with-server/{package.json, server/package.json}`). Все 65
+тестов проходят (57 + 8). `npx tsc --noEmit` чисто. Smoke на 3
+референсах: L2/L1/L1 — без регрессий.
+
+**Bundled rubric не менялась** (no rubric-format changes) — semver bump
+CLI не нужен до Шага X (D12 MVP).
+
+Open после Шага W: см. "Следующий шаг" в TL;DR.
 
 ---
 

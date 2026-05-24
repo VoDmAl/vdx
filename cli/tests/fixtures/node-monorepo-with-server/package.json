@@ -1,0 +1,9 @@
+{
+  "name": "node-monorepo-with-server",
+  "private": true,
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build"
+  }
+}

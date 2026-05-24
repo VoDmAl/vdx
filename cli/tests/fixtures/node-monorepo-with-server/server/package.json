@@ -1,0 +1,9 @@
+{
+  "name": "server",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  }
+}
