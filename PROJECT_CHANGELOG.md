@@ -4,6 +4,30 @@
 
 ## 2026-05-24
 
+### Шаг X.1.c: первый real dogfood — `vdx publish minor` опубликовал @vodmal/vdx-cli@0.4.0
+
+Реальная end-to-end валидация D12 MVP для Node на самом vdx-cli. Cleanup
+stale `@v0.2.1` baseline refs (commit `515cfe8` — README, plugin/README,
+docs/decisions.md, **критический баг** в `cli/src/mcp-server.ts:159` который
+проставлял устаревший baseline в новые mise.toml). После cleanup — `npx tsx
+cli/src/index.ts publish minor` из vdx root: все 4 pre-flight OK, pipeline
+отработал — bump `cli/package.json` 0.3.0 → 0.4.0, `npm publish` с
+интерактивным OTP, commit `cd3eca9 release: v0.4.0`, tag `v0.4.0`, push
+`--follow-tags`. `npm view @vodmal/vdx-cli version` → `0.4.0`.
+
+Это первое реальное (не dry-run) исполнение `executePublish()` —
+подтверждает что `execFileSync` со `stdio: 'inherit'` корректно пропускает
+OTP-prompt npm в живой терминал пользователя. D12 MVP **для Node прошёл
+real-world валидацию**.
+
+Заодно — `git ls-remote --tags origin` для `vdx-rubric-vodmal` показал что
+теги v0.3.0/v0.3.1 уже на GitHub (HANDOFF их числил как blocker, но они
+были запушены вне сессии). Post-handoff audit (`s1-187`/`s3-210`)
+поймал устаревший blocker до того как он попал в work-queue.
+
+После Шага X.1.c остаются: **X.2** — subverbs, **X.3** — PHP+Python
+(Phase 2), **X.4** — Cargo/Ruby/Go/Java (Phase 3).
+
 ### Шаг X.1.b: `vdx publish` execute pipeline (D12 MVP завершён для Node)
 
 Закрывает D12 MVP — `vdx publish <patch|minor|major>` теперь действительно

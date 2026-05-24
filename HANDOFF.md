@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–X.1.b: D12 MVP для Node закрыт — `vdx publish` end-to-end)
+# vdx — Handoff (2026-05-24, после A–X.1.c: @vodmal/vdx-cli@0.4.0 опубликован — D12 прошёл real-world validation)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,10 +12,21 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 24 шага пройдены (A–W + X.1.a + X.1.b). Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
-**[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(Шаг U). DEFAULT_BASELINE `@v0.3.1`. **D12 MVP для Node закрыт**.
+**Где мы сейчас**: 25 шагов пройдены (A–W + X.1.a + X.1.b + X.1.c). Owner-
+рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
+**[@vodmal/vdx-cli@0.4.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(опубликован в Шаге X.1.c через `vdx publish minor` на самом себе).
+DEFAULT_BASELINE `@v0.3.1`. **D12 MVP для Node прошёл real-world validation**.
+
+**Шаг X.1.c (2026-05-24)** — первый real-world dogfood D12. Cleanup
+устаревших `@v0.2.1` baseline-refs в README/plugin/docs + критбаг в
+`mcp-server.ts:159` (commit `515cfe8`). Затем `npx tsx cli/src/index.ts
+publish minor` из vdx root: 4/4 pre-flight OK → bump `cli/package.json`
+0.3.0 → 0.4.0 → `npm publish` с интерактивным OTP → commit `cd3eca9
+release: v0.4.0` → tag `v0.4.0` → `git push --follow-tags`. `npm view
+@vodmal/vdx-cli version` подтверждает `0.4.0`. Side-finding: post-handoff
+audit показал что rubric tags v0.3.0/v0.3.1 на vdx-rubric-vodmal уже на
+remote — HANDOFF числил их как open blocker, stale (`s1-187`).
 
 **Шаг X.1.b (2026-05-24)** — execute pipeline: `executePublish()` делает
 bump package.json → `npm publish` (irreversible, через `execFileSync` с
@@ -102,11 +113,7 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после X.1.b):
-- **Шаг X.1.c — dogfooding `vdx publish` на @vodmal/vdx-cli@0.4.0**:
-  запустить `vdx publish minor` на самом vdx-cli — финальная
-  валидация D12 end-to-end через настоящий npm publish с OTP.
-  minor bump: новый verb = feature.
+**Следующий шаг** (приоритеты после X.1.c):
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
 - **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
@@ -889,6 +896,49 @@ D12 MVP **для Node закрыт**. Следующий шаг — dogfood: bum
 0.4.0 через `vdx publish minor` на самом vdx-cli.
 
 Open после X.1.b: см. "Следующий шаг" в TL;DR.
+
+### Шаг X.1.c — first real dogfood: @vodmal/vdx-cli@0.4.0 опубликован ✅ (2026-05-24)
+
+Финальная валидация D12 MVP для Node — реальный publish из vdx root на
+сам vdx-cli.
+
+**Pre-step cleanup** (commit `515cfe8`): HANDOFF числил "push rubric tags
+v0.3.0/v0.3.1" как open blocker, но `git ls-remote --tags origin` для
+`vdx-rubric-vodmal` показал что оба тега уже на remote (post-handoff
+audit, `s1-187`). Заодно вычищены устаревшие `@v0.2.1` baseline-refs:
+README.md, plugin/README.md, docs/decisions.md, **критбаг** в
+`cli/src/mcp-server.ts:159` (шаблон проставлял устаревший baseline в
+новые `mise.toml` через MCP `vdx_record_success_path`).
+
+**Publish run** (из vdx root):
+
+    npx tsx cli/src/index.ts publish minor
+
+Effective stack резолвится через `primary_subpackage=cli` → Node.
+Pre-flight: working-tree-clean ✓, lib-intent ✓ (applies_when=true:
+publishConfig+bin+main, !private), release-artifact L4 ≥ L3 ✓,
+registry-collision OK (npm @ 0.3.0, new 0.4.0).
+
+Pipeline `executePublish()`:
+
+1. ✓ bump `cli/package.json` 0.3.0 → 0.4.0
+2. ✓ `npm publish` — интерактивный OTP-prompt в живом терминале
+   (`execFileSync` со `stdio: 'inherit'` пропускает в терминал
+   пользователя), 27.7 KB tarball, 19 файлов, integrity sha512
+3. ✓ `git commit cd3eca9 release: v0.4.0`
+4. ✓ `git tag -a v0.4.0`
+5. (не пушено самим vdx — пользователь сделал
+   `git push --follow-tags` отдельно)
+
+**Verification**: `npm view @vodmal/vdx-cli version` → `0.4.0`.
+
+**Семантика**: D12 MVP для Node прошёл первое реальное end-to-end
+исполнение, не только dry-run. Подтверждает что transactional order
+(irreversible-first: bump → publish → commit → tag) и `stdio:inherit`
+для OTP работают как заложено. CLI bump v0.3.0 → v0.4.0 — minor по
+семверу (новый `publish` verb = feature).
+
+Open после X.1.c: см. "Следующий шаг" в TL;DR.
 
 ---
 
