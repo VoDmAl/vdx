@@ -1,7 +1,7 @@
 {
   "name": "vdx",
   "displayName": "vdx — Lifecycle Interface",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Unified lifecycle interface (up/down/build/test/check/fix) + versioned maturity audit. MCP server runs via npx from @vodmal/vdx-cli on npm.",
   "repository": "https://github.com/VoDmAl/vdx",
   "hooks": "./hooks/hooks.json",

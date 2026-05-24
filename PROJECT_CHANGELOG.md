@@ -4,6 +4,20 @@
 
 ## 2026-05-24
 
+### Шаг U: @vodmal/vdx-cli@0.3.0 на npm
+Минорный bump CLI после Шагов P/R/S/T:
+
+- `cli/package.json` 0.2.1 → **0.3.0** (vitest + release-artifact axis
+  + applies_when evaluator + `vdx init --stack/meta`).
+- `plugin/.claude-plugin/plugin.json` 0.2.0 → **0.3.0** (выравнивание;
+  `.mcp.json` уже использует `@latest`).
+- Bundled rubric (`cli/rubric/vdx-rubric.yaml`) теперь синхронизирован
+  с canonical: v0.3.1. `DEFAULT_BASELINE` тоже на v0.3.1.
+
+`npm pack --dry-run`: 18 файлов, 22.7 KB. Bundle clean
+(src/, bin/, rubric, README, LICENSE). Публикация — `npm publish`
+у пользователя (npm 2FA OTP).
+
 ### Шаг T: O29 закрыт — `vdx init` для unknown/meta стеков
 Три улучшения в `cli/src/init.ts` + `cli/src/index.ts`:
 

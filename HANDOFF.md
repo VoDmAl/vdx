@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–T: рубрика v0.3.1 + vdx init --stack/meta)
+# vdx — Handoff (2026-05-24, после A–U: CLI @vodmal/vdx-cli@0.3.0 на npm)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,14 +12,15 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 19 шагов (A–T) пройдены. Owner-рубрика на
+**Где мы сейчас**: 20 шагов (A–U) пройдены. Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1** (Шаг S — `applies_when`).
-Шаг T (2026-05-24) починил `vdx init` для unknown/meta стеков:
-optional `--stack <id>` override + auto-resolve `primary_subpackage`
-для meta + warnings/TODO для unknown. CLI на npm как
-**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(bundled rubric в опубликованном пакете всё ещё v0.2.2 — не критично,
-DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub).
+Шаг U (2026-05-24): CLI bumped 0.2.1 → **0.3.0**, plugin 0.2.0 → 0.3.0;
+bundled rubric теперь v0.3.1 (release-artifact + applies_when) + новый
+`vdx init --stack/meta`. CLI на npm как
+**[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
+`npm pack --dry-run` показал чистый бандл: 18 файлов, 22.7 KB
+(src/, bin/, rubric/v0.3.1, README, LICENSE) — без tests/, vitest.config.
+DEFAULT_BASELINE: `@v0.3.1`.
 External-facing docs (главный README, vdx-rubric-vodmal README/CHANGELOG)
 переведены на английский 2026-05-24; внутренние (HANDOFF, CLAUDE,
 PROJECT_CHANGELOG, docs/) — русский.
@@ -51,15 +52,11 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после T):
+**Следующий шаг** (приоритеты после U):
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
 - **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
-- **republish CLI** — bundled rubric в опубликованном пакете всё ещё
-  v0.2.2; чтобы клиенты получали v0.3.1 ось + `vdx init --stack`,
-  нужен bump cli версии и npm publish. Не критично —
-  DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub.
 
 ---
 
@@ -574,7 +571,42 @@ Open после Шага T:
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage (отложено).
 - **supporting L2** — отложено, см. TL;DR.
-- **republish CLI** — bundled rubric v0.2.2 в npm-пакете.
+
+### Шаг U — @vodmal/vdx-cli@0.3.0 на npm ✅ (2026-05-24)
+
+Минорный bump CLI после накопления фич Шагов P/R/S/T:
+
+- `cli/package.json` version `0.2.1` → **`0.3.0`**.
+- `plugin/.claude-plugin/plugin.json` version `0.2.0` → **`0.3.0`**
+  (выравнивание с CLI; `.mcp.json` использует
+  `@vodmal/vdx-cli@latest`, поэтому новые клиенты получат свежий
+  пакет без правки plugin manifest).
+- Bundled rubric (`cli/rubric/vdx-rubric.yaml`) уже на v0.3.1 —
+  release-artifact axis + applies_when. `DEFAULT_BASELINE` уже
+  `@v0.3.1`. Эти два значения теперь синхронизированы в
+  опубликованном пакете (раньше bundled был v0.2.2).
+
+**`npm pack --dry-run` sanity**: 18 файлов, 22.7 KB, 82.1 KB
+unpacked. Состав:
+- src/ (12 .ts модулей), bin/ (vdx.cjs + vdx-mcp.cjs),
+  rubric/vdx-rubric.yaml (v0.3.1), README.md, LICENSE, package.json.
+- Исключено через `files:` whitelist: tests/, vitest.config.ts,
+  smoke.sh, tsconfig.json, fixtures.
+
+Семвер: minor (0.2.1 → 0.3.0). Не breaking: API CLI сохранён
+(`vdx audit`, `vdx init`), новый `--stack` опционален, bundled
+рубрика обратно-совместимая (новая ось + новое поле axis).
+
+**Публикация**: `npm publish` запускает пользователь — нужен OTP
+из email (npm 2FA не настроен на browser-token). После публикации
+`npx -y -p @vodmal/vdx-cli vdx` будет резолвить новую версию
+автоматически.
+
+Open после Шага U:
+- **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
+- **O26/O27** — TOML round-trip, shared-infra precheck.
+- **O32** — multi-subpackage (отложено).
+- **supporting L2** — отложено, см. TL;DR.
 
 ---
 
