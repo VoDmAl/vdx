@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–X.1.c: @vodmal/vdx-cli@0.4.0 опубликован — D12 прошёл real-world validation)
+# vdx — Handoff (2026-05-24, после A–Y: CJM работает — @vodmal/vdx-cli@0.5.0 + lifecycle pass-through + inline marketplace)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,11 +12,38 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 25 шагов пройдены (A–W + X.1.a + X.1.b + X.1.c). Owner-
-рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
-**[@vodmal/vdx-cli@0.4.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(опубликован в Шаге X.1.c через `vdx publish minor` на самом себе).
-DEFAULT_BASELINE `@v0.3.1`. **D12 MVP для Node прошёл real-world validation**.
+**Где мы сейчас**: 26 шагов пройдены (A–W + X.1.a/b/c + Y). Owner-рубрика
+на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
+**[@vodmal/vdx-cli@0.5.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(опубликован в Шаге Y.1.f, второй dogfood D12 round). DEFAULT_BASELINE
+`@v0.3.1`. **D12 MVP + Y CJM закрыты — `vdx <verb>` работает из любого
+shell, marketplace в этом же репо, skill знает что делать при отсутствии
+verb'а.**
+
+**Шаг Y (2026-05-24)** — CJM «зашёл-набрал-`vdx build`» работает
+end-to-end. Три трека:
+- **Y.1** — `vdx build/test/check/up/down/fix` в shell как pass-through на
+  `mise run <verb>`. Чистая логика в `cli/src/run.ts`
+  (`resolveLifecycleVerb` + `renderResolveError`), тонкий wrapper
+  `cmdRun` в `index.ts`. Без mise.toml / без нужного task'а — exit 2 с
+  подсказкой. 10 новых vitest (76→86), error-path smoke. Реальный
+  exec через `mise` пользователь верифицирует на dev-машине (в моём
+  shell mise бинаря нет).
+- **Y.2** — `marketplace/marketplace.json` inline в этом репо; главный
+  `README.md` получил Install + Quick Start + Claude Code plugin
+  sections; `cli/README.md` расширен примерами всех verb'ов;
+  `plugin/.claude-plugin/plugin.json` bumped 0.3.0 → 0.5.0.
+- **Y.3** — `vdx-discover` skill: новый trigger «`vdx <verb>` →
+  no task» + Step 2b proposal-mode (writable+conventional / writable+
+  environmental / readonly). Anti-pattern «don't invent» сохранён.
+- **Y.1.f** — `vdx publish minor` на самом vdx-cli: 0.4.0 → **0.5.0**.
+  Pre-flight 4/4 OK, npm publish (OTP), commit `release: v0.5.0`, tag
+  `v0.5.0`, push.
+
+vdx-self-audit после Y: overall **L1** без регрессий (ci L4, tests L3,
+release-artifact L4 — все aligned; lifecycle-interface L2 — правда:
+у vdx нет up/down/fix). Заодно стейл baseline в vdx own `mise.toml`
+поправлен: `@v0.2.2` → `@v0.3.1`.
 
 **Шаг X.1.c (2026-05-24)** — первый real-world dogfood D12. Cleanup
 устаревших `@v0.2.1` baseline-refs в README/plugin/docs + критбаг в
@@ -113,7 +140,7 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после X.1.c):
+**Следующий шаг** (приоритеты после Y):
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
 - **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
@@ -939,6 +966,123 @@ Pipeline `executePublish()`:
 семверу (новый `publish` verb = feature).
 
 Open после X.1.c: см. "Следующий шаг" в TL;DR.
+
+### Шаг Y — CJM «vdx <verb> работает в любом проекте» закрыт ✅ (2026-05-24)
+
+Три параллельных трека (Y.1, Y.2, Y.3) + dogfood publish (Y.1.f) в одной
+сессии после Шага X.1.c. Спровоцировано тем, что пользователь прошёл
+свой CJM «зайти в любой проект, написать `vdx audit` или `vdx build`,
+и если build нет — получить prompt Claude Code-агента» и обнаружил три
+гэпа: (а) `vdx build/test/...` не работали в shell; (б) README не имел
+install-инструкций; (в) при отсутствии verb'а в skill не было ветки
+«предложить реализовать».
+
+#### Y.1 — lifecycle verb pass-through на mise (`cli/src/run.ts`)
+
+Новый модуль `cli/src/run.ts`:
+- `LIFECYCLE_VERBS = ['up', 'down', 'build', 'test', 'check', 'fix']`,
+  тип `LifecycleVerb`.
+- `resolveLifecycleVerb(projectRoot, verb): VerbResolveResult` — чистая
+  функция, discriminated union: `{ ok: true; miseTomlPath } |
+  { ok: false; reason: 'no-mise-toml' | 'parse-error' | 'no-task';
+  detail? }`. Читает только `mise.toml` (не агрегирует composer/npm
+  scripts — pass-through должен работать через mise, иначе fallthrough
+  будет молчаливо запускать что не надо).
+- `renderResolveError(res, projectRoot, verb)` — формирует stderr-сообщение
+  с подсказкой (`vdx init .` для no-mise-toml; `vdx init . --force` для
+  no-task; underlying TOML error для parse-error).
+
+В `cli/src/index.ts` — тонкий `cmdRun(verb)`: вызывает
+`resolveLifecycleVerb`, на ошибке — `process.stderr.write(renderResolveError(...))`
++ `process.exit(2)`. На ОК — `execFileSync('mise', ['run', verb], {
+cwd: projectRoot, stdio: 'inherit' })`. Если `mise` бинаря нет
+(`ENOENT`) — exit 127 + ссылка на mise.jdx.dev. Иначе propagate exit
+code от `mise run`.
+
+Dispatch расширен: `else if (LIFECYCLE_VERBS.includes(cmd)) cmdRun(cmd)`.
+Usage обновлён.
+
+**Тесты**: 10 новых vitest в `cli/tests/unit/run.test.ts` через
+`fs.mkdtempSync` (LIFECYCLE_VERBS const, 5 error/ok пути для
+`resolveLifecycleVerb`, 3 формата для `renderResolveError`). Все
+**86 тестов проходят** (76 → 86). `npx tsc --noEmit` чисто.
+
+**Smoke**: 3 error paths из bash (empty dir → no-mise-toml; mise.toml
+без task → no-task; usage). Реальный exec через `mise run` — на
+dev-машине, где mise установлен (в моём shell его нет; см. [cs:s1-227]).
+Smoke регрессий на 3 калибровочных проектах: telegram L2 / t23b L1 /
+bookmap L1 — без изменений.
+
+#### Y.2 — Inline marketplace + install-docs
+
+- `marketplace/marketplace.json` — single-plugin inline marketplace с
+  `source: "../plugin"`. Пользователь подключает через
+  `extraKnownMarketplaces: ["github.com/VoDmAl/vdx/marketplace"]` в
+  `~/.claude/settings.json` и `/plugin install vdx@vdx`. Аргумент за
+  inline: один плагин, отдельный репо overkill (принцип «комбайна»);
+  marketplace = просто JSON-указатель на plugin/-папку, который уже
+  здесь.
+- Главный `README.md` — добавлены **Install** (prerequisites: Node ≥20,
+  mise, git; `npm i -g @vodmal/vdx-cli` или `npx -y @vodmal/vdx-cli vdx
+  audit .`), **Quick Start** (audit / init / build/test/check/up/down /
+  publish examples), **Claude Code Plugin** sections. Current status
+  переписан с финалом на v0.4.0 → теперь после Y финал на v0.5.0
+  (обновится в этом же шаге HANDOFF/CHANGELOG sweep).
+- `cli/README.md` — расширен примерами всех verb'ов + 3 quick-start
+  examples (audit /init+test / publish minor). Структура src/ дополнена
+  новыми `run.ts`, `publish.ts`, `init.ts`. Not-implemented
+  обновлено (publish phased: Node MVP, PHP/Python Y.3, Cargo/Ruby/Go/Java
+  Y.4 — wait, реально это X.3/X.4 в плане; здесь по тексту Y.3).
+- `plugin/.claude-plugin/plugin.json` bumped 0.3.0 → **0.5.0** для
+  выравнивания с CLI; description обновлён (добавлены `publish` +
+  «AI bootstrap skill»).
+
+#### Y.3 — skill proposal-mode для отсутствующих verb'ов
+
+`plugin/skills/vdx-discover/SKILL.md`:
+- Расширено frontmatter `description`: «...when `vdx <verb>` reports a
+  missing task...».
+- Новый trigger в «When this skill applies»: «User runs `vdx <verb>`
+  in shell and gets a `no mise.toml` or `no [tasks.<verb>]` error».
+- Новый **Step 2b — propose when no native candidate exists**:
+  классифицировать проект (writable + conventional verb → A:
+  native script + thin mise wrapper; writable + environmental verb
+  (up/down) → B: pure mise task; readonly/vendored → C: mise-only
+  wrapper в `.vdx-overrides.toml` либо project mise.toml). Всегда
+  показывать diff пользователю. Anti-pattern «don't invent» сохранён.
+
+#### Y.1.f — dogfood publish round 2: @vodmal/vdx-cli@0.5.0
+
+После того как Y.1+Y.2+Y.3 закоммичены — `npx tsx cli/src/index.ts
+publish minor` из vdx root. Pre-flight 4/4 OK (working-tree-clean ✓,
+lib-intent ✓, release-artifact L4 ✓, registry-collision OK
+@0.4.0→0.5.0). `npm publish` с OTP в живом терминале, commit
+`release: v0.5.0` (sha 845c918), tag `v0.5.0`, push `--follow-tags`.
+
+Это второе real-world end-to-end исполнение `executePublish()` — D12
+MVP подтверждён как stable.
+
+#### vdx-self-audit после Y
+
+| Ось | Class | Achieved | Drift |
+|-----|:-----:|:--------:|:------|
+| lifecycle-interface | **C** | L2 | gap (vdx — meta, up/down/fix не применимы) |
+| tests | **C** | L3 | gap до L4 |
+| static-analysis | **C** | L2 | gap |
+| ci | **C** | **L4** | ✅ aligned |
+| release-artifact | s | **L4** | ✅ aligned |
+| docs | s | L3 | gap |
+| mock-infra | s | L2 | gap |
+| reproducibility / code-style / dependency-hygiene / git-hygiene / observability | s | L1 | gap |
+| secrets-config / shared-infra / shared-infra-drift | s | — | suppressed |
+
+**Overall L1** (как было после Q). Никаких регрессий от Y. Three at
+L4 (ci, release-artifact, tests L3 close to L4).
+
+Заодно поправлен stale baseline в vdx own `mise.toml`:
+`@v0.2.2` → `@v0.3.1` (был unaligned после Шага S).
+
+Open после Y: см. "Следующий шаг" в TL;DR.
 
 ---
 

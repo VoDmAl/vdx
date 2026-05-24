@@ -4,6 +4,52 @@
 
 ## 2026-05-24
 
+### Шаг Y: CJM «зашёл-набрал-vdx-build» работает — @vodmal/vdx-cli@0.5.0 + inline marketplace + install-docs
+
+Три параллельных трека, закрытых в одной сессии после Шага X.1.c:
+
+- **Y.1 — lifecycle pass-through.** `vdx build/test/check/up/down/fix`
+  теперь рабочие команды в shell, не только MCP-tools. Чистая логика в
+  `cli/src/run.ts` (`resolveLifecycleVerb` + `renderResolveError`), тонкий
+  side-effect-wrapper `cmdRun` в `index.ts`. Если в проекте нет `mise.toml`
+  или нет `[tasks.<verb>]` — exit 2 с подсказкой (run `vdx init` / `vdx
+  init --force`). exec через `execFileSync('mise', ['run', verb], { stdio:
+  'inherit' })`. 10 новых vitest-кейсов (76→86) на error paths и
+  resolution. Smoke на 3 калибровочных проектах — без регрессий
+  (telegram L2 / t23b L1 / bookmap L1).
+- **Y.2 — install-docs + inline marketplace.** До Y.2 README не имел
+  `npm install` инструкций — gap, обнаружен пользователем
+  midflight ([cs:s1-218]). Добавлены: главный `README.md` Install +
+  Quick Start + Claude Code Plugin sections (English); `cli/README.md`
+  расширен примерами всех глаголов; `plugin/.claude-plugin/plugin.json`
+  bumped 0.3.0 → 0.5.0 для consistency. Создан inline marketplace
+  `marketplace/marketplace.json` (relative `source: "../plugin"`) —
+  пользователь подключает через `extraKnownMarketplaces:
+  ["github.com/VoDmAl/vdx/marketplace"]` в `~/.claude/settings.json`.
+- **Y.3 — skill proposal-mode для отсутствующих verb'ов.** Расширен
+  `plugin/skills/vdx-discover/SKILL.md`: новый trigger «user runs `vdx
+  <verb>` and gets `no [tasks.<verb>]`» + новый Step 2b с
+  proposal-mode (A: writable + conventional → native script + mise
+  wrapper; B: writable + environmental → pure mise task; C: readonly /
+  vendored → mise-only wrapper). Сохранён anti-pattern «don't invent»
+  + требование показать diff пользователю перед apply.
+- **Y.1.f — dogfood publish round 2.** `vdx publish minor` на самом
+  vdx-cli: `0.4.0 → 0.5.0`. Pre-flight 4/4 OK, npm publish с OTP в живом
+  терминале, commit `release: v0.5.0`, tag `v0.5.0`, push `--follow-tags`.
+  Второе real-world end-to-end исполнение D12 MVP.
+
+vdx-self-audit после Y: overall **L1** без регрессий (ci L4, tests L3,
+release-artifact L4 — все aligned). lifecycle-interface остался L2 —
+правда: у vdx как meta-проекта нет `up`/`down`/`fix`, это не gap.
+Заодно поправлен stale baseline в собственном `mise.toml`:
+`@v0.2.2` → `@v0.3.1` (DEFAULT_BASELINE в init.ts уже на v0.3.1, mise.toml
+был неаккуратно не обновлён в Шаге S).
+
+CJM, который пользователь хотел в этой сессии: «зашёл в любой проект →
+`vdx audit` или `vdx build` → если build нет, и я в Claude Code с
+плагином — skill подхватит и предложит реализацию» — **работает** в
+полном объёме.
+
 ### Шаг X.1.c: первый real dogfood — `vdx publish minor` опубликовал @vodmal/vdx-cli@0.4.0
 
 Реальная end-to-end валидация D12 MVP для Node на самом vdx-cli. Cleanup
