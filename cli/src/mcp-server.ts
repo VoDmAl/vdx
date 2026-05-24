@@ -13,8 +13,9 @@ import { autoDetectStack, readToml, type Ctx } from './facts.ts';
 import { audit } from './audit.ts';
 import { reportJson, reportMarkdown } from './report.ts';
 import { STANDARD_VERBS, type Verb } from './init.ts';
+import { resolveDefaultRubric } from './defaults.ts';
 
-const DEFAULT_RUBRIC = '/Users/vdm/AI Projects/vdx-rubric-vodmal/vdx-rubric.yaml';
+const DEFAULT_RUBRIC = resolveDefaultRubric();
 
 function resolveProjectRoot(argv: string[]): string {
   const i = argv.indexOf('--project');

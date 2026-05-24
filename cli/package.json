@@ -1,13 +1,38 @@
 {
-  "name": "vdx-cli",
-  "version": "0.1.0",
-  "description": "vdx — unified lifecycle interface + maturity audit (v0.1 evaluator)",
-  "private": true,
+  "name": "@vodmal/vdx-cli",
+  "version": "0.2.0",
+  "description": "vdx — unified lifecycle interface (up/down/build/test/check/fix) + versioned maturity audit with drift detection. Pairs with the vdx Claude Code plugin.",
+  "keywords": [
+    "vdx",
+    "lifecycle",
+    "audit",
+    "rubric",
+    "mise",
+    "claude-code",
+    "mcp",
+    "drift"
+  ],
+  "homepage": "https://github.com/VoDmAl/vdx#readme",
+  "bugs": "https://github.com/VoDmAl/vdx/issues",
+  "license": "MIT",
+  "author": "VoDmAl",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VoDmAl/vdx.git",
+    "directory": "cli"
+  },
   "type": "module",
   "bin": {
-    "vdx": "src/index.ts",
-    "vdx-mcp": "src/mcp-server.ts"
+    "vdx": "./bin/vdx.cjs",
+    "vdx-mcp": "./bin/vdx-mcp.cjs"
   },
+  "files": [
+    "src",
+    "rubric",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "vdx": "tsx src/index.ts",
     "vdx-mcp": "tsx src/mcp-server.ts",
@@ -19,15 +44,19 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "js-yaml": "^4.1.0",
-    "smol-toml": "^1.3.0"
+    "smol-toml": "^1.3.0",
+    "tsx": "^4.19.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11"
   }
 }

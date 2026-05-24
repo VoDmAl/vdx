@@ -6,8 +6,9 @@ import { autoDetectStack, type Ctx } from './facts.ts';
 import { audit } from './audit.ts';
 import { reportMarkdown, reportJson } from './report.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
+import { resolveDefaultRubric } from './defaults.ts';
 
-const DEFAULT_RUBRIC = '/Users/vdm/AI Projects/vdx-rubric-vodmal/vdx-rubric.yaml';
+const DEFAULT_RUBRIC = resolveDefaultRubric();
 
 function usage(): never {
   process.stderr.write(

@@ -1,6 +1,6 @@
 # vdx — Claude Code plugin
 
-Plugin v0.1 that exposes the vdx lifecycle interface and maturity audit
+Plugin v0.2 that exposes the vdx lifecycle interface and maturity audit
 to Claude Code as MCP tools, plus a `vdx-discover` skill and a PostToolUse
 hook for success-path logging.
 
@@ -9,14 +9,15 @@ hook for success-path logging.
 ```
 plugin/
 ├── .claude-plugin/plugin.json       # plugin manifest
-├── .mcp.json                        # vdx-mcp stdio server
+├── .mcp.json                        # vdx-mcp stdio server (via npx)
 ├── skills/vdx-discover/SKILL.md     # discover-and-record workflow
 ├── hooks/hooks.json                 # PostToolUse hook on vdx_up
 └── scripts/record-success-path.sh   # hook script
 ```
 
-The MCP server is the same one as `cli/src/mcp-server.ts` — the plugin
-just registers it with Claude Code and adds project-level guidance.
+The MCP server lives in [`@vodmal/vdx-cli`](https://www.npmjs.com/package/@vodmal/vdx-cli)
+on npm. `.mcp.json` spawns it via `npx -y -p @vodmal/vdx-cli@latest vdx-mcp`
+— no local clone of vdx required.
 
 ## Local installation (development)
 
@@ -69,13 +70,13 @@ After install, the following MCP tools are available in any project:
 The `vdx-discover` skill auto-suggests itself when Claude enters a project
 that has no `mise.toml` manifest.
 
-## Limitations of v0.1
+## Limitations of v0.2
 
-- The `.mcp.json` references the absolute path to the CLI source. For a
-  public marketplace release, the CLI should be published to npm as
-  `vdx-cli` and `.mcp.json` should call `npx -y vdx-cli mcp` instead.
 - `record-success-path.sh` only logs to `~/.cache/vdx/last-success-path.log`.
   Canonical record of the success path still goes through the
   `vdx_record_success_path` MCP tool (called by the agent, not by the hook).
+- Bundled rubric in `@vodmal/vdx-cli` is a snapshot of canonical
+  `vdx-rubric-vodmal@v0.2.2` at CLI release time. Newer canonical tags
+  require either a CLI republish or per-project override of the rubric path.
 - See open questions O26 (TOML round-trip with comments) and O27 (real
   shared-infra precheck) in `../docs/decisions.md`.

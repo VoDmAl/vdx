@@ -3,8 +3,10 @@
     "vdx": {
       "command": "npx",
       "args": [
-        "tsx",
-        "/Users/vdm/AI Projects/vdx/cli/src/mcp-server.ts",
+        "-y",
+        "-p",
+        "@vodmal/vdx-cli@latest",
+        "vdx-mcp",
         "--project",
         "${CLAUDE_PROJECT_DIR}"
       ]
