@@ -82,6 +82,61 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 `baseline: github.com/vodmal/vdx-rubric@v0.2.0`. Аудит загружает **указанную**
 версию — детерминированность + контролируемое обновление через bump в манифесте.
 
+### D12 — `publish` как 7-й lifecycle verb, lib-gated, subverb-style
+Дата: 2026-05-24 · Research: [docs/research/publish-deploy.md](research/publish-deploy.md)
+
+vdx core словарь расширен с 6 до 7 глаголов: + `publish`. Применяется к
+библиотекам (`applies_when: lib intent` — переиспользует O35 сигналы:
+Node `!private + bin/main/exports/module/publishConfig`; PHP composer
+`type ≠ project`; и т.п.). Apps получают error + указатель на будущий
+`vdx deploy` (D13).
+
+**Subverb-style** (вдохновлено пользовательским паттерном `build:db:migration`):
+- `vdx publish [patch|minor|major]` — full default pipeline (vdx
+  институциализирует stack-specific impl: Node = `npm version X && npm publish && git push --follow-tags`;
+  PHP = edit composer.json + git tag + push; Python = build + twine + tag).
+  Транзакционно: bump→pre-flight→upload→commit/tag/push в одной
+  операции с rollback при upload-failure.
+- `vdx publish:bump <spec>` — only bump version.
+- `vdx publish:upload` — only push artifact.
+- `vdx publish:tag` — only git tag + push --tags.
+- `vdx publish:notes` — only generate release notes.
+
+**Pre-flight gating** через рубрику (новый use case — рубрика становится
+**executable contract**):
+- `rubric.tests < L2` → error
+- `rubric.release-artifact < L3` → error
+- `rubric.ci < L2` → error (с `--no-ci-check` opt-out)
+- `working_tree.dirty` → error
+- `published_version >= local_version` → error (registry collision)
+- `git.head_commit != git.tag(version)` → **warning** by default, `--strict` для error (skipped когда arg-form задаёт version в pipeline)
+
+`--force` обходит refuses_if (для escape-hatch false-negatives applies_when).
+`[tasks.publish]` в `mise.toml` overrides default vdx pipeline (D3
+escape hatch). Conventional-commits — **opt-in**, auto-detect с
+threshold; используется для CHANGELOG/notes если есть.
+
+**Monorepo** — defer. MVP делает single-package; для `.changeset/` —
+proxy в существующие tools. Native monorepo-aware publish — D14+.
+
+**Phasing implementation**:
+- **Phase 1 (MVP)** — Node only (наш own use case: vdx-cli).
+- **Phase 2** — PHP + Python defaults.
+- **Phase 3** — Cargo, Ruby, Go, Java.
+- Sub-verbs parallel с phases.
+
+**Связанные deferred items**: O36 (release-workflow ось — после ship +
+N≥3 lib calibration), O37 (`vdx bump` как отдельный 8-й verb, если
+поле-feedback покажет необходимость cross-stack normalized bump).
+
+**Архитектурный riск D7** (vocabulary fix at 6) — mitigated через
+extension protocol: minor `schema_version` bump, `applies_when`
+defaults, backward-compat (старые manifests без `publish` continue
+работать).
+
+См. полный research, OQ1-OQ7 resolutions и landscape в
+[docs/research/publish-deploy.md](research/publish-deploy.md).
+
 ---
 
 ## Открытые вопросы
@@ -111,6 +166,28 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 ### Активные (от smoke v0.1 evaluator + догфудинг)
 - ~~**vitest для evaluator**~~ — закрыто 2026-05-24 (Шаг P). См. N26.
 - ~~**O35**~~ — закрыто Шагом S 2026-05-24 (см. N29, рубрика v0.3.1).
+- ~~**D12**~~ — закрыто 2026-05-24 как Decided (см. секцию выше).
+- **O36** — `release-workflow` ось (orthogonal к `lifecycle-interface`).
+  Открыто 2026-05-24 как deferred-after-D12 (см. OQ2 в research-doc).
+  Измеряет качество release-процесса (automated CHANGELOG, semver
+  enforcement, idempotency, signing). L1: documented release script;
+  L2: + automated CHANGELOG; L3: + semver enforcement (conventional-commits
+  linted); L4: + signing/provenance (Sigstore/GPG/npm provenance/PyPI
+  Trusted Publishing). Условие добавления: D12 implementation ship'нут +
+  N≥3 lib-проектов для калибровки.
+- **O37** — `vdx bump` как 8-й lifecycle verb (вместо subverb формы).
+  Открыто 2026-05-24 как deferred (см. OQ4 в research-doc). Сейчас bump
+  в scope D12 через subverb `vdx publish:bump` и arg-form
+  `vdx publish patch|minor|major`. Если поле-feedback покажет, что
+  пользователи хотят cross-stack normalized bump **отдельно** от
+  publish (например, для preview-deploys без publish) — выделяем как
+  отдельный verb.
+- **O38** — Native monorepo-aware `vdx publish` (D14+). Открыто
+  2026-05-24 как deferred (см. OQ6 в research-doc). MVP D12 делает
+  single-package; для известных layouts (`.changeset/`, pnpm
+  workspaces) — proxy в existing tools. Native dependency-aware
+  ordering, batched git tags, per-package CHANGELOG — после
+  появления реальных monorepo в портфолио + закрытия O32.
 - **O25** — Mock-infra delta-style ловушка. Node-проекты, у которых mock
   сделан как отдельный docker-сервис (bookmap: `mock-bookmap-api`, директория
   `mock-server/`, `Dockerfile.mock-server`), технически реализуют L3-подход, но

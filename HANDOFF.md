@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–U: CLI @vodmal/vdx-cli@0.3.0 на npm)
+# vdx — Handoff (2026-05-24, после A–V: D12 принято — `vdx publish` как 7-й verb)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,15 +12,30 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 20 шагов (A–U) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1** (Шаг S — `applies_when`).
-Шаг U (2026-05-24): CLI bumped 0.2.1 → **0.3.0**, plugin 0.2.0 → 0.3.0;
-bundled rubric теперь v0.3.1 (release-artifact + applies_when) + новый
-`vdx init --stack/meta`. CLI на npm как
-**[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
-`npm pack --dry-run` показал чистый бандл: 18 файлов, 22.7 KB
-(src/, bin/, rubric/v0.3.1, README, LICENSE) — без tests/, vitest.config.
-DEFAULT_BASELINE: `@v0.3.1`.
+**Где мы сейчас**: 21 шаг (A–V) пройден. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
+**[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(Шаг U). DEFAULT_BASELINE `@v0.3.1`.
+
+**Шаг V (2026-05-24)** — research-финализация **D12** (publish verb):
+3 параллельных landscape-агента (Node / PHP+Python / cross-stack+deploy),
+все 7 OQ resolved, D12 принято в Decided секцию. Краткое:
+- `vdx publish` как **7-й lifecycle verb**, lib-gated через
+  `applies_when` (переиспользует O35).
+- **Subverb-style** + **arg-form**: `vdx publish [patch|minor|major]`
+  делает full default pipeline; `:bump`/`:upload`/`:tag`/`:notes` для
+  granular.
+- **vdx институциализирует stack-specific defaults** (npm/composer/twine/cargo/gem) — user не учит ecosystem-specific commands.
+- **Pre-flight gating через рубрику** — рубрика становится executable
+  contract (новый use-case).
+- `deploy` → D13 (отложен). `release` meta-verb отвергнут.
+- 3 новых deferred items: **O36** (release-workflow ось), **O37**
+  (`vdx bump` standalone), **O38** (native monorepo publish, D14+).
+- Implementation phased: MVP=Node, Phase 2=PHP+Py, Phase 3=Cargo/Ruby/Go/Java.
+
+Подробно: [docs/decisions.md](docs/decisions.md) → D12 секция;
+[docs/research/publish-deploy.md](docs/research/publish-deploy.md) —
+полный research + OQ1-OQ7 resolutions.
 External-facing docs (главный README, vdx-rubric-vodmal README/CHANGELOG)
 переведены на английский 2026-05-24; внутренние (HANDOFF, CLAUDE,
 PROJECT_CHANGELOG, docs/) — русский.
@@ -52,10 +67,19 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после U):
+**Следующий шаг** (приоритеты после V):
+- **Шаг W — D12 MVP implementation**: `vdx publish [patch|minor|major]`
+  для **Node only** (dogfooding на @vodmal/vdx-cli). Включает: subverb
+  registry, pre-flight gating через рубрику, transactional pipeline,
+  warning-default `git.head_commit != tag` check, `--force` opt-out.
+- **Шаг X — D12 Phase 2**: PHP + Python implementations.
+- **Шаг Y — D12 Phase 3**: Cargo/Ruby/Go/Java.
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
+- **O36** — release-workflow ось (после D12 ship + N≥3 lib).
+- **O37** — `vdx bump` как standalone verb (после поля-feedback).
+- **O38** — native monorepo-aware publish (D14+).
 - **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
 
 ---
@@ -607,6 +631,60 @@ Open после Шага U:
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage (отложено).
 - **supporting L2** — отложено, см. TL;DR.
+
+### Шаг V — D12 research-финализация (publish verb) ✅ (2026-05-24)
+
+После запроса пользователя на `vdx publish:npmjs` / `vdm publish` — поднят
+полный landscape research для решения D12 (расширять ли core словарь?).
+
+**3 параллельных research-агента** (skill s2-56 — landscape по independent
+axes spawned concurrently):
+- node-release-research: semantic-release, release-it, changesets, np, publint
+- php-python-release-research: Packagist (pull-based), poetry, hatch, flit, twine, PSR
+- deploy-orchestrators-research: release-please, goreleaser, cargo-release, deploy categories
+
+**Convergent finding** всех трёх: vdx должен **оркестрировать**, не реализовывать
+(принцип "комбайн"); verb униформный, **implementation institutionalized
+per-stack внутри vdx** (user не учит ecosystem-specific commands); рубрика
+становится **executable gate** через pre-flight refuses_if — новый
+value-prop vdx, эксклюзивный относительно existing tools (semantic-release,
+release-please и т.п. не имеют рубрики).
+
+**D12 принято**: `publish` как 7-й lifecycle verb, lib-gated через
+`applies_when` (переиспользует O35 сигналы), **subverb-style** (вдохновлено
+паттерном `build:db:migration`) + **arg-form** `vdx publish patch|minor|major`.
+Subverbs: `publish:bump`, `publish:upload`, `publish:tag`, `publish:notes`.
+Транзакционный pipeline: pre-flight → upload (irreversible first) → bump +
+commit + tag + push на success.
+
+**Pre-flight gating** через рубрику:
+- `rubric.tests < L2` → error
+- `rubric.release-artifact < L3` → error
+- `rubric.ci < L2` → error (с `--no-ci-check` opt-out)
+- `working_tree.dirty` → error
+- `published_version >= local_version` → error (registry collision)
+- `git.head_commit != tag(version)` → warning (default), `--strict` для error
+
+`--force` обходит refuses_if. `[tasks.publish]` в mise.toml как D3 escape hatch.
+
+**OQ1–OQ7 resolved** последовательно с pros/cons + verdict для каждого
+(skill p1-ba45 — sequential resolution с explicit reasoning). Полные
+resolutions в [docs/research/publish-deploy.md](docs/research/publish-deploy.md).
+
+**Deferred items** открыты:
+- **O36** — `release-workflow` ось (orthogonal к lifecycle-interface);
+  добавим после ship + N≥3 lib calibration.
+- **O37** — `vdx bump` как standalone 8-й verb (deferred — сейчас в scope
+  D12 через subverb).
+- **O38** — native monorepo-aware publish (D14+); MVP делает proxy в
+  `.changeset/`.
+
+**Implementation phasing** (см. Next steps):
+- Phase 1 (Шаг W) — MVP для Node only (vdx-cli dogfood).
+- Phase 2 (Шаг X) — PHP + Python.
+- Phase 3 (Шаг Y) — Cargo/Ruby/Go/Java.
+
+Open после Шага V: см. "Следующий шаг" в TL;DR.
 
 ---
 

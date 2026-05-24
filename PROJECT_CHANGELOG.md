@@ -4,6 +4,33 @@
 
 ## 2026-05-24
 
+### Шаг V: D12 принято — `publish` как 7-й lifecycle verb (research-финализация)
+После запроса пользователя на `vdx publish` поднят полный landscape research
+в 3 параллельных агентах (Node / PHP+Python / cross-stack+deploy). Все 7
+open questions OQ1–OQ7 пройдены последовательно с pros/cons + verdict
+каждый.
+
+**D12 принято**:
+- `publish` как **7-й lifecycle verb**, lib-gated через `applies_when`
+  (переиспользует O35 сигналы).
+- **Subverb-style** + arg-form: `vdx publish [patch|minor|major]` делает
+  full default pipeline; `:bump`/`:upload`/`:tag`/`:notes` для granular.
+- **vdx институциализирует stack-specific defaults** (Node/PHP/Py/Cargo/Ruby/Go/Java)
+  — user не учит ecosystem-specific commands.
+- **Pre-flight gating через рубрику** — рубрика становится executable
+  contract (новый use-case).
+- `deploy` → **D13** (отложен; 5 разных категорий). `release` meta-verb
+  отвергнут (noun-collision).
+
+Открыто 3 deferred items: **O36** (release-workflow ось), **O37**
+(`vdx bump` standalone), **O38** (native monorepo publish, D14+).
+
+Implementation phased: MVP=Node, Phase 2=PHP+Py, Phase 3=остальные.
+
+Артефакты: [docs/decisions.md](docs/decisions.md) → D12;
+[docs/research/publish-deploy.md](docs/research/publish-deploy.md) —
+landscape + OQ1-OQ7 resolutions.
+
 ### Шаг U: @vodmal/vdx-cli@0.3.0 на npm
 Минорный bump CLI после Шагов P/R/S/T:
 
