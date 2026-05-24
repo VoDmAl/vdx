@@ -1,6 +1,6 @@
 {
   "name": "@vodmal/vdx-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "vdx — unified lifecycle interface (up/down/build/test/check/fix) + versioned maturity audit with drift detection. Pairs with the vdx Claude Code plugin.",
   "keywords": [
     "vdx",
