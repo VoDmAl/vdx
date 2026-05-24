@@ -31,13 +31,16 @@ ephemeral environment.
 vdx up | down | build | test | check | fix
 
 # Maturity audit against the owner baseline rubric
-vdx audit <project-path> [--json] [--rubric <path>] [--stack <id>]
+vdx audit <project-path> [--format=ansi|markdown|json] [--rubric <path>] [--stack <id>]
 
 # Generate mise.toml + AGENTS.md for a project
 vdx init  <project-path> [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]
 
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish <patch|minor|major> [--dry-run] [--force]
+
+# Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin)
+vdx doctor [--format=ansi|markdown|json]
 
 # MCP stdio server consumed by the Claude Code plugin
 vdx-mcp   --project <path>

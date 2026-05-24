@@ -1,6 +1,7 @@
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import type { AuditResult } from './audit.ts';
+import type { DoctorReport, CheckStatus } from './doctor.ts';
 
 let terminalMarked: Marked | null = null;
 function getTerminalMarked(): Marked {
@@ -61,6 +62,41 @@ export function reportJson(r: AuditResult): string {
 
 export function reportAnsi(r: AuditResult): string {
   const md = reportMarkdown(r);
+  const out = getTerminalMarked().parse(md) as string;
+  return out.endsWith('\n') ? out : out + '\n';
+}
+
+const CHECK_SYMBOL: Record<CheckStatus, string> = {
+  ok: '✅',
+  warning: '⚠️ ',
+  missing: '❌',
+};
+
+export function reportDoctorMarkdown(r: DoctorReport): string {
+  const lines: string[] = [];
+  lines.push('# vdx doctor report');
+  lines.push('');
+  lines.push(
+    `- **OK**: ${r.ok}  **Warning**: ${r.warning}  **Missing**: ${r.missing}`,
+  );
+  lines.push('');
+  lines.push('| Check | Status | Detail | Remedy |');
+  lines.push('|-------|:------:|--------|--------|');
+  for (const c of r.checks) {
+    const sym = CHECK_SYMBOL[c.status];
+    const level = c.level !== undefined ? ` (L${c.level})` : '';
+    const remedy = c.remedy ? `\`${c.remedy}\`` : '—';
+    lines.push(`| **${c.label}** | ${sym} ${c.status}${level} | ${c.message} | ${remedy} |`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+export function reportDoctorJson(r: DoctorReport): string {
+  return JSON.stringify(r, null, 2);
+}
+
+export function reportDoctorAnsi(r: DoctorReport): string {
+  const md = reportDoctorMarkdown(r);
   const out = getTerminalMarked().parse(md) as string;
   return out.endsWith('\n') ? out : out + '\n';
 }

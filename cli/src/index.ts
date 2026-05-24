@@ -11,7 +11,15 @@ import {
   renderResolveError,
 } from './run.ts';
 import { audit } from './audit.ts';
-import { reportMarkdown, reportJson, reportAnsi } from './report.ts';
+import {
+  reportMarkdown,
+  reportJson,
+  reportAnsi,
+  reportDoctorMarkdown,
+  reportDoctorJson,
+  reportDoctorAnsi,
+} from './report.ts';
+import { runDoctor, looksLikeProject } from './doctor.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -31,6 +39,7 @@ function usage(): never {
   vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]
   vdx init    <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
   vdx publish <patch|minor|major> [--dry-run] [--force]
+  vdx doctor  [--format=ansi|markdown|json] [--json]
 `,
   );
   process.exit(1);
@@ -69,6 +78,14 @@ function cmdAudit(opts: ParsedArgs): void {
   const projectArg = opts.positionals[0];
   if (!projectArg) usage();
   const projectRoot = path.resolve(projectArg);
+
+  if (!looksLikeProject(projectRoot)) {
+    process.stderr.write(
+      `vdx: ${projectRoot} doesn't look like a project root ` +
+        `(no package.json / composer.json / pyproject.toml / Makefile / mise.toml / .git found)\n` +
+        `hint: try \`vdx doctor\` to check your environment, or \`vdx audit <path-to-project>\`.\n\n`,
+    );
+  }
 
   const manifest = loadManifest(projectRoot);
   const overrides = loadOverrides(projectRoot);
@@ -217,10 +234,34 @@ function cmdRun(verb: LifecycleVerb): void {
   }
 }
 
+function cmdDoctor(opts: ParsedArgs): void {
+  const report = runDoctor();
+
+  const formatFlag =
+    typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
+  const wantJson = opts.flags.json === true || formatFlag === 'json';
+  const wantMarkdown = formatFlag === 'markdown' || formatFlag === 'md';
+  const wantAnsi = formatFlag === 'ansi';
+  const isTty = process.stdout.isTTY === true;
+
+  if (wantJson) {
+    process.stdout.write(reportDoctorJson(report) + '\n');
+  } else if (wantMarkdown) {
+    process.stdout.write(reportDoctorMarkdown(report));
+  } else if (wantAnsi || (isTty && !formatFlag)) {
+    process.stdout.write(reportDoctorAnsi(report));
+  } else {
+    process.stdout.write(reportDoctorMarkdown(report));
+  }
+
+  if (report.missing > 0) process.exit(2);
+}
+
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
 else if (parsed.cmd === 'publish') cmdPublish(parsed);
+else if (parsed.cmd === 'doctor') cmdDoctor(parsed);
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd))
   cmdRun(parsed.cmd as LifecycleVerb);
 else usage();

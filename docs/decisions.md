@@ -217,6 +217,20 @@ defaults, backward-compat (старые manifests без `publish` continue
   multi-stack monorepo использует override на оси. Реальных пользователей с
   таким раскладом пока нет — отложено до появления.
 - ~~**O34**~~ — закрыто Шагом R 2026-05-24 (см. N28, рубрика v0.3.0).
+- **O40** — Rubric-driven `vdx doctor` (long-term architectural). Шаг Z
+  (2026-05-24) реализовал `vdx doctor` как hardcoded checks-array в
+  `cli/src/doctor.ts` (Node/git/mise/npm-auth/container-runtime/Claude-Code-plugin)
+  по YAGNI-принципу. Концептуально doctor близок к audit: тоже набор
+  предикатов с outcome'ами. Open: мигрировать на rubric-driven схему —
+  внешний `vdx-environment.yaml` с YAML-описанием checks, переиспользовать
+  `evaluator.ts` + `predicates.ts`, добавить новые predicates
+  (`binary_in_path`, `version_at_least`, `file_contains_in_home`).
+  **Триггер**: N≥10 checks или потребность пользовательской кастомизации
+  через `~/.vdx-environment.yaml`. **Развилка**: либо rubric раздваивается
+  на project-axes и environment-checks (два shape), либо унификация через
+  axes с simplified-levels (binary present + optional version-level).
+  Решение откладывается до накопления реальных use-case'ов от живого
+  использования doctor.
 
 ### Закрытые
 

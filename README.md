@@ -89,6 +89,9 @@ vdx down  # tear down
 
 # 4. Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish minor   # bump, npm publish (with OTP), git commit+tag
+
+# 5. Check your local environment (Node version, mise, git, docker, Claude Code plugin)
+vdx doctor
 ```
 
 `vdx init` works deterministically on Node/PHP/Python/Go/Ruby projects. For unknown or `meta` (monorepo-with-subpackage) stacks, pass `--stack <id>` or — preferably — invoke vdx inside Claude Code with the plugin installed and let the `vdx-discover` skill bootstrap interactively.
