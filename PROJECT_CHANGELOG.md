@@ -4,6 +4,46 @@
 
 ## 2026-05-24
 
+### Шаг X.1.b: `vdx publish` execute pipeline (D12 MVP завершён для Node)
+
+Закрывает D12 MVP — `vdx publish <patch|minor|major>` теперь действительно
+публикует на npm и тегирует. Pipeline в `executePublish()`:
+
+1. **bump** — `package.json.version = newVersion`, перезапись с
+   сохранением оригинального текста для возможного revert.
+2. **`npm publish`** через `execFileSync` с `stdio: 'inherit'` — даёт
+   пользователю интерактивный OTP-prompt (`p2-40d8`: 2FA не настроен,
+   нужен реальный терминал). Irreversible шаг, идёт **до** git commit.
+3. **revert на failure** — если `npm publish` упал, package.json
+   восстанавливается из оригинала; exit 3.
+4. **git** — `git add <pkg.json> && git commit -m "release: vX.Y.Z" &&
+   git tag -a vX.Y.Z -m "vX.Y.Z"`, все через `execFileSync`. Не
+   пушит — `git push --follow-tags` остаётся за пользователем (D12
+   принцип: irreversible/visible операции — отдельный шаг).
+5. **delegated-to-mise** — если в `mise.toml` есть `[tasks.publish]`,
+   `executePublish` exec'ает `mise run publish` и выходит. vdx-native
+   pipeline пропускается полностью.
+
+Семантика: на неудаче `npm publish` ничего не меняется (revert).
+На неудаче git после успешного npm — пакет уже опубликован, локально
+осталась bumped версия без commit — пользователь чинит руками
+(публикация на npm immutable; unpublish-ить пакет нельзя в общем
+случае).
+
+Security: 100% argv-array (`execFileSync(prog, [...args])`) — нет
+shell-interpolation surface.
+
+Smoke verified (только dry-run; реальный npm publish — пользователь
+триггерит сам): typecheck чист, 76/76 vitest без регрессий, dry-run
+на vdx root через primary_subpackage=cli корректно показывает план.
+
+После Шага X.1.b D12 MVP **закрыт для Node**. Следующее:
+- **Шаг X.2** — subverbs (`publish:bump`/`upload`/`tag`/`notes`).
+- **Шаг X.3** — PHP + Python (Phase 2).
+- **Шаг X.4** — Cargo/Ruby/Go/Java (Phase 3).
+- **Bump CLI на npm** — `@vodmal/vdx-cli@0.4.0` (новый verb = minor).
+  Перед этим нужно запушить rubric tags v0.3.0/v0.3.1 (см. ниже).
+
 ### Шаг X.1.a: `vdx publish` plan + pre-flight (без execute pipeline)
 
 D12 MVP первый кусок: команда `vdx publish <patch|minor|major>` + 4

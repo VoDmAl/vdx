@@ -9,6 +9,7 @@ import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
   renderPublishPlan,
+  executePublish,
   type BumpKind,
   type PublishOptions,
 } from './publish.ts';
@@ -162,13 +163,16 @@ function cmdPublish(opts: ParsedArgs): void {
     return;
   }
 
-  // Execute pipeline lands in Шаг X.1.b — for now even non-dry-run stops at plan.
-  process.stderr.write(
-    '\n[X.1.a] execute-pipeline пока не реализован — повторно запусти с --dry-run, ' +
-      'либо жди Шаг X.1.b (npm publish + git commit/tag).\n',
-  );
   if (!plan.preflightPassed && !planOpts.force) {
+    process.stderr.write('\nerror: pre-flight failed (use --force to bypass)\n');
     process.exit(2);
+  }
+
+  try {
+    executePublish(plan);
+  } catch (e: any) {
+    process.stderr.write(`\nerror: ${e?.message ?? String(e)}\n`);
+    process.exit(3);
   }
 }
 

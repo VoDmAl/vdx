@@ -20,6 +20,7 @@ export interface PreflightCheck {
 }
 
 export interface PublishPlan {
+  projectRoot: string;
   stack: string;
   packageName: string;
   currentVersion: string;
@@ -118,6 +119,7 @@ export function planPublish(
 ): PublishPlan {
   if (checkMiseOverride(opts.projectRoot)) {
     return {
+      projectRoot: opts.projectRoot,
       stack: ctx.stack,
       packageName: '(delegated)',
       currentVersion: '',
@@ -229,6 +231,7 @@ export function planPublish(
   const preflightPassed = preflight.every((c) => c.ok);
 
   return {
+    projectRoot: opts.projectRoot,
     stack: ctx.stack,
     packageName,
     currentVersion,
@@ -239,6 +242,78 @@ export function planPublish(
     preflightPassed,
     delegatedToMise: false,
   };
+}
+
+/**
+ * Execute the publish pipeline. Order is transactional:
+ *   1. bump package.json in-place (reversible by file restore).
+ *   2. `npm publish` (irreversible — first because npm errors are easier
+ *      to recover from than a published-but-uncommitted state).
+ *   3. git add + commit + tag (reversible by reset/tag delete, but only
+ *      a problem if step 2 succeeded — uncommitted bump after success
+ *      is recoverable manually).
+ *   4. NOT pushed — that's the user's call.
+ *
+ * On npm publish failure → restore original package.json contents.
+ * Git failures after a successful npm publish leave the user in a
+ * partially-released state; they fix it manually (commit/tag what's
+ * needed) — we don't try to unpublish.
+ */
+export function executePublish(plan: PublishPlan): void {
+  if (plan.delegatedToMise) {
+    process.stderr.write('→ delegating to `mise run publish`...\n');
+    execFileSync('mise', ['run', 'publish'], {
+      cwd: plan.projectRoot,
+      stdio: 'inherit',
+    });
+    return;
+  }
+
+  // 1. Bump package.json in-place (keep original text for revert)
+  const originalText = fs.readFileSync(plan.packageJsonPath, 'utf8');
+  const pkg = JSON.parse(originalText);
+  pkg.version = plan.newVersion;
+  fs.writeFileSync(
+    plan.packageJsonPath,
+    JSON.stringify(pkg, null, 2) + '\n',
+    'utf8',
+  );
+  process.stderr.write(
+    `✓ bumped ${path.relative(plan.projectRoot, plan.packageJsonPath)}: ${plan.currentVersion} → ${plan.newVersion}\n`,
+  );
+
+  // 2. npm publish (interactive — OTP prompt may appear)
+  process.stderr.write(`→ running \`npm publish\` (OTP prompt may appear)...\n`);
+  const pkgDir = path.dirname(plan.packageJsonPath);
+  try {
+    execFileSync('npm', ['publish'], { cwd: pkgDir, stdio: 'inherit' });
+  } catch (e: any) {
+    fs.writeFileSync(plan.packageJsonPath, originalText, 'utf8');
+    process.stderr.write(
+      `✗ npm publish failed (exit ${e?.status ?? '?'}); reverted package.json\n`,
+    );
+    throw new Error('npm publish failed');
+  }
+  process.stderr.write(`✓ published ${plan.packageName}@${plan.newVersion}\n`);
+
+  // 3. git add + commit + tag (at project root)
+  execFileSync('git', ['add', plan.packageJsonPath], {
+    cwd: plan.projectRoot,
+    stdio: 'inherit',
+  });
+  execFileSync('git', ['commit', '-m', `release: v${plan.newVersion}`], {
+    cwd: plan.projectRoot,
+    stdio: 'inherit',
+  });
+  execFileSync(
+    'git',
+    ['tag', '-a', `v${plan.newVersion}`, '-m', `v${plan.newVersion}`],
+    { cwd: plan.projectRoot, stdio: 'inherit' },
+  );
+  process.stderr.write(`✓ committed + tagged v${plan.newVersion}\n`);
+  process.stderr.write(
+    `\n! NOT pushed — your call: \`git push --follow-tags\`\n`,
+  );
 }
 
 export function renderPublishPlan(plan: PublishPlan): string {

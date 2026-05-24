@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–X.1.a: D12 MVP plan + pre-flight приземлились)
+# vdx — Handoff (2026-05-24, после A–X.1.b: D12 MVP для Node закрыт — `vdx publish` end-to-end)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,10 +12,16 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 23 шага пройдены (A–W + X.1.a). Owner-рубрика на
+**Где мы сейчас**: 24 шага пройдены (A–W + X.1.a + X.1.b). Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
 **[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(Шаг U). DEFAULT_BASELINE `@v0.3.1`.
+(Шаг U). DEFAULT_BASELINE `@v0.3.1`. **D12 MVP для Node закрыт**.
+
+**Шаг X.1.b (2026-05-24)** — execute pipeline: `executePublish()` делает
+bump package.json → `npm publish` (irreversible, через `execFileSync` с
+inherit-stdio для OTP) → revert на failure → `git add/commit/tag`.
+Не пушит — это решение пользователя. `delegated-to-mise` ветка exec'ает
+`mise run publish`. D12 MVP для Node end-to-end закрыт.
 
 **Шаг X.1.a (2026-05-24)** — D12 MVP первая часть: `vdx publish
 <patch|minor|major>` + 4 pre-flight check'а + рендер plan. **Без**
@@ -96,16 +102,16 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после X.1.a):
-- **Шаг X.1.b — D12 execute pipeline**: реальный bump (`package.json
-  version = newVersion`) → `npm publish` (irreversible — first) →
-  `git add package.json && git commit -m "release: vX.Y.Z" && git tag
-  -a vX.Y.Z`. Без push (это решение пользователя). На неудаче
-  `npm publish` — revert package.json.
+**Следующий шаг** (приоритеты после X.1.b):
+- **Шаг X.1.c — dogfooding `vdx publish` на @vodmal/vdx-cli@0.4.0**:
+  (а) push rubric tags `v0.3.0`/`v0.3.1` в vdx-rubric-vodmal (open
+  blocker, см. гочи); (б) запустить `vdx publish minor` на самом
+  vdx-cli — это финальная валидация D12 end-to-end через настоящий
+  npm publish с OTP. minor bump: новый verb = feature.
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
-- **Шаг X.3 — Phase 2**: PHP (composer.json edit + `composer config
-  version`) + Python (`pyproject.toml`).
+- **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
+  (`pyproject.toml`).
 - **Шаг X.4 — Phase 3**: Cargo/Ruby/Go/Java.
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O26/O27** — TOML round-trip, shared-infra precheck.
@@ -829,6 +835,61 @@ Smoke verified — `npx tsx cli/src/index.ts publish patch --dry-run`
 Open после X.1.a:
 - **X.1.b** — execute pipeline (см. "Следующий шаг" в TL;DR).
 - Subverbs / conventional-commits / PHP+Python — X.2/X.3.
+
+### Шаг X.1.b — `vdx publish` execute pipeline ✅ (2026-05-24)
+
+Закрывает D12 MVP для Node. После plan + pre-flight (X.1.a) теперь
+есть `executePublish()` — реальное выполнение pipeline.
+
+**Файлы**:
+- `cli/src/publish.ts`: новая функция `executePublish(plan)` (~70 строк).
+- `cli/src/index.ts`: `cmdPublish` теперь вызывает `executePublish`
+  после проверки `preflightPassed && !force`. Exit codes: 0 OK, 2
+  pre-flight failed, 3 execute failed.
+
+**Pipeline** (single-package, non-delegated):
+
+1. **bump** — `package.json.version = newVersion`, перезапись через
+   `fs.writeFileSync`. Оригинальный текст сохраняется в `originalText`
+   для возможного revert.
+2. **`npm publish`** через `execFileSync('npm', ['publish'], { cwd:
+   pkgDir, stdio: 'inherit' })`. Stdio:inherit пропускает OTP-prompt
+   к терминалу пользователя. Идёт **до** git commit — irreversible
+   шаг первым (transactional order из research D12 OQ4).
+3. **revert на failure** — `try/catch` вокруг `execFileSync('npm')`.
+   На ошибке: `fs.writeFileSync(plan.packageJsonPath, originalText)`,
+   stderr-сообщение, throw → exit 3 от cmdPublish.
+4. **git** — `git add <pkg.json>` → `git commit -m "release: vX.Y.Z"`
+   → `git tag -a vX.Y.Z -m "vX.Y.Z"`, все через `execFileSync` с
+   `cwd: plan.projectRoot`. Не пушит — пользователь решает (
+   `git push --follow-tags`).
+5. **delegated-to-mise**: если `plan.delegatedToMise` — exec
+   `mise run publish` через `execFileSync` и выход.
+
+**Семантика на failure-paths**:
+
+- `npm publish` fail → revert package.json + exit 3. Чистое state,
+  можно retry.
+- `git commit` fail после успешного `npm publish` → пакет уже
+  опубликован, bumped version без commit. Пользователь чинит руками
+  (`git add ... && git commit`). vdx не пытается unpublish (npm
+  immutable).
+
+**Security**: 100% argv-array через `execFileSync` — нет
+shell-interpolation. Поправлено в [cs:s1-206]-стиле с первой версии
+кода.
+
+**Smoke verified** (только dry-run без реального publish):
+- `npx tsc --noEmit` чисто.
+- 76/76 vitest проходят (нет регрессий; executePublish без unit-теста
+  — слишком интегрировано с external commands; smoke = ручной).
+- Dry-run на vdx root: план корректный, pre-flight выдаёт правильные
+  results, registry-collision `OK (registry @ 0.3.0, new 0.3.1)`.
+
+D12 MVP **для Node закрыт**. Следующий шаг — dogfood: bump CLI до
+0.4.0 через `vdx publish minor` на самом vdx-cli.
+
+Open после X.1.b: см. "Следующий шаг" в TL;DR.
 
 ---
 
