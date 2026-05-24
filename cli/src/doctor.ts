@@ -226,6 +226,52 @@ function checkVdxOnPath(): CheckResult {
   };
 }
 
+function checkVdxInShell(): CheckResult {
+  const found = findOnPath('vdx');
+  if (!found) {
+    return {
+      id: 'vdx-in-shell',
+      label: 'vdx in shell',
+      status: 'warning',
+      level: 1,
+      message:
+        'no — `vdx` command not on persistent PATH. If you set a shell alias, it works but doctor cannot detect aliases.',
+      remedy:
+        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"',
+    };
+  }
+  const ephemeral = isEphemeralPath(found);
+  if (ephemeral === 'npx-cache') {
+    return {
+      id: 'vdx-in-shell',
+      label: 'vdx in shell',
+      status: 'warning',
+      level: 1,
+      message:
+        'no — only the ephemeral npx-cache binary is on PATH; bare `vdx <verb>` in a fresh shell will not resolve',
+      remedy:
+        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"',
+    };
+  }
+  if (ephemeral === 'local-bin') {
+    return {
+      id: 'vdx-in-shell',
+      label: 'vdx in shell',
+      status: 'warning',
+      level: 2,
+      message: `project-only — \`vdx\` works inside this project root (${found}) but not elsewhere`,
+      remedy: 'npm i -g @vodmal/vdx-cli for global shell access',
+    };
+  }
+  return {
+    id: 'vdx-in-shell',
+    label: 'vdx in shell',
+    status: 'ok',
+    level: 4,
+    message: `yes — \`vdx\` resolves globally (${found})`,
+  };
+}
+
 function checkClaudeCodePlugin(): CheckResult {
   const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
   if (!fs.existsSync(settingsPath)) {
@@ -267,6 +313,7 @@ function checkClaudeCodePlugin(): CheckResult {
 const CHECKS: Array<() => CheckResult> = [
   checkNode,
   checkVdxOnPath,
+  checkVdxInShell,
   checkGit,
   checkMise,
   checkNpmAuth,
