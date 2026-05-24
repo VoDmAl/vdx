@@ -104,10 +104,9 @@ engines.node на root, стабильный mock-infra на Linux. Отложе
 
 **Следующий шаг** (приоритеты после X.1.b):
 - **Шаг X.1.c — dogfooding `vdx publish` на @vodmal/vdx-cli@0.4.0**:
-  (а) push rubric tags `v0.3.0`/`v0.3.1` в vdx-rubric-vodmal (open
-  blocker, см. гочи); (б) запустить `vdx publish minor` на самом
-  vdx-cli — это финальная валидация D12 end-to-end через настоящий
-  npm publish с OTP. minor bump: новый verb = feature.
+  запустить `vdx publish minor` на самом vdx-cli — финальная
+  валидация D12 end-to-end через настоящий npm publish с OTP.
+  minor bump: новый verb = feature.
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
 - **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
@@ -909,9 +908,9 @@ Open после X.1.b: см. "Следующий шаг" в TL;DR.
    бессмысленным. (См. D8.)
 
 4. **Owner-репо опубликован.** Внешний репо доступен как
-   **github.com/VoDmAl/vdx-rubric-vodmal** (public, tags `v0.2.0`+`v0.2.1`).
+   **github.com/VoDmAl/vdx-rubric-vodmal** (public, tags `v0.2.0`…`v0.3.1`).
    `vdx init` по умолчанию проставляет `baseline:
-   github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1` в `[vdx]` блок сгенерированного
+   github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1` в `[vdx]` блок сгенерированного
    `mise.toml`. Переопределить — `vdx init --baseline <ref>`. (NB: GitHub
    username — `VoDmAl`, а не `vodmal` — обнаружено при push'е, не критично
    т.к. сейчас GitHub case-insensitive.)

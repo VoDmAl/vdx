@@ -517,10 +517,7 @@ O30 (опция d из issue). Изменения:
 Следующий шаг — реальные тесты + CI для vdx, либо открытое **O31**
 (sub-package-aware predicate evaluation), либо переписать README.
 
-⚠️ **GitHub state**: canonical-репо тегнут v0.2.0+v0.2.1; **v0.2.2
-тег ещё НЕ создан** и не push'нут на GitHub. Manifest-ссылки
-`@v0.2.2` будут резолвиться неполно для downstream-проектов до этого
-момента. Локально evaluator грузит из `file:///`, поэтому работает.
+(Снято после push'a v0.2.2 — см. позднейшую отметку в шаге J.)
 
 **N21 — Шаг K: `primary_subpackage` закрывает O31 (2026-05-23).** Добавлено
 optional поле `[vdx].primary_subpackage` в `VdxManifest` (`cli/src/manifest.ts`).

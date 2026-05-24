@@ -64,7 +64,7 @@ After install, the following MCP tools are available in any project:
 - `vdx_up`, `vdx_down`, `vdx_build`, `vdx_test`, `vdx_check`, `vdx_fix` —
   lifecycle wrappers over `mise run <verb>`
 - `vdx_audit` — maturity audit against the canonical rubric
-  (`github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1` by default)
+  (`github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1` by default)
 - `vdx_record_success_path` — persist discovered commands into `mise.toml`
 
 The `vdx-discover` skill auto-suggests itself when Claude enters a project

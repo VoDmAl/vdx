@@ -109,7 +109,7 @@ Spec D1–D11 ratified; core delivered in steps A–O within a single session
 - **Step O** — O33 closed (subpackage stack lift): for axes with
   `applies_to`, the evaluator now uses the subpackage's stack instead of
   the root's. For vdx this removes the `excluded` mask from 5 stack axes →
-  an honest score (CLI v0.2.1).
+  an honest score (CLI v0.2.1; latest is **v0.3.0**).
 
 ### Research artifacts
 | Artifact | File | Status |

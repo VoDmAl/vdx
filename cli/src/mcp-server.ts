@@ -156,7 +156,7 @@ function recordSuccessPath(input: {
 
   doc.vdx = doc.vdx ?? {
     schema_version: '0.2',
-    baseline: 'github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1',
+    baseline: 'github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1',
     stack: autoDetectStack(PROJECT_ROOT),
   };
   doc.vdx.verbs = input.verbs.map((v) => v.name);
