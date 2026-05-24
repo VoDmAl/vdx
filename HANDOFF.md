@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–Z: @vodmal/vdx-cli@0.8.0 — `vdx doctor` environment self-check)
+# vdx — Handoff (2026-05-24, после A–Z.2.c: @vodmal/vdx-cli@0.8.1 — `vdx doctor` с install-mode detection)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,14 +12,16 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 28 шагов пройдены (A–W + X.1.a/b/c + Y + Y.4 + Z).
-Owner-рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на
-npm как **[@vodmal/vdx-cli@0.8.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(опубликован в Шаге Z, 4-й/5-й dogfood publish-round'ы). DEFAULT_BASELINE
-`@v0.3.1`. **D12 MVP + Y CJM + Z doctor закрыты; pipeline команд:
-audit / init / build/test/check/up/down/fix / publish / doctor.
-Hardcoded environment-checks с quality-levels (OrbStack=L4 vs Docker=L3,
-Node ≥ 20 vs older); rubric-driven миграция отложена как O40.**
+**Где мы сейчас**: 29 шагов пройдены (A–W + X.1.a/b/c + Y + Y.4 + Z +
+Z.2.c). Owner-рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**.
+CLI на npm как **[@vodmal/vdx-cli@0.8.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(опубликован в Шагах Z + Z.2.c, 4–6 dogfood publish-round'ы).
+DEFAULT_BASELINE `@v0.3.1`. **D12 MVP + Y CJM + Z doctor закрыты;
+pipeline команд: audit / init / build/test/check/up/down/fix / publish /
+doctor. Hardcoded environment-checks с quality-levels (OrbStack=L4 vs
+Docker=L3, Node ≥ 20 vs older, vdx install mode: global L4 / npx-cache
+L3 / local-bin L2 — все три = ok); rubric-driven миграция отложена как
+O40.**
 
 **Шаг Z (2026-05-24)** — `vdx doctor` + audit soft-pivot.
 Hardcoded checks-array в `cli/src/doctor.ts` (Node / vdx-on-path / git /

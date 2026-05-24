@@ -4,6 +4,27 @@
 
 ## 2026-05-24
 
+### Шаг Z.2.c: `vdx doctor` — install-mode detection (global / npx-cache / local-bin), @vodmal/vdx-cli@0.8.1
+
+После публикации 0.8.0 пользователь сообщил false-positive: `vdx on PATH`
+показывал ok когда фактически `which vdx` в shell говорил "not found".
+Причина: `npx -y -p @vodmal/vdx-cli vdx ...` эфемерно подмешивает в PATH
+свой кэш-каталог (`~/.npm/_npx/<hash>/node_modules/.bin/`), и `findOnPath`
+возвращал именно этот путь.
+
+Fix: новая функция `isEphemeralPath(p)` детектит `/.npm/_npx/` и
+`/node_modules/.bin/`. Переоформлено как **install-mode reporting**
+(по запросу пользователя — «оба — OK, просто разный mode»):
+
+- **global** (на постоянном PATH) → ok, **level 4**, message `global: <path>`
+- **npx cache** → ok, **level 3**, `via npx cache: <path> (ephemeral; fine for npx-only workflows — always latest)`
+- **local node_modules/.bin** → ok, **level 2**, `local node_modules: <path> (works inside this project only)`
+- **not found** → warning level 1, message также упоминает что shell alias валиден но недетектируем
+
+label поменялся с «vdx on PATH» на «vdx install» — точнее отражает что
+именно показывается. CLI bump 0.8.0 → **0.8.1** (patch — bugfix +
+refinement).
+
 ### Шаг Z: `vdx doctor` — environment self-check с quality-levels, @vodmal/vdx-cli@0.7.0 → 0.8.0
 
 После первого реального dogfood `npx -y -p @vodmal/vdx-cli vdx audit .`
