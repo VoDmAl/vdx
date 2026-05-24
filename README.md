@@ -58,7 +58,10 @@ vdx audit .
 
 # B. Zero-install, run from anywhere (recommended for CI, one-shot trial,
 #    onboarding a teammate, or any "I just want to look")
-npx -y @vodmal/vdx-cli vdx audit .
+#
+# NOTE: `-p` is required because the binary `vdx` doesn't match the scoped
+# package name `@vodmal/vdx-cli` — npx can't auto-infer the entry point.
+npx -y -p @vodmal/vdx-cli vdx audit .
 ```
 
 Rule of thumb:
