@@ -8,13 +8,21 @@ Published on npm as **[@vodmal/vdx-cli](https://www.npmjs.com/package/@vodmal/vd
 
 ## Install
 
-```bash
-# global install
-npm install -g @vodmal/vdx-cli
+Two equally supported paths:
 
-# or one-shot via npx (no install)
+```bash
+# A. Daily-use install — recommended when you run `vdx <verb>` many times per session
+npm install -g @vodmal/vdx-cli
+vdx audit /path/to/project
+
+# B. Zero-install via npx — recommended for CI runners, one-shot trial, or fresh envs
 npx -y -p @vodmal/vdx-cli vdx audit /path/to/project
 ```
+
+Same binary, same behavior. `npx` adds ~200–500 ms resolve overhead per
+invocation; pick global when you'll run `vdx` repeatedly, npx when you
+don't want anything in your global `node_modules` or you're in an
+ephemeral environment.
 
 ## Use
 

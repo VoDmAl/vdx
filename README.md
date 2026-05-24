@@ -49,17 +49,24 @@ Prerequisites:
 - **[mise](https://mise.jdx.dev/getting-started.html)** — vdx delegates lifecycle execution to `mise run <verb>`.
 - **git** — for `vdx audit` rubric resolution (`github.com/.../vdx-rubric-vodmal@<tag>`) and for `vdx publish`.
 
-Then:
+Then pick one — same binary, same behavior, different trade-offs:
 
 ```bash
-# Global install (recommended)
+# A. Daily-use install (recommended for any repeated `vdx <verb>` workflow)
 npm i -g @vodmal/vdx-cli
+vdx audit .
 
-# …or one-shot, no install
+# B. Zero-install, run from anywhere (recommended for CI, one-shot trial,
+#    onboarding a teammate, or any "I just want to look")
 npx -y @vodmal/vdx-cli vdx audit .
 ```
 
-This puts two binaries on your PATH: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin).
+Rule of thumb:
+
+- **Global** when you run `vdx` many times per session — pays no per-invocation latency.
+- **npx** when you don't want a global install or you're in a clean / ephemeral environment (CI runner, fresh VM, someone else's laptop). Each `npx` call adds ~200–500 ms for resolve+stat.
+
+Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin — itself launched via `npx` from the plugin manifest, so plugin users never need a global install).
 
 ## Quick start
 
