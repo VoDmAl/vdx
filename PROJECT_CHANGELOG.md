@@ -4,6 +4,69 @@
 
 ## 2026-05-24
 
+### Шаг Z: `vdx doctor` — environment self-check с quality-levels, @vodmal/vdx-cli@0.7.0 → 0.8.0
+
+После первого реального dogfood `npx -y -p @vodmal/vdx-cli vdx audit .`
+пользователь поднял системный вопрос: что если у пользователя нет
+зависимостей (mise, docker, Claude Code плагин)? Нужен ли `vdx doctor`?
+И — концептуально близок ли он к `vdx audit` (та же rubric-логика на
+другом subject)?
+
+**Концептуальное решение**: doctor близок к audit — оба предикатные
+dashboard'ы. **Quality-levels применимы**: node 18 хуже чем node 20 (не
+просто binary present/absent); docker = L3, OrbStack = L4 (preferred).
+**Архитектурно**: YAGNI — hardcoded CHECKS-массив сейчас (Шаг Z),
+rubric-driven миграция отложена как **O40** (триггер: N≥10 checks или
+per-user кастомизация).
+
+**Z.1 — `vdx doctor` (hardcoded)**:
+
+- `cli/src/doctor.ts` (~180 строк): `CheckResult { id, label, status,
+  level?, message, remedy? }` + 7 hardcoded checks (Node, vdx-on-path,
+  git, mise, npm-auth, container-runtime, Claude Code plugin). Quality
+  gradation: Node ≥ 22 → L4, ≥ 20 → L3, < 20 → warning L1. OrbStack
+  found → L4, Docker only → L3 + remedy «consider OrbStack». npm auth
+  через `npm whoami`. Claude Code plugin — чтение `~/.claude/settings.json`
+  на наличие `VoDmAl/vdx` substring.
+- `cli/src/report.ts` — `reportDoctorMarkdown/Json/Ansi` (переиспользуют
+  `terminalMarked` из Y.4).
+- `cli/src/index.ts` — `cmdDoctor(opts)` + dispatch + usage; `--format=
+  ansi|markdown|json` + TTY auto-detect. Exit 2 если `missing > 0`.
+- **Soft-pivot в `cmdAudit`**: `looksLikeProject(path)` проверяет
+  package.json / composer.json / pyproject.toml / Makefile / mise.toml /
+  .git / Cargo.toml / go.mod. Если ни одного — stderr-warning
+  «doesn't look like a project — try `vdx doctor`», но audit
+  продолжается (non-blocking).
+- 10 новых vitest в `cli/tests/unit/doctor.test.ts` — структура
+  CheckResult, project-markers detection, формат-рендеры. 91 → 101.
+
+**Z.2 — пользователь предложил два доп. улучшения**:
+
+- **`vdx-on-path` check** — если бинарь не на PATH (например, ставили
+  только через npx), warning L1 с remedy `npm i -g @vodmal/vdx-cli  OR
+  alias vdx="npx -y -p @vodmal/vdx-cli vdx"`.
+- **README hint** в Install секции: «Run `vdx doctor` first» —
+  onboarding-anchor, пользователь видит гэпы окружения до запуска
+  audit/init.
+
+**O40 (long-term)**: rubric-driven doctor через единую YAML-схему +
+переиспользование `evaluator.ts`. Сейчас raздваивается shape rubric'а на
+project-axes vs environment-checks — отложено до накопления реальных
+use-case'ов от живого использования doctor.
+
+**Реальная картинка vdx doctor на моей машине** (smoke-результат):
+Node v26.0.0 (L4) ✅ · vdx-on-path warning (нет global install,
+работа через npx tsx) · git ✅ · mise ❌ missing · npm auth ✅
+vodmal · OrbStack 2.1.3 (L4) ✅ · Claude Code plugin warning
+(настроен, но vdx marketplace не зарегистрирован). Полезно — поймали
+2 warning + 1 missing на dev-машине.
+
+**Публикация**: bump 0.6.0 → **0.7.0** через `vdx publish minor` (Z.1)
++ ещё один `vdx publish minor` 0.7.0 → **0.8.0** для включения Z.2
+(второй bump был излишним — Z.1 + Z.2 можно было объединить в один
+publish, но обе версии стабильные и без regression'ов). Оба tag'a
+запушены: github.com/VoDmAl/vdx tags v0.7.0 + v0.8.0.
+
 ### Шаг Y.4: `vdx audit --format=ansi` — встроенный TUI-рендер через marked-terminal, @vodmal/vdx-cli@0.6.0
 
 После first dogfood `npx -y -p @vodmal/vdx-cli vdx audit .` (Шаг Y) пользователь

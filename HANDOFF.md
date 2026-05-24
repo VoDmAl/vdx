@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–Y.4: @vodmal/vdx-cli@0.6.0 — встроенный ANSI-рендер `vdx audit`)
+# vdx — Handoff (2026-05-24, после A–Z: @vodmal/vdx-cli@0.8.0 — `vdx doctor` environment self-check)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,12 +12,26 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 27 шагов пройдены (A–W + X.1.a/b/c + Y + Y.4). Owner-
-рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
-**[@vodmal/vdx-cli@0.6.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(опубликован в Шаге Y.4, третий dogfood D12 round). DEFAULT_BASELINE
-`@v0.3.1`. **D12 MVP + Y CJM закрыты; Y.4 добавил `vdx audit --format=ansi`
-с встроенным ANSI-рендером через marked-terminal (без внешних pipe-tools).**
+**Где мы сейчас**: 28 шагов пройдены (A–W + X.1.a/b/c + Y + Y.4 + Z).
+Owner-рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на
+npm как **[@vodmal/vdx-cli@0.8.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(опубликован в Шаге Z, 4-й/5-й dogfood publish-round'ы). DEFAULT_BASELINE
+`@v0.3.1`. **D12 MVP + Y CJM + Z doctor закрыты; pipeline команд:
+audit / init / build/test/check/up/down/fix / publish / doctor.
+Hardcoded environment-checks с quality-levels (OrbStack=L4 vs Docker=L3,
+Node ≥ 20 vs older); rubric-driven миграция отложена как O40.**
+
+**Шаг Z (2026-05-24)** — `vdx doctor` + audit soft-pivot.
+Hardcoded checks-array в `cli/src/doctor.ts` (Node / vdx-on-path / git /
+mise / npm-auth / container-runtime / Claude-Code-plugin) с
+quality-levels (OrbStack=L4, Docker=L3, Node ≥22=L4, ≥20=L3, <20=warning).
+В Z.2 добавлен **`vdx-on-path`** check (warning + remedy `npm i -g` или
+alias) и README hint «Run `vdx doctor` first» в Install секции.
+**Soft-pivot в `cmdAudit`** через `looksLikeProject(path)`: stderr-warning
+если cwd не выглядит как project root. **O40** — rubric-driven doctor
+отложено как long-term architectural. 91 → 101 vitest. Bump 0.6.0 →
+0.7.0 → **0.8.0** (Z.1 + Z.2 раздельные publish'ы — два tag'a на
+remote).
 
 **Шаг Y.4 (2026-05-24)** — `vdx audit --format=ansi` встроенный TUI-рендер.
 Пользователь после first dogfood `vdx audit .` указал что raw markdown в
@@ -149,7 +163,7 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после Y.4):
+**Следующий шаг** (приоритеты после Z):
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
 - **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
