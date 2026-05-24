@@ -4,6 +4,22 @@
 
 ## 2026-05-23
 
+### Шаг N: CLI выложен на npm как @vodmal/vdx-cli@0.2.0
+TypeScript CLI вынесен в публикуемый npm-пакет с bin entries (`vdx`, `vdx-mcp`).
+`tsx` переехал в `dependencies` + `bin/*.cjs` обёртки регистрируют ESM-loader
+in-process (`require('tsx/esm/api').register()`, без `namespace` —
+namespace изолирует loader так, что type-only cross-module exports ломаются).
+Bundled рубрика в `cli/rubric/vdx-rubric.yaml` снимает зависимость от
+локального canonical-репо при инсталляции через npm; путь резолвится через
+`src/defaults.ts` (по `import.meta.url`). `plugin/.mcp.json` переключён с
+абсолютного пути на `npx -y -p @vodmal/vdx-cli@latest vdx-mcp` — плагин теперь
+marketplace-ready (нет привязки к локальному рабочему дереву). Открыто
+**O33** (subpackage с другим стеком должен contributить applies_to-осям
+parent'а: текущая `audit.ts` проверка excluded стоит до subpackage-ctx) и
+**O34** (новая ось `release-artifact`: name/version/license/repository/bin/
+publishConfig/registry-resolves). См. [docs/decisions.md](docs/decisions.md)
+N24, O33, O34.
+
 ### Шаг M: ci L4 через matrix node [20, 22]
 В `.github/workflows/ci.yml` добавлен `strategy.matrix.node-version: [20, 22]`
 с `fail-fast: false`. Typecheck гоняется на двух LTS-версиях node параллельно.

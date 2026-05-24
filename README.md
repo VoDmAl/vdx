@@ -79,9 +79,9 @@ Manifest-ссылки в проектах вида `baseline: github.com/VoDmAl/
 ведут на конкретный semver-тег canonical-репо. Правила синхронизации между двумя
 репо — в [CLAUDE.md](CLAUDE.md) («Внешний репо»).
 
-## Текущий статус: ядро работает, рубрика v0.2.2
+## Текущий статус: ядро работает + CLI на npm, рубрика v0.2.2
 
-Спека D1–D11 принята, ядро реализовано шагами A–J за одну сессию (см.
+Спека D1–D11 принята, ядро реализовано шагами A–N за одну сессию (см.
 [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
 
 - **Шаг A** — рубрика v0.2 + draft спеки (формат, predicate DSL, drift-алгоритм).
@@ -97,6 +97,12 @@ Manifest-ссылки в проектах вида `baseline: github.com/VoDmAl/
 - **Шаг I** — stack-detector видит depth-1 sub-packages (monorepo / dev-hub).
 - **Шаг J** — `applies_to` filter в рубрике v0.2.2: stack-нерелевантные оси
   получают `drift_kind: excluded`, не учитываются в overall.
+- **Шаг K** — `[vdx].primary_subpackage` + `resolveSubpackageCtx` (O31 закрыт).
+- **Шаг L** — `.github/workflows/ci.yml` + `npm test` alias (ci L0→L3).
+- **Шаг M** — `matrix.node-version: [20, 22]` (ci L3→L4, первая ось vdx на max).
+- **Шаг N** — CLI выложен на npm как
+  **[@vodmal/vdx-cli](https://www.npmjs.com/package/@vodmal/vdx-cli)**;
+  плагин теперь marketplace-ready (`npx -y -p @vodmal/vdx-cli@latest vdx-mcp`).
 
 ### Research-артефакты
 | Артефакт | Файл | Статус |

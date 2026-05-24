@@ -144,6 +144,31 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   `[vdx.subpackages] tests = "php-api"`; (c) принять как ограничение —
   multi-stack monorepo использует override на оси. Реальных пользователей с
   таким раскладом пока нет — отложено до появления.
+- **O33** — Sub-package с другим стеком должен влиять на applies_to-оси
+  parent'а. Текущая логика в `audit.ts` (~line 99): `if axis.applies_to and
+  ctx.stack not in applies_to: excluded`. Эта проверка стоит **до** подмены
+  `subpackageCtx`, и `subpackageCtx.stack` наследуется от root (`ctx.stack`).
+  Симптом: vdx (stack=meta) с `primary_subpackage=cli` НЕ получает оценку
+  `tests` от cli/ — она excluded по meta до того, как evaluator видит, что
+  cli/ — это node. Опции: (a) проверять applies_to против `subpackage.stack`
+  если есть match; (b) подменять `stack` в subpackageCtx; (c) ввести явное
+  поле `[vdx].subpackage_stack` в манифесте. Связано с O32 (multi-subpackage)
+  — оба про contributing-stack. Решение откладывается до момента, когда
+  станет нужен реальный лифт overall — без него `excluded` это **правдивая**
+  оценка vdx-как-целого meta-репо. Найдено в Шаге N (см. N24).
+- **O34** — Новая ось рубрики `release-artifact` (publish-readiness).
+  Наблюдение из Шага N: подготовка `cli/` к публикации в npm добавила набор
+  атрибутов (`name`, `version`, `license`, `repository`, `bin`,
+  `publishConfig`, `files`, `LICENSE`-файл), которые ни одна текущая ось
+  не оценивает. `dependency-hygiene` смотрит lockfile, не publishability.
+  Кандидат уровней: L1=поля `name`+`version`+`license` в manifest;
+  L2=+`repository`, LICENSE-файл, `description`; L3=+`files`-whitelist,
+  `bin`/entry-point, `publishConfig` (для scoped npm); L4=пакет реально
+  опубликован и резолвится из реестра (`npm view`/`pip index`/`gem search`).
+  `applies_to: [node, python, ruby, php]` (для package-manager-driven
+  стеков). Семантически отдельная от `docs` (документация ≠ release).
+  Пересекается с `primary_subpackage` (Шаг K) — возможно стоит ввести
+  синоним `release_subpackage` или принять что они совпадают de facto.
 
 ### Закрытые
 
@@ -540,3 +565,41 @@ Workflow прогоняет typecheck на двух LTS-версиях node. Aud
 L3 → **L4** (предикат L4 `file_contains: matrix:` ✓). Overall vdx остался L0
 по той же причине (4 supporting-оси на L0 — meta-репо без docker/.env/compose).
 **ci — первая ось vdx на max**.
+
+**N24 — Шаг N: CLI как npm package @vodmal/vdx-cli@0.2.0 (2026-05-23).**
+Подготовка к publish открыла два класса проблем, ни один из которых не был
+очевиден до публикации:
+
+1. **Subpackage publish ≠ subpackage evaluation entry.** `cli/` теперь играет
+   обе роли (был только evaluation entry в Шаге K). Для будущих проектов эти
+   роли могут разделиться (Python: `src/pkg/` для дев + `dist/*.whl` для
+   publish). Открыто как **O34** (release-artifact как новая ось рубрики).
+
+2. **Bundled рубрика — снимок canonical на момент release.** Пакет
+   содержит `rubric/vdx-rubric.yaml` (mirror v0.2.2). Снимает зависимость
+   npm-installed CLI от наличия локального `vdx-rubric-vodmal`-репо.
+   Trade-off: версия bundled-рубрики де-факто связана с версией npm-пакета —
+   каждый bump canonical потребует republish CLI. Обход — runtime-загрузка
+   из git-ref, но `loadRubric` пока только file paths.
+
+Технический рецепт (publish TypeScript CLI без build, через tsx loader):
+1. `tsx` переезжает в `dependencies` (не devDeps).
+2. `bin/*.cjs` обёртки: `require('tsx/esm/api').register()` БЕЗ
+   `{ namespace: ... }` — namespace изолирует loader так, что type-only
+   cross-module exports не резолвятся (был detour в этой сессии).
+3. `src/defaults.ts` резолвит bundled-файлы через
+   `path.dirname(fileURLToPath(import.meta.url))`.
+4. `package.json`: `type: module`, `bin: { vdx: './bin/vdx.cjs', ... }`,
+   `files: ['src', 'rubric', 'bin', 'LICENSE', 'README.md']`,
+   `publishConfig: { access: 'public' }` (для scoped).
+5. Smoke: `npx -y -p @vodmal/vdx-cli vdx` из чистой `/tmp/`-директории —
+   подтверждает что плагинный сценарий работает end-to-end.
+
+Эффект на плагин: `plugin/.mcp.json` теперь не зависит от абсолютного пути —
+`command: npx, args: ['-y', '-p', '@vodmal/vdx-cli@latest', 'vdx-mcp',
+'--project', '${CLAUDE_PROJECT_DIR}']`. Плагин **marketplace-ready** — single-
+line install через `~/.claude/settings.json` без локальной копии vdx.
+
+Open после Шага N: **O33** (subpackage stack lift для applies_to-осей) и
+**O34** (release-artifact ось). Audit vdx не изменился (overall L0,
+14 осей те же значения) — publish не трогает рубрику.

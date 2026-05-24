@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–G + H догфудинг + I detector monorepo + J applies_to filter + K primary_subpackage + L CI workflow)
+# vdx — Handoff (2026-05-23, после A–N: CLI выложен на npm)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,41 +12,42 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 13 шагов (A–M) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (тег push'нут на GitHub
-2026-05-23). Evaluator дотюнен (D), `vdx init` атакует N13 (E),
-MCP-сервер на stdio с 9 tools (F), Claude Code плагин с MCP+skill+hook (G),
-догфудинг на самом vdx (H): vdx имеет корневой `mise.toml` (stack=meta),
-achieved L0 (lifecycle L2). **Шаг I**: monorepo/subpackage stack detection
-— `autoDetectStack` root-first + depth-1 fallback, `findSubPackages()`;
-auto-detect на vdx без декларации: `unknown` → `node` через `cli/`.
-**Шаг J**: `applies_to` filter — 5 stack-specific осей помечены
-`[php, node, go, python]`; для stack=meta получают `drift_kind: excluded`,
-не учитываются в overall. **Шаг K**: `[vdx].primary_subpackage` в манифесте +
-`resolveSubpackageCtx` в `audit.ts` — для осей с `applies_to` evaluator
-подменяет projectRoot на subpackage (explicit или auto-resolve через
-`findSubPackages` когда ровно один subpackage совпадает с stack).
-**Шаг L**: `.github/workflows/ci.yml` + `npm test` в `cli/package.json` —
-ci-ось v0.2.2 поднялась L0 → **L3** (workflow + npm test regex +
-pull_request trigger без `\|\| true`). **Шаг M**: добавлен `matrix.node-version: [20, 22]` в workflow — ci-ось дотянулась до **L4** (первая ось vdx на max).
+**Где мы сейчас**: 14 шагов (A–N) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (push'нут 2026-05-23).
+Evaluator дотюнен (D), `vdx init` (E), MCP-сервер (F), Claude Code плагин
+(G), догфудинг (H), monorepo detector (I), `applies_to` filter (J),
+`primary_subpackage` (K), CI workflow (L), node matrix L4 (M).
+**Шаг N**: CLI выложен на npm как
+**[@vodmal/vdx-cli@0.2.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
+`tsx` переехал в `dependencies` + bin-wrappers (`bin/*.cjs` с
+`tsx/esm/api.register()` БЕЗ namespace), bundled рубрика в `cli/rubric/`
+снимает зависимость от локального canonical-репо.
+`plugin/.mcp.json` переключён с хардкод-пути на
+`npx -y -p @vodmal/vdx-cli@latest vdx-mcp` — **плагин marketplace-ready**.
 
 vdx сейчас: stack=meta, 5 stack-осей excluded, lifecycle L2, **ci L4**,
-overall **L0** (capping переехал на 4 supporting-оси: reproducibility/
-secrets-config/shared-infra/shared-infra-drift — у meta-репо буквально
-нет docker/.env/compose, это правдивая оценка).
+overall **L0** (capping на 4 supporting-L0: reproducibility/secrets-config/
+shared-infra/shared-infra-drift — meta-репо буквально не имеет docker/.env/
+compose, это правдивая оценка).
 
-**Следующий шаг** (приоритеты после M):
-- **L1 overall для vdx** — самая близкая планка. Нужно поднять 2 из 4
-  supporting-L0: либо Dockerfile/Makefile (reproducibility L1), либо
-  `.env.example` (secrets-config L2), либо override через
-  `.vdx-overrides.yml` для shared-infra (meta не имеет shared-infra).
-  Альтернатива: принять L0 как честную meta-оценку и зафиксировать в README.
+**Следующий шаг** (приоритеты после N):
+- **O33** (новое из Шага N) — subpackage с другим стеком должен contribut'ить
+  applies_to-осям parent'а. Сейчас `cli/`-тесты не подтянут vdx-tests
+  потому что excluded по meta до подмены ctx. Откладывается — без этого
+  excluded — правдивое состояние.
+- **O34** (новое из Шага N) — новая ось рубрики `release-artifact`
+  (publish-readiness: name/version/license/repository/bin/publishConfig/
+  registry-resolves). vdx сам бы выиграл от этой оси.
+- **L1 overall для vdx** — самая близкая планка. Опции: Dockerfile/Makefile
+  (reproducibility L1), `.env.example` (secrets-config L2), override
+  через `.vdx-overrides.yml` для shared-infra. Альтернатива: принять L0
+  как честную meta-оценку.
 - **O29** — поведение `vdx init` при unknown/meta (редкий случай).
-- **O25** (mock-infra delta-trap), **O26** (TOML round-trip), **O27**
-  (реальный shared-infra precheck) — известны ранее.
+- **O25/O26/O27** — известны ранее (mock-infra delta-trap, TOML round-trip,
+  shared-infra precheck).
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
-- Альтернативы: настоящие тесты для vdx (vitest на evaluator), вынос CLI в
-  npm package для marketplace-релиза плагина.
+- Альтернатива: vitest на evaluator (без эффекта на overall пока O33 не
+  решён — но самоценно как надёжность).
 
 ---
 
@@ -272,6 +273,44 @@ Workflow push'нут на GitHub 2026-05-23 — Actions tab активен.
 + `fail-fast: false`. Typecheck гоняется параллельно на двух LTS. Audit на
 vdx: `ci` L3 → **L4** (предикат `file_contains: matrix:` совпадает). Это
 первая ось vdx, достигшая max. Overall L0 без изменений. См. N23.
+
+### Шаг N — CLI выложен на npm как @vodmal/vdx-cli@0.2.0 ✅ (2026-05-23)
+
+`cli/` стал публикуемым npm-пакетом. Изменения:
+
+- `tsx` переехал в `dependencies`; новые `bin/vdx.cjs` и `bin/vdx-mcp.cjs`
+  обёртки регистрируют ESM loader через `tsx/esm/api.register()` **без**
+  `{ namespace: ... }` (namespace изолирует loader так, что type-only
+  cross-module exports ломаются — это был detour).
+- Bundled рубрика в `cli/rubric/vdx-rubric.yaml` (mirror canonical v0.2.2).
+  Резолвится через `cli/src/defaults.ts` от `import.meta.url`. Env override:
+  `VDX_RUBRIC=/path/to/rubric.yaml`.
+- `cli/package.json`: scope `@vodmal/vdx-cli`, `version: 0.2.0`, MIT
+  LICENSE, `repository`, `homepage`, `bugs`, `bin: { vdx, vdx-mcp }`,
+  `files: [src, rubric, bin, README.md, LICENSE]`, `publishConfig.access:
+  public` (scoped → нужен явный access).
+- `plugin/.mcp.json` переключён с хардкод-пути на
+  `npx -y -p @vodmal/vdx-cli@latest vdx-mcp --project ${CLAUDE_PROJECT_DIR}`.
+  Плагин **marketplace-ready**: один config-файл, без локального клона vdx.
+- `plugin/.claude-plugin/plugin.json` bumped до v0.2.0.
+
+Контрольные точки:
+- `npx tsc --noEmit` чисто.
+- Smoke на 3 референсах через `node bin/vdx.cjs` — без регрессий
+  (telegram L2, t23b L1, bookmap L1).
+- `npm publish` (требует 2FA / OTP — выполнял пользователь).
+- `npx -y -p @vodmal/vdx-cli vdx` из чистой `/tmp/`-директории — usage
+  печатается, bundled рубрика подхватывается, end-to-end ОК.
+
+Открыто после Шага N:
+- **O33** — subpackage с другим стеком должен contributить applies_to-осям
+  parent'а. Текущая `audit.ts:99` проверка `excluded` стоит до подмены
+  `subpackageCtx`, и `subpackageCtx.stack` наследует `ctx.stack`. Симптом:
+  vdx (stack=meta) + `primary_subpackage=cli` НЕ получит лифт по
+  cli-tests/static-analysis. См. N24.
+- **O34** — новая ось рубрики `release-artifact` (publish-readiness):
+  name/version/license/repository/bin/publishConfig/files + registry-
+  resolves. vdx-как-проект сам бы выиграл от этой оси. См. N24.
 
 ---
 
