@@ -670,3 +670,64 @@ Smoke на 3 референсах без регрессий (telegram L2 / t23b 
 Vitest добавлен только в `cli/devDependencies`, в `files`-whitelist
 не входит (только `src`, `rubric`, `bin`, `README.md`, `LICENSE`) —
 published npm-пакет не толстеет.
+
+**N27 — Шаг Q: supporting лифт + overrides, overall L0 → L1 (2026-05-24).**
+Добавлены три минимальных артефакта плюс per-project overrides:
+
+1. `Makefile` в корне vdx — `build`/`test`/`check`/`audit`/`smoke`
+   таргеты как алиасы на `mise run` или `npm` команды внутри `cli/`.
+   Делает `reproducibility` L1 (предикат `has_file: Makefile`).
+2. `cli/.editorconfig` — `root = true` + UTF-8/LF/2-space defaults +
+   tab override для Makefile. Subpackage-ctx из Шага K направляет
+   ось `code-style` на cli/, поэтому конфиг лежит там, не в root.
+   Делает `code-style` L1 (предикат `has_file: .editorconfig`).
+3. `.vdx-overrides.yml` в корне — три `suppress: true` для осей,
+   которые описывают класс проектов, в который vdx не входит:
+   - `secrets-config` — vdx-CLI не имеет runtime env-config (только
+     опциональный `VDX_RUBRIC`, документирован в cli/README.md);
+   - `shared-infra` — vdx не сервис, не потребляет shared reverse
+     proxy / external networks;
+   - `shared-infra-drift` — нет `misc/traefik-global/`, ось не
+     применима (sub-axis работает только при наличии копии).
+
+**vdx-self-audit ДО → ПОСЛЕ:**
+
+| Ось | До Q | После Q |
+|-----|:--:|:--:|
+| reproducibility (S) | L0 | **L1** (Makefile) |
+| code-style (S) | L0 | **L1** (.editorconfig) |
+| secrets-config (S) | L0 | **suppressed** |
+| shared-infra (S) | L0 | **suppressed** |
+| shared-infra-drift (S) | L0 | **suppressed** |
+| mock-infra (S) | L1 | **L2** (case-insensitive FS, см. ниже) |
+| **overall** | **L0** | **L1** |
+
+Supporting visible после suppression: 7 (вместо 10). Все 7 на L1+ →
+ratio = 1.0 ≥ 0.8 threshold по D7. Critical min L2 — выше L1.
+Smoke на 3 референсах без регрессий (telegram L2 / t23b L1 / bookmap L1).
+
+**Наблюдение N27a — case-insensitive FS даёт false positive на macOS**.
+`mock-infra` L2 предикат `has_file: tests/Fixtures` (capital F) совпал с
+`cli/tests/fixtures/` (lowercase) из-за case-insensitive APFS. На Linux
+CI этот match не сработает, `mock-infra` вернётся к L1. Overall L1
+сохранится в любом случае (supporting margin 1.0 → 0.857 = 6/7 при
+выпадении одной оси, всё ещё ≥ 0.8). Решение: оставить как есть.
+Альтернатива — переименовать фикстуру (`tests/Fixtures` → `tests/case-fx`),
+но рубрика-предикат сам по себе хрупкий — он завязан на PHP-конвенцию
+PSR-4 capital-cased директорий, и спорить с case sensitivity FS на
+evaluator-уровне не стоит. Возможно стоит в спеке предикатов сделать
+`has_file` case-sensitive явно (через `fs.readdirSync` + сравнение
+имён), но это отдельная задача — открыто как наблюдение, не задача.
+
+**Семантика L1**: vdx теперь дотягивается до **«reproducible»**
+уровня — есть один документированный путь (`make build`/`make test`),
+есть единый стиль (.editorconfig для cli/), знание о неприменимых
+осях зафиксировано в overrides. Это первая реальная overall-планка
+vdx после A–P (где capping был сначала на 4 supporting-L0, потом на
+tests-L0, теперь на 5 supporting-L0 ушёл за overrides).
+
+**Что не сделано**: эталонной planке L2 нужно 6/7 supporting на L2+
+(сейчас только docs L3 и mock-infra L2 = 2/7 = 0.29). Чтобы L2:
+prettier+eslint конфиг → code-style L2; engines.node на root-уровне
+(не cli/) → reproducibility L2; mock-infra стабильно через msw → L2
+на Linux тоже. Это сильно больше работы — отложено.

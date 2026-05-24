@@ -1,0 +1,20 @@
+schema_version: "0.2"
+
+# vdx is a meta-repo (docs + nested CLI in cli/). The axes below are
+# defined by the canonical rubric but do not apply to projects of this
+# class — they describe deployable services with shared infra and runtime
+# secrets, neither of which vdx has. Suppression is permanent, not
+# time-boxed, because the project class won't change.
+
+overrides:
+  - axis: secrets-config
+    suppress: true
+    reason: "vdx is a CLI/docs repo with no runtime env configuration; the only optional variable is VDX_RUBRIC, documented in cli/README.md"
+
+  - axis: shared-infra
+    suppress: true
+    reason: "vdx is not a deployable service and does not consume a shared reverse proxy or container network — the axis describes a class vdx is not in"
+
+  - axis: shared-infra-drift
+    suppress: true
+    reason: "no misc/traefik-global directory exists because shared-infra itself does not apply (see above)"

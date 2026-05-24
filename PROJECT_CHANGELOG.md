@@ -4,6 +4,24 @@
 
 ## 2026-05-24
 
+### Шаг Q: supporting лифт — overall L0 → L1
+Добавлены три минимальных артефакта + 3 override'а:
+- `Makefile` в корне — алиасы на mise commands (`build`, `test`, `check`,
+  `audit`, `smoke`) → `reproducibility` L0→L1.
+- `cli/.editorconfig` — стандартные правила (2-space, LF, UTF-8) →
+  `code-style` L0→L1 (subpackage-ctx направляет на cli/).
+- `.vdx-overrides.yml` — `suppress: true` для трёх осей, не применимых
+  к meta-проекту: `secrets-config` (нет runtime env), `shared-infra`
+  (vdx не сервис), `shared-infra-drift` (нет misc/traefik-global).
+
+vdx-self-audit: **overall L0 → L1**. Supporting visible (7 = 10 - 3
+suppressed): 7/7 на L1+ = 1.0 ≥ 0.8 threshold. Critical min L2.
+
+`mock-infra` неожиданно L1 → L2 — false positive из-за `cli/tests/fixtures/`
+матчащегося под `has_file: tests/Fixtures` на case-insensitive APFS. На
+Linux CI это вернёт L1, overall всё равно L1 (supporting margin большой).
+См. N27 в [docs/decisions.md](docs/decisions.md).
+
 ### External-facing docs переведены на английский
 `README.md` (главный), `vdx-rubric-vodmal/README.md` и
 `vdx-rubric-vodmal/CHANGELOG.md` переведены на английский — для npm/GitHub

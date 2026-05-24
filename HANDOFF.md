@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–P: vitest добавлен, tests L0→L3)
+# vdx — Handoff (2026-05-24, после A–Q: overall L1 достигнут)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -25,32 +25,35 @@ PROJECT_CHANGELOG, docs/) — русский.
 добавлены. CI workflow обновлён — typecheck и тесты как раздельные шаги.
 
 vdx сейчас: stack=meta, lifecycle L2, **tests L3**, **ci L4**, overall
-**L0**. Per-axis после P:
-- tests **L3** (vitest dep + test:unit task + coverage task — раньше L0)
-- ci L4 (matrix node 20/22 — Шаг M)
+**L1**. Per-axis после Q:
+- tests **L3** (vitest + test:unit + coverage)
+- ci L4 (matrix node 20/22)
 - lifecycle-interface L2 (3 verb'а: build/test/check)
 - static-analysis **L2** (tsc strict через cli/)
+- reproducibility **L1** (Makefile)
+- code-style **L1** (cli/.editorconfig)
 - dependency-hygiene **L1** (lockfile)
-- mock-infra **L1**, observability **L1**, git-hygiene **L1**, docs **L3**
-- code-style L0, reproducibility L0, secrets-config L0, shared-infra L0,
-  shared-infra-drift L0 — supporting-L0 без real artefacts.
+- mock-infra **L1** (на Linux) / L2 (на macOS, case-FS false positive)
+- observability **L1**, git-hygiene **L1**, docs **L3**
+- secrets-config / shared-infra / shared-infra-drift — **suppressed**
+  через `.vdx-overrides.yml` (vdx — meta-CLI, эти оси не применимы).
 
-Overall capping переехал с "tests=C L0" на supporting (5 из 10 на L0 =
-0.5 < 0.8 threshold). Чтобы поднять overall до L1, теперь нужно добить
-**supporting** оси (`.env.example`, eslint+prettier, Dockerfile/Makefile),
-не критические.
+Supporting visible = 7 (10 - 3 suppressed), все на L1+ → ratio 1.0 ≥ 0.8.
+Critical min L2 ≥ L1. **Overall L1**.
 
-**Следующий шаг** (приоритеты после P):
-- **supporting лифт** — `.env.example` (secrets-config L2), eslint+prettier
-  (code-style L1+), Dockerfile/Makefile (reproducibility L1), override
-  через `.vdx-overrides.yml` для shared-infra (meta не имеет).
+Чтобы L2 overall: нужно 6/7 supporting на L2+ (сейчас только docs L3 и
+mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
+engines.node на root, стабильный mock-infra на Linux. Отложено.
+
+**Следующий шаг** (приоритеты после Q):
 - **O34** — новая ось рубрики `release-artifact` (publish-readiness:
   name/version/license/repository/bin/publishConfig/registry-resolves).
   vdx сам бы выиграл от этой оси. Bump до v0.3.0.
-- **O29** — поведение `vdx init` при unknown/meta (редкий случай).
-- **O25/O26/O27** — известны ранее (mock-infra delta-trap, TOML round-trip,
-  shared-infra precheck).
+- **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
+- **O29** — поведение `vdx init` при unknown/meta.
+- **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
+- **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
 
 ---
 
@@ -400,6 +403,69 @@ Open после Шага P:
 - **O34** — release-artifact ось (см. N24).
 - **O25/O26/O27/O29** — ранее известные.
 - **O32** — multi-subpackage (отложено).
+
+### Шаг Q — supporting лифт + overrides (overall L0 → L1) ✅ (2026-05-24)
+
+Три минимальных артефакта + три suppress'а в `.vdx-overrides.yml`:
+
+1. **`Makefile`** в корне vdx — `build`/`test`/`check`/`audit`/`smoke`
+   таргеты, делегирующие в `cd cli && npm <…>`. Источник правды для
+   задач остаётся `mise.toml`; Makefile — это конвенциональный
+   entry-point для stranger'а, который хочет запустить `make test` без
+   изучения mise. Эффект: `reproducibility` L0 → **L1** (предикат
+   `has_file: Makefile`).
+2. **`cli/.editorconfig`** — root=true, 2-space, LF, UTF-8 +
+   tab-override для Makefile (root vdx Makefile использует tab).
+   Subpackage-ctx из Шага K направляет ось `code-style` на cli/
+   (потому что у неё `applies_to: [php, node, go, python]` и primary
+   subpackage = cli). Эффект: `code-style` L0 → **L1** (предикат
+   `has_file: .editorconfig` относительно subpackage-root).
+3. **`.vdx-overrides.yml`** в корне vdx — три `suppress: true`:
+   - `secrets-config` — vdx-CLI не имеет runtime env-config (только
+     optional `VDX_RUBRIC`, документирован в cli/README.md).
+   - `shared-infra` — vdx не сервис, не потребляет shared reverse
+     proxy / external networks.
+   - `shared-infra-drift` — sub-axis работает только если есть
+     `misc/traefik-global/`; у vdx нет, значит ось не применима.
+
+Все три suppress'а **постоянные** (без `until:`), потому что класс
+проекта не изменится. Спека overrides формата — [docs/specs/overrides-format.md](docs/specs/overrides-format.md).
+
+**vdx-self-audit ДО → ПОСЛЕ:**
+
+| Ось | До Q | После Q |
+|-----|:--:|:--:|
+| reproducibility (S) | L0 | **L1** |
+| code-style (S) | L0 | **L1** |
+| secrets-config (S) | L0 | **suppressed** |
+| shared-infra (S) | L0 | **suppressed** |
+| shared-infra-drift (S) | L0 | **suppressed** |
+| mock-infra (S) | L1 | **L2** (case-FS false positive, см. ниже) |
+| **overall** | **L0** | **L1** |
+
+Supporting visible после suppression: 7 (10 - 3). Все 7 на L1+ →
+ratio 1.0 ≥ 0.8 threshold. Critical min L2 → выше L1. Overall **L1**.
+
+**Гоча — case-insensitive FS на macOS**: `mock-infra` L2 предикат
+`has_file: tests/Fixtures` (PSR-4 PHP-конвенция, capital F) совпал с
+`cli/tests/fixtures/` (lowercase) на macOS APFS. На Linux CI этот
+match не сработает — `mock-infra` вернётся к L1. Overall L1
+сохранится в любом случае (6/7 на L1+ = 0.857 ≥ 0.8). Решение —
+оставить как есть; это интересное наблюдение про хрупкость
+file-presence предикатов на разных FS. См. N27a в decisions.md.
+
+Smoke на 3 референсах без регрессий (telegram L2 / t23b L1 /
+bookmap L1) — у них нет `.vdx-overrides.yml`, эффект изолирован.
+
+**Семантика**: vdx достиг своей же L1 «reproducible» планки одним
+коммитом из 3 файлов. Это первая overall-планка vdx после A–P. Дальше
+до L2 — кратно больше работы (см. TL;DR раздел).
+
+Open после Шага Q:
+- **O34** — release-artifact ось.
+- **O25/O26/O27/O29** — ранее известные.
+- **O32** — multi-subpackage (отложено).
+- **supporting L2** — отложено, см. TL;DR.
 
 ---
 
