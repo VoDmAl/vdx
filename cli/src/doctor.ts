@@ -149,6 +149,39 @@ function checkContainerRuntime(): CheckResult {
   };
 }
 
+function findOnPath(name: string): string | null {
+  const PATH = process.env.PATH ?? '';
+  const sep = process.platform === 'win32' ? ';' : ':';
+  for (const dir of PATH.split(sep)) {
+    if (!dir) continue;
+    const p = path.join(dir, name);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function checkVdxOnPath(): CheckResult {
+  const found = findOnPath('vdx');
+  if (found) {
+    return {
+      id: 'vdx-on-path',
+      label: 'vdx on PATH',
+      status: 'ok',
+      level: 4,
+      message: found,
+    };
+  }
+  return {
+    id: 'vdx-on-path',
+    label: 'vdx on PATH',
+    status: 'warning',
+    level: 1,
+    message: 'binary not on PATH — `vdx <verb>` will not work directly in shell',
+    remedy:
+      'npm i -g @vodmal/vdx-cli  (or alias vdx="npx -y -p @vodmal/vdx-cli vdx")',
+  };
+}
+
 function checkClaudeCodePlugin(): CheckResult {
   const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
   if (!fs.existsSync(settingsPath)) {
@@ -189,6 +222,7 @@ function checkClaudeCodePlugin(): CheckResult {
 
 const CHECKS: Array<() => CheckResult> = [
   checkNode,
+  checkVdxOnPath,
   checkGit,
   checkMise,
   checkNpmAuth,

@@ -24,6 +24,11 @@ invocation; pick global when you'll run `vdx` repeatedly, npx when you
 don't want anything in your global `node_modules` or you're in an
 ephemeral environment.
 
+**First command after install: `vdx doctor`** — it inspects your environment
+(Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude
+Code plugin) and points to remedies for everything that's missing or
+sub-optimal.
+
 ## Use
 
 ```bash

@@ -71,6 +71,8 @@ Rule of thumb:
 
 Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin — itself launched via `npx` from the plugin manifest, so plugin users never need a global install).
 
+**Run `vdx doctor` first.** It checks your environment (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude Code plugin) and shows you exactly what to install or configure before using anything else.
+
 ## Quick start
 
 ```bash
