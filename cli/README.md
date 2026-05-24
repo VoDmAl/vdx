@@ -19,9 +19,34 @@ npx -y -p @vodmal/vdx-cli vdx audit /path/to/project
 ## Use
 
 ```bash
+# Lifecycle verbs (pass-through to `mise run <verb>`; requires mise + mise.toml)
+vdx up | down | build | test | check | fix
+
+# Maturity audit against the owner baseline rubric
 vdx audit <project-path> [--json] [--rubric <path>] [--stack <id>]
-vdx init  <project-path> [--baseline github.com/org/repo@vX.Y] [--dry-run] [--force]
-vdx-mcp   --project <path>   # MCP stdio server (used by the plugin)
+
+# Generate mise.toml + AGENTS.md for a project
+vdx init  <project-path> [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]
+
+# Publish a library (Node MVP; PHP/Python coming in Y.3)
+vdx publish <patch|minor|major> [--dry-run] [--force]
+
+# MCP stdio server consumed by the Claude Code plugin
+vdx-mcp   --project <path>
+```
+
+**Three quick examples**
+
+```bash
+# 1. Score the project I'm standing in
+vdx audit .
+
+# 2. Wire native scripts into the 6 lifecycle verbs, then run one
+vdx init . --stack node
+vdx test            # → mise run test (which calls `vitest run` or whatever was detected)
+
+# 3. Ship a new minor release of a Node lib
+vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no push)
 ```
 
 By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
@@ -48,6 +73,9 @@ npm run typecheck
 - `src/evaluator.ts`  — recursive evaluator + sugar notation
 - `src/scoring.ts`    — delta-style levels, flags for orthogonal axes
 - `src/audit.ts`      — orchestrator: overrides + applies_to filter + subpackage-ctx
+- `src/init.ts`       — `vdx init` planner (`selectVerbTask` + mise.toml/AGENTS.md renderers)
+- `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
+- `src/publish.ts`    — `planPublish` (pre-flight) + `executePublish` (bump → npm → git)
 - `src/report.ts`     — markdown / JSON output
 - `src/index.ts`      — CLI entry
 - `src/mcp-server.ts` — MCP stdio server (9 tools)
@@ -60,4 +88,8 @@ npm run typecheck
 - Baseline loading from a git ref is documented but evaluator still reads file
   paths only — `baseline:` in `mise.toml` is recorded but does not auto-fetch.
 - Watermark drift (phase 2 of `drift-algorithm.md`).
-- O25/O26/O27/O33/O34 — see [docs/decisions.md](../docs/decisions.md).
+- `vdx publish` only ships for Node (MVP). PHP/Python in Y.3; Cargo/Ruby/Go/Java
+  in Y.4.
+- Open items: O25 (mock-infra delta for Node), O26 (TOML round-trip), O27 (real
+  shared-infra precheck), O32 (multi-subpackage monorepo). See
+  [docs/decisions.md](../docs/decisions.md).

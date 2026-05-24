@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { loadRubric } from './rubric.ts';
 import { loadManifest, loadOverrides } from './manifest.ts';
 import { autoDetectStack, type Ctx } from './facts.ts';
+import {
+  LIFECYCLE_VERBS,
+  type LifecycleVerb,
+  resolveLifecycleVerb,
+  renderResolveError,
+} from './run.ts';
 import { audit } from './audit.ts';
 import { reportMarkdown, reportJson } from './report.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
@@ -20,6 +27,7 @@ const DEFAULT_RUBRIC = resolveDefaultRubric();
 function usage(): never {
   process.stderr.write(
     `Usage:
+  vdx <up|down|build|test|check|fix>     run lifecycle verb (via mise run <verb>)
   vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--json]
   vdx init    <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
   vdx publish <patch|minor|major> [--dry-run] [--force]
@@ -176,8 +184,32 @@ function cmdPublish(opts: ParsedArgs): void {
   }
 }
 
+function cmdRun(verb: LifecycleVerb): void {
+  const projectRoot = process.cwd();
+  const res = resolveLifecycleVerb(projectRoot, verb);
+  if (!res.ok) {
+    process.stderr.write(renderResolveError(res, projectRoot, verb));
+    process.exit(2);
+  }
+
+  try {
+    execFileSync('mise', ['run', verb], { cwd: projectRoot, stdio: 'inherit' });
+  } catch (e: any) {
+    if (e?.code === 'ENOENT') {
+      process.stderr.write(
+        `vdx: \`mise\` binary not found on PATH\n` +
+          `hint: install mise — https://mise.jdx.dev/getting-started.html\n`,
+      );
+      process.exit(127);
+    }
+    process.exit(typeof e?.status === 'number' ? e.status : 1);
+  }
+}
+
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
 else if (parsed.cmd === 'publish') cmdPublish(parsed);
+else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd))
+  cmdRun(parsed.cmd as LifecycleVerb);
 else usage();

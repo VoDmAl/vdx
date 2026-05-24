@@ -1,0 +1,19 @@
+{
+  "name": "vdx",
+  "owner": {
+    "name": "VoDmAl",
+    "url": "https://github.com/VoDmAl"
+  },
+  "metadata": {
+    "version": "0.5.0",
+    "description": "vdx — unified project lifecycle interface (up/down/build/test/check/fix/publish) and versioned maturity rubric with drift detection, integrated with Claude Code.",
+    "homepage": "https://github.com/VoDmAl/vdx"
+  },
+  "plugins": [
+    {
+      "name": "vdx",
+      "source": "../plugin",
+      "description": "MCP server (vdx_audit, vdx_build, vdx_test, …) + vdx-discover skill that bootstraps a project's lifecycle interface and records the success path into mise.toml."
+    }
+  ]
+}

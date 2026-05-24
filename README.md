@@ -41,6 +41,71 @@ into the things nobody else does — which is precisely why vdx exists.
 >   already writes findings between sessions natively; vdx's novelty is
 >   that the recorded path is *structured and executable*, not prose).
 
+## Install
+
+Prerequisites:
+
+- **Node.js** ≥ 20 (the CLI ships as ESM TypeScript via `tsx`, no build step required).
+- **[mise](https://mise.jdx.dev/getting-started.html)** — vdx delegates lifecycle execution to `mise run <verb>`.
+- **git** — for `vdx audit` rubric resolution (`github.com/.../vdx-rubric-vodmal@<tag>`) and for `vdx publish`.
+
+Then:
+
+```bash
+# Global install (recommended)
+npm i -g @vodmal/vdx-cli
+
+# …or one-shot, no install
+npx -y @vodmal/vdx-cli vdx audit .
+```
+
+This puts two binaries on your PATH: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin).
+
+## Quick start
+
+```bash
+# 1. Score any project against the owner baseline rubric
+vdx audit .
+
+# 2. Generate a mise.toml that wires native scripts to vdx's 6 verbs
+vdx init .
+
+# 3. Run lifecycle verbs (pass-through to `mise run <verb>`)
+vdx build
+vdx test
+vdx check
+vdx up    # bring services up
+vdx down  # tear down
+
+# 4. Publish a library (Node MVP; PHP/Python coming in Y.3)
+vdx publish minor   # bump, npm publish (with OTP), git commit+tag
+```
+
+`vdx init` works deterministically on Node/PHP/Python/Go/Ruby projects. For unknown or `meta` (monorepo-with-subpackage) stacks, pass `--stack <id>` or — preferably — invoke vdx inside Claude Code with the plugin installed and let the `vdx-discover` skill bootstrap interactively.
+
+## Claude Code plugin
+
+vdx ships a Claude Code plugin (MCP server + skill + hook) so the agent can call `vdx_build`, `vdx_audit`, etc. natively and bootstrap unknown projects.
+
+Inline marketplace (this repo serves the plugin directly):
+
+```jsonc
+// ~/.claude/settings.json
+{
+  "extraKnownMarketplaces": [
+    "github.com/VoDmAl/vdx/marketplace"
+  ]
+}
+```
+
+…or point at a local clone: `"/abs/path/to/vdx/marketplace"`. Then `/plugin install vdx@vdx` inside Claude Code.
+
+The plugin gives you:
+
+- **MCP tools** — `list_capabilities`, `vdx_up`/`down`/`build`/`test`/`check`/`fix`, `vdx_audit`, `vdx_record_success_path`.
+- **`vdx-discover` skill** — auto-triggers when a project lacks `mise.toml` (or audits at L0/L1 on `lifecycle-interface`); walks native scripts, verifies them, records the success path.
+- **PostToolUse hook** — passive watermark of successful lifecycle runs into `~/.cache/vdx/last-success-path.log`.
+
 ## Architecture
 
 | Layer | Tool | Decision |
@@ -82,10 +147,11 @@ github.com/VoDmAl/vdx-rubric-vodmal@v0.3.0`, point at a specific semver
 tag of the canonical repo. Sync rules between the two repos are documented
 in [CLAUDE.md](CLAUDE.md) ("External repo").
 
-## Current status: core works + CLI on npm, rubric v0.3.0
+## Current status: CLI v0.4.0 on npm, rubric v0.3.1, D12 (`publish`) MVP validated end-to-end
 
-Spec D1–D11 ratified; core delivered in steps A–O within a single session
-(see [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
+Spec D1–D12 ratified; core delivered in steps A–X.1.c within a single
+working session (see [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md) for the
+full per-step log and [HANDOFF.md](HANDOFF.md) for live state). Highlights:
 
 - **Step A** — rubric v0.2 + draft spec (format, predicate DSL, drift algorithm).
 - **Step B** — canonical repo `vdx-rubric-vodmal` published on GitHub.
@@ -109,7 +175,21 @@ Spec D1–D11 ratified; core delivered in steps A–O within a single session
 - **Step O** — O33 closed (subpackage stack lift): for axes with
   `applies_to`, the evaluator now uses the subpackage's stack instead of
   the root's. For vdx this removes the `excluded` mask from 5 stack axes →
-  an honest score (CLI v0.2.1; latest is **v0.3.0**).
+  an honest score.
+- **Steps P–U** — vitest harness (tests axis L0→L3), new
+  `release-artifact` axis with `applies_when` lib/app gate (rubric
+  v0.3.1, O34/O35 closed), `vdx init` transparency + monorepo fallback
+  (O39 closed), CLI bumped to **v0.3.0** on npm.
+- **Step V** — D12 (`publish`) accepted as 7th lifecycle verb after
+  parallel landscape research; `vdx publish` lib-gated via the new
+  `applies_when` predicate, stack-specific defaults institutionalized
+  inside vdx (npm/composer/twine/cargo/gem) so users don't learn
+  ecosystem-specific commands.
+- **Step X.1.a–X.1.c** — D12 MVP for Node delivered and dogfooded:
+  `executePublish()` runs the full pipeline (bump → `npm publish` with
+  interactive OTP via `stdio: 'inherit'` → git commit + tag, no push) and
+  was used to ship **[@vodmal/vdx-cli@0.4.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+  end-to-end.
 
 ### Research artifacts
 | Artifact | File | Status |
