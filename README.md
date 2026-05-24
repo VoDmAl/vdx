@@ -75,14 +75,14 @@ fixes; on third-party repos, it's a read-only report.
 | Repo | What | Release cadence |
 |------|------|-----------------|
 | **[vdx](https://github.com/VoDmAl/vdx)** (this) | dev hub: research, spec, evaluator (`cli/`), Claude Code plugin (`plugin/`) | changes often |
-| **[vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal)** | canonical owner-baseline rubric (`vdx-rubric.yaml`) | semver tags (`v0.2.2`+) |
+| **[vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal)** | canonical owner-baseline rubric (`vdx-rubric.yaml`) | semver tags (`v0.3.0`+) |
 
 Manifest references in projects, e.g. `baseline:
-github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2`, point at a specific semver
+github.com/VoDmAl/vdx-rubric-vodmal@v0.3.0`, point at a specific semver
 tag of the canonical repo. Sync rules between the two repos are documented
 in [CLAUDE.md](CLAUDE.md) ("External repo").
 
-## Current status: core works + CLI on npm, rubric v0.2.2
+## Current status: core works + CLI on npm, rubric v0.3.0
 
 Spec D1–D11 ratified; core delivered in steps A–O within a single session
 (see [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
@@ -125,7 +125,7 @@ Spec D1–D11 ratified; core delivered in steps A–O within a single session
 > author's working notes. The outward-facing surface (this README, the
 > CLI README, plugin README, and canonical-rubric repo) is English.
 
-### Core spec (v0.2.2)
+### Core spec (v0.3.0)
 | Document | What it specifies |
 |----------|-------------------|
 | [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Format of the `vdx-rubric.yaml` owner baseline + predicate DSL + `applies_to` |

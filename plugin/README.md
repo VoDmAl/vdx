@@ -76,7 +76,7 @@ that has no `mise.toml` manifest.
   Canonical record of the success path still goes through the
   `vdx_record_success_path` MCP tool (called by the agent, not by the hook).
 - Bundled rubric in `@vodmal/vdx-cli` is a snapshot of canonical
-  `vdx-rubric-vodmal@v0.2.2` at CLI release time. Newer canonical tags
+  `vdx-rubric-vodmal@v0.3.0` at CLI release time. Newer canonical tags
   require either a CLI republish or per-project override of the rubric path.
 - See open questions O26 (TOML round-trip with comments) and O27 (real
   shared-infra precheck) in `../docs/decisions.md`.

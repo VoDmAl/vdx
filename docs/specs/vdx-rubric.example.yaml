@@ -11,7 +11,7 @@ schema_version: "0.2"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "0.2.2"
+  version: "0.3.0"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -534,3 +534,62 @@ axes:
           file_contains:
             paths: [misc/traefik-global/README.md, misc/traefik-global/start.sh]
             pattern: "@v\\d+\\.\\d+\\.\\d+"          # semver pin
+
+  - id: release-artifact
+    class: supporting
+    description: "Publish-readiness: metadata completeness + entry points + registry signals (O34, v0.3.0)"
+    applies_to: [node, php, ruby, python]
+    storage: level
+    default_target: L4
+    fact_sources:
+      - package.json
+      - composer.json
+      - LICENSE
+      - LICENSE.md
+      - LICENSE.txt
+    levels:
+      L1:
+        requires:
+          any_of:
+            - all_of:
+                - config_value: { path: package.json, jsonpath: "name",    op: present }
+                - config_value: { path: package.json, jsonpath: "version", op: present }
+                - config_value: { path: package.json, jsonpath: "license", op: present }
+            - all_of:
+                - config_value: { path: composer.json, jsonpath: "name",    op: present }
+                - config_value: { path: composer.json, jsonpath: "license", op: present }
+      L2:
+        requires:
+          any_of:
+            - all_of:
+                - config_value: { path: package.json, jsonpath: "description", op: present }
+                - config_value: { path: package.json, jsonpath: "repository",  op: present }
+                - any_of:
+                    - has_file: LICENSE
+                    - has_file: LICENSE.md
+                    - has_file: LICENSE.txt
+            - all_of:
+                - config_value: { path: composer.json, jsonpath: "description", op: present }
+                - any_of:
+                    - has_file: LICENSE
+                    - has_file: LICENSE.md
+      L3:
+        requires:
+          any_of:
+            - all_of:
+                - config_value: { path: package.json, jsonpath: "files", op: present }
+                - any_of:
+                    - config_value: { path: package.json, jsonpath: "bin",     op: present }
+                    - config_value: { path: package.json, jsonpath: "main",    op: present }
+                    - config_value: { path: package.json, jsonpath: "exports", op: present }
+            - all_of:
+                - config_value: { path: composer.json, jsonpath: "autoload", op: present }
+                - config_value: { path: composer.json, jsonpath: "type",     op: present }
+      L4:
+        requires:
+          any_of:
+            - all_of:
+                - config_value: { path: package.json, jsonpath: "publishConfig", op: present }
+                - config_value: { path: package.json, jsonpath: "homepage",      op: present }
+                - config_value: { path: package.json, jsonpath: "bugs",          op: present }
+            - config_value: { path: composer.json, jsonpath: "extra.publish", op: present }

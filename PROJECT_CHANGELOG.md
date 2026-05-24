@@ -4,6 +4,30 @@
 
 ## 2026-05-24
 
+### Шаг R: O34 закрыт — ось `release-artifact`, рубрика v0.3.0
+Новая ось `release-artifact` (supporting, `applies_to: [node, php, ruby,
+python]`) добавлена в canonical-рубрику + bumpнута до **v0.3.0**:
+
+- **L1**: `name`+`version`+`license` (npm) или `name`+`license` (composer)
+- **L2**: + `description`+`repository`+LICENSE (npm) или
+  `description`+LICENSE (composer)
+- **L3**: + `files`+entry (`bin`/`main`/`exports`) (npm) или
+  `autoload`+`type` (composer)
+- **L4**: + `publishConfig`+`homepage`+`bugs` (npm) или
+  `extra.publish` (composer)
+
+Mirror'нуто в `cli/rubric/vdx-rubric.yaml` (bundled) и
+`docs/specs/vdx-rubric.example.yaml`. `DEFAULT_BASELINE` в
+`cli/src/init.ts` → `@v0.3.0`. README'и обновлены.
+
+vdx (cli subpackage): **release-artifact L4** — все четыре уровня (cli уже
+publish-ready). Overall L1 сохранился (8/8 supporting на L1+).
+
+Calibration regression: **telegram L2 → L1** (release-artifact L1 без
+publish-readiness). Это fair signal — telegram это app, не библиотека.
+Открыто как **O35**: `applies_when` для оси (lib vs app detection).
+См. N28 в [docs/decisions.md](docs/decisions.md).
+
 ### Шаг Q: supporting лифт — overall L0 → L1
 Добавлены три минимальных артефакта + 3 override'а:
 - `Makefile` в корне — алиасы на mise commands (`build`, `test`, `check`,

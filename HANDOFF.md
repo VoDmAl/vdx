@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–Q: overall L1 достигнут)
+# vdx — Handoff (2026-05-24, после A–R: рубрика v0.3.0 + release-artifact)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,9 +12,11 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 16 шагов (A–P) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2**, CLI на npm как
-**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
+**Где мы сейчас**: 17 шагов (A–R) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.0** (новая ось
+`release-artifact`), CLI на npm как
+**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(bundled rubric обновится при следующей публикации).
 External-facing docs (главный README, vdx-rubric-vodmal README/CHANGELOG)
 переведены на английский 2026-05-24; внутренние (HANDOFF, CLAUDE,
 PROJECT_CHANGELOG, docs/) — русский.
@@ -24,10 +26,11 @@ PROJECT_CHANGELOG, docs/) — русский.
 `test` = `vitest run`, `typecheck` отдельно, `test:unit` + `coverage`
 добавлены. CI workflow обновлён — typecheck и тесты как раздельные шаги.
 
-vdx сейчас: stack=meta, lifecycle L2, **tests L3**, **ci L4**, overall
-**L1**. Per-axis после Q:
+vdx сейчас: stack=meta, lifecycle L2, **tests L3**, **ci L4**,
+**release-artifact L4**, overall **L1**. Per-axis после R:
 - tests **L3** (vitest + test:unit + coverage)
 - ci L4 (matrix node 20/22)
+- **release-artifact L4** (publishConfig + homepage + bugs в cli/)
 - lifecycle-interface L2 (3 verb'а: build/test/check)
 - static-analysis **L2** (tsc strict через cli/)
 - reproducibility **L1** (Makefile)
@@ -38,22 +41,26 @@ vdx сейчас: stack=meta, lifecycle L2, **tests L3**, **ci L4**, overall
 - secrets-config / shared-infra / shared-infra-drift — **suppressed**
   через `.vdx-overrides.yml` (vdx — meta-CLI, эти оси не применимы).
 
-Supporting visible = 7 (10 - 3 suppressed), все на L1+ → ratio 1.0 ≥ 0.8.
-Critical min L2 ≥ L1. **Overall L1**.
+Supporting visible = 8 (11 - 3 suppressed), все на L1+ → ratio 1.0 ≥ 0.8.
+Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artifact).
 
 Чтобы L2 overall: нужно 6/7 supporting на L2+ (сейчас только docs L3 и
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после Q):
-- **O34** — новая ось рубрики `release-artifact` (publish-readiness:
-  name/version/license/repository/bin/publishConfig/registry-resolves).
-  vdx сам бы выиграл от этой оси. Bump до v0.3.0.
+**Следующий шаг** (приоритеты после R):
+- **O35** — `applies_when` для `release-artifact` (lib vs app detection).
+  Текущая ось ловит и приложения, и библиотеки — fair-but-noisy сигнал
+  для апов (telegram упал L2→L1). Workaround: апп-проекты suppress'ят
+  через `.vdx-overrides.yml`. См. N28.
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O29** — поведение `vdx init` при unknown/meta.
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
 - **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
+- **republish CLI** — bundled rubric в опубликованном пакете всё ещё
+  v0.2.2; чтобы клиенты получали v0.3.0 ось, нужен bump cli версии и
+  npm publish. Не критично — DEFAULT_BASELINE уже на @v0.3.0.
 
 ---
 

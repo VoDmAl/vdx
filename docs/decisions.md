@@ -110,6 +110,17 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 
 ### Активные (от smoke v0.1 evaluator + догфудинг)
 - ~~**vitest для evaluator**~~ — закрыто 2026-05-24 (Шаг P). См. N26.
+- **O35** — `release-artifact` ось применяется ко всем
+  node/php/ruby/python-проектам, включая приложения без publish-lifecycle.
+  Это даёт fair, но шумный сигнал — apps получают L1-L2 вместо exclusion.
+  Нужен `applies_when: <predicate>` или auto-skip когда:
+  (a) `package.json.private == true`, или
+  (b) `composer.json.type` отсутствует/равен "project" (не "library"),
+  или (c) нет `bin`/`main`/`exports`/`autoload` ключей вовсе.
+  Тип "app vs library" — это onthological detection, который полезен и
+  для других осей (например, mock-infra). Возможно стоит ввести
+  ось-агностичный `project_kind` факт. Workaround сейчас: апп-проекты
+  suppress'ят `release-artifact` через `.vdx-overrides.yml`. См. N28.
 - **O25** — Mock-infra delta-style ловушка. Node-проекты, у которых mock
   сделан как отдельный docker-сервис (bookmap: `mock-bookmap-api`, директория
   `mock-server/`, `Dockerfile.mock-server`), технически реализуют L3-подход, но
@@ -145,19 +156,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   `[vdx.subpackages] tests = "php-api"`; (c) принять как ограничение —
   multi-stack monorepo использует override на оси. Реальных пользователей с
   таким раскладом пока нет — отложено до появления.
-- **O34** — Новая ось рубрики `release-artifact` (publish-readiness).
-  Наблюдение из Шага N: подготовка `cli/` к публикации в npm добавила набор
-  атрибутов (`name`, `version`, `license`, `repository`, `bin`,
-  `publishConfig`, `files`, `LICENSE`-файл), которые ни одна текущая ось
-  не оценивает. `dependency-hygiene` смотрит lockfile, не publishability.
-  Кандидат уровней: L1=поля `name`+`version`+`license` в manifest;
-  L2=+`repository`, LICENSE-файл, `description`; L3=+`files`-whitelist,
-  `bin`/entry-point, `publishConfig` (для scoped npm); L4=пакет реально
-  опубликован и резолвится из реестра (`npm view`/`pip index`/`gem search`).
-  `applies_to: [node, python, ruby, php]` (для package-manager-driven
-  стеков). Семантически отдельная от `docs` (документация ≠ release).
-  Пересекается с `primary_subpackage` (Шаг K) — возможно стоит ввести
-  синоним `release_subpackage` или принять что они совпадают de facto.
+- ~~**O34**~~ — закрыто Шагом R 2026-05-24 (см. N28, рубрика v0.3.0).
 
 ### Закрытые
 
@@ -177,6 +176,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O30 | Шаг J 2026-05-23 — Добавлен `applies_to: [stack-id, ...]` filter на ось в спеке рубрики (v0.2.2). Если задан и `ctx.stack` не в списке — ось получает `drift_kind: excluded`, не учитывается в overall scoring. 5 осей помечены `[php, node, go, python]`: tests, static-analysis, code-style, dependency-hygiene, mock-infra. См. N20. **Частично**: остаётся (b) — sub-package-aware predicate evaluation для случая stack=node + nested manifest. Открыто как **O31**. |
 | O31 | Шаг K 2026-05-23 — Добавлено поле `[vdx].primary_subpackage` в манифест проекта. В `audit.ts` для осей с `applies_to` evaluator подменяет `ctx.projectRoot` на subpackage (explicit-from-manifest или auto-resolve через `findSubPackages()` когда ровно один subpackage совпадает с `ctx.stack`). Owner-рубрика остаётся stack-agnostic. См. N21. **Полностью**: остаточный кейс multi-subpackage monorepo (разные стеки в разных папках) выделен в **O32**. |
 | O33 | Шаг O 2026-05-23 — `stackForDir` экспортирован из `facts.ts`. В `resolveSubpackageCtx` (`audit.ts`): для explicit `primary_subpackage` теперь detect actual stack subpackage'a; для auto-resolve добавлен fallback "если ровно один subpackage с любым стеком — adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (а не наследуется от root). В audit loop проверка `applies_to` сравнивается с `evalCtx.stack` (не `ctx.stack`). Эффект на vdx: 5 stack-осей больше не `excluded` — оцениваются по cli/ (static-analysis L0→**L2**, dependency-hygiene/mock-infra L0→**L1**, tests/code-style правдиво L0). Overall vdx L0→L0 (теперь capping на tests=C L0, не маска). Smoke на 3 референсах без регрессий. См. N25. |
+| O34 | Шаг R 2026-05-24 — Добавлена ось `release-artifact` (supporting, `applies_to: [node, php, ruby, python]`) в canonical-рубрику v0.3.0. L1: required-поля (name+version+license / name+license). L2: + description+repository+LICENSE. L3: + files+entry-point / autoload+type. L4: + publishConfig+homepage+bugs / extra.publish. Эффект на vdx: release-artifact L4 на cli subpackage (cli уже publish-ready). Эффект на референсы: telegram L2→L1 регрессия (PHP app не publish-ready) — fair signal, design issue открыт как O35. См. N28. |
 
 ---
 
@@ -731,3 +731,63 @@ tests-L0, теперь на 5 supporting-L0 ушёл за overrides).
 prettier+eslint конфиг → code-style L2; engines.node на root-уровне
 (не cli/) → reproducibility L2; mock-infra стабильно через msw → L2
 на Linux тоже. Это сильно больше работы — отложено.
+
+**N28 — Шаг R: O34 закрыт через ось `release-artifact`, рубрика v0.3.0 (2026-05-24).**
+Новая ось `release-artifact` (supporting, `applies_to: [node, php, ruby,
+python]`) добавлена в canonical-рубрику. Уровни:
+
+- **L1**: required-поля (`name`+`version`+`license` для npm;
+  `name`+`license` для composer).
+- **L2**: + `description`+`repository`+LICENSE-файл (npm) или
+  `description`+LICENSE (composer).
+- **L3**: + `files` whitelist + entry-point (`bin`/`main`/`exports`) —
+  npm; `autoload`+`type` — composer.
+- **L4**: + `publishConfig`+`homepage`+`bugs` — npm;
+  `extra.publish` — composer.
+
+`metadata.version` bumped `0.2.2` → `0.3.0`. Mirror'нуто в
+`cli/rubric/vdx-rubric.yaml` (bundled) и `docs/specs/vdx-rubric.example.yaml`.
+`DEFAULT_BASELINE` в `cli/src/init.ts` → `@v0.3.0`. README'и обновлены.
+
+**Эффект на vdx (cli subpackage)**: release-artifact **L4** — все
+четыре уровня. cli/package.json уже имел все нужные поля
+(publishConfig.access, homepage, bugs) из подготовки к публикации на
+npm. Это первая ось vdx, которая дошла до L4 благодаря публикации;
+ci L4 был через `matrix.node-version`, release-artifact L4 — через
+**факт публикации**. Overall vdx сохранился L1 (8/8 supporting на L1+).
+
+**Эффект на калибровочные референсы (РЕГРЕССИЯ telegram)**:
+
+| project | до v0.3.0 | после v0.3.0 | release-artifact |
+|---------|:--:|:--:|:--:|
+| telegram (PHP) | L2 | **L1** | L1 (no publish metadata) |
+| t23b (PHP) | L1 | L1 | L1 |
+| bookmap (Node) | L1 | L1 | L1 |
+
+Telegram упал L2→L1 потому что новая supporting ось добавилась в
+counting (10 → 11 supporting), а у telegram release-artifact = L1.
+Раньше для L2 был достаточен ratio supporting ≥ L2 ≥ 0.8, теперь
+release-artifact L1 валит supporting на L2. **Это правда** —
+telegram это PHP-приложение без publish-lifecycle.
+
+**Design issue → O35**: ось применяется слишком широко.
+`applies_to: [node, php, ...]` ловит и библиотеки, и приложения.
+Не каждый node-проект публикуется — для апов release-artifact
+сейчас даёт fair-but-noisy сигнал, а должен либо excluded, либо
+self-skipped. Нужен `applies_when: <predicate>` или auto-detection
+"app vs library" (например `package.json.private == true` →
+excluded; `composer.json.type` отсутствует или `"project"` →
+excluded). Workaround сейчас: апп-проекты suppress'ят
+`release-artifact` через `.vdx-overrides.yml`. Открыто как O35.
+
+**Семантика семвер-bump'а**: minor (0.2.2 → 0.3.0), а не patch —
+новая ось это **новая фича рубрики**, изменение поведения для
+проектов, которые попадают под `applies_to`. Не breaking — старые
+manifest-ссылки `@v0.2.2` продолжают работать на старой рубрике
+без оси. Major bump зарезервирован для переименований/удалений
+осей или изменения `schema_version`.
+
+Smoke на 3 референсах **выявил design issue (telegram regression)**
+до публикации тега — это правильный workflow: concrete instance
+ловит abstract flaw (паттерн s1-72). Тег `v0.3.0` push'ится после
+коммита.
