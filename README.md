@@ -1,144 +1,155 @@
 # vdx
 
-**Тонкая надстройка над существующими инструментами: единый словарь команд +
-версионируемая рубрика зрелости с детектом дрейфа + структурированный манифест
-для AI-агента.**
+**A thin layer over existing tools: a unified lifecycle vocabulary + a
+versioned maturity rubric with drift detection + a structured manifest for
+the AI agent.**
 
-> Рабочее название. Можно переименовать.
+> Working name. Subject to rename.
 
 ---
 
-## Проблема
+## The problem
 
-AI снял потолок параллельности: вместо одного основного стека (PHP) — десятки
-продуктов одновременно на PHP, Node, Python, Go. Из этого растут две боли:
+AI lifted the parallelism ceiling: instead of one primary stack (PHP), the
+same developer now juggles dozens of products at once across PHP, Node,
+Python, and Go. That creates two compounding pains:
 
-1. **Операционное трение.** В каждом проекте свой способ «поднять / остановить /
-   пересобрать / прогнать тесты». Глубина и словарь команд скачут от проекта к
-   проекту.
-2. **Дрейф качества.** Нет объективной меры зрелости. Когда личный стандарт
-   качества растёт, старые проекты молча отстают, и узнать об этом негде.
+1. **Operational friction.** Every project has its own way to "bring up /
+   shut down / rebuild / run tests." The depth and vocabulary of commands
+   varies wildly from repo to repo.
+2. **Quality drift.** There is no objective measure of maturity. As the
+   personal quality bar rises, older projects quietly fall behind, and
+   there is no place to notice it.
 
-## Замысел
+## Concept
 
-vdx собирается как **«комбайн»** из готовых инструментов. Свой код — только то,
-чего нет ни у кого, и собственно из-за чего vdx существует.
+vdx is built as a **combine** of ready-made tools. Custom code goes only
+into the things nobody else does — which is precisely why vdx exists.
 
-### Защищаемое ядро — 4 вещи
+### The defensible core — four things
 
-| # | Что | Почему этого нет в готовом |
-|---|-----|----------------------------|
-| 1 | Нормализованный словарь глаголов `up / down / build / test / check / fix` | раннеры (mise/Task/just) не задают стандартного словаря |
-| 2 | **Версионируемая рубрика зрелости + drift-движок** | Soundcheck/Cortex/OpsLevel мутируют стандарт вживую; локально и на чужих репах не работают |
-| 3 | **Shared-infra оркестрация** (Global Traefik как зависимость `up`) | ни один раннер не моделит cross-repo зависимости |
-| 4 | Структурированный исполняемый манифест для AI-агента | AGENTS.md намеренно проза; Claude Code auto-memory тоже пишет прозой |
+| # | What | Why nothing off-the-shelf covers it |
+|---|------|--------------------------------------|
+| 1 | Normalized verb vocabulary `up / down / build / test / check / fix` | task runners (mise/Task/just) don't prescribe a vocabulary |
+| 2 | **Versioned maturity rubric + drift engine** | Soundcheck/Cortex/OpsLevel mutate the standard live; they don't work locally or on third-party repos |
+| 3 | **Shared-infra orchestration** (Global Traefik as a dependency of `up`) | no runner models cross-repo dependencies |
+| 4 | A structured, executable manifest for the AI agent | AGENTS.md is deliberately prose; Claude Code auto-memory also writes prose |
 
-> **Чего vdx делать НЕ будет:**
-> — собственный task-runner (mise делает это полиглотно и стабильно);
-> — собственный «discover-and-cache» loop как идею (Claude Code auto-memory
->   нативно пишет находки между сессиями; новизна vdx — что фиксированный путь
->   *структурированный и исполняемый*, а не проза).
+> **What vdx will NOT do:**
+> — ship its own task runner (mise already does this polyglot and well);
+> — claim "discover-and-cache" as a novel loop (Claude Code auto-memory
+>   already writes findings between sessions natively; vdx's novelty is
+>   that the recorded path is *structured and executable*, not prose).
 
-## Архитектура
+## Architecture
 
-| Слой | Инструмент | Решение |
-|------|-----------|---------|
-| Раннер задач | **mise** | [D3](docs/decisions.md) |
-| Манифест возможностей | `mise.toml` + vdx-метаблок; проекция в `AGENTS.md ## Commands` | [D4](docs/decisions.md) |
-| Сбор фактов для аудита | OpenSSF Scorecard · Qlty CLI · MegaLinter (планово) | [D5](docs/decisions.md) |
-| Scaffold-fix на своих | copier (`copier update`, 3-way merge) — планово | [D5](docs/decisions.md) |
-| Упаковка для Claude Code | плагин: MCP-сервер + skill + hook | [D6](docs/decisions.md) |
+| Layer | Tool | Decision |
+|-------|------|----------|
+| Task runner | **mise** | [D3](docs/decisions.md) |
+| Capability manifest | `mise.toml` + vdx meta-block; projected into `AGENTS.md ## Commands` | [D4](docs/decisions.md) |
+| Fact gathering for audit | OpenSSF Scorecard · Qlty CLI · MegaLinter (planned) | [D5](docs/decisions.md) |
+| Scaffold-fix on own projects | copier (`copier update`, 3-way merge) — planned | [D5](docs/decisions.md) |
+| Claude Code packaging | plugin: MCP server + skill + hook | [D6](docs/decisions.md) |
 
-Полные обоснования и открытые вопросы — в [docs/decisions.md](docs/decisions.md).
+Full rationale and open questions live in [docs/decisions.md](docs/decisions.md).
 
-## Сценарии
+## Scenarios
 
-**Знакомый стек.** `vdx up` → infra-precheck → `mise run up` → нативная команда.
-Мгновенно.
+**Familiar stack.** `vdx up` → infra precheck → `mise run up` → native
+command. Instant.
 
-**Незнакомый стек через Claude Code.** Агент через MCP знает 6 глаголов проекта,
-вызывает их без чтения docker-файлов. `vdx audit` оценивает по *твоей* рубрике
-даже в незнакомом тулинге.
+**Unfamiliar stack via Claude Code.** Through MCP, the agent knows the
+project's 6 verbs and can invoke them without reading docker files.
+`vdx audit` scores it against *your* rubric even in unfamiliar tooling.
 
-**Манифеста ещё нет.** `vdx` падает в fallback — детектит
-`make`/`composer`/`npm`, вызывает напрямую. Агент по итогам фиксирует найденный
-success path в `mise.toml` через hook — следующий запуск уже мгновенный.
+**No manifest yet.** `vdx` falls back to detection — `make`/`composer`/
+`npm` — and calls them directly. Once the agent finds a working success
+path, a hook records it into `mise.toml` — the next run is instant.
 
-**Дрейф.** Owner-рубрика ушла вперёд → `vdx audit` показывает разрыв со старым
-проектом. На своих — `copier update` накатывает шаблонные исправления;
-на чужих — read-only отчёт.
+**Drift.** The owner rubric moved forward → `vdx audit` shows the gap on
+an old project. On your own repos, `copier update` applies the template
+fixes; on third-party repos, it's a read-only report.
 
-## Двух-репо структура
+## Two-repo layout
 
-| Репо | Что | Релиз |
-|------|-----|-------|
-| **[vdx](https://github.com/VoDmAl/vdx)** (этот) | dev-hub: research, спека, evaluator (`cli/`), Claude Code плагин (`plugin/`) | меняется часто |
-| **[vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal)** | canonical owner-baseline рубрики (`vdx-rubric.yaml`) | semver-теги (`v0.2.2`+) |
+| Repo | What | Release cadence |
+|------|------|-----------------|
+| **[vdx](https://github.com/VoDmAl/vdx)** (this) | dev hub: research, spec, evaluator (`cli/`), Claude Code plugin (`plugin/`) | changes often |
+| **[vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal)** | canonical owner-baseline rubric (`vdx-rubric.yaml`) | semver tags (`v0.2.2`+) |
 
-Manifest-ссылки в проектах вида `baseline: github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2`
-ведут на конкретный semver-тег canonical-репо. Правила синхронизации между двумя
-репо — в [CLAUDE.md](CLAUDE.md) («Внешний репо»).
+Manifest references in projects, e.g. `baseline:
+github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2`, point at a specific semver
+tag of the canonical repo. Sync rules between the two repos are documented
+in [CLAUDE.md](CLAUDE.md) ("External repo").
 
-## Текущий статус: ядро работает + CLI на npm, рубрика v0.2.2
+## Current status: core works + CLI on npm, rubric v0.2.2
 
-Спека D1–D11 принята, ядро реализовано шагами A–N за одну сессию (см.
-[PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
+Spec D1–D11 ratified; core delivered in steps A–O within a single session
+(see [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md)):
 
-- **Шаг A** — рубрика v0.2 + draft спеки (формат, predicate DSL, drift-алгоритм).
-- **Шаг B** — canonical-репо `vdx-rubric-vodmal` опубликован на GitHub.
-- **Шаг C** — нативный evaluator (TypeScript, ~600 LOC в `cli/src/`).
-- **Шаг D** — evaluator дотюнен по smoke-тестам на 3 референсах.
-- **Шаг E** — `vdx init`: автодетект стека → mapping нативных задач в 6 глаголов
-  → генерация `mise.toml` + `AGENTS.md ## Commands`.
-- **Шаг F** — MCP-сервер `vdx-mcp` на stdio с 9 tools.
-- **Шаг G** — Claude Code плагин `vdx/plugin/` (`.claude-plugin/`, `.mcp.json`,
-  skill, hook).
-- **Шаг H** — догфудинг: vdx сам имеет корневой `mise.toml`, baseline-аудит.
-- **Шаг I** — stack-detector видит depth-1 sub-packages (monorepo / dev-hub).
-- **Шаг J** — `applies_to` filter в рубрике v0.2.2: stack-нерелевантные оси
-  получают `drift_kind: excluded`, не учитываются в overall.
-- **Шаг K** — `[vdx].primary_subpackage` + `resolveSubpackageCtx` (O31 закрыт).
-- **Шаг L** — `.github/workflows/ci.yml` + `npm test` alias (ci L0→L3).
-- **Шаг M** — `matrix.node-version: [20, 22]` (ci L3→L4, первая ось vdx на max).
-- **Шаг N** — CLI выложен на npm как
+- **Step A** — rubric v0.2 + draft spec (format, predicate DSL, drift algorithm).
+- **Step B** — canonical repo `vdx-rubric-vodmal` published on GitHub.
+- **Step C** — native evaluator (TypeScript, ~600 LOC under `cli/src/`).
+- **Step D** — evaluator tuned via smoke tests on 3 reference projects.
+- **Step E** — `vdx init`: stack autodetect → mapping native tasks to the
+  6 verbs → generation of `mise.toml` + `AGENTS.md ## Commands`.
+- **Step F** — MCP server `vdx-mcp` on stdio with 9 tools.
+- **Step G** — Claude Code plugin `vdx/plugin/` (`.claude-plugin/`,
+  `.mcp.json`, skill, hook).
+- **Step H** — dogfooding: vdx now has its own root `mise.toml`, baseline audit.
+- **Step I** — stack detector sees depth-1 sub-packages (monorepo / dev hub).
+- **Step J** — `applies_to` filter in rubric v0.2.2: stack-irrelevant axes
+  get `drift_kind: excluded` and don't count toward overall.
+- **Step K** — `[vdx].primary_subpackage` + `resolveSubpackageCtx` (O31 closed).
+- **Step L** — `.github/workflows/ci.yml` + `npm test` alias (ci L0→L3).
+- **Step M** — `matrix.node-version: [20, 22]` (ci L3→L4, first axis at max).
+- **Step N** — CLI published on npm as
   **[@vodmal/vdx-cli](https://www.npmjs.com/package/@vodmal/vdx-cli)**;
-  плагин теперь marketplace-ready (`npx -y -p @vodmal/vdx-cli@latest vdx-mcp`).
-- **Шаг O** — O33 закрыт (subpackage stack lift): для осей с `applies_to`
-  evaluator теперь использует stack subpackage'a, а не root. Для vdx
-  снимает маску `excluded` с 5 stack-осей → честная оценка (CLI v0.2.1).
+  the plugin is now marketplace-ready (`npx -y -p @vodmal/vdx-cli@latest vdx-mcp`).
+- **Step O** — O33 closed (subpackage stack lift): for axes with
+  `applies_to`, the evaluator now uses the subpackage's stack instead of
+  the root's. For vdx this removes the `excluded` mask from 5 stack axes →
+  an honest score (CLI v0.2.1).
 
-### Research-артефакты
-| Артефакт | Файл | Статус |
+### Research artifacts
+| Artifact | File | Status |
 |----------|------|--------|
-| Onboarding для новой сессии | [HANDOFF.md](HANDOFF.md) | актуален |
-| Research-журнал (Decided / Open / Observed) | [docs/decisions.md](docs/decisions.md) | актуален |
-| Обзор аналогов (что делает / не делает) | [docs/landscape.md](docs/landscape.md) | актуален |
-| Рубрика зрелости v0.2 (калибровано) | [docs/maturity-rubric.md](docs/maturity-rubric.md) | актуален |
-| Решение build-vs-adopt | [docs/decision.md](docs/decision.md) | актуален |
-| Журнал изменений | [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md) | ведётся |
+| Onboarding for a new session | [HANDOFF.md](HANDOFF.md) | current |
+| Research journal (Decided / Open / Observed) | [docs/decisions.md](docs/decisions.md) | current |
+| Landscape of comparable tools (does / doesn't) | [docs/landscape.md](docs/landscape.md) | current |
+| Maturity rubric v0.2 (calibrated) | [docs/maturity-rubric.md](docs/maturity-rubric.md) | current |
+| Build-vs-adopt decision | [docs/decision.md](docs/decision.md) | current |
+| Change log | [PROJECT_CHANGELOG.md](PROJECT_CHANGELOG.md) | maintained |
 
-### Спека ядра (v0.2.2)
-| Документ | Что специфицирует |
+> Internal research artifacts above are kept in Russian — they are the
+> author's working notes. The outward-facing surface (this README, the
+> CLI README, plugin README, and canonical-rubric repo) is English.
+
+### Core spec (v0.2.2)
+| Document | What it specifies |
 |----------|-------------------|
-| [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Формат `vdx-rubric.yaml` owner-baseline + predicate DSL + `applies_to` |
-| [docs/specs/manifest-format.md](docs/specs/manifest-format.md) | `[vdx]` блок в `mise.toml` + проекция `AGENTS.md` |
-| [docs/specs/overrides-format.md](docs/specs/overrides-format.md) | `.vdx-overrides.yml` для per-project переопределений |
-| [docs/specs/mcp-api.md](docs/specs/mcp-api.md) | Контракт MCP-сервера vdx |
-| [docs/specs/drift-algorithm.md](docs/specs/drift-algorithm.md) | Алгоритм расчёта уровня + drift |
-| [docs/specs/vdx-rubric.example.yaml](docs/specs/vdx-rubric.example.yaml) | Mirror canonical-инстанса (для документации) |
+| [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Format of the `vdx-rubric.yaml` owner baseline + predicate DSL + `applies_to` |
+| [docs/specs/manifest-format.md](docs/specs/manifest-format.md) | The `[vdx]` block in `mise.toml` + `AGENTS.md` projection |
+| [docs/specs/overrides-format.md](docs/specs/overrides-format.md) | `.vdx-overrides.yml` for per-project overrides |
+| [docs/specs/mcp-api.md](docs/specs/mcp-api.md) | Contract of the vdx MCP server |
+| [docs/specs/drift-algorithm.md](docs/specs/drift-algorithm.md) | Level computation + drift algorithm |
+| [docs/specs/vdx-rubric.example.yaml](docs/specs/vdx-rubric.example.yaml) | Mirror of the canonical instance (for documentation) |
 
-## Догфудинг
+## Dogfooding
 
-vdx сам аудитится своей же рубрикой. Декларация в [mise.toml](mise.toml):
-`stack = "meta"` (документация + nested CLI в `cli/`).
+vdx audits itself against its own rubric. The declaration in
+[mise.toml](mise.toml) is `stack = "meta"` (documentation + a nested CLI
+in `cli/`).
 
-Текущая позиция: **overall L0**. Реальный блокер — ось `ci` (vdx не имеет
-GitHub Actions). 5 stack-специфичных осей (tests, static-analysis, code-style,
-dependency-hygiene, mock-infra) корректно получают `drift_kind: excluded` для
-meta-стека и не учитываются в overall. Lifecycle-interface = L2 (3 глагола из
-6: build, test, check — up/down/fix отсутствуют преднамеренно, vdx — не сервис).
+Current position: **overall L0**. The real blocker is the `ci` axis (vdx
+lacked GitHub Actions until step L; the supporting axes still need real
+artifacts). Five stack-specific axes (tests, static-analysis, code-style,
+dependency-hygiene, mock-infra) correctly receive `drift_kind: excluded`
+under the meta stack and don't count toward overall. Lifecycle-interface
+is at L2 (3 of 6 verbs: build, test, check — up/down/fix are absent by
+design, vdx is not a service).
 
-Следующие шаги в `vdx`: настоящие тесты (vitest), CI-workflow, sub-package-aware
-predicates (O31) для аудита nested `cli/` как Node-проекта. Полный список
-открытых вопросов — в [docs/decisions.md](docs/decisions.md) и
-[HANDOFF.md](HANDOFF.md).
+Next steps inside `vdx`: real tests (vitest), CI workflow, and sub-package-aware
+predicates (O31) so the nested `cli/` is audited as a Node project. The
+full list of open questions lives in [docs/decisions.md](docs/decisions.md)
+and [HANDOFF.md](HANDOFF.md).
