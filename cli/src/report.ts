@@ -1,4 +1,15 @@
+import { Marked } from 'marked';
+import { markedTerminal } from 'marked-terminal';
 import type { AuditResult } from './audit.ts';
+
+let terminalMarked: Marked | null = null;
+function getTerminalMarked(): Marked {
+  if (terminalMarked) return terminalMarked;
+  const m = new Marked();
+  m.use(markedTerminal({ reflowText: false, tab: 2 }) as never);
+  terminalMarked = m;
+  return m;
+}
 
 const SYMBOL: Record<string, string> = {
   aligned: '✅',
@@ -46,4 +57,10 @@ export function reportMarkdown(r: AuditResult): string {
 
 export function reportJson(r: AuditResult): string {
   return JSON.stringify(r, null, 2);
+}
+
+export function reportAnsi(r: AuditResult): string {
+  const md = reportMarkdown(r);
+  const out = getTerminalMarked().parse(md) as string;
+  return out.endsWith('\n') ? out : out + '\n';
 }

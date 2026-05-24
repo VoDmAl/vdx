@@ -11,7 +11,7 @@ import {
   renderResolveError,
 } from './run.ts';
 import { audit } from './audit.ts';
-import { reportMarkdown, reportJson } from './report.ts';
+import { reportMarkdown, reportJson, reportAnsi } from './report.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -28,7 +28,7 @@ function usage(): never {
   process.stderr.write(
     `Usage:
   vdx <up|down|build|test|check|fix>     run lifecycle verb (via mise run <verb>)
-  vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--json]
+  vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]
   vdx init    <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
   vdx publish <patch|minor|major> [--dry-run] [--force]
 `,
@@ -88,8 +88,19 @@ function cmdAudit(opts: ParsedArgs): void {
   const baselineRef = manifest?.baseline ?? `file://${rubricPath}`;
   const result = audit(rubric, ctx, overrides, baselineRef, manifest);
 
-  if (opts.flags.json) {
+  const formatFlag =
+    typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
+  const wantJson = opts.flags.json === true || formatFlag === 'json';
+  const wantMarkdown = formatFlag === 'markdown' || formatFlag === 'md';
+  const wantAnsi = formatFlag === 'ansi';
+  const isTty = process.stdout.isTTY === true;
+
+  if (wantJson) {
     process.stdout.write(reportJson(result) + '\n');
+  } else if (wantMarkdown) {
+    process.stdout.write(reportMarkdown(result));
+  } else if (wantAnsi || (isTty && !formatFlag)) {
+    process.stdout.write(reportAnsi(result));
   } else {
     process.stdout.write(reportMarkdown(result));
   }
