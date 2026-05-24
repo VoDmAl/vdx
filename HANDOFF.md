@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–Y: CJM работает — @vodmal/vdx-cli@0.5.0 + lifecycle pass-through + inline marketplace)
+# vdx — Handoff (2026-05-24, после A–Y.4: @vodmal/vdx-cli@0.6.0 — встроенный ANSI-рендер `vdx audit`)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,13 +12,22 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 26 шагов пройдены (A–W + X.1.a/b/c + Y). Owner-рубрика
-на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
-**[@vodmal/vdx-cli@0.5.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
-(опубликован в Шаге Y.1.f, второй dogfood D12 round). DEFAULT_BASELINE
-`@v0.3.1`. **D12 MVP + Y CJM закрыты — `vdx <verb>` работает из любого
-shell, marketplace в этом же репо, skill знает что делать при отсутствии
-verb'а.**
+**Где мы сейчас**: 27 шагов пройдены (A–W + X.1.a/b/c + Y + Y.4). Owner-
+рубрика на **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
+**[@vodmal/vdx-cli@0.6.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(опубликован в Шаге Y.4, третий dogfood D12 round). DEFAULT_BASELINE
+`@v0.3.1`. **D12 MVP + Y CJM закрыты; Y.4 добавил `vdx audit --format=ansi`
+с встроенным ANSI-рендером через marked-terminal (без внешних pipe-tools).**
+
+**Шаг Y.4 (2026-05-24)** — `vdx audit --format=ansi` встроенный TUI-рендер.
+Пользователь после first dogfood `vdx audit .` указал что raw markdown в
+консоли некрасивый. Решение: `marked` + `marked-terminal` внутри CLI,
+**не** внешний glow/mdcat. `reportAnsi()` в `cli/src/report.ts` через
+`new Marked()` instance (singleton `marked` в v15 не аккумулирует
+extensions через `.use()`). `--format=ansi|markdown|json` flag в
+`cmdAudit` + TTY auto-detection: `process.stdout.isTTY && !flag.format`
+→ ANSI; pipe → raw markdown (jq-friendly). +5 unit-тестов (86→91). CLI
+bump **0.5.0 → 0.6.0** опубликован.
 
 **Шаг Y (2026-05-24)** — CJM «зашёл-набрал-`vdx build`» работает
 end-to-end. Три трека:
@@ -140,7 +149,7 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после Y):
+**Следующий шаг** (приоритеты после Y.4):
 - **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
   `publish:tag`, `publish:notes` для granular control.
 - **Шаг X.3 — Phase 2**: PHP (composer.json edit) + Python
@@ -1083,6 +1092,66 @@ L4 (ci, release-artifact, tests L3 close to L4).
 `@v0.2.2` → `@v0.3.1` (был unaligned после Шага S).
 
 Open после Y: см. "Следующий шаг" в TL;DR.
+
+### Шаг Y.4 — `vdx audit --format=ansi` встроенный TUI ✅ (2026-05-24)
+
+После Шага Y пользователь прошёл `npx -y -p @vodmal/vdx-cli vdx audit .`
+и указал что вывод в консоли — raw markdown: `**bold**` со звёздочками,
+таблица pipe-разделённая, headers с `#`. Решено: встроенный ANSI-рендер
+через готовую либу (не внешний glow/mdcat — UX-принцип «один CLI»).
+
+**Изменения**:
+
+- `cli/dependencies` ← `marked@^15`, `marked-terminal@^7`;
+  `cli/devDependencies` ← `@types/marked-terminal`.
+- `cli/src/report.ts`: новая `reportAnsi(result): string` через
+  `new Marked()` instance (lazy, single shared instance) + `.use(markedTerminal({
+  reflowText: false, tab: 2 }))`. Берёт `reportMarkdown(result)` как входной
+  markdown — переиспользует существующий формат без дублирования.
+- Cинглетон `marked` из package в marked@15 НЕ аккумулирует extensions
+  через `.use()` в нашем ESM-setup — `marked.parse(md)` возвращает
+  unchanged text. Решено через `new Marked()` instance per-process,
+  cached в module-level `terminalMarked: Marked | null`.
+- `cli/src/index.ts/cmdAudit`: новый `--format=ansi|markdown|md|json` flag
+  + TTY auto-detection: `if (wantAnsi || (process.stdout.isTTY && !formatFlag)) →
+  reportAnsi`. `--json` сохранён как back-compat alias на `--format=json`.
+  Usage обновлён.
+
+**Эффект на vdx audit .**:
+
+- В живом терминале (TTY): h1 magenta+underline+bold, h2 green+bold,
+  box-drawing таблица через cli-table3 (transitive dep), yellow для
+  `\`code\``, bold для `**class**`.
+- В pipe (`vdx audit . | cat` / `| jq` / `| less`): raw markdown как
+  раньше — chalk auto-disables colors, marked-terminal оставляет
+  pipe-table → не ломает downstream tools.
+- `--json` — `reportJson` без изменений.
+
+**Тестирование**: 5 новых vitest в `cli/tests/unit/report.test.ts`
+(91 total, 86→91): reportMarkdown / reportJson / reportAnsi (ANSI
+escapes under FORCE_COLOR, surfacing level/axis names after stripAnsi,
+box-drawing chars `[─│┌┐└┘├┤┬┴┼]`). `npx tsc --noEmit` чисто. Smoke
+`FORCE_COLOR=1 vdx audit . --format=ansi` на vdx-self — ANSI escapes
+визуально подтверждены (h1 magenta `\x1b[35m\x1b[4m\x1b[1m`, h2 green
+`\x1b[32m\x1b[1m`, table frame `\x1b[90m...\x1b[39m`).
+
+**Гочи** (для следующего агента):
+
+- **marked v15 + marked-terminal v7 несовместимы для singleton** —
+  используй `new Marked()` instance ВСЕГДА. См. `terminalMarked`
+  паттерн в report.ts.
+- **inline `**bold**` внутри bullet'ов не рендерится** marked-terminal v7
+  (известная неполнота); таблицы и headers — корректно. Не блокер для
+  audit-вывода, но юзер может заметить если будет долго смотреть на
+  Overrides секцию (там много bold-фраз).
+- **chalk auto-detects TTY** — `FORCE_COLOR=1` нужен для отладочного
+  pipe-output (или `vitest`'у в process.env).
+
+**CLI bump 0.5.0 → 0.6.0** (новый flag + изменение default = feature).
+Опубликован через `vdx publish minor` (третий round D12 dogfood),
+commit `0b0cdef release: v0.6.0`, tag `v0.6.0`, push сделан.
+
+Open после Y.4: см. "Следующий шаг" в TL;DR.
 
 ---
 

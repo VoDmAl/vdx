@@ -4,6 +4,41 @@
 
 ## 2026-05-24
 
+### Шаг Y.4: `vdx audit --format=ansi` — встроенный TUI-рендер через marked-terminal, @vodmal/vdx-cli@0.6.0
+
+После first dogfood `npx -y -p @vodmal/vdx-cli vdx audit .` (Шаг Y) пользователь
+указал что вывод markdown в консоли некрасивый: raw `**bold**`, pipe-разделённая
+таблица. Решено добавить встроенный ANSI-рендер (внешние pipe-tools типа `glow`
+отвергнуты — UX должен быть «один CLI, всё внутри»).
+
+Изменения:
+
+- **`marked` + `marked-terminal`** добавлены в `cli/dependencies` (+ `@types/marked-terminal`
+  в devDeps). Используется паттерн `new Marked()` (instance), а **не** `marked` singleton —
+  singleton в marked@15 не аккумулирует extensions через `.use()` в нашем ESM-import setup.
+- **`reportAnsi(result)`** в `cli/src/report.ts` использует `reportMarkdown()` как входной
+  markdown, прогоняет через terminal-Marked, возвращает ANSI-разрисованный текст с
+  box-drawing таблицей (через `cli-table3` внутри marked-terminal), цветными headers
+  (chalk.magenta+underline+bold для h1, chalk.green+bold для h2), bold для `**class**`,
+  yellow для `\`code\``.
+- **`--format=ansi|markdown|json`** flag в `cmdAudit` + TTY auto-detection: если
+  `process.stdout.isTTY && !flag.json && !flag.format` → ANSI; иначе raw markdown
+  (pipe-friendly: `vdx audit . | jq` продолжает работать через `--json`).
+  `--json` сохранён как back-compat alias на `--format=json`.
+- **5 unit-тестов** в `cli/tests/unit/report.test.ts` (91 total, 86→91) на
+  reportMarkdown / reportJson / reportAnsi (ANSI-escapes под FORCE_COLOR, box-drawing
+  chars, surfacing level/axis names).
+- **CLI bump 0.5.0 → 0.6.0** (новый flag + изменение default = minor),
+  опубликован через `vdx publish minor` (третий round D12 dogfood).
+
+Гочи:
+- Marked@15 + marked-terminal@7 несовместимы для `marked` singleton — заметно только
+  при ESM-import без явного `new Marked()`. Использовать **только** `new Marked()`.
+- chalk внутри marked-terminal детектит TTY: в pipe-mode colors auto-disabled.
+  Это правильно — `vdx audit . | cat` даёт plain text, не сырые escape sequences.
+- inline `**bold**` внутри bullet'ов marked-terminal v7 не превращает в bold
+  (известная неполнота); таблицы и headers — рендерятся корректно. Не блокер.
+
 ### Шаг Y: CJM «зашёл-набрал-vdx-build» работает — @vodmal/vdx-cli@0.5.0 + inline marketplace + install-docs
 
 Три параллельных трека, закрытых в одной сессии после Шага X.1.c:
