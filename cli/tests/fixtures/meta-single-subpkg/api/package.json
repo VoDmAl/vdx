@@ -1,0 +1,8 @@
+{
+  "name": "fixture-meta-api",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc"
+  }
+}

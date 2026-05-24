@@ -129,14 +129,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   реальной проверки `is_running` (всегда false). По спеке `vdx_up` должен
   poднять shared infra (например Traefik) если `precheck: true`. Нужен механизм:
   HTTP-curl до `healthcheck_url`, либо `mise run up` в директории provider'a.
-- **O29** — Поведение `vdx init` при stack=unknown. Сейчас генерится почти
-  пустой `mise.toml` (`stack="unknown"`, `verbs=[]`) — корректно, но не полезно
-  пользователю: нет mapping'а нативных задач, нет шансов поднять
-  `lifecycle-interface` без ручной правки. Опции: (a) явно прервать с
-  подсказкой передать `--stack <id>`; (b) интерактивный prompt (выбивается из
-  «нет TTY» сценариев MCP); (c) ничего не делать (status quo) — пусть user
-  правит `mise.toml` руками; (d) для stack=meta заюзать специальные `description-only`
-  плейсхолдеры, чтобы хоть verb-имена были видны в AGENTS.md. Связан с O28.
+- ~~**O29**~~ — закрыто Шагом T 2026-05-24 (см. N30).
 - **O32** — Multi-subpackage monorepo (разные стеки в разных папках). Шаг K
   закрыл O31 одним полем `primary_subpackage` — но это **одно** subpackage на
   проект. Для гибрида типа `php-api/ + node-web/` (где tests/static-analysis
@@ -168,6 +161,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O33 | Шаг O 2026-05-23 — `stackForDir` экспортирован из `facts.ts`. В `resolveSubpackageCtx` (`audit.ts`): для explicit `primary_subpackage` теперь detect actual stack subpackage'a; для auto-resolve добавлен fallback "если ровно один subpackage с любым стеком — adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (а не наследуется от root). В audit loop проверка `applies_to` сравнивается с `evalCtx.stack` (не `ctx.stack`). Эффект на vdx: 5 stack-осей больше не `excluded` — оцениваются по cli/ (static-analysis L0→**L2**, dependency-hygiene/mock-infra L0→**L1**, tests/code-style правдиво L0). Overall vdx L0→L0 (теперь capping на tests=C L0, не маска). Smoke на 3 референсах без регрессий. См. N25. |
 | O34 | Шаг R 2026-05-24 — Добавлена ось `release-artifact` (supporting, `applies_to: [node, php, ruby, python]`) в canonical-рубрику v0.3.0. L1: required-поля (name+version+license / name+license). L2: + description+repository+LICENSE. L3: + files+entry-point / autoload+type. L4: + publishConfig+homepage+bugs / extra.publish. Эффект на vdx: release-artifact L4 на cli subpackage (cli уже publish-ready). Эффект на референсы: telegram L2→L1 регрессия (PHP app не publish-ready) — fair signal, design issue открыт как O35. См. N28. |
 | O35 | Шаг S 2026-05-24 — В `Axis` добавлено optional поле `applies_when: <Predicate>`. В `audit.ts` после `applies_to`-фильтра evaluator проверяет `applies_when` относительно `evalCtx`; если predicate=false → `drift_kind: excluded` (та же семантика, что и `applies_to`-non-match). Применено к `release-artifact` в canonical-рубрике v0.3.1: any_of [Node lib signal (НЕ private + bin/main/exports/module/publishConfig), PHP lib signal (composer.json + name + type≠project)]. Эффект на референсы: telegram восстановлен L1→**L2** (release-artifact теперь excluded, capping вернулся к ci), t23b/bookmap unchanged. Эффект на vdx-cli (subpackage): release-artifact остаётся L4. См. N29. |
+| O29 | Шаг T 2026-05-24 — `vdx init` получил три улучшения: (a) опциональный override `--stack <id>` (`planInit({stack})`), (b) для `stack=meta` авто-резолв `primary_subpackage` через `findSubPackages()` если найден ровно один nested manifest + scanning тасков и tools на subpackage-ctx, (c) ясные warnings в STDERR + TODO-комментарий в сгенерированный `mise.toml` при stack=unknown/monorepo без override. `InitPlan` расширен полями `stackOverridden`/`primarySubpackage`/`warnings`. Для meta runCommand префиксится `cd <subpackage> &&`. Smoke: vdx (как meta) генерит `primary_subpackage="cli"` + `run = "cd cli && npm run test"`. См. N30. |
 
 ---
 
@@ -861,3 +855,62 @@ secrets-config). Решено НЕ делать сейчас по принцип
 только одна ось требует app/lib различения, predicate-based
 гейтинг компактнее. Если появится 2+ оси с тем же требованием —
 вынести в `project_kind` факт.
+
+**N30 — Шаг T: O29 закрыт через `vdx init --stack` + meta-subpackage handling (2026-05-24).**
+
+Три изменения в `cli/src/init.ts` + `cli/src/index.ts`:
+
+1. **`planInit(projectRoot, { stack?, baseline? })`** — добавлен
+   optional `stack` override. CLI: `vdx init <path> --stack <id>`.
+   Когда задан И отличается от `autoDetectStack` → ставится
+   `stackOverridden: true`, warnings подавляются (вы знаете, что
+   делаете).
+
+2. **`stack=meta` ветка** — при detected/forced `meta` вызывается
+   `findSubPackages(projectRoot)`:
+   - Ровно 1 subpackage → ставится `primarySubpackage`, scanning
+     тасков (`listAllTasks`) и pkgManager-detection идут на
+     subpackage-ctx (`scanRoot = projectRoot/subpkg`), `scanStack`
+     = subpackage'a stack. В `[vdx]` блок mise.toml записывается
+     `primary_subpackage = "..."`. `runCommand` для каждого verb
+     префиксится `cd <subpkg> &&` (через helper
+     `renderRunCommandInSubpackage`).
+   - 0 subpackages → warning "stack=meta, nested manifest не найден".
+   - >1 subpackages → warning со списком, primary не выбран.
+
+3. **Warnings + TODO comment** — при detected `unknown`/`monorepo`
+   без override planInit добавляет warnings в `InitPlan.warnings`.
+   `renderMiseToml` для этих stack'ов вставляет TODO-комментарий
+   перед `[vdx]` блоком. `cmdInit` печатает warnings в STDERR.
+
+`InitPlan` интерфейс расширен полями: `stackOverridden: boolean`,
+`primarySubpackage: string | null`, `warnings: string[]`.
+
+**Smoke verified**:
+
+| сценарий | результат |
+|----------|-----------|
+| `vdx init /tmp/empty` | stack=unknown, warning, TODO в mise.toml, verbs=[] |
+| `vdx init /tmp/empty --stack node` | stack=node, no warning, no TODO, verbs=[] (пустая дир) |
+| `vdx init <repo> --stack meta` (с single subpkg) | stack=meta, primary_subpackage=cli, runCommand=`cd cli && npm run test`, verbs=["test"] |
+
+**Тесты**: 5 новых unit-тестов в `cli/tests/unit/init.test.ts`:
+- unknown без override → warning + TODO
+- unknown + override → no warning
+- meta + empty → warning "nested manifest не найден"
+- meta + single subpkg фикстура (`meta-single-subpkg/api`) →
+  primary_subpackage + `cd api && ...` runCommand
+- regression: node fixture без override работает как раньше
+
+Все 57 тестов (52 + 5 init) проходят.
+
+**Дизайн-выбор `cd <subpkg> &&` для meta runCommand**:
+Альтернатива `mise run -C <subpkg>` требует `mise.toml` в subpkg —
+нет смысла дублировать. `cd && ...` — universal, работает с любым
+shell-runner'ом mise (default sh).
+
+**Альтернатива не выбрана — интерактивный prompt при unknown**:
+plan'ировался как опция (b) в O29, но отвергнут потому что vdx
+запускается в MCP/CI без TTY. Warning-and-continue даёт worka из
+обеих сторон: user видит сигнал, autonomous-сценарий получает stub
+для дальнейшего ручного редактирования.

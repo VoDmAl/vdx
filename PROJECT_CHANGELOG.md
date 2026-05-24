@@ -4,6 +4,23 @@
 
 ## 2026-05-24
 
+### Шаг T: O29 закрыт — `vdx init` для unknown/meta стеков
+Три улучшения в `cli/src/init.ts` + `cli/src/index.ts`:
+
+- **`--stack <id>` override** в CLI и `planInit({ stack })` —
+  подавляет detection warnings когда stack явный.
+- **`stack=meta` ветка** auto-resolve'ит `primary_subpackage` через
+  `findSubPackages()` (когда ровно один subpackage), сканит таски на
+  subpackage-ctx, префиксит `runCommand` через `cd <subpkg> &&`.
+- **Warnings + TODO comment** для detected `unknown`/`monorepo` без
+  override: `InitPlan.warnings` печатается в STDERR, `mise.toml`
+  получает `# TODO(vdx): ...` перед `[vdx]` блоком.
+
+Smoke verified: vdx как meta → `primary_subpackage="cli"` +
+`run = "cd cli && npm run test"`. 5 новых unit-тестов в
+`cli/tests/unit/init.test.ts` + фикстура `meta-single-subpkg/api/`.
+57/57 тестов проходят. См. N30 в [docs/decisions.md](docs/decisions.md).
+
 ### Шаг S: O35 закрыт — `applies_when`, рубрика v0.3.1
 В `Axis` добавлено optional поле `applies_when: <Predicate>` (`cli/src/rubric.ts`).
 Evaluator (`cli/src/audit.ts`) после `applies_to`-фильтра проверяет

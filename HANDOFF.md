@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–S: рубрика v0.3.1 + applies_when)
+# vdx — Handoff (2026-05-24, после A–T: рубрика v0.3.1 + vdx init --stack/meta)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,9 +12,11 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 18 шагов (A–S) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1** (Шаг S — `applies_when`
-predicate, lib vs app detection для release-artifact). CLI на npm как
+**Где мы сейчас**: 19 шагов (A–T) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1** (Шаг S — `applies_when`).
+Шаг T (2026-05-24) починил `vdx init` для unknown/meta стеков:
+optional `--stack <id>` override + auto-resolve `primary_subpackage`
+для meta + warnings/TODO для unknown. CLI на npm как
 **[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
 (bundled rubric в опубликованном пакете всё ещё v0.2.2 — не критично,
 DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub).
@@ -49,15 +51,14 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после S):
+**Следующий шаг** (приоритеты после T):
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
-- **O29** — поведение `vdx init` при unknown/meta.
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
 - **supporting L2** (отложено) — prettier+eslint, engines.node, etc.
 - **republish CLI** — bundled rubric в опубликованном пакете всё ещё
-  v0.2.2; чтобы клиенты получали v0.3.1 ось `release-artifact` +
-  `applies_when`, нужен bump cli версии и npm publish. Не критично —
+  v0.2.2; чтобы клиенты получали v0.3.1 ось + `vdx init --stack`,
+  нужен bump cli версии и npm publish. Не критично —
   DEFAULT_BASELINE уже на @v0.3.1 и резолвится через GitHub.
 
 ---
@@ -531,6 +532,49 @@ Open после Шага S:
 - **republish CLI** — bundled rubric в опубликованном пакете всё ещё
   v0.2.2; для прямого доступа клиентов через `npx -y -p @vodmal/vdx-cli`
   без сети нужен bump cli и npm publish.
+
+### Шаг T — `vdx init` для unknown/meta стеков (O29 закрыт) ✅ (2026-05-24)
+
+Три улучшения в `cli/src/init.ts` + `cli/src/index.ts`:
+
+1. **`--stack <id>` override** — `planInit` принимает opt `stack`,
+   CLI парсит `--stack`. Когда задан, `stackOverridden=true`,
+   detection-warnings подавляются.
+
+2. **`stack=meta` ветка с auto-resolve `primary_subpackage`** —
+   `findSubPackages(projectRoot)`: при ровно одном subpackage
+   `planInit` ставит `primarySubpackage` + сканит таски/tools
+   на subpackage-ctx (`scanRoot = projectRoot/subpkg`).
+   `runCommand` префиксится `cd <subpkg> &&` через helper
+   `renderRunCommandInSubpackage`. В `[vdx]` блок пишется
+   `primary_subpackage = "..."`. 0 subpackages / >1 → warning.
+
+3. **Warnings + TODO comment** — для detected `unknown`/`monorepo`
+   без override planInit заполняет `InitPlan.warnings`,
+   `renderMiseToml` вставляет `# TODO(vdx): ...` перед `[vdx]`,
+   `cmdInit` печатает warnings в STDERR.
+
+`InitPlan` расширен полями `stackOverridden`, `primarySubpackage`,
+`warnings`.
+
+**Smoke verified**:
+
+| сценарий | результат |
+|----------|-----------|
+| `vdx init <empty>` | stack=unknown, warning, TODO в mise.toml |
+| `vdx init <empty> --stack node` | stack=node, no warning, no TODO |
+| `vdx init <repo> --stack meta` (single subpkg) | primary_subpackage=cli + `cd cli && npm run test` |
+
+5 новых unit-тестов в `cli/tests/unit/init.test.ts` + новая
+фикстура `tests/fixtures/meta-single-subpkg/api/package.json`.
+Все 57 тестов (52 + 5) проходят.
+
+Open после Шага T:
+- **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
+- **O26/O27** — TOML round-trip, shared-infra precheck.
+- **O32** — multi-subpackage (отложено).
+- **supporting L2** — отложено, см. TL;DR.
+- **republish CLI** — bundled rubric v0.2.2 в npm-пакете.
 
 ---
 

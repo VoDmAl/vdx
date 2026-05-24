@@ -14,7 +14,7 @@ function usage(): never {
   process.stderr.write(
     `Usage:
   vdx audit <project_path> [--rubric <path>] [--stack <stack>] [--json]
-  vdx init  <project_path> [--baseline <ref>] [--dry-run] [--force]
+  vdx init  <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
 `,
   );
   process.exit(1);
@@ -86,9 +86,18 @@ function cmdInit(opts: ParsedArgs): void {
 
   const baselineFlag = opts.flags.baseline;
   const baseline = typeof baselineFlag === 'string' ? baselineFlag : undefined;
-  const plan = planInit(projectRoot, baseline ? { baseline } : {});
+  const stackFlag = opts.flags.stack;
+  const stackOverride = typeof stackFlag === 'string' ? stackFlag : undefined;
+  const plan = planInit(projectRoot, {
+    ...(baseline ? { baseline } : {}),
+    ...(stackOverride ? { stack: stackOverride } : {}),
+  });
 
   process.stdout.write(renderPlanSummary(plan));
+
+  for (const w of plan.warnings) {
+    process.stderr.write(`\n⚠ ${w}\n`);
+  }
 
   if (opts.flags['dry-run']) {
     process.stderr.write('\n[dry-run] mise.toml / AGENTS.md не записаны.\n');
