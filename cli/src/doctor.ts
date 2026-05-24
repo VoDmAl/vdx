@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 export type CheckStatus = 'ok' | 'warning' | 'missing';
@@ -15,10 +16,25 @@ export interface CheckResult {
 }
 
 export interface DoctorReport {
+  cliVersion: string;
   checks: CheckResult[];
   ok: number;
   warning: number;
   missing: number;
+}
+
+function readCliVersion(): string {
+  try {
+    const pkgPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      'package.json',
+    );
+    const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return raw.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 function probeVersion(binary: string, args: string[] = ['--version']): string | null {
@@ -187,7 +203,9 @@ function checkVdxOnPath(): CheckResult {
       label: 'vdx install',
       status: 'ok',
       level: 3,
-      message: `via npx cache: ${found} (ephemeral; fine for npx-only workflows — always latest)`,
+      message:
+        `via npx cache: ${found} — invoked-only (shell command \`vdx\` will not resolve outside npx). ` +
+        `For shell-global command run: npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx".`,
     };
   }
   if (ephemeral === 'local-bin') {
@@ -261,7 +279,7 @@ export function runDoctor(): DoctorReport {
   const ok = checks.filter((c) => c.status === 'ok').length;
   const warning = checks.filter((c) => c.status === 'warning').length;
   const missing = checks.filter((c) => c.status === 'missing').length;
-  return { checks, ok, warning, missing };
+  return { cliVersion: readCliVersion(), checks, ok, warning, missing };
 }
 
 const PROJECT_MARKER_FILES = [
