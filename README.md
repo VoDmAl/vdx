@@ -103,6 +103,9 @@ Manifest-ссылки в проектах вида `baseline: github.com/VoDmAl/
 - **Шаг N** — CLI выложен на npm как
   **[@vodmal/vdx-cli](https://www.npmjs.com/package/@vodmal/vdx-cli)**;
   плагин теперь marketplace-ready (`npx -y -p @vodmal/vdx-cli@latest vdx-mcp`).
+- **Шаг O** — O33 закрыт (subpackage stack lift): для осей с `applies_to`
+  evaluator теперь использует stack subpackage'a, а не root. Для vdx
+  снимает маску `excluded` с 5 stack-осей → честная оценка (CLI v0.2.1).
 
 ### Research-артефакты
 | Артефакт | Файл | Статус |

@@ -4,6 +4,20 @@
 
 ## 2026-05-23
 
+### Шаг O: O33 закрыт — subpackage stack lift для applies_to-осей (@vodmal/vdx-cli@0.2.1)
+`stackForDir` экспортирован из `cli/src/facts.ts`. В `resolveSubpackageCtx`
+(`cli/src/audit.ts`): для explicit `primary_subpackage` detect actual stack
+subpackage'a; для auto-resolve добавлен fallback "если ровно один subpackage
+с любым стеком — adopt его". Возвращаемый `subpackageCtx.stack` = stack
+subpackage'a (а не наследуется от root). Проверка `applies_to` в audit loop
+теперь сравнивается с `evalCtx.stack`. Эффект на vdx-self-audit: 5
+stack-осей больше не excluded — static-analysis L0→**L2**, dependency-hygiene/
+mock-infra L0→**L1**, tests/code-style **L0** правдиво (нет vitest/eslint).
+Overall vdx L0→L0, но capping переехал с 4 supporting-L0 на критическую
+tests=L0 — **fix integrity**, не лифт. CLI bump v0.2.0→v0.2.1. Smoke на 3
+референсах без регрессий. См. [docs/decisions.md](docs/decisions.md) N25 +
+закрытие O33.
+
 ### Шаг N: CLI выложен на npm как @vodmal/vdx-cli@0.2.0
 TypeScript CLI вынесен в публикуемый npm-пакет с bin entries (`vdx`, `vdx-mcp`).
 `tsx` переехал в `dependencies` + `bin/*.cjs` обёртки регистрируют ESM-loader

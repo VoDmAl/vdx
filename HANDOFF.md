@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-23, после A–N: CLI выложен на npm)
+# vdx — Handoff (2026-05-23, после A–O: O33 закрыт, CLI v0.2.1)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,42 +12,45 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 14 шагов (A–N) пройдены. Owner-рубрика на
-**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2** (push'нут 2026-05-23).
-Evaluator дотюнен (D), `vdx init` (E), MCP-сервер (F), Claude Code плагин
-(G), догфудинг (H), monorepo detector (I), `applies_to` filter (J),
-`primary_subpackage` (K), CI workflow (L), node matrix L4 (M).
-**Шаг N**: CLI выложен на npm как
-**[@vodmal/vdx-cli@0.2.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**.
-`tsx` переехал в `dependencies` + bin-wrappers (`bin/*.cjs` с
-`tsx/esm/api.register()` БЕЗ namespace), bundled рубрика в `cli/rubric/`
-снимает зависимость от локального canonical-репо.
-`plugin/.mcp.json` переключён с хардкод-пути на
-`npx -y -p @vodmal/vdx-cli@latest vdx-mcp` — **плагин marketplace-ready**.
+**Где мы сейчас**: 15 шагов (A–O) пройдены. Owner-рубрика на
+**github.com/VoDmAl/vdx-rubric-vodmal@v0.2.2**, CLI на npm как
+**[@vodmal/vdx-cli@0.2.1](https://www.npmjs.com/package/@vodmal/vdx-cli)**
+(Шаг N — публикация v0.2.0 marketplace-ready, Шаг O — O33-фикс v0.2.1).
 
-vdx сейчас: stack=meta, 5 stack-осей excluded, lifecycle L2, **ci L4**,
-overall **L0** (capping на 4 supporting-L0: reproducibility/secrets-config/
-shared-infra/shared-infra-drift — meta-репо буквально не имеет docker/.env/
-compose, это правдивая оценка).
+**Шаг O / O33-fix**: `stackForDir` экспортирован из `facts.ts`. В
+`resolveSubpackageCtx` для explicit `primary_subpackage` detect actual stack
+subpackage'a; для auto-resolve "если ровно один subpackage с любым стеком —
+adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (не
+наследуется). Проверка `applies_to` в audit loop сравнивается с
+`evalCtx.stack`. Это **fix integrity**, не лифт оценки.
 
-**Следующий шаг** (приоритеты после N):
-- **O33** (новое из Шага N) — subpackage с другим стеком должен contribut'ить
-  applies_to-осям parent'а. Сейчас `cli/`-тесты не подтянут vdx-tests
-  потому что excluded по meta до подмены ctx. Откладывается — без этого
-  excluded — правдивое состояние.
-- **O34** (новое из Шага N) — новая ось рубрики `release-artifact`
-  (publish-readiness: name/version/license/repository/bin/publishConfig/
-  registry-resolves). vdx сам бы выиграл от этой оси.
-- **L1 overall для vdx** — самая близкая планка. Опции: Dockerfile/Makefile
-  (reproducibility L1), `.env.example` (secrets-config L2), override
-  через `.vdx-overrides.yml` для shared-infra. Альтернатива: принять L0
-  как честную meta-оценку.
+vdx сейчас: stack=meta, lifecycle L2, **ci L4**, overall **L0**. Per-axis
+после O33:
+- tests **L0** (раньше excluded — теперь правдивая критическая планка)
+- static-analysis **L2** (tsc strict через cli/)
+- dependency-hygiene **L1** (lockfile)
+- mock-infra **L1**
+- code-style L0, reproducibility L0, secrets-config L0, shared-infra L0,
+  shared-infra-drift L0 — supporting-L0 без real artefacts.
+
+Overall capping переехал с "4 supporting-L0" на "tests=C L0 + supporting" —
+после Шага N оценка vdx стала **жёстче и честнее**: чтобы поднять до L1,
+нужны реальные тесты (vitest), а не 1-2 supporting-фикса.
+
+**Следующий шаг** (приоритеты после O):
+- **vitest на evaluator** — теперь критический для L1 overall (с O33 он
+  будет считаться). Цель: tests L0 → L1 (наличие `tests/` или
+  `package_present: vitest` в cli/).
+- **O34** — новая ось рубрики `release-artifact` (publish-readiness:
+  name/version/license/repository/bin/publishConfig/registry-resolves).
+  vdx сам бы выиграл от этой оси. Bump до v0.3.0.
+- **supporting лифт** — `.env.example` (secrets-config L2), Dockerfile/
+  Makefile (reproducibility L1), override через `.vdx-overrides.yml` для
+  shared-infra (meta не имеет).
 - **O29** — поведение `vdx init` при unknown/meta (редкий случай).
 - **O25/O26/O27** — известны ранее (mock-infra delta-trap, TOML round-trip,
   shared-infra precheck).
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
-- Альтернатива: vitest на evaluator (без эффекта на overall пока O33 не
-  решён — но самоценно как надёжность).
 
 ---
 
@@ -304,13 +307,50 @@ vdx: `ci` L3 → **L4** (предикат `file_contains: matrix:` совпад�
 
 Открыто после Шага N:
 - **O33** — subpackage с другим стеком должен contributить applies_to-осям
-  parent'а. Текущая `audit.ts:99` проверка `excluded` стоит до подмены
-  `subpackageCtx`, и `subpackageCtx.stack` наследует `ctx.stack`. Симптом:
-  vdx (stack=meta) + `primary_subpackage=cli` НЕ получит лифт по
-  cli-tests/static-analysis. См. N24.
+  parent'а (закрыто в Шаге O — см. ниже).
 - **O34** — новая ось рубрики `release-artifact` (publish-readiness):
   name/version/license/repository/bin/publishConfig/files + registry-
   resolves. vdx-как-проект сам бы выиграл от этой оси. См. N24.
+
+### Шаг O — O33 закрыт (subpackage stack lift), @vodmal/vdx-cli@0.2.1 ✅ (2026-05-23)
+
+Изменения в evaluator:
+
+- `cli/src/facts.ts`: `stackForDir` экспортирован (был private).
+- `cli/src/audit.ts/resolveSubpackageCtx`:
+  - для explicit `primary_subpackage` — detect actual stack через
+    `stackForDir(abs_path)`;
+  - для auto-resolve — fallback "если `matching` пуст и `subs.length === 1`,
+    adopt single subpackage с любым стеком";
+  - возвращаемый `subpackageCtx.stack` = stack subpackage'a (а не наследует
+    от root).
+- `cli/src/audit.ts` audit loop: `evalCtx` определяется первым, проверка
+  `applies_to` сравнивается с `evalCtx.stack` (не `ctx.stack`).
+
+CLI bump v0.2.0 → **v0.2.1**, опубликован на npm.
+
+vdx-self-audit ДО → ПОСЛЕ:
+
+| Ось | До O33 | После O33 |
+|-----|:--:|:--:|
+| tests (C) | excluded | **L0** (правдиво — нет vitest) |
+| static-analysis (C) | excluded | **L2** (tsc strict в cli/) |
+| code-style (S) | excluded | L0 |
+| dependency-hygiene (S) | excluded | **L1** (lockfile) |
+| mock-infra (S) | excluded | **L1** |
+| overall | L0 (4 supporting capping) | L0 (tests=C + supporting capping) |
+
+**Семантика**: O33 — не лифт, а **fix integrity**. Маска `excluded` снята,
+появилась реальная критическая планка `tests=L0`. Путь к L1 теперь требует
+real tests (vitest), не 1-2 supporting-фикса. Smoke на 3 референсах без
+регрессий. См. N25.
+
+Open после Шага O:
+- **O34** — release-artifact ось (см. N24).
+- **vitest** — критический для L1 (раньше excluded, теперь tests=C L0).
+- **supporting лифт** — .env.example / Dockerfile / shared-infra override.
+- **O25/O26/O27/O29** — ранее известные.
+- **O32** — multi-subpackage (отложено).
 
 ---
 

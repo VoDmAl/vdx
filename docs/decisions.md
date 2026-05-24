@@ -144,18 +144,6 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
   `[vdx.subpackages] tests = "php-api"`; (c) принять как ограничение —
   multi-stack monorepo использует override на оси. Реальных пользователей с
   таким раскладом пока нет — отложено до появления.
-- **O33** — Sub-package с другим стеком должен влиять на applies_to-оси
-  parent'а. Текущая логика в `audit.ts` (~line 99): `if axis.applies_to and
-  ctx.stack not in applies_to: excluded`. Эта проверка стоит **до** подмены
-  `subpackageCtx`, и `subpackageCtx.stack` наследуется от root (`ctx.stack`).
-  Симптом: vdx (stack=meta) с `primary_subpackage=cli` НЕ получает оценку
-  `tests` от cli/ — она excluded по meta до того, как evaluator видит, что
-  cli/ — это node. Опции: (a) проверять applies_to против `subpackage.stack`
-  если есть match; (b) подменять `stack` в subpackageCtx; (c) ввести явное
-  поле `[vdx].subpackage_stack` в манифесте. Связано с O32 (multi-subpackage)
-  — оба про contributing-stack. Решение откладывается до момента, когда
-  станет нужен реальный лифт overall — без него `excluded` это **правдивая**
-  оценка vdx-как-целого meta-репо. Найдено в Шаге N (см. N24).
 - **O34** — Новая ось рубрики `release-artifact` (publish-readiness).
   Наблюдение из Шага N: подготовка `cli/` к публикации в npm добавила набор
   атрибутов (`name`, `version`, `license`, `repository`, `bin`,
@@ -187,6 +175,7 @@ Owner-baseline = отдельный git-репозиторий (`vdx-rubric-vodm
 | O28 | Шаг I 2026-05-23 — `autoDetectStack` в `facts.ts` теперь делает root-first + depth-1 scan; новая функция `findSubPackages` возвращает массив `{relPath, stack}`. См. N19. **Частично**: для оценки nested manifest'ов в предикатах нужен O30 (sub-package-aware predicates). |
 | O30 | Шаг J 2026-05-23 — Добавлен `applies_to: [stack-id, ...]` filter на ось в спеке рубрики (v0.2.2). Если задан и `ctx.stack` не в списке — ось получает `drift_kind: excluded`, не учитывается в overall scoring. 5 осей помечены `[php, node, go, python]`: tests, static-analysis, code-style, dependency-hygiene, mock-infra. См. N20. **Частично**: остаётся (b) — sub-package-aware predicate evaluation для случая stack=node + nested manifest. Открыто как **O31**. |
 | O31 | Шаг K 2026-05-23 — Добавлено поле `[vdx].primary_subpackage` в манифест проекта. В `audit.ts` для осей с `applies_to` evaluator подменяет `ctx.projectRoot` на subpackage (explicit-from-manifest или auto-resolve через `findSubPackages()` когда ровно один subpackage совпадает с `ctx.stack`). Owner-рубрика остаётся stack-agnostic. См. N21. **Полностью**: остаточный кейс multi-subpackage monorepo (разные стеки в разных папках) выделен в **O32**. |
+| O33 | Шаг O 2026-05-23 — `stackForDir` экспортирован из `facts.ts`. В `resolveSubpackageCtx` (`audit.ts`): для explicit `primary_subpackage` теперь detect actual stack subpackage'a; для auto-resolve добавлен fallback "если ровно один subpackage с любым стеком — adopt его". Возвращаемый `subpackageCtx.stack` = stack subpackage'a (а не наследуется от root). В audit loop проверка `applies_to` сравнивается с `evalCtx.stack` (не `ctx.stack`). Эффект на vdx: 5 stack-осей больше не `excluded` — оцениваются по cli/ (static-analysis L0→**L2**, dependency-hygiene/mock-infra L0→**L1**, tests/code-style правдиво L0). Overall vdx L0→L0 (теперь capping на tests=C L0, не маска). Smoke на 3 референсах без регрессий. См. N25. |
 
 ---
 
@@ -603,3 +592,43 @@ line install через `~/.claude/settings.json` без локальной ко
 Open после Шага N: **O33** (subpackage stack lift для applies_to-осей) и
 **O34** (release-artifact ось). Audit vdx не изменился (overall L0,
 14 осей те же значения) — publish не трогает рубрику.
+
+**N25 — Шаг O: O33 закрыт через stack lift в subpackage-ctx (2026-05-23).**
+Изменения в `cli/src/`:
+
+1. `facts.ts`: `stackForDir(dir)` экспортирован (был private).
+2. `audit.ts/resolveSubpackageCtx`:
+   - explicit `primary_subpackage`: detect actual stack через `stackForDir(abs)`;
+   - auto-resolve: если matching по `ctx.stack` пуст и `subs.length === 1` —
+     adopt single subpackage любого стека (новая логика O33);
+   - возвращаемый `subpackageCtx.stack` = stack subpackage'a (не root).
+3. `audit.ts` loop: `evalCtx` определяется первым, проверка `applies_to`
+   сравнивается с `evalCtx.stack` (а не `ctx.stack`).
+
+**vdx-self-audit ДО → ПОСЛЕ:**
+
+| Ось | До O33 | После O33 |
+|-----|:--:|:--:|
+| tests (C) | excluded | **L0** (gap, правдиво — нет vitest) |
+| static-analysis (C) | excluded | **L2** (tsc strict в cli/) |
+| code-style (S) | excluded | L0 (нет eslint/prettier) |
+| dependency-hygiene (S) | excluded | **L1** (lockfile есть) |
+| mock-infra (S) | excluded | **L1** |
+| overall | L0 (4 supporting capping) | L0 (tests=C + supporting capping) |
+
+**Семантический сдвиг**: O33 — это не лифт оценки, а **fix integrity**.
+До: 5 осей маскировались `excluded`, не учитывались в scoring → overall L0
+capping был на 4 supporting-L0. После: маска снята, появилась реальная
+критическая планка `tests=L0` (которая до этого была невидима). Путь к
+L1 overall теперь требует реальные тесты (vitest), а не просто 1-2
+supporting-фикса. Это правильная семантика — рубрика должна быть честной.
+
+Smoke на 3 референсах без регрессий (telegram L2 / t23b L1 / bookmap L1).
+Каждый из этих проектов имеет manifest в корне → ctx.stack === root, нет
+nested subpackages → нечего lift'ить.
+
+Edge case (потенциальная регрессия): репо с manifest в корне + один
+nested subpackage с другим стеком. До O33: applies_to-оси оценивались
+на root (где manifest есть). После O33: всё ещё на root (так как `matching
+=== 1` срабатывает первым — есть match по ctx.stack). Логика "adopt
+single non-matching subpackage" работает только когда matching пуст. ОК.
