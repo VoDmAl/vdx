@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-05-24, после A–W: O39 закрыт — `vdx init` transparency + monorepo fallback)
+# vdx — Handoff (2026-05-24, после A–X.1.a: D12 MVP plan + pre-flight приземлились)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -12,10 +12,22 @@
 + исполняемый манифест для AI-агента. Свой код только в 4 пунктах ядра
 (см. [README.md](README.md)).
 
-**Где мы сейчас**: 22 шага (A–W) пройдены. Owner-рубрика на
+**Где мы сейчас**: 23 шага пройдены (A–W + X.1.a). Owner-рубрика на
 **github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1**. CLI на npm как
 **[@vodmal/vdx-cli@0.3.0](https://www.npmjs.com/package/@vodmal/vdx-cli)**
 (Шаг U). DEFAULT_BASELINE `@v0.3.1`.
+
+**Шаг X.1.a (2026-05-24)** — D12 MVP первая часть: `vdx publish
+<patch|minor|major>` + 4 pre-flight check'а + рендер plan. **Без**
+execute pipeline (npm publish + git commit/tag) — это X.1.b.
+Файлы: `cli/src/publish.ts` (~270 строк), `cli/tests/unit/publish.test.ts`
+(11 кейсов), dispatch в `index.ts`. Pre-flight: working-tree-clean,
+lib-intent (applies_when), release-artifact ≥ L3, registry-collision
+(`npm view <pkg> version`). `[tasks.publish]` в mise.toml →
+**delegating to mise** (D3 escape hatch). Effective stack резолвится
+через `primary_subpackage` — vdx root (meta) корректно publish'нул бы
+cli/ как Node. Security: `execFileSync` (argv-array, без shell-injection).
+76 тестов проходят (65→76).
 
 **Шаг W (2026-05-24)** — `vdx init` transparency + monorepo fallback
 (O39 закрыт). Догфудинг на 3 калибровочных проектах показал что эвристика
@@ -84,13 +96,17 @@ Critical min L2 ≥ L1. **Overall L1**. Две оси на L4 (ci, release-artif
 mock-infra L2 = 2/7 = 0.29). Это сильно больше работы — prettier+eslint,
 engines.node на root, стабильный mock-infra на Linux. Отложено.
 
-**Следующий шаг** (приоритеты после W):
-- **Шаг X — D12 MVP implementation**: `vdx publish [patch|minor|major]`
-  для **Node only** (dogfooding на @vodmal/vdx-cli). Включает: subverb
-  registry, pre-flight gating через рубрику, transactional pipeline,
-  warning-default `git.head_commit != tag` check, `--force` opt-out.
-- **Шаг Y — D12 Phase 2**: PHP + Python implementations.
-- **Шаг Z — D12 Phase 3**: Cargo/Ruby/Go/Java.
+**Следующий шаг** (приоритеты после X.1.a):
+- **Шаг X.1.b — D12 execute pipeline**: реальный bump (`package.json
+  version = newVersion`) → `npm publish` (irreversible — first) →
+  `git add package.json && git commit -m "release: vX.Y.Z" && git tag
+  -a vX.Y.Z`. Без push (это решение пользователя). На неудаче
+  `npm publish` — revert package.json.
+- **Шаг X.2 — Subverbs**: `publish:bump`, `publish:upload`,
+  `publish:tag`, `publish:notes` для granular control.
+- **Шаг X.3 — Phase 2**: PHP (composer.json edit + `composer config
+  version`) + Python (`pyproject.toml`).
+- **Шаг X.4 — Phase 3**: Cargo/Ruby/Go/Java.
 - **O25** — mock-infra delta-trap (Node-проекты с docker-mock).
 - **O26/O27** — TOML round-trip, shared-infra precheck.
 - **O32** — multi-subpackage monorepo (отложено до реальных пользователей).
@@ -758,6 +774,61 @@ monorepo, shortest-wins, not-found, integration на новой фикстуре
 CLI не нужен до Шага X (D12 MVP).
 
 Open после Шага W: см. "Следующий шаг" в TL;DR.
+
+### Шаг X.1.a — `vdx publish` plan + pre-flight (без execute) ✅ (2026-05-24)
+
+Первая часть D12 MVP. Делает `vdx publish <patch|minor|major>`
+рабочим **до** уровня вывода plan + 4 pre-flight check'а. Pipeline
+(npm publish + git ops) приземлится в **X.1.b**. Разделение
+сознательно — позволяет руками проверить план перед irreversible-
+операцией.
+
+**Файлы**:
+
+- `cli/src/publish.ts` (~270 строк): `bumpSemver`, `compareSemver`,
+  `planPublish`, `renderPublishPlan`, helpers.
+- `cli/src/index.ts`: `cmdPublish` + dispatch + usage update.
+- `cli/tests/unit/publish.test.ts`: 11 кейсов (bump/compare/plan
+  pre-flight/render).
+
+**Pre-flight checks (4 шт)**:
+
+1. **working-tree-clean** — `git status --porcelain` через
+   `execFileSync` (argv-array, без shell-injection).
+2. **lib-intent (applies_when)** — release-artifact ось не должна
+   быть `excluded` (это значило бы `applies_when=false`,
+   то есть проект — app, не lib).
+3. **release-artifact ≥ L3** — нужны publishable metadata
+   (files[], main/exports, license).
+4. **registry-collision** — `npm view <pkg> version` → новый bump
+   должен быть строго выше уже опубликованного. 404 = first publish
+   (OK). Сетевые/auth ошибки → fail с сообщением.
+
+**Mise override** (D3 escape hatch): если в `mise.toml` есть секция
+`[tasks.publish]` — plan возвращает `delegatedToMise: true` без
+vdx-native проверок. Реальное delegate-exec (`mise run publish`)
+приземлится в X.1.b.
+
+**Subpackage-aware**: `effectiveStack` резолвится через
+`audit.primary_subpackage + stackForDir()`. vdx root (stack=meta) с
+`primary_subpackage=cli` → publish работает на cli/ как Node. Если
+`effectiveStack !== 'node'` → error с подсказкой про X.2 (PHP/Python).
+
+**Семантика**: dry-run выдаёт markdown plan с таблицей checks +
+pipeline (что бы сделалось). Non-dry-run пока тоже выходит на plan
+(execute заглушка с TODO в X.1.b).
+
+Smoke verified — `npx tsx cli/src/index.ts publish patch --dry-run`
+из vdx root:
+- Package: `@vodmal/vdx-cli`, Version: `0.3.0 → 0.3.1`
+- working-tree-clean (зависит от состояния), lib-intent OK,
+  release-artifact L4 OK, registry-collision OK (registry @ 0.3.0).
+
+Тесты: 65 → 76 (11 новых). `npx tsc --noEmit` чисто.
+
+Open после X.1.a:
+- **X.1.b** — execute pipeline (см. "Следующий шаг" в TL;DR).
+- Subverbs / conventional-commits / PHP+Python — X.2/X.3.
 
 ---
 

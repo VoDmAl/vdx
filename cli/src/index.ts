@@ -6,6 +6,12 @@ import { autoDetectStack, type Ctx } from './facts.ts';
 import { audit } from './audit.ts';
 import { reportMarkdown, reportJson } from './report.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
+import {
+  planPublish,
+  renderPublishPlan,
+  type BumpKind,
+  type PublishOptions,
+} from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
@@ -13,8 +19,9 @@ const DEFAULT_RUBRIC = resolveDefaultRubric();
 function usage(): never {
   process.stderr.write(
     `Usage:
-  vdx audit <project_path> [--rubric <path>] [--stack <stack>] [--json]
-  vdx init  <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
+  vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--json]
+  vdx init    <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
+  vdx publish <patch|minor|major> [--dry-run] [--force]
 `,
   );
   process.exit(1);
@@ -114,7 +121,59 @@ function cmdInit(opts: ParsedArgs): void {
   }
 }
 
+function cmdPublish(opts: ParsedArgs): void {
+  const bumpArg = opts.positionals[0];
+  if (!bumpArg || !['patch', 'minor', 'major'].includes(bumpArg)) {
+    process.stderr.write(
+      'Usage: vdx publish <patch|minor|major> [--dry-run] [--force]\n',
+    );
+    process.exit(1);
+  }
+  const bump = bumpArg as BumpKind;
+  const projectRoot = process.cwd();
+
+  const manifest = loadManifest(projectRoot);
+  const overrides = loadOverrides(projectRoot);
+  const rubric = loadRubric(DEFAULT_RUBRIC);
+  const stack = manifest?.stack || autoDetectStack(projectRoot);
+  const ctx: Ctx = { projectRoot, stack, cache: new Map() };
+  const baselineRef = manifest?.baseline ?? `file://${DEFAULT_RUBRIC}`;
+  const auditResult = audit(rubric, ctx, overrides, baselineRef, manifest);
+
+  const planOpts: PublishOptions = {
+    projectRoot,
+    bump,
+    dryRun: Boolean(opts.flags['dry-run']),
+    force: Boolean(opts.flags.force),
+  };
+
+  let plan;
+  try {
+    plan = planPublish(planOpts, auditResult, ctx);
+  } catch (e: any) {
+    process.stderr.write(`error: ${e?.message ?? String(e)}\n`);
+    process.exit(2);
+  }
+
+  process.stdout.write(renderPublishPlan(plan));
+
+  if (planOpts.dryRun) {
+    process.stderr.write('\n[dry-run] не выполнено.\n');
+    return;
+  }
+
+  // Execute pipeline lands in Шаг X.1.b — for now even non-dry-run stops at plan.
+  process.stderr.write(
+    '\n[X.1.a] execute-pipeline пока не реализован — повторно запусти с --dry-run, ' +
+      'либо жди Шаг X.1.b (npm publish + git commit/tag).\n',
+  );
+  if (!plan.preflightPassed && !planOpts.force) {
+    process.exit(2);
+  }
+}
+
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
+else if (parsed.cmd === 'publish') cmdPublish(parsed);
 else usage();

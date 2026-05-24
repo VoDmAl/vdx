@@ -4,6 +4,56 @@
 
 ## 2026-05-24
 
+### Шаг X.1.a: `vdx publish` plan + pre-flight (без execute pipeline)
+
+D12 MVP первый кусок: команда `vdx publish <patch|minor|major>` + 4
+pre-flight checks + рендер plan. Реальный pipeline (npm publish + git
+commit + tag) приземлится в X.1.b. Это разделение чтобы можно было
+руками проверить план перед irreversible-операцией.
+
+Новый модуль `cli/src/publish.ts`:
+- `bumpSemver(current, kind)` — patch/minor/major semver-арифметика.
+- `compareSemver(a, b)` — `-1/0/1` для версионных сравнений.
+- `planPublish(opts, audit, ctx): PublishPlan` — 4 pre-flight check'а:
+  1. **working-tree-clean** через `git status --porcelain`.
+  2. **lib-intent (applies_when)** — release-artifact ось не должна быть
+     `excluded` (это бы значило что project это app, не lib).
+  3. **release-artifact >= L3** — нужны publishable metadata (files/main/
+     exports/license).
+  4. **registry-collision** через `npm view <pkg> version` — новый bump
+     должен быть строго выше уже опубликованного. 404 = first publish, OK.
+- `[tasks.publish]` в `mise.toml` → **delegating to mise** (D3 escape hatch):
+  plan возвращает `delegatedToMise: true` без запуска vdx-native проверок.
+- Effective stack resolved через `audit.primary_subpackage + stackForDir()`
+  — vdx root (`stack=meta`) с `primary_subpackage=cli` → publish работает
+  на cli/ как Node.
+
+В `cli/src/index.ts`: новая команда `vdx publish` + dispatch + usage
+update. `--dry-run` показывает план; non-`--dry-run` пока выводит
+заглушку "execute pipeline lands in X.1.b".
+
+Security: используется `execFileSync` (argv-array, без shell), не
+`execSync` — устраняет injection-сурфейс.
+
+Тесты в `cli/tests/unit/publish.test.ts`: 11 кейсов — bumpSemver
+(patch/minor/major + malformed), compareSemver, planPublish с mock
+AuditResult (3 ветки: non-node reject, excluded axis, RA < L3),
+renderPublishPlan (normal + delegated). Все 76 тестов проходят
+(65 → 76). `npx tsc --noEmit` чисто.
+
+Smoke verified: `npx tsx cli/src/index.ts publish patch --dry-run` из
+vdx root корректно резолвится в cli/ через primary_subpackage, выдаёт:
+- Package: `@vodmal/vdx-cli`, Version: `0.3.0 → 0.3.1`
+- 4 check'а: working-tree-clean (зависит от состояния), lib-intent OK,
+  release-artifact L4 OK, registry-collision OK (registry @ 0.3.0).
+
+Open после X.1.a:
+- **X.1.b** — execute pipeline (bump package.json → npm publish → git
+  add/commit/tag). Не пушит на remote — это решение пользователя.
+- Subverbs (`publish:bump`/`upload`/`tag`/`notes`) — X.2.
+- PHP/Python phases — X.3.
+- Conventional-commits + release notes — O36/X.4.
+
 ### Шаг W: `vdx init` transparency + monorepo fallback (O39 закрыт)
 Догфудинг на 3 калибровочных проектах показал три гочи в init verb-mapping:
 эвристика **работала**, но (а) не показывала почему выбран тот или иной
