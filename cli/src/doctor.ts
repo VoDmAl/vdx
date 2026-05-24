@@ -160,25 +160,51 @@ function findOnPath(name: string): string | null {
   return null;
 }
 
+function isEphemeralPath(p: string): 'npx-cache' | 'local-bin' | null {
+  if (p.includes(`${path.sep}.npm${path.sep}_npx${path.sep}`)) return 'npx-cache';
+  if (p.includes(`${path.sep}node_modules${path.sep}.bin${path.sep}`)) return 'local-bin';
+  return null;
+}
+
 function checkVdxOnPath(): CheckResult {
   const found = findOnPath('vdx');
-  if (found) {
+  if (!found) {
     return {
       id: 'vdx-on-path',
-      label: 'vdx on PATH',
+      label: 'vdx install',
+      status: 'warning',
+      level: 1,
+      message:
+        '`vdx` not on PATH at check time. If you use a shell alias it is also fine — doctor cannot detect aliases.',
+      remedy:
+        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"  OR  keep using `npx -y -p @vodmal/vdx-cli vdx …` ad-hoc',
+    };
+  }
+  const ephemeral = isEphemeralPath(found);
+  if (ephemeral === 'npx-cache') {
+    return {
+      id: 'vdx-on-path',
+      label: 'vdx install',
       status: 'ok',
-      level: 4,
-      message: found,
+      level: 3,
+      message: `via npx cache: ${found} (ephemeral; fine for npx-only workflows — always latest)`,
+    };
+  }
+  if (ephemeral === 'local-bin') {
+    return {
+      id: 'vdx-on-path',
+      label: 'vdx install',
+      status: 'ok',
+      level: 2,
+      message: `local node_modules: ${found} (works inside this project only)`,
     };
   }
   return {
     id: 'vdx-on-path',
-    label: 'vdx on PATH',
-    status: 'warning',
-    level: 1,
-    message: 'binary not on PATH — `vdx <verb>` will not work directly in shell',
-    remedy:
-      'npm i -g @vodmal/vdx-cli  (or alias vdx="npx -y -p @vodmal/vdx-cli vdx")',
+    label: 'vdx install',
+    status: 'ok',
+    level: 4,
+    message: `global: ${found}`,
   };
 }
 
