@@ -291,7 +291,8 @@ function checkVdx(): CheckResult {
       status: 'ok',
       level,
       message: `${tag} — \`npx -y -p @vodmal/vdx-cli vdx …\` works; bare \`vdx\` in a fresh shell does not`,
-      remedy: 'npm i -g @vodmal/vdx-cli for shell-global command',
+      remedy:
+        'npm i -g @vodmal/vdx-cli  OR  add `alias vdx="npx -y -p @vodmal/vdx-cli vdx"` to your shell rc (~/.zshrc / ~/.bashrc)',
     };
   }
   return {
@@ -300,7 +301,8 @@ function checkVdx(): CheckResult {
     status: 'ok',
     level,
     message: `${tag} — works inside this project only (${found})`,
-    remedy: 'npm i -g @vodmal/vdx-cli for global shell access',
+    remedy:
+      'npm i -g @vodmal/vdx-cli  OR  add `alias vdx="npx -y -p @vodmal/vdx-cli vdx"` to your shell rc',
   };
 }
 
