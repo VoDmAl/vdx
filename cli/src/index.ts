@@ -140,21 +140,20 @@ function cmdInit(opts: ParsedArgs): void {
     ...(stackOverride ? { stack: stackOverride } : {}),
   });
 
-  process.stdout.write(renderPlanSummary(plan));
+  const dryRun = Boolean(opts.flags['dry-run']);
+  process.stdout.write(renderPlanSummary(plan, { verbose: dryRun }));
 
   for (const w of plan.warnings) {
     process.stderr.write(`\n⚠ ${w}\n`);
   }
 
-  if (opts.flags['dry-run']) {
-    process.stderr.write('\n[dry-run] mise.toml / AGENTS.md не записаны.\n');
+  if (dryRun) {
+    process.stderr.write('\n[dry-run] mise.toml не записан.\n');
     return;
   }
   try {
     writeInit(plan, { force: Boolean(opts.flags.force) });
-    process.stderr.write(
-      `\n✓ Записаны:\n  ${plan.miseTomlPath}\n  ${plan.agentsMdPath}\n`,
-    );
+    process.stderr.write(`\n✓ wrote ${plan.miseTomlPath}\n`);
   } catch (e: any) {
     process.stderr.write(`\nerror: ${e?.message ?? String(e)}\n`);
     process.exit(2);

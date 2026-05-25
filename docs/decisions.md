@@ -231,6 +231,32 @@ defaults, backward-compat (старые manifests без `publish` continue
   axes с simplified-levels (binary present + optional version-level).
   Решение откладывается до накопления реальных use-case'ов от живого
   использования doctor.
+- **O42 (rejected, 2026-05-25)** — Auto-init на лету для `vdx up/down/build/...`
+  без mise.toml. Идея: при отсутствии mise.toml не падать с exit 2, а
+  на лету запустить тот же `selectVerbTask` (из `cli/src/init.ts`) и
+  выполнить ту же команду что записал бы `vdx init`. Отклонено:
+  (a) **mise сам не работает без mise.toml** — он не принимает
+  in-memory tasks; vdx пришлось бы парсить package.json/composer.json и
+  exec native scripts сам — это дублирование mise и удар по принципу
+  «не делать свой раннер»; (b) **magic скрывает интенцию** — следующий
+  человек, открывая чужой проект, не видит mise.toml и не понимает
+  откуда `vdx up` знает что запускать; vdx позиционирован как
+  read-through конвенция, артефакт в git — основной канал; (c) каждый
+  `vdx up` будет re-detect, нет кэша. Альтернатива (открыта):
+  усилить error path в `run.ts` до интерактивного prompt
+  `mise.toml not found. Run \`vdx init\` now? [y/N]` в TTY-режиме.
+  Триггер: после повторных жалоб на «зашёл в чужой репо — пришлось
+  делать init руками».
+- **O43 (rejected, 2026-05-25)** — `vdx init` создаёт `AGENTS.md`.
+  Прежнее поведение (до 2026-05-25): vdx init писал `AGENTS.md` с
+  блоком `## Commands` между markers `<!-- vdx:commands -->`. Отклонено
+  по фидбэку: (a) для Claude Code users (CLAUDE.md экосистема) файл
+  бесполезен — Claude Code его не auto-loadит; (b) `vdx-discover`
+  skill в Claude Code plugin уже реагирует на vdx-контекст и покрывает
+  ту же роль агент-гайда; (c) загрязнение чужого репо файлом, который
+  пользователь не просил. Новое поведение: vdx init пишет только
+  mise.toml. Для других AI-агентов (Cursor, Codex) пользователь сам
+  решает куда положить подсказку. Реализовано в коммите Z.5.
 - **O41** — `vdx doctor --fix` (auto-remediation mode). После Z.3 (cli-table3
   rework, 2026-05-25) пользователь отметил, что текстовые `remedy` в
   таблице — это «копировать руками неудобно; зачем такие remedy, когда

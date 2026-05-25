@@ -33,7 +33,7 @@ into the things nobody else does — which is precisely why vdx exists.
 | 1 | Normalized verb vocabulary `up / down / build / test / check / fix` | task runners (mise/Task/just) don't prescribe a vocabulary |
 | 2 | **Versioned maturity rubric + drift engine** | Soundcheck/Cortex/OpsLevel mutate the standard live; they don't work locally or on third-party repos |
 | 3 | **Shared-infra orchestration** (Global Traefik as a dependency of `up`) | no runner models cross-repo dependencies |
-| 4 | A structured, executable manifest for the AI agent | AGENTS.md is deliberately prose; Claude Code auto-memory also writes prose |
+| 4 | A structured, executable manifest for the AI agent | AGENTS.md is deliberately prose; Claude Code skills (vdx-discover) react to project context |
 
 > **What vdx will NOT do:**
 > — ship its own task runner (mise already does this polyglot and well);
@@ -173,7 +173,7 @@ full per-step log and [HANDOFF.md](HANDOFF.md) for live state). Highlights:
 - **Step C** — native evaluator (TypeScript, ~600 LOC under `cli/src/`).
 - **Step D** — evaluator tuned via smoke tests on 3 reference projects.
 - **Step E** — `vdx init`: stack autodetect → mapping native tasks to the
-  6 verbs → generation of `mise.toml` + `AGENTS.md ## Commands`.
+  6 verbs → generation of `mise.toml` (no AGENTS.md — Claude Code users get the `vdx-discover` skill from the plugin instead).
 - **Step F** — MCP server `vdx-mcp` on stdio with 9 tools.
 - **Step G** — Claude Code plugin `vdx/plugin/` (`.claude-plugin/`,
   `.mcp.json`, skill, hook).

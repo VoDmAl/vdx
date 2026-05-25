@@ -4,6 +4,38 @@
 
 ## 2026-05-25
 
+### Шаг Z.5: `vdx init` drops AGENTS.md generation + quiet stdout by default, @vodmal/vdx-cli@0.10.0
+
+Догфудный feedback после Z.4: stdout `vdx init` выглядел «как для
+LLM или от LLM» — большой markdown с verb-mappings table, alternatives,
+generated mise.toml. Дополнительно — generation `AGENTS.md`, который
+для Claude Code users бесполезен (Claude Code читает CLAUDE.md, не
+AGENTS.md), а в проектах с уже существующим CLAUDE.md дублирует роль
+агент-гайда.
+
+Изменения:
+
+- **Удалена генерация `AGENTS.md`** (`cli/src/init.ts`): функции
+  `renderAgentsCommandsSection`, `buildAgentsMd`, поля
+  `agentsMdPath`/`agentsMdContent` в `InitPlan`, и второй
+  `fs.writeFileSync` в `writeInit`. Causa: для Claude Code users
+  `vdx-discover` skill уже покрывает роль агент-гайда; для других AI
+  агентов user сам решает формат. Решено в O43 (rejected:
+  auto-AGENTS-generation).
+- **Quiet stdout по умолчанию** (`renderPlanSummary({ verbose })`):
+  default — 1–3 строки `vdx init: stack=X, N/6 verbs mapped` + список
+  not-mapped. Verbose markdown (verb-mappings table, alternatives
+  considered, generated mise.toml) только под `--dry-run`. Транспарентность
+  планировщика по-прежнему доступна через комментарии в самом
+  `mise.toml` (`# vdx: matched "X" via reason; alt: ...` — добавлены в
+  Шаге W).
+- **O42 (rejected)**: auto-init на лету для `vdx up/down/...` без
+  mise.toml. Причины — см. docs/decisions.md.
+
+Bump 0.9.x → **0.10.0** (minor — breaking для интеграций,
+полагающихся на AGENTS.md, и для парсеров, читающих verbose markdown
+из stdout).
+
 ### Шаг Z.4: `vdx audit` / `vdx init` default = cwd, @vodmal/vdx-cli@0.9.x→0.10.0
 
 UX-улучшение: positional `<project_path>` стал опциональным,

@@ -2,9 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   Ctx,
-  fileExists,
   readJson,
-  readText,
   listAllTasks,
   autoDetectStack,
   findSubPackages,
@@ -124,8 +122,6 @@ export interface InitPlan {
   mappings: VerbMapping[];
   miseTomlPath: string;
   miseTomlContent: string;
-  agentsMdPath: string;
-  agentsMdContent: string;
   baseline: string;
   /** Human-readable advisories for the user — printed to stderr by the CLI. */
   warnings: string[];
@@ -340,52 +336,6 @@ export function renderMiseToml(
   return out.join('\n');
 }
 
-const AGENTS_MARKER_OPEN = '<!-- vdx:commands -->';
-const AGENTS_MARKER_CLOSE = '<!-- /vdx:commands -->';
-
-export function renderAgentsCommandsSection(
-  mappings: VerbMapping[],
-  baseline: string,
-): string {
-  const lines: string[] = [];
-  lines.push(AGENTS_MARKER_OPEN);
-  lines.push('## Commands');
-  lines.push('');
-  lines.push(
-    `This project follows the vdx lifecycle interface (baseline: ${baseline}).`,
-  );
-  lines.push('');
-  lines.push('| Verb | What it does | Native command |');
-  lines.push('|------|--------------|----------------|');
-  for (const m of mappings) {
-    if (!m.runCommand) {
-      lines.push(`| \`mise run ${m.verb}\` | ${VERB_DESCRIPTIONS[m.verb]} | _(not mapped)_ |`);
-    } else {
-      lines.push(
-        `| \`mise run ${m.verb}\` | ${VERB_DESCRIPTIONS[m.verb]} | \`${m.runCommand}\` |`,
-      );
-    }
-  }
-  lines.push(AGENTS_MARKER_CLOSE);
-  return lines.join('\n');
-}
-
-export function buildAgentsMd(existing: string | null, section: string): string {
-  if (existing === null) {
-    return `# AGENTS\n\nProject agent guide.\n\n${section}\n`;
-  }
-  const openIdx = existing.indexOf(AGENTS_MARKER_OPEN);
-  const closeIdx = existing.indexOf(AGENTS_MARKER_CLOSE);
-  if (openIdx !== -1 && closeIdx !== -1 && closeIdx > openIdx) {
-    const before = existing.slice(0, openIdx);
-    const after = existing.slice(closeIdx + AGENTS_MARKER_CLOSE.length);
-    return before + section + after;
-  }
-  // No markers — append.
-  const sep = existing.endsWith('\n') ? '\n' : '\n\n';
-  return existing + sep + section + '\n';
-}
-
 export function planInit(
   projectRoot: string,
   opts: { baseline?: string; stack?: string } = {},
@@ -463,11 +413,6 @@ export function planInit(
   const baseline = opts.baseline ?? DEFAULT_BASELINE;
   const miseTomlContent = renderMiseToml(tools, mappings, stack, baseline, primarySubpackage);
 
-  const agentsMdPath = path.join(projectRoot, 'AGENTS.md');
-  const existingAgents = fileExists(rootCtx, 'AGENTS.md') ? readText(rootCtx, 'AGENTS.md') : null;
-  const section = renderAgentsCommandsSection(mappings, baseline);
-  const agentsMdContent = buildAgentsMd(existingAgents, section);
-
   let pkgManager: InitPlan['pkgManager'] = null;
   const pmStack = primarySubpackage ? scanStack : stack;
   const pmRoot = primarySubpackage ? scanRoot : projectRoot;
@@ -484,8 +429,6 @@ export function planInit(
     mappings,
     miseTomlPath: path.join(projectRoot, 'mise.toml'),
     miseTomlContent,
-    agentsMdPath,
-    agentsMdContent,
     baseline,
     warnings,
   };
@@ -498,10 +441,24 @@ export function writeInit(plan: InitPlan, opts: { force: boolean }): void {
     );
   }
   fs.writeFileSync(plan.miseTomlPath, plan.miseTomlContent, 'utf8');
-  fs.writeFileSync(plan.agentsMdPath, plan.agentsMdContent, 'utf8');
 }
 
-export function renderPlanSummary(plan: InitPlan): string {
+export function renderPlanSummary(plan: InitPlan, opts: { verbose?: boolean } = {}): string {
+  const verbose = opts.verbose === true;
+  const mapped = plan.mappings.filter((m) => m.runCommand).length;
+  const total = plan.mappings.length;
+  const unmatched = plan.mappings.filter((m) => !m.runCommand).map((m) => m.verb);
+
+  if (!verbose) {
+    const lines: string[] = [];
+    lines.push(`vdx init: stack=${plan.stack}${plan.stackOverridden ? ' (via --stack)' : ''}, ${mapped}/${total} verbs mapped`);
+    if (plan.primarySubpackage) lines.push(`  primary subpackage: ${plan.primarySubpackage}`);
+    if (unmatched.length > 0) {
+      lines.push(`  not mapped: ${unmatched.join(', ')} (add [tasks.X] in mise.toml manually)`);
+    }
+    return lines.join('\n') + '\n';
+  }
+
   const lines: string[] = [];
   lines.push(`# vdx init plan`);
   lines.push('');
@@ -555,7 +512,6 @@ export function renderPlanSummary(plan: InitPlan): string {
     }
     lines.push('');
   }
-  const unmatched = plan.mappings.filter((m) => !m.runCommand).map((m) => m.verb);
   if (unmatched.length > 0) {
     lines.push(`> Not mapped: ${unmatched.join(', ')}. Добавь тиски в \`mise.toml\` вручную.`);
     lines.push('');

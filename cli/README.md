@@ -38,7 +38,7 @@ vdx up | down | build | test | check | fix
 # Maturity audit against the owner baseline rubric
 vdx audit [project-path] [--format=ansi|markdown|json] [--rubric <path>] [--stack <id>]   # default: cwd
 
-# Generate mise.toml + AGENTS.md for a project
+# Generate mise.toml for a project (no AGENTS.md — vdx-discover skill covers Claude Code; pick your own format for other agents)
 vdx init  [project-path] [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]   # default: cwd
 
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
@@ -89,7 +89,7 @@ npm run typecheck
 - `src/evaluator.ts`  — recursive evaluator + sugar notation
 - `src/scoring.ts`    — delta-style levels, flags for orthogonal axes
 - `src/audit.ts`      — orchestrator: overrides + applies_to filter + subpackage-ctx
-- `src/init.ts`       — `vdx init` planner (`selectVerbTask` + mise.toml/AGENTS.md renderers)
+- `src/init.ts`       — `vdx init` planner (`selectVerbTask` + mise.toml renderer)
 - `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
 - `src/publish.ts`    — `planPublish` (pre-flight) + `executePublish` (bump → npm → git)
 - `src/report.ts`     — markdown / JSON output
