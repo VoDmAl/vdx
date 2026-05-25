@@ -2,6 +2,43 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-05-25
+
+### Шаг Z.3: `vdx doctor` UX-rework — cli-table3 word-wrap, version-check, переупорядоченные checks, @vodmal/vdx-cli@0.9.0
+
+Догфудный feedback после 0.8.3: таблица `vdx doctor` ломалась
+горизонтально из-за длинного `vdx install` message (`marked-terminal` не
+делает word-wrap для cells), а markdown header `- **@vodmal/vdx-cli
+version**: …` рендерился as-is плейн-текстом потому что marked-terminal
+не применяет inline-bold внутри bullet-lists.
+
+Изменения:
+
+- **ANSI-render через `cli-table3`** (`cli/src/report.ts:120-152`):
+  динамические ширины колонок от `process.stdout.columns`,
+  `wordWrap: true`, `wrapOnWordBoundary: true`. Header через ручные ANSI
+  escapes (bold + green/yellow/red для счётчиков). Markdown-output (для
+  pipe) не трогали, только убрали дубликат version-bullet.
+- **Объединил `vdx-on-path` + `vdx-in-shell` в один `vdx` check**: они
+  дублировали `findOnPath('vdx')` + `isEphemeralPath`. Теперь одна
+  строка с install-mode (global L4 / npx-cache L3 / local-bin L2) и
+  remedy для shell-global.
+- **Новый `vdx-version` check** (`cli/src/doctor.ts:54-87`): `npm view
+  @vodmal/vdx-cli version` с тайм-аутом 2с. Сравнение `current` vs
+  `latest` через `compareSemver`. Offline-graceful (если npm timeout —
+  показывает только current с пометкой). Стал **первой** строкой.
+- **Новый `claude-code` check**: `claude --version` на PATH. Отдельная
+  first-class строка перед `claude-plugin` (по принципу «каждая
+  diagnostic concern — отдельная row»).
+- **Новый порядок** (важное вверх): vdx-version → vdx → claude-code →
+  claude-plugin → node → git → mise → npm-auth → container-runtime.
+- **parseArgs fix** (`cli/src/index.ts:54-79`): теперь поддерживает
+  `--key=value` (раньше только `--key value`).
+
+Bump 0.8.3 → **0.9.0** (minor — id'шники checks изменились = breaking
+для JSON-парсеров, плюс новый сетевой call в hot-path). 101 → **104**
+vitest.
+
 ## 2026-05-24
 
 ### Шаг Z.2.c: `vdx doctor` — install-mode detection (global / npx-cache / local-bin), @vodmal/vdx-cli@0.8.1

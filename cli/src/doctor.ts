@@ -23,7 +23,7 @@ export interface DoctorReport {
   missing: number;
 }
 
-function readCliVersion(): string {
+export function readCliVersion(): string {
   try {
     const pkgPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -35,6 +35,30 @@ function readCliVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+function probeNpmLatestVersion(pkg: string, timeoutMs = 2000): string | null {
+  try {
+    const out = execFileSync('npm', ['view', pkg, 'version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: timeoutMs,
+    });
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10));
+  const pb = b.split('.').map((n) => parseInt(n, 10));
+  for (let i = 0; i < 3; i++) {
+    const ai = pa[i] ?? 0;
+    const bi = pb[i] ?? 0;
+    if (ai !== bi) return ai - bi;
+  }
+  return 0;
 }
 
 function probeVersion(binary: string, args: string[] = ['--version']): string | null {
@@ -182,93 +206,122 @@ function isEphemeralPath(p: string): 'npx-cache' | 'local-bin' | null {
   return null;
 }
 
-function checkVdxOnPath(): CheckResult {
-  const found = findOnPath('vdx');
-  if (!found) {
+function checkVdxVersion(): CheckResult {
+  const current = readCliVersion();
+  const latest = probeNpmLatestVersion('@vodmal/vdx-cli');
+  if (current === 'unknown') {
     return {
-      id: 'vdx-on-path',
-      label: 'vdx install',
+      id: 'vdx-version',
+      label: 'vdx version',
       status: 'warning',
-      level: 1,
-      message:
-        '`vdx` not on PATH at check time. If you use a shell alias it is also fine — doctor cannot detect aliases.',
-      remedy:
-        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"  OR  keep using `npx -y -p @vodmal/vdx-cli vdx …` ad-hoc',
+      message: 'cannot read local cli package.json version',
     };
   }
-  const ephemeral = isEphemeralPath(found);
-  if (ephemeral === 'npx-cache') {
+  if (!latest) {
     return {
-      id: 'vdx-on-path',
-      label: 'vdx install',
+      id: 'vdx-version',
+      label: 'vdx version',
       status: 'ok',
       level: 3,
-      message:
-        `via npx cache: ${found} — invoked-only (shell command \`vdx\` will not resolve outside npx). ` +
-        `For shell-global command run: npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx".`,
+      message: `${current} (latest check skipped — offline or npm timeout)`,
     };
   }
-  if (ephemeral === 'local-bin') {
+  const cmp = compareSemver(current, latest);
+  if (cmp < 0) {
     return {
-      id: 'vdx-on-path',
-      label: 'vdx install',
-      status: 'ok',
+      id: 'vdx-version',
+      label: 'vdx version',
+      status: 'warning',
       level: 2,
-      message: `local node_modules: ${found} (works inside this project only)`,
+      message: `${current} → latest ${latest}`,
+      remedy: 'npm i -g @vodmal/vdx-cli@latest (or clear npx cache)',
+    };
+  }
+  if (cmp > 0) {
+    return {
+      id: 'vdx-version',
+      label: 'vdx version',
+      status: 'ok',
+      level: 4,
+      message: `${current} (ahead of npm latest ${latest} — local dev build)`,
     };
   }
   return {
-    id: 'vdx-on-path',
-    label: 'vdx install',
+    id: 'vdx-version',
+    label: 'vdx version',
     status: 'ok',
     level: 4,
-    message: `global: ${found}`,
+    message: `${current} (latest)`,
   };
 }
 
-function checkVdxInShell(): CheckResult {
+function classifyVdxInstall(found: string): { mode: 'global' | 'npx-cache' | 'local-bin'; level: number; tag: string } {
+  const ephemeral = isEphemeralPath(found);
+  if (ephemeral === 'npx-cache') return { mode: 'npx-cache', level: 3, tag: 'npx cache (ephemeral)' };
+  if (ephemeral === 'local-bin') return { mode: 'local-bin', level: 2, tag: 'project node_modules' };
+  return { mode: 'global', level: 4, tag: 'global' };
+}
+
+function checkVdx(): CheckResult {
   const found = findOnPath('vdx');
   if (!found) {
     return {
-      id: 'vdx-in-shell',
-      label: 'vdx in shell',
+      id: 'vdx',
+      label: 'vdx',
       status: 'warning',
       level: 1,
-      message:
-        'no — `vdx` command not on persistent PATH. If you set a shell alias, it works but doctor cannot detect aliases.',
-      remedy:
-        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"',
+      message: 'not on PATH (alias may still work — doctor cannot detect aliases)',
+      remedy: 'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"',
     };
   }
-  const ephemeral = isEphemeralPath(found);
-  if (ephemeral === 'npx-cache') {
+  const { mode, level, tag } = classifyVdxInstall(found);
+  if (mode === 'global') {
     return {
-      id: 'vdx-in-shell',
-      label: 'vdx in shell',
-      status: 'warning',
-      level: 1,
-      message:
-        'no — only the ephemeral npx-cache binary is on PATH; bare `vdx <verb>` in a fresh shell will not resolve',
-      remedy:
-        'npm i -g @vodmal/vdx-cli  OR  alias vdx="npx -y -p @vodmal/vdx-cli vdx"',
+      id: 'vdx',
+      label: 'vdx',
+      status: 'ok',
+      level,
+      message: `${tag} — resolves in any shell (${found})`,
     };
   }
-  if (ephemeral === 'local-bin') {
+  if (mode === 'npx-cache') {
     return {
-      id: 'vdx-in-shell',
-      label: 'vdx in shell',
-      status: 'warning',
-      level: 2,
-      message: `project-only — \`vdx\` works inside this project root (${found}) but not elsewhere`,
-      remedy: 'npm i -g @vodmal/vdx-cli for global shell access',
+      id: 'vdx',
+      label: 'vdx',
+      status: 'ok',
+      level,
+      message: `${tag} — \`npx -y -p @vodmal/vdx-cli vdx …\` works; bare \`vdx\` in a fresh shell does not`,
+      remedy: 'npm i -g @vodmal/vdx-cli for shell-global command',
     };
   }
   return {
-    id: 'vdx-in-shell',
-    label: 'vdx in shell',
+    id: 'vdx',
+    label: 'vdx',
+    status: 'ok',
+    level,
+    message: `${tag} — works inside this project only (${found})`,
+    remedy: 'npm i -g @vodmal/vdx-cli for global shell access',
+  };
+}
+
+function checkClaudeCode(): CheckResult {
+  const found = findOnPath('claude');
+  if (!found) {
+    return {
+      id: 'claude-code',
+      label: 'Claude Code',
+      status: 'warning',
+      message: '`claude` CLI not on PATH',
+      remedy: 'https://docs.claude.com/en/docs/claude-code',
+    };
+  }
+  const v = probeVersion('claude', ['--version']);
+  return {
+    id: 'claude-code',
+    label: 'Claude Code',
     status: 'ok',
     level: 4,
-    message: `yes — \`vdx\` resolves globally (${found})`,
+    message: v ?? `installed (${found})`,
   };
 }
 
@@ -279,7 +332,7 @@ function checkClaudeCodePlugin(): CheckResult {
       id: 'claude-plugin',
       label: 'Claude Code vdx plugin',
       status: 'warning',
-      message: '~/.claude/settings.json not found — Claude Code not installed or not configured',
+      message: '~/.claude/settings.json not found',
       remedy: 'Install Claude Code, then add vdx marketplace (see README)',
     };
   }
@@ -290,14 +343,14 @@ function checkClaudeCodePlugin(): CheckResult {
         id: 'claude-plugin',
         label: 'Claude Code vdx plugin',
         status: 'ok',
-        message: 'vdx marketplace present in extraKnownMarketplaces',
+        message: 'vdx marketplace registered',
       };
     }
     return {
       id: 'claude-plugin',
       label: 'Claude Code vdx plugin',
       status: 'warning',
-      message: 'Claude Code configured but vdx marketplace not registered',
+      message: 'vdx marketplace not registered',
       remedy: 'Add github.com/VoDmAl/vdx/marketplace to extraKnownMarketplaces',
     };
   } catch (e: any) {
@@ -311,14 +364,15 @@ function checkClaudeCodePlugin(): CheckResult {
 }
 
 const CHECKS: Array<() => CheckResult> = [
+  checkVdxVersion,
+  checkVdx,
+  checkClaudeCode,
+  checkClaudeCodePlugin,
   checkNode,
-  checkVdxOnPath,
-  checkVdxInShell,
   checkGit,
   checkMise,
   checkNpmAuth,
   checkContainerRuntime,
-  checkClaudeCodePlugin,
 ];
 
 export function runDoctor(): DoctorReport {

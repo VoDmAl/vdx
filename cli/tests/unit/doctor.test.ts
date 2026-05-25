@@ -33,6 +33,32 @@ describe('runDoctor', () => {
     expect(node).toBeDefined();
     expect(node!.status).toBe('ok');
   });
+
+  it('vdx-version is the first check', () => {
+    const r = runDoctor();
+    expect(r.checks[0]!.id).toBe('vdx-version');
+  });
+
+  it('priority order: vdx-version, vdx, claude-code, claude-plugin appear before env checks', () => {
+    const r = runDoctor();
+    const ids = r.checks.map((c) => c.id);
+    const idxVersion = ids.indexOf('vdx-version');
+    const idxVdx = ids.indexOf('vdx');
+    const idxClaude = ids.indexOf('claude-code');
+    const idxPlugin = ids.indexOf('claude-plugin');
+    const idxNode = ids.indexOf('node');
+    expect(idxVersion).toBeLessThan(idxVdx);
+    expect(idxVdx).toBeLessThan(idxClaude);
+    expect(idxClaude).toBeLessThan(idxPlugin);
+    expect(idxPlugin).toBeLessThan(idxNode);
+  });
+
+  it('legacy duplicate rows (vdx-on-path, vdx-in-shell) are gone', () => {
+    const r = runDoctor();
+    const ids = r.checks.map((c) => c.id);
+    expect(ids).not.toContain('vdx-on-path');
+    expect(ids).not.toContain('vdx-in-shell');
+  });
 });
 
 describe('looksLikeProject', () => {

@@ -59,13 +59,18 @@ function parseArgs(argv: string[]): ParsedArgs {
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a.startsWith('--')) {
-      const name = a.slice(2);
-      const next = rest[i + 1];
-      if (next !== undefined && !next.startsWith('--')) {
-        flags[name] = next;
-        i++;
+      const body = a.slice(2);
+      const eqIdx = body.indexOf('=');
+      if (eqIdx >= 0) {
+        flags[body.slice(0, eqIdx)] = body.slice(eqIdx + 1);
       } else {
-        flags[name] = true;
+        const next = rest[i + 1];
+        if (next !== undefined && !next.startsWith('--')) {
+          flags[body] = next;
+          i++;
+        } else {
+          flags[body] = true;
+        }
       }
     } else {
       positionals.push(a);

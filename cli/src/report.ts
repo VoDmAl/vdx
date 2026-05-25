@@ -1,7 +1,16 @@
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
+import Table from 'cli-table3';
 import type { AuditResult } from './audit.ts';
 import type { DoctorReport, CheckStatus } from './doctor.ts';
+
+const ANSI = {
+  bold: (s: string): string => `\x1b[1m${s}\x1b[22m`,
+  dim: (s: string): string => `\x1b[2m${s}\x1b[22m`,
+  green: (s: string): string => `\x1b[32m${s}\x1b[39m`,
+  yellow: (s: string): string => `\x1b[33m${s}\x1b[39m`,
+  red: (s: string): string => `\x1b[31m${s}\x1b[39m`,
+};
 
 let terminalMarked: Marked | null = null;
 function getTerminalMarked(): Marked {
@@ -76,9 +85,8 @@ export function reportDoctorMarkdown(r: DoctorReport): string {
   const lines: string[] = [];
   lines.push('# vdx doctor report');
   lines.push('');
-  lines.push(`- **@vodmal/vdx-cli version**: \`${r.cliVersion}\``);
   lines.push(
-    `- **OK**: ${r.ok}  **Warning**: ${r.warning}  **Missing**: ${r.missing}`,
+    `**OK**: ${r.ok}  **Warning**: ${r.warning}  **Missing**: ${r.missing}`,
   );
   lines.push('');
   lines.push('| Check | Status | Detail | Remedy |');
@@ -96,8 +104,48 @@ export function reportDoctorJson(r: DoctorReport): string {
   return JSON.stringify(r, null, 2);
 }
 
+const STATUS_RENDER: Record<CheckStatus, (s: string) => string> = {
+  ok: ANSI.green,
+  warning: ANSI.yellow,
+  missing: ANSI.red,
+};
+
+function termWidth(fallback = 100): number {
+  const w = process.stdout.columns;
+  if (typeof w === 'number' && w >= 60) return w;
+  return fallback;
+}
+
 export function reportDoctorAnsi(r: DoctorReport): string {
-  const md = reportDoctorMarkdown(r);
-  const out = getTerminalMarked().parse(md) as string;
-  return out.endsWith('\n') ? out : out + '\n';
+  const lines: string[] = [];
+  lines.push(ANSI.bold('vdx doctor'));
+  const summary =
+    `${STATUS_RENDER.ok(`✅ ${r.ok} ok`)}  ` +
+    `${STATUS_RENDER.warning(`⚠ ${r.warning} warning`)}  ` +
+    `${STATUS_RENDER.missing(`✗ ${r.missing} missing`)}`;
+  lines.push(summary);
+  lines.push('');
+
+  const total = termWidth();
+  const checkW = 18;
+  const statusW = 14;
+  const remedyW = Math.max(20, Math.min(36, Math.floor((total - checkW - statusW - 6) * 0.4)));
+  const detailW = Math.max(24, total - checkW - statusW - remedyW - 6);
+
+  const table = new Table({
+    head: [ANSI.bold('Check'), ANSI.bold('Status'), ANSI.bold('Detail'), ANSI.bold('Remedy')],
+    colWidths: [checkW, statusW, detailW, remedyW],
+    wordWrap: true,
+    wrapOnWordBoundary: true,
+    style: { head: [], border: [] },
+  });
+  for (const c of r.checks) {
+    const sym = CHECK_SYMBOL[c.status];
+    const level = c.level !== undefined ? ` L${c.level}` : '';
+    const statusCell = STATUS_RENDER[c.status](`${sym} ${c.status}${level}`);
+    table.push([ANSI.bold(c.label), statusCell, c.message, c.remedy ?? ANSI.dim('—')]);
+  }
+  lines.push(table.toString());
+  lines.push('');
+  return lines.join('\n');
 }
