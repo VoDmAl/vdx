@@ -36,8 +36,8 @@ function usage(): never {
   process.stderr.write(
     `Usage:
   vdx <up|down|build|test|check|fix>     run lifecycle verb (via mise run <verb>)
-  vdx audit   <project_path> [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]
-  vdx init    <project_path> [--stack <id>] [--baseline <ref>] [--dry-run] [--force]
+  vdx audit   [project_path]  [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]   (default: cwd)
+  vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
 `,
@@ -80,8 +80,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function cmdAudit(opts: ParsedArgs): void {
-  const projectArg = opts.positionals[0];
-  if (!projectArg) usage();
+  const projectArg = opts.positionals[0] ?? '.';
   const projectRoot = path.resolve(projectArg);
 
   if (!looksLikeProject(projectRoot)) {
@@ -129,8 +128,7 @@ function cmdAudit(opts: ParsedArgs): void {
 }
 
 function cmdInit(opts: ParsedArgs): void {
-  const projectArg = opts.positionals[0];
-  if (!projectArg) usage();
+  const projectArg = opts.positionals[0] ?? '.';
   const projectRoot = path.resolve(projectArg);
 
   const baselineFlag = opts.flags.baseline;

@@ -4,6 +4,26 @@
 
 ## 2026-05-25
 
+### Шаг Z.4: `vdx audit` / `vdx init` default = cwd, @vodmal/vdx-cli@0.9.x→0.10.0
+
+UX-улучшение: positional `<project_path>` стал опциональным,
+`vdx audit` / `vdx init` без аргумента работают по cwd (как `git` /
+`npm` / `composer`). Старый `vdx audit /path/to/project` остаётся
+backwards-compatible. Soft-pivot через `looksLikeProject` уже
+warning'ует если cwd не похож на project root — ловушки «забыл cd» нет.
+
+Изменения: `cli/src/index.ts:82-85, 131-133` —
+`opts.positionals[0] ?? '.'`, выкинут ранний `usage()`. `usage()`
+обновлён: `vdx audit [project_path]` / `vdx init [project_path]` (по
+умолчанию cwd). `cmdPublish` не трогали — positional[0] это
+`<patch|minor|major>`.
+
+### Шаг Z.3.b: `vdx` check — shell-rc alias как альтернатива global install, @vodmal/vdx-cli@0.9.1
+
+Patch после Z.3: remedy для npx-cache/local-bin install-mode теперь
+содержит **обе** альтернативы (`npm i -g @vodmal/vdx-cli` OR
+`alias vdx="..."` в shell rc). Раньше предлагал только global install.
+
 ### Шаг Z.3: `vdx doctor` UX-rework — cli-table3 word-wrap, version-check, переупорядоченные checks, @vodmal/vdx-cli@0.9.0
 
 Догфудный feedback после 0.8.3: таблица `vdx doctor` ломалась
