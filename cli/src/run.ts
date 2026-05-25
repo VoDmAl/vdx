@@ -43,14 +43,14 @@ export function renderResolveError(
     case 'no-mise-toml':
       return (
         `vdx: no mise.toml in ${projectRoot}\n` +
-        `hint: run \`vdx init .\` to generate one, or define it manually.\n`
+        `hint: run \`vdx init\` to generate one, or define it manually.\n`
       );
     case 'parse-error':
       return `vdx: failed to parse mise.toml: ${res.detail ?? 'unknown error'}\n`;
     case 'no-task':
       return (
         `vdx: no \`[tasks.${verb}]\` in mise.toml\n` +
-        `hint: run \`vdx init . --force\` to re-detect, or add the task manually.\n`
+        `hint: run \`vdx init --force\` to re-detect, or add the task manually.\n`
       );
   }
 }

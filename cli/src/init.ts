@@ -299,7 +299,7 @@ export function renderMiseToml(
         stack +
         '". Замени на php/node/go/python/meta',
     );
-    out.push('#   и заполни [tasks.*] блоки руками, либо перегенери: vdx init . --stack <id>.');
+    out.push('#   и заполни [tasks.*] блоки руками, либо перегенери: vdx init --stack <id>.');
     out.push('');
   }
 
