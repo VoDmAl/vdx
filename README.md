@@ -54,14 +54,14 @@ Then pick one — same binary, same behavior, different trade-offs:
 ```bash
 # A. Daily-use install (recommended for any repeated `vdx <verb>` workflow)
 npm i -g @vodmal/vdx-cli
-vdx audit .
+vdx audit
 
 # B. Zero-install, run from anywhere (recommended for CI, one-shot trial,
 #    onboarding a teammate, or any "I just want to look")
 #
 # NOTE: `-p` is required because the binary `vdx` doesn't match the scoped
 # package name `@vodmal/vdx-cli` — npx can't auto-infer the entry point.
-npx -y -p @vodmal/vdx-cli vdx audit .
+npx -y -p @vodmal/vdx-cli vdx audit
 ```
 
 Rule of thumb:
@@ -77,10 +77,10 @@ Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP 
 
 ```bash
 # 1. Score any project against the owner baseline rubric
-vdx audit .
+vdx audit
 
 # 2. Generate a mise.toml that wires native scripts to vdx's 6 verbs
-vdx init .
+vdx init
 
 # 3. Run lifecycle verbs (pass-through to `mise run <verb>`)
 vdx build

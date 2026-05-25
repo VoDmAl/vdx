@@ -36,10 +36,10 @@ sub-optimal.
 vdx up | down | build | test | check | fix
 
 # Maturity audit against the owner baseline rubric
-vdx audit <project-path> [--format=ansi|markdown|json] [--rubric <path>] [--stack <id>]
+vdx audit [project-path] [--format=ansi|markdown|json] [--rubric <path>] [--stack <id>]   # default: cwd
 
 # Generate mise.toml + AGENTS.md for a project
-vdx init  <project-path> [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]
+vdx init  [project-path] [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]   # default: cwd
 
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish <patch|minor|major> [--dry-run] [--force]
@@ -54,11 +54,11 @@ vdx-mcp   --project <path>
 **Three quick examples**
 
 ```bash
-# 1. Score the project I'm standing in
-vdx audit .
+# 1. Score the project I'm standing in (no arg → cwd)
+vdx audit
 
 # 2. Wire native scripts into the 6 lifecycle verbs, then run one
-vdx init . --stack node
+vdx init --stack node
 vdx test            # → mise run test (which calls `vitest run` or whatever was detected)
 
 # 3. Ship a new minor release of a Node lib
