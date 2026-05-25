@@ -231,6 +231,22 @@ defaults, backward-compat (старые manifests без `publish` continue
   axes с simplified-levels (binary present + optional version-level).
   Решение откладывается до накопления реальных use-case'ов от живого
   использования doctor.
+- **O41** — `vdx doctor --fix` (auto-remediation mode). После Z.3 (cli-table3
+  rework, 2026-05-25) пользователь отметил, что текстовые `remedy` в
+  таблице — это «копировать руками неудобно; зачем такие remedy, когда
+  он [vdx] может попробовать сам всё исправить». Пример: для
+  `claude-plugin warning` правильный flow — это две Claude Code команды
+  (`/plugin marketplace add VoDmAl/vdx` + `/plugin install vdx@vdx`),
+  которые vdx может выполнить сам, если ему дали Claude Code на PATH.
+  Open вопросы: (a) границы «безопасно auto-fix» vs «требует
+  подтверждения» (npm i -g трогает global, alias правит ~/.zshrc — оба
+  side-effects на пользовательский env); (b) per-check fix-стратегия —
+  каждый check описывает свой `fix()` (parallel hardcoded checks-array)
+  или fix описывается декларативно в YAML (зависит от O40); (c)
+  interactive vs `--yes` flag; (d) idempotency contract — `--fix`
+  второй раз не должен дублировать alias-line. **Триггер**: после ≥1
+  итерации О40 (rubric-driven doctor), или раньше — если копирование
+  remedy станет постоянной болью.
 
 ### Закрытые
 
