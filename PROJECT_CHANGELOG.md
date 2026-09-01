@@ -2,6 +2,25 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-09-01
+
+### Первый кристалл: `docs/tasks/` + ось про проволоченность гейтов vdm (parked)
+
+Заведён crystal-root `docs/tasks/`. Первый воркайтем —
+[vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md),
+`status: ready` (parking): предложение от внешнего репо `cc-vdm-plugins`
+добавить ось рубрики «гейты vdm проволочены через принятый в репозитории
+hook-фреймворк». Отправитель измерил цену дыры — 0 нарушений на 371
+воркайтеме в 12 репозиториях, поэтому работа припаркована, а не начата.
+
+При проверке брифа по коду вскрыты три расхождения реализации со спекой,
+зафиксированы в Decision Log воркайтема: `command_succeeds`
+([predicates.ts:156](cli/src/predicates.ts)) — заглушка, хотя
+[rubric-format.md:195](docs/specs/rubric-format.md) описывает его как
+рабочий escape-hatch; `git_hook_installed` проверяет наличие файла хука,
+но не резолв скрипта и не знает про `core.hooksPath`; `expandPaths`
+([facts.ts:171](cli/src/facts.ts)) не поддерживает рекурсивный глоб.
+
 ## 2026-05-25
 
 ### Шаг Z.5: `vdx init` drops AGENTS.md generation + quiet stdout by default, @vodmal/vdx-cli@0.10.0
