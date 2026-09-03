@@ -375,7 +375,135 @@ function checkClaudeCodePlugin(): CheckResult {
   }
 }
 
-const CHECKS: Array<(ctx: DoctorCtx) => CheckResult> = [
+/**
+ * Variables a hook body *gates on*: `[ -n "${VAR:-}" ]`, `[ -x "$VAR" ]` and
+ * friends. Restricted to test-expression positions on purpose — a bare `$VAR`
+ * anywhere in a script says nothing about whether the hook still does its job,
+ * while an unset variable inside the guard means the guarded block never runs.
+ */
+const GATING_VAR_RE =
+  /\[\s+-[nxfse]\s+"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}"|\[\s+-[nxfse]\s+"\$([A-Z][A-Z0-9_]*)"/g;
+
+/**
+ * Git hooks: declared vs actually wired.
+ *
+ * A hook framework leaves two separable traces: files in the repository
+ * (tracked, same for every clone) and activation in `.git/config` (per-clone,
+ * never committed). Presence of the first says nothing about the second, and a
+ * hook that is present but inert fails exactly like success — nothing is
+ * printed, the commit goes through. Same for a hook whose body is gated on an
+ * environment variable nobody set: the guard short-circuits and the gate is a
+ * no-op.
+ *
+ * Returns null (row omitted) when the repo declares no hooks at all — there is
+ * nothing to be wrong about.
+ */
+function checkGitHooks(ctx: DoctorCtx): CheckResult | null {
+  const root = ctx.projectRoot;
+  if (root === null) return null;
+  if (!fs.existsSync(path.join(root, '.git'))) return null;
+
+  const id = 'git-hooks';
+  const label = 'git hooks';
+
+  let hooksPath: string | null = null;
+  try {
+    const out = execFileSync('git', ['-C', root, 'config', '--get', 'core.hooksPath'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    hooksPath = out.trim() || null;
+  } catch {
+    hooksPath = null;
+  }
+
+  // Directories a framework would have written into the repo.
+  const declaredDirs = ['.githooks', '.husky'].filter((d) =>
+    fs.existsSync(path.join(root, d)),
+  );
+
+  if (hooksPath === null) {
+    if (declaredDirs.length === 0) return null; // nothing declared — not applicable
+    return {
+      id,
+      label,
+      status: 'warning',
+      message: `${declaredDirs.join(', ')} present but core.hooksPath is unset — hooks never run`,
+      remedy: `git -C ${root} config core.hooksPath ${declaredDirs[0]}`,
+    };
+  }
+
+  const dir = path.resolve(root, hooksPath);
+  if (!fs.existsSync(dir)) {
+    return {
+      id,
+      label,
+      status: 'missing',
+      message: `core.hooksPath=${hooksPath} but that directory does not exist`,
+      remedy: `git -C ${root} config --unset core.hooksPath, or create ${hooksPath}/`,
+    };
+  }
+
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(dir).filter((f) => !f.startsWith('.') && !f.endsWith('.sample'));
+  } catch {
+    entries = [];
+  }
+  const executable = entries.filter((f) => {
+    try {
+      fs.accessSync(path.join(dir, f), fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  if (executable.length === 0) {
+    return {
+      id,
+      label,
+      status: 'warning',
+      message: `core.hooksPath=${hooksPath} but it holds no executable hook`,
+      remedy: `chmod +x ${hooksPath}/*`,
+    };
+  }
+
+  // A hook gated on an unset variable is inert while looking installed.
+  const unresolved = new Set<string>();
+  for (const f of executable) {
+    let body = '';
+    try {
+      body = fs.readFileSync(path.join(dir, f), 'utf8');
+    } catch {
+      continue;
+    }
+    for (const m of body.matchAll(GATING_VAR_RE)) {
+      const name = m[1] ?? m[2];
+      if (name && !process.env[name]) unresolved.add(name);
+    }
+  }
+
+  if (unresolved.size > 0) {
+    const names = [...unresolved].sort();
+    return {
+      id,
+      label,
+      status: 'warning',
+      message: `${executable.length} hook(s) via ${hooksPath}, but gated on unset ${names.join(', ')} — those gates are no-ops`,
+      remedy: `export ${names[0]}=... in your shell profile (see the tool that ships the hook)`,
+    };
+  }
+
+  return {
+    id,
+    label,
+    status: 'ok',
+    message: `${executable.length} hook(s) active via ${hooksPath}`,
+  };
+}
+
+const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkVdxVersion,
   checkVdx,
   checkClaudeCode,
@@ -385,6 +513,7 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult> = [
   checkMise,
   checkNpmAuth,
   checkContainerRuntime,
+  checkGitHooks,
 ];
 
 export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {
@@ -392,7 +521,7 @@ export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {
 }
 
 export function runDoctor(ctx: DoctorCtx = resolveDoctorCtx()): DoctorReport {
-  const checks = CHECKS.map((fn) => fn(ctx));
+  const checks = CHECKS.map((fn) => fn(ctx)).filter((c): c is CheckResult => c !== null);
   const ok = checks.filter((c) => c.status === 'ok').length;
   const warning = checks.filter((c) => c.status === 'warning').length;
   const missing = checks.filter((c) => c.status === 'missing').length;

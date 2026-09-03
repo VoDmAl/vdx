@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
 import {
   reportDoctorMarkdown,
@@ -158,5 +159,93 @@ describe('reportDoctor formatters', () => {
       if (prev === undefined) delete process.env.FORCE_COLOR;
       else process.env.FORCE_COLOR = prev;
     }
+  });
+});
+
+describe('checkGitHooks (via runDoctor)', () => {
+  let tmp: string;
+  const row = (root: string) =>
+    runDoctor({ projectRoot: root }).checks.find((c) => c.id === 'git-hooks');
+
+  const git = (root: string, ...args: string[]) =>
+    execFileSync('git', ['-C', root, ...args], { stdio: 'ignore' });
+
+  beforeEach(() => {
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-hooks-')));
+    execFileSync('git', ['init', '-q', tmp], { stdio: 'ignore' });
+  });
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  const writeHook = (dir: string, name: string, body: string) => {
+    fs.mkdirSync(path.join(tmp, dir), { recursive: true });
+    const f = path.join(tmp, dir, name);
+    fs.writeFileSync(f, body);
+    fs.chmodSync(f, 0o755);
+  };
+
+  it('omits the row when the repo declares no hooks', () => {
+    expect(row(tmp)).toBeUndefined();
+  });
+
+  it('omits the row outside a project', () => {
+    expect(runDoctor({ projectRoot: null }).checks.find((c) => c.id === 'git-hooks')).toBeUndefined();
+  });
+
+  it('RED: hook files present but core.hooksPath unset — hooks never run', () => {
+    writeHook('.githooks', 'pre-commit', '#!/bin/bash\nexit 0\n');
+    const r = row(tmp);
+    expect(r?.status).toBe('warning');
+    expect(r?.message).toContain('core.hooksPath is unset');
+  });
+
+  it('RED: core.hooksPath points at a directory that does not exist', () => {
+    git(tmp, 'config', 'core.hooksPath', '.githooks');
+    const r = row(tmp);
+    expect(r?.status).toBe('missing');
+  });
+
+  it('RED: hooksPath set but nothing executable in it', () => {
+    fs.mkdirSync(path.join(tmp, '.githooks'));
+    fs.writeFileSync(path.join(tmp, '.githooks', 'pre-commit'), '#!/bin/bash\n');
+    fs.chmodSync(path.join(tmp, '.githooks', 'pre-commit'), 0o644);
+    git(tmp, 'config', 'core.hooksPath', '.githooks');
+    expect(row(tmp)?.status).toBe('warning');
+  });
+
+  it('RED: hook gated on an unset variable is a no-op that looks installed', () => {
+    // The documented vdm activation snippet, verbatim in shape.
+    writeHook(
+      '.githooks',
+      'pre-commit',
+      '#!/bin/bash\n[ -n "${VDX_TEST_GATE:-}" ] && [ -x "$VDX_TEST_GATE" ] && { "$VDX_TEST_GATE" || exit 1; }\n',
+    );
+    git(tmp, 'config', 'core.hooksPath', '.githooks');
+    delete process.env.VDX_TEST_GATE;
+    const r = row(tmp);
+    expect(r?.status).toBe('warning');
+    expect(r?.message).toContain('VDX_TEST_GATE');
+  });
+
+  it('GREEN: same hook goes ok once the variable resolves', () => {
+    writeHook(
+      '.githooks',
+      'pre-commit',
+      '#!/bin/bash\n[ -n "${VDX_TEST_GATE:-}" ] && [ -x "$VDX_TEST_GATE" ] && { "$VDX_TEST_GATE" || exit 1; }\n',
+    );
+    git(tmp, 'config', 'core.hooksPath', '.githooks');
+    process.env.VDX_TEST_GATE = '/bin/true';
+    try {
+      const r = row(tmp);
+      expect(r?.status).toBe('ok');
+      expect(r?.message).toContain('active via .githooks');
+    } finally {
+      delete process.env.VDX_TEST_GATE;
+    }
+  });
+
+  it('does not flag a hook that merely mentions a variable outside a test', () => {
+    writeHook('.githooks', 'pre-commit', '#!/bin/bash\necho "run $HOME/x"\nexit 0\n');
+    git(tmp, 'config', 'core.hooksPath', '.githooks');
+    expect(row(tmp)?.status).toBe('ok');
   });
 });
