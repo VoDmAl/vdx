@@ -2,10 +2,10 @@
 title: "Гейт vdm: правило в environment-документе персонального сета, не ось"
 slug: vdm-gates-wiring-axis
 description: "Ось vdx, проверяющая что pre-commit гейт vdm реально проволочен и резолвится"
-status: ready
+status: in-progress
 session-type: prd-prep
 created: 2026-09-01
-last-updated: 2026-09-01
+last-updated: 2026-09-03
 ---
 
 # Гейт vdm: правило в environment-документе персонального сета, не ось
@@ -550,6 +550,27 @@ protection, ни required status checks не проверяются, то ест
 
 **Status:** open
 
+### #12. Данные по референсам для `git_hooks_arranged` (собраны, не использованы)
+
+**Возникло в:** начале трека A 2026-09-03, до переключения на handoff
+**Описание:** различие, на котором должен строиться предикат, — есть ли у
+фреймворка **автоматическая** установка. Замеры по трём референсам:
+
+- `telegram.vorobyev.name` — `composer.json` → `post-install-cmd` содержит
+  `@cghooks add --ignore-lock`, `post-update-cmd` → `@cghooks update`, плюс
+  `extra.hooks` с шестью хуками. Это **arranged**: `composer install` активирует.
+- `www.t23b.org` — `post-install-cmd`/`post-update-cmd` есть, но только
+  `@auto-scripts` (Symfony), хуков нет вовсе.
+- `trading-tools-bookmap` — install-скриптов нет, `.husky`/`lefthook` нет.
+
+Ключевое следствие для рубрики: паттерн `.githooks/` + `core.hooksPath`
+**принципиально** не может быть arranged — у git нет авто-запускаемого install-шага.
+Именно поэтому гейт `vdm`, распространяемый так, не установлен нигде (DL #9).
+Это эмпирическое обоснование того, чтобы уровень за «arranged» был выше уровня
+за «объявлено».
+
+**Status:** open
+
 ## Next actions
 
 Порядок: B закрывает боль, A — самостоятельная общая работа, C снят (DL #8).
@@ -594,10 +615,16 @@ protection, ни required status checks не проверяются, то ест
       половиной**: `git-hooks` отвечает на «резолвится ли объявленное», но не на
       «обязан ли гейт тут быть». Это трек `vdx-environment.yaml` + O40
 
-**Трек A — false-green в самой рубрике (независим, общая польза):**
+**Трек A — false-green в самой рубрике (независим, общая польза). ⏸ Здесь
+остановились 2026-09-03; данные по референсам собраны в Sidetrack #12:**
 
-- [ ] `git_hook_installed` (`predicates.ts:103`) различает «объявлено» и
-      «устроено так, что активируется при нормальной установке»
+- [ ] Новый предикат `git_hooks_arranged`: активация автоматизирована —
+      `package.json` → `prepare`/`postinstall` с husky/lefthook, либо
+      `composer.json` → `post-install-cmd` с `cghooks`. `.githooks/` +
+      `core.hooksPath` не проходит принципиально: у git нет авто-install-шага
+- [ ] `git_hook_installed` (`predicates.ts:103`) не трогать (breaking), но
+      исправить его описание в `docs/specs/rubric-format.md` — сказать прямо,
+      что проверяется декларация, а не активация
 - [ ] Решить: править предикат in place (breaking для чужих рубрик) или новый рядом
 - [ ] Пересмотреть уровни `git-hygiene` (`vdx-rubric.yaml:365`) — L2–L4 сейчас
       выдаются за наличие файлов
