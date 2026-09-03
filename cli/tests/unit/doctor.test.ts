@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { runDoctor, looksLikeProject } from '../../src/doctor.ts';
+import { runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
 import {
   reportDoctorMarkdown,
   reportDoctorJson,
@@ -58,6 +58,40 @@ describe('runDoctor', () => {
     const ids = r.checks.map((c) => c.id);
     expect(ids).not.toContain('vdx-on-path');
     expect(ids).not.toContain('vdx-in-shell');
+  });
+});
+
+describe('resolveDoctorCtx', () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-doctor-ctx-'));
+  });
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  it('projectRoot is null outside a project', () => {
+    expect(resolveDoctorCtx(tmp).projectRoot).toBeNull();
+  });
+
+  it('projectRoot is the cwd when it looks like a project', () => {
+    fs.writeFileSync(path.join(tmp, 'package.json'), '{}');
+    expect(resolveDoctorCtx(tmp).projectRoot).toBe(tmp);
+  });
+
+  it('defaults to process.cwd() — we run inside the cli package', () => {
+    expect(resolveDoctorCtx().projectRoot).toBe(process.cwd());
+  });
+});
+
+describe('runDoctor with explicit ctx', () => {
+  it('accepts a ctx and still produces a well-formed report', () => {
+    const r = runDoctor({ projectRoot: null });
+    expect(r.ok + r.warning + r.missing).toBe(r.checks.length);
+  });
+
+  it('machine-level checks are unaffected by projectRoot', () => {
+    const withRoot = runDoctor({ projectRoot: process.cwd() });
+    const without = runDoctor({ projectRoot: null });
+    expect(withRoot.checks.map((c) => c.id)).toEqual(without.checks.map((c) => c.id));
   });
 });
 

@@ -15,6 +15,16 @@ export interface CheckResult {
   remedy?: string;
 }
 
+/**
+ * Context a check may consult. Doctor is primarily a machine-level report, but
+ * some checks are about the repository it is invoked in (git config of this
+ * clone, tracked hook files). `projectRoot` is null when doctor runs outside a
+ * project — `vdx doctor` is explicitly usable from anywhere.
+ */
+export interface DoctorCtx {
+  projectRoot: string | null;
+}
+
 export interface DoctorReport {
   cliVersion: string;
   checks: CheckResult[];
@@ -365,7 +375,7 @@ function checkClaudeCodePlugin(): CheckResult {
   }
 }
 
-const CHECKS: Array<() => CheckResult> = [
+const CHECKS: Array<(ctx: DoctorCtx) => CheckResult> = [
   checkVdxVersion,
   checkVdx,
   checkClaudeCode,
@@ -377,8 +387,12 @@ const CHECKS: Array<() => CheckResult> = [
   checkContainerRuntime,
 ];
 
-export function runDoctor(): DoctorReport {
-  const checks = CHECKS.map((fn) => fn());
+export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {
+  return { projectRoot: looksLikeProject(cwd) ? cwd : null };
+}
+
+export function runDoctor(ctx: DoctorCtx = resolveDoctorCtx()): DoctorReport {
+  const checks = CHECKS.map((fn) => fn(ctx));
   const ok = checks.filter((c) => c.status === 'ok').length;
   const warning = checks.filter((c) => c.status === 'warning').length;
   const missing = checks.filter((c) => c.status === 'missing').length;
