@@ -65,8 +65,11 @@ Canonical owner-baseline живёт в отдельном репо:
 
 - **Локально**: `/Users/vdm/AI Projects/vdx-rubric-vodmal/`
 - **GitHub**: https://github.com/VoDmAl/vdx-rubric-vodmal (public)
-- **Файл**: `vdx-rubric.yaml` — единственный canonical-инстанс рубрики
-- **Версионирование**: аннотированные semver-теги (`v0.2.0`, `v0.2.1`, ...)
+- **Файлы**: `vdx-rubric.yaml` — единственный canonical-инстанс рубрики;
+  `vdx-environment.yaml` — личный профиль для `vdx ai` (D14), зеркало —
+  `docs/specs/vdx-environment.example.yaml`
+- **Версионирование**: аннотированные semver-теги (`v0.2.0`, `v0.2.1`, ...),
+  один тег на оба документа; `metadata.version` обоих совпадает с тегом
 
 **Правила синхронизации:**
 
@@ -82,3 +85,15 @@ Canonical owner-baseline живёт в отдельном репо:
    конкретный тег: `baseline: github.com/VoDmAl/vdx-rubric-vodmal@v0.2.1`.
 4. Default baseline в `cli/src/init.ts` (константа `DEFAULT_BASELINE`)
    обновлять при выпуске нового тега.
+
+## Выпуск CLI
+
+- `vdx publish <patch|minor|major>` запускает владелец в своём терминале: npm
+  спрашивает OTP. Потом `git push --follow-tags`.
+- `vdx publish` не трогает `cli/package-lock.json` — версию в нём синхронизировать
+  отдельным коммитом.
+- На рабочие станции (m3, lft) vdx ставит nas-info, версия закреплена
+  `VDX_VERSION` в `nas-info/ansible/config/roles/workstation.conf`. Новая версия
+  доходит до машин только письмом nas-info с просьбой её поднять.
+- `npm i -g <клон>` на станции откатывается циклом gather (~15 мин).
+  Неопубликованное проверять в `cli/`: `npm run vdx -- ai --dry-run`.

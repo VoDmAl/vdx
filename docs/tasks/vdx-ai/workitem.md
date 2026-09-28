@@ -2,7 +2,7 @@
 title: "vdx ai — запуск агента в проекте по личному профилю"
 slug: vdx-ai
 description: "Запускает нужного агента в нужном репо с нужными флагами, в tmux если он есть"
-status: in-progress
+status: done
 session-type: prd-work
 created: 2026-09-28
 last-updated: 2026-09-28
@@ -410,7 +410,7 @@ echelon, ему передан. Окно канала в 2.1.280 то же, чт
 Списка проектов у vdx нет, а у echelon — только `sources.yaml` по проектам.
 Не делать, пока не попросят.
 
-**Status:** open
+**Status:** cancelled — владелец 2026-09-28: «команду пока не надо»
 
 ### #5. Сессия Claude в каталоге без git регистрирует агента intercom
 
@@ -421,7 +421,7 @@ echelon, ему передан. Окно канала в 2.1.280 то же, чт
 судя по записи, SessionStart-хук этого не соблюдает. Касается `vdx ai` в любом
 каталоге без git. Сообщить `ai-dev-plugins`.
 
-**Status:** open
+**Status:** resolved — письмо `intercom-hook-registers-non-git-dirs` агенту `ai-dev-plugins` (2026-09-28): причина — `intercom-identity-check.sh:52` вызывает `intercom_register` без `--implicit`
 
 ## Next actions
 
@@ -472,8 +472,10 @@ echelon, ему передан. Окно канала в 2.1.280 то же, чт
       `projectIdentity` «the t23b-program case», 2026-09-28
 - [x] Sidetrack #3: поправить устаревшую строку HANDOFF про package-lock —
       блок «Активная работа» переписан, 2026-09-28
-- [ ] Sidetrack #4: спросить владельца, нужен ли подъём всех проектов по условию
-- [ ] Sidetrack #5: письмо `ai-dev-plugins` про регистрацию по имени каталога
+- [x] Sidetrack #4: спросить владельца, нужен ли подъём всех проектов по условию —
+      cancelled (reason: владелец 2026-09-28: «команду пока не надо»)
+- [x] Sidetrack #5: письмо `ai-dev-plugins` про регистрацию по имени каталога —
+      `intercom-hook-registers-non-git-dirs`, 2026-09-28
 
 ## References
 

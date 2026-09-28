@@ -7,29 +7,17 @@
 
 ## ▶︎ Активная работа (2026-09-28)
 
-**Открытый кристалл:** [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md)
-— `status: in-progress`, ветка `feature/vdx-ai`. Он, а не этот файл, содержит
-текущее состояние: Decision Log, побеги, `## Next actions`.
+**Активного кристалла нет.** Последний —
+[docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), `status: done`
+(2026-09-28): команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и
+tmux из личного профиля `vdx-environment.yaml`. Итог:
 
-Кратко:
-
-- Пришло письмом от echelon: сессии проектов с `mail.watch` стартовали без флага
-  канала, и сигналы молча терялись. Владелец развернул это в фичу — команду
-  **`vdx ai`** ([D14](docs/decisions.md)): агент, флаги и tmux берутся из личного
-  профиля `vdx-environment.yaml`.
-- **Сделано:** `cli/src/ai.ts` + тесты (включая реальный tmux на изолированном
-  сервере), спека [docs/specs/environment-format.md](docs/specs/environment-format.md),
-  профиль владельца в `vdx-rubric-vodmal` (тег `v0.4.0`), `@vodmal/vdx-cli@0.12.0`
-  в npm. На lft `t23b-program@lft` и `ga-gap@lft` перезапущены через
-  `vdx ai --restart`, канал echelon доходит (проверено тестовым сигналом).
-- **Установка на станциях — у nas-info:** флаг `FEATURE_VDX`, версия закреплена
-  `VDX_VERSION` в `nas-info/ansible/config/roles/workstation.conf`, модуль ставит
-  пакет из npm и симлинк `~/.vdx-environment.yaml`; `VDX_HOST` экспортирует общий
-  `~/Dropbox/settings/bash/.zshenv`. Новая версия CLI доходит до машин только
-  письмом nas-info. `npm i -g <клон>` откатывается за цикл gather — неопубликованное
-  проверять в `cli/`: `npm run vdx -- ai --dry-run`.
-- **Ждёт:** патч 0.12.1 (исправление `-u` для вызова вне tmux без locale, DL #13)
-  → письмо nas-info; проверить vdx на m3 после коммита nas-info.
+- `@vodmal/vdx-cli@0.12.1` в npm, сет `vdx-rubric-vodmal@v0.4.0` на GitHub.
+- vdx на m3 и lft ставит nas-info (закреплённая `VDX_VERSION`); порядок выпуска —
+  раздел «Выпуск CLI» в [CLAUDE.md](CLAUDE.md).
+- Сессии проектов с `mail.watch` (`t23b-program` на lft и m3, `global-auth-gap` на
+  lft) работают с флагом канала echelon, доставка проверена тестовыми сигналами.
+- Отложено владельцем: команда, поднимающая все проекты с `mail.watch` разом.
 
 **На паузе:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — `status: dormant`. Остановились на треке A (false-green в `git_hook_installed`
