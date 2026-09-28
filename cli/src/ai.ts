@@ -420,8 +420,13 @@ export class Tmux {
     }
   }
 
+  /**
+   * `-u`: outside tmux and without a UTF-8 locale (`ssh host vdx ai`, launchd)
+   * tmux prints the tabs of PANE_FORMAT as `_`, and every pane would be
+   * dropped — the running agent unseen, a second one started.
+   */
   run(args: string[]): string {
-    return execFileSync('tmux', this.argv(args), {
+    return execFileSync('tmux', ['-u', ...this.argv(args)], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });

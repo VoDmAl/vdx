@@ -67,8 +67,9 @@ last-updated: 2026-09-28
   2026-09-28 (`bd004f2`).
 - **Состояние на 2026-09-28:** на lft обе сессии с `mail.watch` работают по
   профилю, канал echelon доходит (DL #11). `@vodmal/vdx-cli@0.12.0` в npm, тег
-  сета `v0.4.0` на GitHub. CLI на lft стоит из рабочего дерева; на m3 vdx нет —
-  ждём nas-info.
+  сета `v0.4.0` на GitHub. vdx на станциях ставит nas-info (`FEATURE_VDX`,
+  версия `VDX_VERSION`): на lft 0.12.0 из npm, m3 — после коммита nas-info
+  (DL #12). Найден и исправлен сбой вне tmux без locale (DL #13), ждёт 0.12.1.
 - **`{host}`** в имени сессии = `$VDX_HOST`, иначе короткое имя хоста (DL #6).
 
 ## Decision Log
@@ -304,6 +305,51 @@ MCP-сервер в сессии и `notifications/claude/channel`.
 **Implication:** Приёмка echelon выполнена на lft. На m3 vdx нет — установку
 ведёт nas-info (бриф `vdx-on-workstations`).
 
+### #12 / 2026-09-28 / vdx на станциях ставит nas-info; `VDX_HOST` переехал в `.zshenv`
+
+**Source:** both
+**Basis:** observed
+**Basis-detail:** Ответ nas-info `vdx-on-workstations-answer` (intercom, в
+`_done/` у vdx). Проверено мной на lft: `/usr/local/lib/node_modules/@vodmal/vdx-cli`
+— каталог, версия 0.12.0; `export VDX_HOST=$VDM_HOST_LABEL` теперь в
+`~/Dropbox/settings/bash/.zshenv:33`, в `.zshrc` осталась ссылка-комментарий;
+`env -i … zsh -c` → `VDX_HOST=lft`, `vdx ai --dry-run` в `t23b-program` —
+профиль `~/.vdx-environment.yaml`, имя `t23b-program@lft`. На m3 по ssh:
+`VDX_HOST=m3`; vdx и симлинка профиля ещё нет — поставит apply после коммита
+nas-info владельцем. **Не проверено мной:** модуль `ansible/modules/vdx.sh`,
+бейдж `f:vdx` — знаю из письма.
+**Context:** DL #6 положил строку в `.zshrc`, но `ssh <host> vdx …` читает только
+`.zshenv`, и имя сессии было бы `<проект>@vodmal-work-imac`.
+**Why:** Установку держит тот, кто держит машины: флаг `FEATURE_VDX` на двух
+станциях, версия закреплена `VDX_VERSION` в nas-info (не `latest`), установка из
+рабочего дерева откатывается на закреплённую за цикл gather (~15 мин).
+**Implication:** Новая версия CLI доходит до станций только письмом nas-info с
+просьбой поднять `VDX_VERSION`. Неопубликованный код проверять в клоне:
+`npm run vdx -- ai …` в `cli/`, а не `npm i -g`.
+**Cross:** DL #6
+
+### #13 / 2026-09-28 / Вне tmux и без UTF-8 locale tmux портил список панелей — `-u`
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** Проверка ответа nas-info: `env -i HOME PATH zsh -c 'vdx ai
+--dry-run'` в `t23b-program` дал `running: —`, хотя агент там работал. Из node
+`tmux list-panes -a -F '<поля через таб>'` отвечал статусом 0, но
+`parsePanes` не находил ни одной панели. Воспроизведено напрямую: `env -u TMUX
+-u LANG tmux list-panes -F "#{session_name}<TAB>#{pane_id}"` → `cc-vdm@lft_%10`;
+с `LANG=en_US.UTF-8` или с `tmux -u` — табуляция на месте. Изнутри tmux
+(`TMUX` задан) даже с `LANG=C` табуляция не портится — поэтому тесты из моей
+сессии этого не видели. После `-u` тот же `env -i` → «running:
+t23b-program@lft %7 — matches the profile». Новый тест снимает `TMUX` и ставит
+`LANG=C`; мутация (убрать `-u`) его роняет.
+**Context:** Именно так вызывают vdx nas-info (`ssh <host> vdx ai`, бейдж) и
+launchd: вне tmux и часто без locale.
+**Why:** Без исправления такой вызов не видит бегущего агента и заводит второй
+рядом с живым — ровно то, от чего DL #5 защищает. `-u` добавлен только в
+служебные вызовы (`run`), не в `attach`: там вывод идёт в терминал человека.
+**Implication:** Нужен патч-релиз 0.12.1 и письмо nas-info поднять
+`VDX_VERSION`.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -376,8 +422,12 @@ MCP-сервер в сессии и `notifications/claude/channel`.
       `export VDX_HOST` — 2026-09-28: симлинк профиля на клон сета; строка
       `export VDX_HOST=$VDM_HOST_LABEL` в общем `~/Dropbox/settings/bash/.zshrc`;
       CLI временно `npm i -g` из рабочего дерева
-- [ ] vdx на m3 и lft через nas-info — бриф `vdx-on-workstations` отправлен
-      2026-09-28, ждём ответ nas-info (у него в очереди 12 писем)
+- [x] vdx на m3 и lft через nas-info — ответ `vdx-on-workstations-answer`,
+      2026-09-28 (DL #12); на lft проверено мной, m3 — после коммита nas-info
+- [ ] m3: убедиться, что apply поставил vdx и симлинк профиля (nas-info обещал
+      дописать в свой ответ; проверить `ssh m3 vdx ai --dry-run`)
+- [ ] Патч-релиз 0.12.1 с исправлением `-u` (DL #13): коммит, `vdx publish patch`
+      (владелец, OTP), письмо nas-info поднять `VDX_VERSION`
 - [x] Перезапуск `t23b-program` и `global-auth-gap` через `vdx ai --restart` —
       2026-09-28, канал проверен тестовым сигналом (DL #11)
 - [x] Ответ echelon письмом: как стартуют сессии, где это лежит, что проверено —

@@ -463,6 +463,24 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     }
   }, 30_000); // "not running" is concluded after a 10 s wait
 
+  it('finds the running agent outside tmux without a UTF-8 locale (ssh host vdx ai)', () => {
+    writeProfile(['--base', '--extra']);
+    const saved = { TMUX: process.env['TMUX'], LANG: process.env['LANG'], LC_ALL: process.env['LC_ALL'], LC_CTYPE: process.env['LC_CTYPE'] };
+    delete process.env['TMUX'];
+    delete process.env['LC_ALL'];
+    delete process.env['LC_CTYPE'];
+    process.env['LANG'] = 'C';
+    try {
+      expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toMatch(/running:  proj@testhost %\d+ — matches the profile/);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
   it('--dry-run shows the plan and the running agent without touching it', () => {
     writeProfile(['--base', '--extra']);
     expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);

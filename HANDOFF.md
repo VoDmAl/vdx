@@ -17,16 +17,19 @@
   канала, и сигналы молча терялись. Владелец развернул это в фичу — команду
   **`vdx ai`** ([D14](docs/decisions.md)): агент, флаги и tmux берутся из личного
   профиля `vdx-environment.yaml`.
-- **Сделано:** `cli/src/ai.ts` + 35 тестов (включая реальный tmux на изолированном
+- **Сделано:** `cli/src/ai.ts` + тесты (включая реальный tmux на изолированном
   сервере), спека [docs/specs/environment-format.md](docs/specs/environment-format.md),
-  профиль владельца в `vdx-rubric-vodmal` — тег `v0.4.0` на GitHub. На lft:
-  `t23b-program@lft` и `ga-gap@lft` перезапущены через `vdx ai --restart`, канал
-  echelon доходит (проверено тестовым сигналом); `~/.vdx-environment.yaml` —
-  симлинк на клон сета, `VDX_HOST` экспортирует общий `.zshrc`, CLI стоит
-  временно из рабочего дерева (`npm i -g ~/AI Projects/vdx/cli`).
-- **Ждёт:** merge `feature/vdx-ai` в `main` и push; публикация CLI 0.12.0
-  (владелец: `npm login`, `vdx publish minor`, OTP); установка vdx на m3 и lft
-  через nas-info — бриф `vdx-on-workstations` в очереди nas-info.
+  профиль владельца в `vdx-rubric-vodmal` (тег `v0.4.0`), `@vodmal/vdx-cli@0.12.0`
+  в npm. На lft `t23b-program@lft` и `ga-gap@lft` перезапущены через
+  `vdx ai --restart`, канал echelon доходит (проверено тестовым сигналом).
+- **Установка на станциях — у nas-info:** флаг `FEATURE_VDX`, версия закреплена
+  `VDX_VERSION` в `nas-info/ansible/config/roles/workstation.conf`, модуль ставит
+  пакет из npm и симлинк `~/.vdx-environment.yaml`; `VDX_HOST` экспортирует общий
+  `~/Dropbox/settings/bash/.zshenv`. Новая версия CLI доходит до машин только
+  письмом nas-info. `npm i -g <клон>` откатывается за цикл gather — неопубликованное
+  проверять в `cli/`: `npm run vdx -- ai --dry-run`.
+- **Ждёт:** патч 0.12.1 (исправление `-u` для вызова вне tmux без locale, DL #13)
+  → письмо nas-info; проверить vdx на m3 после коммита nas-info.
 
 **На паузе:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — `status: dormant`. Остановились на треке A (false-green в `git_hook_installed`
