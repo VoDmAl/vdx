@@ -66,8 +66,9 @@ last-updated: 2026-09-28
 - **Версия сета** — `v0.4.0` для обоих документов (DL #10); тег на GitHub с
   2026-09-28 (`bd004f2`).
 - **Состояние на 2026-09-28:** на lft обе сессии с `mail.watch` работают по
-  профилю, канал echelon доходит (DL #11). CLI на lft стоит из рабочего дерева;
-  на m3 vdx нет — ждём nas-info.
+  профилю, канал echelon доходит (DL #11). `@vodmal/vdx-cli@0.12.0` в npm, тег
+  сета `v0.4.0` на GitHub. CLI на lft стоит из рабочего дерева; на m3 vdx нет —
+  ждём nas-info.
 - **`{host}`** в имени сессии = `$VDX_HOST`, иначе короткое имя хоста (DL #6).
 
 ## Decision Log
@@ -369,7 +370,8 @@ MCP-сервер в сессии и `notifications/claude/channel`.
 - [x] Документация: D14 в `docs/decisions.md`, спека профиля в `docs/specs/`,
       README и `cli/README.md`, PROJECT_CHANGELOG, HANDOFF (Sidetrack #3) —
       2026-09-28
-- [ ] Коммит ветки `feature/vdx-ai` — с согласия владельца
+- [x] Коммит ветки `feature/vdx-ai` — 2026-09-28, `d498468` + `ad46c01`,
+      fast-forward в `main`, push
 - [x] Установка на lft: CLI на PATH, `~/.vdx-environment.yaml`,
       `export VDX_HOST` — 2026-09-28: симлинк профиля на клон сета; строка
       `export VDX_HOST=$VDM_HOST_LABEL` в общем `~/Dropbox/settings/bash/.zshrc`;
@@ -380,7 +382,8 @@ MCP-сервер в сессии и `notifications/claude/channel`.
       2026-09-28, канал проверен тестовым сигналом (DL #11)
 - [x] Ответ echelon письмом: как стартуют сессии, где это лежит, что проверено —
       `project-sessions-vdx-ai`, 2026-09-28; результат теста — сообщением
-- [ ] Публикация CLI в npm — с согласия владельца
+- [x] Публикация CLI в npm — 2026-09-28, `@vodmal/vdx-cli@0.12.0`
+      (`26a5ba9`, тег `v0.12.0`); lock синхронизирован отдельным коммитом
 - [ ] Sidetrack #1: CLI на PATH на lft (закрывается пунктом установки выше)
 - [x] Sidetrack #2: тест — репо без `origin` даёт `{project}` = имя каталога —
       `projectIdentity` «the t23b-program case», 2026-09-28
