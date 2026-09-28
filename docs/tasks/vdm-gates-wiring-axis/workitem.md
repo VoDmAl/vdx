@@ -2,10 +2,10 @@
 title: "Гейт vdm: правило в environment-документе персонального сета, не ось"
 slug: vdm-gates-wiring-axis
 description: "Ось vdx, проверяющая что pre-commit гейт vdm реально проволочен и резолвится"
-status: in-progress
+status: dormant
 session-type: prd-prep
 created: 2026-09-01
-last-updated: 2026-09-03
+last-updated: 2026-09-28
 ---
 
 # Гейт vdm: правило в environment-документе персонального сета, не ось

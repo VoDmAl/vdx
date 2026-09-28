@@ -1,37 +1,38 @@
-# vdx — Handoff (2026-09-03, @vodmal/vdx-cli@0.11.0)
+# vdx — Handoff (2026-09-28, @vodmal/vdx-cli@0.11.0)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
 
 ---
 
-## ▶︎ Активная работа (2026-09-03)
+## ▶︎ Активная работа (2026-09-28)
 
-**Открытый кристалл:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
-— `status: in-progress`. Он, а не этот файл, содержит текущее состояние задачи:
-Decision Log #1–#10, побеги #1–#11, треки в `## Next actions`. **Читать сразу
-после этого раздела.**
+**Открытый кристалл:** [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md)
+— `status: in-progress`, ветка `feature/vdx-ai`. Он, а не этот файл, содержит
+текущее состояние: Decision Log, побеги, `## Next actions`.
 
-Кратко, чтобы подхватить с «продолжаем»:
+Кратко:
 
-- Задача пришла по intercom от `cc-vdm-plugins` как запрос на ось рубрики
-  «гейты `vdm` проволочены». Решение — **оси не будет**: активация хука это
-  свойство машины и клона (`facts.ts:228` исключает `.git`), а рубрика оценивает
-  репозиторий. Ответ отправителю отправлен.
-- **Сделано:** `DoctorCtx { projectRoot }` в `runDoctor()` + общая проверка
-  `git-hooks` в `cli/src/doctor.ts` — объявленные хуки обязаны резолвиться,
-  включая случай «хук загейчен на незаданную переменную». 117 тестов, красные
-  пути проверены мутацией. Коммиты `6113fe7`, `2d2c6ae`.
-- **Остановились на треке A** — false-green в самой рубрике: `git_hook_installed`
-  (`predicates.ts:103`) и уровни `git-hygiene` (`vdx-rubric.yaml:365`) выдают до
-  L4 за наличие файлов; `gh_workflow_blocks_pr` (`predicates.ts:84`) обещает
-  энфорсмент, а проверяет декларацию. План — новый предикат `git_hooks_arranged`
-  (различает «объявлено» и «ставится автоматически при `npm/composer install`»),
-  честные правки спеки, потом уровни рубрики и перекалибровка 3 референсов.
-- **Не начато:** трек B-персональный — `vdx-environment.yaml` в
-  `vdx-rubric-vodmal` + O40 (rubric-driven doctor), чей триггер сработал.
-- **Висит в рабочем дереве:** правка `cli/package-lock.json` (`0.8.3` → `0.11.0`,
-  publish-пайплайн не обновлял лок три релиза) — не закоммичена.
+- Пришло письмом от echelon: сессии проектов с `mail.watch` стартовали без флага
+  канала, и сигналы молча терялись. Владелец развернул это в фичу — команду
+  **`vdx ai`** ([D14](docs/decisions.md)): агент, флаги и tmux берутся из личного
+  профиля `vdx-environment.yaml`.
+- **Сделано:** `cli/src/ai.ts` + 35 тестов (включая реальный tmux на изолированном
+  сервере), спека [docs/specs/environment-format.md](docs/specs/environment-format.md),
+  профиль владельца в `vdx-rubric-vodmal` — тег `v0.4.0` на GitHub. На lft:
+  `t23b-program@lft` и `ga-gap@lft` перезапущены через `vdx ai --restart`, канал
+  echelon доходит (проверено тестовым сигналом); `~/.vdx-environment.yaml` —
+  симлинк на клон сета, `VDX_HOST` экспортирует общий `.zshrc`, CLI стоит
+  временно из рабочего дерева (`npm i -g ~/AI Projects/vdx/cli`).
+- **Ждёт:** merge `feature/vdx-ai` в `main` и push; публикация CLI 0.12.0
+  (владелец: `npm login`, `vdx publish minor`, OTP); установка vdx на m3 и lft
+  через nas-info — бриф `vdx-on-workstations` в очереди nas-info.
+
+**На паузе:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
+— `status: dormant`. Остановились на треке A (false-green в `git_hook_installed`
+/ `git-hygiene` / `gh_workflow_blocks_pr`); трек B-персональный
+(`vdx-environment.yaml` + O40) теперь опирается на документ, заведённый для
+`vdx ai`.
 
 > ⚠️ Всё, что ниже этой черты, описывает состояние на 2026-05-24 (шаги A–Z.2.c,
 > версия 0.8.1) и не обновлялось для релизов v0.10.0 / v0.11.0. Историю шагов
