@@ -47,6 +47,9 @@ vdx publish <patch|minor|major> [--dry-run] [--force]
 # Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin)
 vdx doctor [--format=ansi|markdown|json]
 
+# Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
+vdx ai [project-path] [--restart] [--resume] [--detach] [--dry-run]   # default: cwd
+
 # MCP stdio server consumed by the Claude Code plugin
 vdx-mcp   --project <path>
 ```
@@ -63,7 +66,14 @@ vdx test            # → mise run test (which calls `vitest run` or whatever wa
 
 # 3. Ship a new minor release of a Node lib
 vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no push)
+
+# 4. Start the agent here; re-run to attach, --restart to apply a changed profile
+vdx ai
 ```
+
+`vdx ai` reads a personal profile, never a bundled one: `$VDX_ENVIRONMENT`, else
+`~/.vdx-environment.yaml`, else a plain `claude`/`codex` with no flags. Format:
+[docs/specs/environment-format.md](../docs/specs/environment-format.md).
 
 By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal) at the time of
@@ -92,6 +102,7 @@ npm run typecheck
 - `src/init.ts`       — `vdx init` planner (`selectVerbTask` + mise.toml renderer)
 - `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
 - `src/publish.ts`    — `planPublish` (pre-flight) + `executePublish` (bump → npm → git)
+- `src/ai.ts`         — `vdx ai`: profile loader, launch plan, tmux session handling
 - `src/report.ts`     — markdown / JSON output
 - `src/index.ts`      — CLI entry
 - `src/mcp-server.ts` — MCP stdio server (9 tools)
@@ -100,7 +111,7 @@ npm run typecheck
 
 ## Not implemented yet
 
-- `config_value`/`command_succeeds` predicates are stubs (warning at evaluation).
+- `command_succeeds` predicate is a stub (warning at evaluation).
 - Baseline loading from a git ref is documented but evaluator still reads file
   paths only — `baseline:` in `mise.toml` is recorded but does not auto-fetch.
 - Watermark drift (phase 2 of `drift-algorithm.md`).

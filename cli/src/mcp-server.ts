@@ -12,7 +12,7 @@ import { loadManifest, loadOverrides } from './manifest.ts';
 import { autoDetectStack, readToml, type Ctx } from './facts.ts';
 import { audit } from './audit.ts';
 import { reportJson, reportMarkdown } from './report.ts';
-import { STANDARD_VERBS, type Verb } from './init.ts';
+import { DEFAULT_BASELINE, STANDARD_VERBS, type Verb } from './init.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
@@ -156,7 +156,7 @@ function recordSuccessPath(input: {
 
   doc.vdx = doc.vdx ?? {
     schema_version: '0.2',
-    baseline: 'github.com/VoDmAl/vdx-rubric-vodmal@v0.3.1',
+    baseline: DEFAULT_BASELINE,
     stack: autoDetectStack(PROJECT_ROOT),
   };
   doc.vdx.verbs = input.verbs.map((v) => v.name);

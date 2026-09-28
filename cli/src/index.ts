@@ -29,6 +29,7 @@ import {
   type PublishOptions,
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
+import { runAi, defaultDeps } from './ai.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -40,6 +41,7 @@ function usage(): never {
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
+  vdx ai      [project_path]  [--restart] [--resume] [--detach] [--dry-run]                                 (default: cwd)
 `,
   );
   process.exit(1);
@@ -259,11 +261,30 @@ function cmdDoctor(opts: ParsedArgs): void {
   if (report.missing > 0) process.exit(2);
 }
 
+function cmdAi(opts: ParsedArgs): void {
+  // parseArgs hands the token after a bare flag to that flag as its value;
+  // these flags take none, so such a token is the project path.
+  const positionals = [...opts.positionals];
+  const bool = (name: string): boolean => {
+    const v = opts.flags[name];
+    if (typeof v === 'string') positionals.push(v);
+    return v !== undefined;
+  };
+  const restart = bool('restart');
+  const resume = bool('resume');
+  const detach = bool('detach');
+  const dryRun = bool('dry-run');
+  process.exit(
+    runAi({ path: positionals[0] ?? '.', restart, resume, detach, dryRun }, defaultDeps()),
+  );
+}
+
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
 else if (parsed.cmd === 'publish') cmdPublish(parsed);
 else if (parsed.cmd === 'doctor') cmdDoctor(parsed);
+else if (parsed.cmd === 'ai') cmdAi(parsed);
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd))
   cmdRun(parsed.cmd as LifecycleVerb);
 else usage();

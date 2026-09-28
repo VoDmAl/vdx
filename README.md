@@ -94,9 +94,35 @@ vdx publish minor   # bump, npm publish (with OTP), git commit+tag
 
 # 5. Check your local environment (Node version, mise, git, docker, Claude Code plugin)
 vdx doctor
+
+# 6. Start your agent in a project, the way your profile says (see below)
+vdx ai
 ```
 
 `vdx init` works deterministically on Node/PHP/Python/Go/Ruby projects. For unknown or `meta` (monorepo-with-subpackage) stacks, pass `--stack <id>` or — preferably — invoke vdx inside Claude Code with the plugin installed and let the `vdx-discover` skill bootstrap interactively.
+
+## Starting an agent: `vdx ai`
+
+`vdx ai [path]` starts *your* agent in a project — which agent, with which permissions, and whether inside tmux is personal, so it comes from your own profile, never from the CLI. The profile is `vdx-environment.yaml` from your rubric set, found via `$VDX_ENVIRONMENT` or `~/.vdx-environment.yaml`. Without one, `vdx ai` starts a plain `claude` (or `codex`) in the current terminal.
+
+```yaml
+# ~/.vdx-environment.yaml
+agent:
+  command: claude                       # or codex, or anything
+  args: [--dangerously-skip-permissions]
+  resume_args: [--continue]             # used by --restart / --resume
+  when:                                 # per-project flags, decided by rubric predicates
+    - id: echelon-channel
+      if: {config_value: {path: signals/sources.yaml, jsonpath: mail.watch}}
+      args: [--dangerously-load-development-channels, plugin:echelon@echelon]
+      confirm:                          # the prompt this flag causes, answered in tmux
+        - {screen: "Loading development channels", keys: [Enter]}
+session:
+  multiplexer: tmux                     # falls back to this terminal without tmux
+  name: "{project}@{host}"              # {host} = $VDX_HOST or the short hostname
+```
+
+A second `vdx ai` finds the running agent by its process instead of starting another. An agent running without the flags the profile asks for is reported (exit 3) and left alone; `vdx ai --restart` restarts it in the same tmux pane and resumes the conversation. `--dry-run` shows the plan and the state of running agents. Format: [docs/specs/environment-format.md](docs/specs/environment-format.md); the owner's profile lives in [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal).
 
 ## Claude Code plugin
 

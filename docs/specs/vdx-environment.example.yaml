@@ -1,0 +1,41 @@
+# vdx-environment.yaml — personal environment profile (vodmal)
+#
+# The person-and-machine half of the vodmal set; vdx-rubric.yaml is the
+# project half. Read by `vdx ai` to start an agent in a project.
+#
+# Never bundled into vdx — which agent runs, and with which permissions, is
+# a personal choice. Point vdx at this file with $VDX_ENVIRONMENT or a
+# ~/.vdx-environment.yaml symlink.
+#
+# Format: https://github.com/VoDmAl/vdx/blob/main/docs/specs/environment-format.md
+
+schema_version: "0.1"
+
+metadata:
+  name: vdx-environment-vodmal
+  version: "0.4.0"
+  owner: vodmal
+  description: "How vodmal runs an agent in a project"
+
+agent:
+  command: claude
+  args: [--dangerously-skip-permissions]
+  resume_args: [--continue]
+  when:
+    # echelon wakes a project's agent with a Claude Code channel event while
+    # the project's mail window is open. A session started without the flag
+    # drops the event silently.
+    - id: echelon-channel
+      description: "Project declares mail.watch: echelon wakes the agent over the plugin:echelon@echelon channel"
+      if:
+        config_value: {path: signals/sources.yaml, jsonpath: mail.watch}
+      args: [--dangerously-load-development-channels, plugin:echelon@echelon]
+      confirm:
+        # Shown on every start with this flag, --continue included; the
+        # cursor rests on "1. I am using this for local development".
+        - screen: "Loading development channels"
+          keys: [Enter]
+
+session:
+  multiplexer: tmux          # tmux | none; without tmux installed, runs in this terminal
+  name: "{project}@{host}"   # {host} = $VDX_HOST, else the short hostname
