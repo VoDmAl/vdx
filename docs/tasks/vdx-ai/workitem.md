@@ -69,7 +69,8 @@ last-updated: 2026-09-28
   профилю, канал echelon доходит (DL #11). `@vodmal/vdx-cli@0.12.0` в npm, тег
   сета `v0.4.0` на GitHub. vdx на станциях ставит nas-info (`FEATURE_VDX`,
   версия `VDX_VERSION`): на lft 0.12.0 из npm, m3 — после коммита nas-info
-  (DL #12). Найден и исправлен сбой вне tmux без locale (DL #13), ждёт 0.12.1.
+  (DL #12). Сбой вне tmux без locale исправлен в 0.12.1 (DL #13); nas-info
+  просили поднять `VDX_VERSION`.
 - **`{host}`** в имени сессии = `$VDX_HOST`, иначе короткое имя хоста (DL #6).
 
 ## Decision Log
@@ -426,8 +427,11 @@ launchd: вне tmux и часто без locale.
       2026-09-28 (DL #12); на lft проверено мной, m3 — после коммита nas-info
 - [ ] m3: убедиться, что apply поставил vdx и симлинк профиля (nas-info обещал
       дописать в свой ответ; проверить `ssh m3 vdx ai --dry-run`)
-- [ ] Патч-релиз 0.12.1 с исправлением `-u` (DL #13): коммит, `vdx publish patch`
-      (владелец, OTP), письмо nas-info поднять `VDX_VERSION`
+- [x] Патч-релиз 0.12.1 с исправлением `-u` (DL #13): коммит, `vdx publish patch`
+      (владелец, OTP), письмо nas-info поднять `VDX_VERSION` — 2026-09-28:
+      `9e254d6`, `36e84f1`, npm `latest` 0.12.1, письмо `vdx-0-12-1`
+- [ ] nas-info: `VDX_VERSION` 0.12.1 и коммит его правок vdx владельцем — пока
+      не закоммичено в `~/PhpstormProjects/git.vorobyev.name/nas-info`
 - [x] Перезапуск `t23b-program` и `global-auth-gap` через `vdx ai --restart` —
       2026-09-28, канал проверен тестовым сигналом (DL #11)
 - [x] Ответ echelon письмом: как стартуют сессии, где это лежит, что проверено —
