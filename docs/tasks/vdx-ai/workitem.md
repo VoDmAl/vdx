@@ -69,8 +69,8 @@ last-updated: 2026-09-28
   профилю, канал echelon доходит (DL #11). `@vodmal/vdx-cli@0.12.0` в npm, тег
   сета `v0.4.0` на GitHub. vdx на станциях ставит nas-info (`FEATURE_VDX`,
   версия `VDX_VERSION`): на lft 0.12.0 из npm, m3 — после коммита nas-info
-  (DL #12). Сбой вне tmux без locale исправлен в 0.12.1 (DL #13); nas-info
-  просили поднять `VDX_VERSION`.
+  (DL #12). Сбой вне tmux без locale исправлен в 0.12.1 (DL #13). На обеих
+  станциях 0.12.1 из npm; `t23b-program` с каналом и на lft, и на m3 (DL #14).
 - **`{host}`** в имени сессии = `$VDX_HOST`, иначе короткое имя хоста (DL #6).
 
 ## Decision Log
@@ -351,6 +351,28 @@ launchd: вне tmux и часто без locale.
 **Implication:** Нужен патч-релиз 0.12.1 и письмо nas-info поднять
 `VDX_VERSION`.
 
+### #14 / 2026-09-28 / m3: vdx поставлен nas-info; t23b-program@m3 перезапущен с флагом
+
+**Source:** both
+**Basis:** observed
+**Basis-detail:** По ssh на m3: `/opt/homebrew/bin/vdx`, пакет 0.12.1,
+`~/.vdx-environment.yaml` → клон сета (nas-info `13a34a4`, apply 16:05).
+`vdx ai --dry-run` в `t23b-program`: `session … "t23b-program@m3"`, `running:
+t23b-program@m3 %5 — missing --dangerously-load-development-channels
+plugin:echelon@echelon`. Сессия простаивала: поле ввода пустое, «esc to
+interrupt» нет; Claude Code 2.1.280. Владелец выбрал «Да, перезапустить».
+`ssh m3 'cd … && vdx ai --restart'` → окно канала отвечено, `ps`:
+`/opt/homebrew/bin/claude --dangerously-skip-permissions
+--dangerously-load-development-channels plugin:echelon@echelon --continue`,
+разговор вернулся (контекст 79%). Это первый реальный вызов по ssh вне tmux —
+то окружение, где 0.12.0 не видел панелей (DL #13); 0.12.1 нашёл панель.
+**Context:** На m3 была своя, запущенная руками сессия t23b-program без флага.
+**Why:** Перезапуск обрывает работу, поэтому решал владелец; сессия
+простаивала.
+**Implication:** У t23b-program теперь агент с каналом на обеих машинах.
+Могут ли wake-файлы echelon ехать между машинами и будить обоих — вопрос к
+echelon, ему передан. Окно канала в 2.1.280 то же, что в 2.1.283.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -360,7 +382,7 @@ launchd: вне tmux и часто без locale.
 после публикации или глобальная установка из рабочего дерева. Проверка doctor
 `vdx-on-path` про это и есть.
 
-**Status:** open
+**Status:** resolved — ставит nas-info (`FEATURE_VDX`), DL #12
 
 ### #2. У t23b-program нет remote `origin`
 
@@ -425,20 +447,27 @@ launchd: вне tmux и часто без locale.
       CLI временно `npm i -g` из рабочего дерева
 - [x] vdx на m3 и lft через nas-info — ответ `vdx-on-workstations-answer`,
       2026-09-28 (DL #12); на lft проверено мной, m3 — после коммита nas-info
-- [ ] m3: убедиться, что apply поставил vdx и симлинк профиля (nas-info обещал
-      дописать в свой ответ; проверить `ssh m3 vdx ai --dry-run`)
+- [x] m3: убедиться, что apply поставил vdx и симлинк профиля (nas-info обещал
+      дописать в свой ответ; проверить `ssh m3 vdx ai --dry-run`) — 2026-09-28,
+      DL #14; `t23b-program@m3` перезапущен с флагом
+- [x] Тестовый сигнал echelon на m3 — `test-m3-20260928-1613`, записан на m3 в
+      16:13:44 EDT; к 16:14:24 виден и в `t23b-program@m3`, и в
+      `t23b-program@lft`: канал на m3 работает, а wake-файлы едут Syncthing'ом и
+      будят обе машины. Двойное пробуждение чинит echelon (файл сигналов — на
+      машину), 2026-09-28
 - [x] Патч-релиз 0.12.1 с исправлением `-u` (DL #13): коммит, `vdx publish patch`
       (владелец, OTP), письмо nas-info поднять `VDX_VERSION` — 2026-09-28:
       `9e254d6`, `36e84f1`, npm `latest` 0.12.1, письмо `vdx-0-12-1`
-- [ ] nas-info: `VDX_VERSION` 0.12.1 и коммит его правок vdx владельцем — пока
-      не закоммичено в `~/PhpstormProjects/git.vorobyev.name/nas-info`
+- [x] nas-info: `VDX_VERSION` 0.12.1 и коммит его правок vdx владельцем —
+      nas-info `13a34a4`, 2026-09-28
 - [x] Перезапуск `t23b-program` и `global-auth-gap` через `vdx ai --restart` —
       2026-09-28, канал проверен тестовым сигналом (DL #11)
 - [x] Ответ echelon письмом: как стартуют сессии, где это лежит, что проверено —
       `project-sessions-vdx-ai`, 2026-09-28; результат теста — сообщением
 - [x] Публикация CLI в npm — 2026-09-28, `@vodmal/vdx-cli@0.12.0`
       (`26a5ba9`, тег `v0.12.0`); lock синхронизирован отдельным коммитом
-- [ ] Sidetrack #1: CLI на PATH на lft (закрывается пунктом установки выше)
+- [x] Sidetrack #1: CLI на PATH на lft (закрывается пунктом установки выше) —
+      модуль nas-info, 0.12.1 из npm, 2026-09-28
 - [x] Sidetrack #2: тест — репо без `origin` даёт `{project}` = имя каталога —
       `projectIdentity` «the t23b-program case», 2026-09-28
 - [x] Sidetrack #3: поправить устаревшую строку HANDOFF про package-lock —
