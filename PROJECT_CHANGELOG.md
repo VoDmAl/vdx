@@ -12,7 +12,7 @@
 них — теперь и без tmux. `--new` начинает новый разговор, `--resume` принимается
 и ничего не меняет ([cli/src/ai.ts](cli/src/ai.ts),
 [environment-format.md](docs/specs/environment-format.md)). Решение —
-[DL #15](docs/tasks/vdx-ai/workitem.md); выйдет в 0.13.0.
+[DL #15](docs/tasks/vdx-ai/workitem.md); вышло в 0.13.0.
 
 ## 2026-09-28
 

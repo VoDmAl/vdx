@@ -455,6 +455,19 @@ conversation found to continue» и выходит с кодом 1 сразу (C
 
 **Status:** resolved — письмо `intercom-hook-registers-non-git-dirs` агенту `ai-dev-plugins` (2026-09-28): причина — `intercom-identity-check.sh:52` вызывает `intercom_register` без `--implicit`
 
+### #6. `vdx publish` не проверяет авторизацию npm до bump
+
+**Возникло в:** выпуск 0.13.0, 2026-09-29.
+**Описание:** Pre-flight проверил чистоту дерева, `lib-intent`,
+`release-artifact` и коллизию версии, но не вход в npm. Сессия npm со вчерашнего
+выпуска 0.12.1 уже не действовала (`npm whoami` → 401), и отказ пришёл только на
+`PUT`: npm отвечает на него 404 «Not found», а не 401, — сообщение уводит в
+сторону. `vdx publish` откатил `package.json`, следов не осталось. Проверка
+`npm whoami` в pre-flight поймала бы это до bump и назвала бы причину. `vdx
+doctor` авторизацию npm уже проверяет — можно взять оттуда.
+
+**Status:** open
+
 ## Next actions
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
@@ -511,9 +524,14 @@ conversation found to continue» и выходит с кодом 1 сразу (C
 - [x] Продолжение по умолчанию и `--new` (DL #15): код, тесты (160, ключевые —
       мутацией), README, `cli/README.md`, спека, D14 — 2026-09-29
 - [x] Коммит правки DL #15 — `e522124`, 2026-09-29
-- [ ] `vdx publish minor` → 0.13.0 (владелец, OTP), `git push --follow-tags`,
-      синхронизация `cli/package-lock.json` отдельным коммитом
-- [ ] Письмо nas-info: поднять `VDX_VERSION` до 0.13.0
+- [x] `vdx publish minor` → 0.13.0 (владелец, OTP), `git push --follow-tags`,
+      синхронизация `cli/package-lock.json` отдельным коммитом — 2026-09-29:
+      `ffc1b62`, тег `v0.13.0`, npm `latest` 0.13.0 с 16:47:40Z (PUT 202 в
+      16:45:39Z — registry показал версию через ~2 мин). Первая попытка упала
+      E404: сессия npm истекла (`npm whoami` → 401), помог `npm login` (Sidetrack #6)
+- [x] Письмо nas-info: поднять `VDX_VERSION` до 0.13.0 — `vdx-0-13-0`,
+      2026-09-29, сессия nas-info разбужена
+- [ ] Sidetrack #6: проверка авторизации npm в pre-flight `vdx publish`
 
 ## References
 
