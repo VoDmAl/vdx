@@ -11,8 +11,8 @@
 [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), переоткрыт
 2026-09-29: `vdx ai` продолжает последний разговор по умолчанию, `--new` —
 новый (DL #15). `@vodmal/vdx-cli@0.13.0` в npm, письмо nas-info поднять
-`VDX_VERSION` отправлено (`vdx-0-13-0`). Открыто: Sidetrack #6 — проверка входа
-в npm в pre-flight `vdx publish`.
+`VDX_VERSION` отправлено (`vdx-0-13-0`). Sidetrack #6 сделан: pre-flight
+`vdx publish` проверяет вход в npm (`npm-auth`); ждёт patch-выпуска.
 
 Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
 личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:

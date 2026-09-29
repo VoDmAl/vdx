@@ -466,7 +466,12 @@ conversation found to continue» и выходит с кодом 1 сразу (C
 `npm whoami` в pre-flight поймала бы это до bump и назвала бы причину. `vdx
 doctor` авторизацию npm уже проверяет — можно взять оттуда.
 
-**Status:** open
+**Status:** resolved — pre-flight `npm-auth` (`cli/src/publish.ts`,
+2026-09-29): `npm whoami` против registry, куда уйдёт пакет
+(`publishConfig.registry`, иначе registry области видимости); E401/ENEEDAUTH →
+«not logged in … Run: npm login». Зонды npm идут с `npm_config_loglevel=error`:
+под `npm run -s` npm наследует `silent` и падает с пустым stderr. Тесты
+`publish` больше не ходят в сеть — npm подставляется в `planPublish`.
 
 ## Next actions
 
@@ -531,7 +536,9 @@ doctor` авторизацию npm уже проверяет — можно вз
       E404: сессия npm истекла (`npm whoami` → 401), помог `npm login` (Sidetrack #6)
 - [x] Письмо nas-info: поднять `VDX_VERSION` до 0.13.0 — `vdx-0-13-0`,
       2026-09-29, сессия nas-info разбужена
-- [ ] Sidetrack #6: проверка авторизации npm в pre-flight `vdx publish`
+- [x] Sidetrack #6: проверка авторизации npm в pre-flight `vdx publish` —
+      2026-09-29, живьём: с входом OK, с `NPM_CONFIG_USERCONFIG=/dev/null` FAIL
+- [ ] Выпуск проверки `npm-auth` (patch)
 
 ## References
 

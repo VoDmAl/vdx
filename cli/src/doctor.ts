@@ -162,7 +162,7 @@ function checkNpmAuth(): CheckResult {
       id: 'npm-auth',
       label: 'npm auth',
       status: 'warning',
-      message: 'not logged in — `vdx publish` will fail with E404',
+      message: 'not logged in — `vdx publish` refuses at pre-flight (npm-auth)',
       remedy: 'npm login',
     };
   }

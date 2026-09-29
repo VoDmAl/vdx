@@ -4,6 +4,14 @@
 
 ## 2026-09-29
 
+### `vdx publish` проверяет вход в npm до bump
+
+Новая проверка pre-flight `npm-auth`: `npm whoami` против registry, куда уйдёт
+пакет. Выпуск 0.13.0 сначала упал на самой публикации с E404 — сессия npm
+истекла, а на scoped-пакет npm отвечает 404, не 401. Теперь это отказ до bump с
+подсказкой `npm login` ([cli/src/publish.ts](cli/src/publish.ts),
+[Sidetrack #6](docs/tasks/vdx-ai/workitem.md)).
+
 ### `vdx ai` продолжает последний разговор по умолчанию; `--new` — новый
 
 После перезагрузки голый `vdx ai` возвращает агента к последнему разговору в

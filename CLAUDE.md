@@ -92,6 +92,9 @@ Canonical owner-baseline живёт в отдельном репо:
   спрашивает OTP. Потом `git push --follow-tags`.
 - `vdx publish` не трогает `cli/package-lock.json` — версию в нём синхронизировать
   отдельным коммитом.
+- Вход в npm с прошлого выпуска может уже не действовать (2026-09-29 так и было:
+  `npm whoami` → 401). Pre-flight `npm-auth` это ловит до bump — тогда `npm login`
+  и заново. Новая версия видна в registry через пару минут после публикации.
 - На рабочие станции (m3, lft) vdx ставит nas-info, версия закреплена
   `VDX_VERSION` в `nas-info/ansible/config/roles/workstation.conf`. Новая версия
   доходит до машин только письмом nas-info с просьбой её поднять.

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bumpSemver, compareSemver, planPublish, renderPublishPlan } from '../../src/publish.ts';
+import {
+  type NpmRunner,
+  bumpSemver,
+  checkNpmAuth,
+  compareSemver,
+  planPublish,
+  publishRegistry,
+  renderPublishPlan,
+} from '../../src/publish.ts';
 import type { AuditResult } from '../../src/audit.ts';
 import type { Ctx } from '../../src/facts.ts';
 
@@ -56,6 +64,28 @@ function mockAudit(overrides: Partial<AuditResult> = {}): AuditResult {
   };
 }
 
+/** A fake npm: answers from the table by joined args; an Error is thrown with that stderr. */
+function fakeNpm(answers: Record<string, string | Error>): NpmRunner & { calls: string[][] } {
+  const calls: string[][] = [];
+  const run = (args: string[]) => {
+    calls.push(args);
+    const a = answers[args.join(' ')];
+    if (a === undefined) throw Object.assign(new Error('unexpected npm call'), { stderr: `unexpected: ${args.join(' ')}` });
+    if (a instanceof Error) throw a;
+    return a;
+  };
+  return Object.assign(run, { calls });
+}
+
+const npmError = (stderr: string) => Object.assign(new Error('Command failed: npm'), { stderr });
+
+// The fixture is not on the registry, and its owner is logged in: no real npm.
+const fixtureNpm = () =>
+  fakeNpm({
+    whoami: 'someone',
+    'view fixture-node-with-vitest version': npmError('npm error code E404\nnpm error 404 Not Found\n'),
+  });
+
 describe('planPublish: pre-flight', () => {
   it('rejects non-node stacks in MVP', () => {
     const ctx: Ctx = {
@@ -91,6 +121,7 @@ describe('planPublish: pre-flight', () => {
       { projectRoot, bump: 'patch', dryRun: true, force: false },
       audit,
       ctx,
+      fixtureNpm(),
     );
     const libCheck = plan.preflight.find((c) => c.name === 'lib-intent (applies_when)');
     expect(libCheck?.ok).toBe(false);
@@ -117,10 +148,81 @@ describe('planPublish: pre-flight', () => {
       { projectRoot, bump: 'patch', dryRun: true, force: false },
       audit,
       ctx,
+      fixtureNpm(),
     );
     const raCheck = plan.preflight.find((c) => c.name === 'release-artifact >= L3');
     expect(raCheck?.ok).toBe(false);
     expect(raCheck?.message).toMatch(/L1.*need >= L3/);
+  });
+
+  it('refuses before the bump when npm has no login for the package', () => {
+    const projectRoot = path.join(FIXTURES, 'node-with-vitest');
+    const ctx: Ctx = { projectRoot, stack: 'node', cache: new Map() };
+    const plan = planPublish(
+      { projectRoot, bump: 'patch', dryRun: true, force: false },
+      mockAudit(),
+      ctx,
+      fakeNpm({
+        whoami: npmError('npm error code E401\n'),
+        'view fixture-node-with-vitest version': '0.0.1',
+      }),
+    );
+    expect(plan.preflight.find((c) => c.name === 'npm-auth')?.ok).toBe(false);
+    expect(plan.preflightPassed).toBe(false);
+  });
+});
+
+describe('checkNpmAuth', () => {
+  it('passes when npm whoami names the user', () => {
+    const c = checkNpmAuth(null, fakeNpm({ whoami: 'vodmal\n' }));
+    expect(c).toEqual({ name: 'npm-auth', ok: true, message: 'OK (logged in to npm as vodmal)' });
+  });
+
+  it('fails on an expired session (E401) and names npm login — the 0.13.0 case', () => {
+    const c = checkNpmAuth(
+      null,
+      fakeNpm({ whoami: npmError('npm error code E401\nnpm error 401 Unauthorized - GET https://registry.npmjs.org/-/whoami\n') }),
+    );
+    expect(c.ok).toBe(false);
+    expect(c.message).toMatch(/not logged in to npm .*Run: npm login$/);
+  });
+
+  it('fails without any token (ENEEDAUTH)', () => {
+    const c = checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code ENEEDAUTH\nnpm error need auth\n') }));
+    expect(c.ok).toBe(false);
+    expect(c.message).toMatch(/not logged in/);
+  });
+
+  it('reports another failure by its first line, not as a missing login', () => {
+    const c = checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code ENOTFOUND\nnpm error network\n') }));
+    expect(c.ok).toBe(false);
+    expect(c.message).toBe('npm whoami failed for npm: npm error code ENOTFOUND');
+  });
+
+  it('asks the registry the package goes to', () => {
+    const npm = fakeNpm({ 'whoami --registry https://npm.example.com/': 'me' });
+    const c = checkNpmAuth('https://npm.example.com/', npm);
+    expect(c.ok).toBe(true);
+    expect(c.message).toBe('OK (logged in to https://npm.example.com/ as me)');
+  });
+});
+
+describe('publishRegistry', () => {
+  it('takes publishConfig.registry first', () => {
+    const npm = fakeNpm({});
+    expect(publishRegistry({ name: '@x/y', publishConfig: { registry: 'https://r/' } }, npm)).toBe('https://r/');
+    expect(npm.calls).toEqual([]);
+  });
+
+  it('takes the scope registry from npm config for a scoped package', () => {
+    expect(publishRegistry({ name: '@finam/lib' }, fakeNpm({ 'config get @finam:registry': 'https://nexus/\n' }))).toBe(
+      'https://nexus/',
+    );
+  });
+
+  it('is the default registry for an unscoped package or a scope without its own', () => {
+    expect(publishRegistry({ name: 'demo' }, fakeNpm({}))).toBeNull();
+    expect(publishRegistry({ name: '@vodmal/vdx-cli' }, fakeNpm({ 'config get @vodmal:registry': 'undefined\n' }))).toBeNull();
   });
 });
 

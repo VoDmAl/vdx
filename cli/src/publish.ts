@@ -79,17 +79,74 @@ function isGitWorkingTreeClean(projectRoot: string): { ok: boolean; detail: stri
   }
 }
 
-function fetchPublishedVersion(packageName: string): string | null {
+/** Runs npm with these args and returns stdout; throws with `stderr` on a non-zero exit. */
+export type NpmRunner = (args: string[]) => string;
+
+// A caller's `npm run -s` passes `npm_config_loglevel=silent` down, and npm then
+// fails with an empty stderr — no E401 or E404 left to tell the cases apart.
+const runNpm: NpmRunner = (args) =>
+  execFileSync('npm', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, npm_config_loglevel: 'error' },
+  });
+
+function fetchPublishedVersion(packageName: string, npm: NpmRunner): string | null {
   try {
-    const out = execFileSync('npm', ['view', packageName, 'version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const out = npm(['view', packageName, 'version']);
     return out.trim() || null;
   } catch (e: any) {
     const stderr = String(e?.stderr ?? e?.message ?? '');
     if (stderr.includes('E404') || stderr.includes('404 Not Found')) return null;
     throw new Error(`npm view failed: ${stderr.split('\n')[0] ?? stderr}`);
+  }
+}
+
+/**
+ * The registry `npm publish` sends this package to, when it is not npm's
+ * default: `publishConfig.registry`, else the scope's registry from npm config.
+ */
+export function publishRegistry(
+  pkg: { name?: string; publishConfig?: { registry?: string } },
+  npm: NpmRunner,
+): string | null {
+  if (pkg.publishConfig?.registry) return pkg.publishConfig.registry;
+  const scope = pkg.name?.match(/^(@[^/]+)\//)?.[1];
+  if (!scope) return null;
+  try {
+    const value = npm(['config', 'get', `${scope}:registry`]).trim();
+    return value && value !== 'undefined' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Logged in where the package goes? Without it `npm publish` fails only after
+ * the bump and the pack, and with E404 on a scoped package, not E401 — an
+ * expired npm session reads as a missing package.
+ */
+export function checkNpmAuth(registry: string | null, npm: NpmRunner): PreflightCheck {
+  const where = registry ?? 'npm';
+  const login = registry ? `npm login --registry ${registry}` : 'npm login';
+  try {
+    const who = npm(registry ? ['whoami', '--registry', registry] : ['whoami']).trim();
+    if (who) return { name: 'npm-auth', ok: true, message: `OK (logged in to ${where} as ${who})` };
+    return { name: 'npm-auth', ok: false, message: `npm whoami answered nothing for ${where}. Run: ${login}` };
+  } catch (e: any) {
+    const stderr = String(e?.stderr ?? e?.message ?? '');
+    if (/E401|ENEEDAUTH/.test(stderr)) {
+      return {
+        name: 'npm-auth',
+        ok: false,
+        message: `not logged in to ${where} (the npm session may have expired). Run: ${login}`,
+      };
+    }
+    return {
+      name: 'npm-auth',
+      ok: false,
+      message: `npm whoami failed for ${where}: ${stderr.split('\n').find((l) => l.trim()) ?? stderr}`,
+    };
   }
 }
 
@@ -116,6 +173,7 @@ export function planPublish(
   opts: PublishOptions,
   audit: AuditResult,
   ctx: Ctx,
+  npm: NpmRunner = runNpm,
 ): PublishPlan {
   if (checkMiseOverride(opts.projectRoot)) {
     return {
@@ -197,10 +255,12 @@ export function planPublish(
         : `release-artifact at ${raLevel}, need >= L3. Add files[], main/exports, license in package.json.`,
   });
 
+  preflight.push(checkNpmAuth(publishRegistry(pkg, npm), npm));
+
   let published: string | null = null;
   let registryError: string | null = null;
   try {
-    published = fetchPublishedVersion(packageName);
+    published = fetchPublishedVersion(packageName, npm);
   } catch (e: any) {
     registryError = e?.message ?? String(e);
   }
