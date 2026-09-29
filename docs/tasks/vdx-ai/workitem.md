@@ -510,7 +510,7 @@ conversation found to continue» и выходит с кодом 1 сразу (C
       `intercom-hook-registers-non-git-dirs`, 2026-09-28
 - [x] Продолжение по умолчанию и `--new` (DL #15): код, тесты (160, ключевые —
       мутацией), README, `cli/README.md`, спека, D14 — 2026-09-29
-- [ ] Коммит правки DL #15
+- [x] Коммит правки DL #15 — `e522124`, 2026-09-29
 - [ ] `vdx publish minor` → 0.13.0 (владелец, OTP), `git push --follow-tags`,
       синхронизация `cli/package-lock.json` отдельным коммитом
 - [ ] Письмо nas-info: поднять `VDX_VERSION` до 0.13.0
