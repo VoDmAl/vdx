@@ -4,6 +4,13 @@
 
 ## 2026-09-29
 
+### Релизы vdx доезжают до станций через topgrade, без письма nas-info
+
+nas-info больше не закрепляет версию vdx на m3 и lft: пакет обновляет topgrade,
+`VDX_VERSION` остался тормозом для плохого релиза. Письмо nas-info после выпуска
+нужно только релизу, которому мало нового пакета ([CLAUDE.md](CLAUDE.md) «Выпуск
+CLI», [DL #16](docs/tasks/vdx-ai/workitem.md)).
+
 ### `vdx publish` проверяет вход в npm до bump
 
 Новая проверка pre-flight `npm-auth`: `npm whoami` против registry, куда уйдёт

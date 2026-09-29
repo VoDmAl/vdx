@@ -10,15 +10,16 @@
 **Активный кристалл** —
 [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), переоткрыт
 2026-09-29: `vdx ai` продолжает последний разговор по умолчанию, `--new` —
-новый (DL #15). `@vodmal/vdx-cli@0.13.0` в npm, письмо nas-info поднять
-`VDX_VERSION` отправлено (`vdx-0-13-0`). Sidetrack #6 сделан: pre-flight
+новый (DL #15). `@vodmal/vdx-cli@0.13.0` в npm. Sidetrack #6 сделан: pre-flight
 `vdx publish` проверяет вход в npm (`npm-auth`); ждёт patch-выпуска.
+С 2026-09-29 vdx на станциях не закреплён по версии, релизы везёт topgrade
+(DL #16). Правка nas-info пока не закоммичена: на станциях 0.12.1.
 
 Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
 личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:
 
 - `@vodmal/vdx-cli@0.12.1` в npm, сет `vdx-rubric-vodmal@v0.4.0` на GitHub.
-- vdx на m3 и lft ставит nas-info (закреплённая `VDX_VERSION`); порядок выпуска —
+- vdx на m3 и lft ставит nas-info, обновляет topgrade (DL #16); порядок выпуска —
   раздел «Выпуск CLI» в [CLAUDE.md](CLAUDE.md).
 - Сессии проектов с `mail.watch` (`t23b-program` на lft и m3, `global-auth-gap` на
   lft) работают с флагом канала echelon, доставка проверена тестовыми сигналами.
