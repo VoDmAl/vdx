@@ -110,7 +110,7 @@ vdx ai
 agent:
   command: claude                       # or codex, or anything
   args: [--dangerously-skip-permissions]
-  resume_args: [--continue]             # used by --restart / --resume
+  resume_args: [--continue]             # a start continues the last conversation
   when:                                 # per-project flags, decided by rubric predicates
     - id: echelon-channel
       if: {config_value: {path: signals/sources.yaml, jsonpath: mail.watch}}
@@ -122,7 +122,7 @@ session:
   name: "{project}@{host}"              # {host} = $VDX_HOST or the short hostname
 ```
 
-A second `vdx ai` finds the running agent by its process instead of starting another. An agent running without the flags the profile asks for is reported (exit 3) and left alone; `vdx ai --restart` restarts it in the same tmux pane and resumes the conversation. `--dry-run` shows the plan and the state of running agents. Format: [docs/specs/environment-format.md](docs/specs/environment-format.md); the owner's profile lives in [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal).
+A start continues the project's last conversation with `resume_args`, so after a reboot a plain `vdx ai` brings the agent back where it was; with nothing to continue, the agent starts without them, and `vdx ai --new` starts a new conversation. A second `vdx ai` finds the running agent by its process instead of starting another. An agent running without the flags the profile asks for is reported (exit 3) and left alone; `vdx ai --restart` restarts it in the same tmux pane and resumes the conversation. `--dry-run` shows the plan and the state of running agents. Format: [docs/specs/environment-format.md](docs/specs/environment-format.md); the owner's profile lives in [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal).
 
 ## Claude Code plugin
 

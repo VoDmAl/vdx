@@ -41,7 +41,7 @@ function usage(): never {
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
-  vdx ai      [project_path]  [--restart] [--resume] [--detach] [--dry-run]                                 (default: cwd)
+  vdx ai      [project_path]  [--new] [--restart] [--detach] [--dry-run]                                    (default: cwd)
 `,
   );
   process.exit(1);
@@ -271,11 +271,14 @@ function cmdAi(opts: ParsedArgs): void {
     return v !== undefined;
   };
   const restart = bool('restart');
-  const resume = bool('resume');
+  const fresh = bool('new');
+  // `--resume` asked to continue in 0.12; continuing is the default now.
+  // Still read, so the path after it is not taken for its value.
+  bool('resume');
   const detach = bool('detach');
   const dryRun = bool('dry-run');
   process.exit(
-    runAi({ path: positionals[0] ?? '.', restart, resume, detach, dryRun }, defaultDeps()),
+    runAi({ path: positionals[0] ?? '.', restart, fresh, detach, dryRun }, defaultDeps()),
   );
 }
 

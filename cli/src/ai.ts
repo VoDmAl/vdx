@@ -13,6 +13,10 @@ import type { Predicate } from './rubric.ts';
  * and hands it to tmux, or runs it in this terminal when tmux is not wanted or
  * not installed.
  *
+ * A start continues the project's last conversation (the profile's
+ * `resume_args`) — after a reboot `vdx ai` brings the agent back where it was;
+ * `--new` starts a new conversation.
+ *
  * The profile is personal (which agent, which permissions), so it is never
  * bundled into the CLI: it is read from `$VDX_ENVIRONMENT` or
  * `~/.vdx-environment.yaml`. Without one, vdx starts a plain `claude` or
@@ -499,7 +503,8 @@ export class Tmux {
 export interface AiOptions {
   path: string;
   restart: boolean;
-  resume: boolean;
+  /** `--new`: start a new conversation — leave out the profile's resume args. */
+  fresh: boolean;
   detach: boolean;
   dryRun: boolean;
 }
@@ -543,6 +548,13 @@ export const EXIT_OK = 0;
 export const EXIT_USAGE = 2;
 export const EXIT_DRIFT = 3;
 export const EXIT_LAUNCH_FAILED = 4;
+
+/**
+ * Without tmux the agent runs in the foreground. One that fails this soon after
+ * a start with the resume args had nothing to resume (`claude --continue` exits
+ * 1 at once); the window covers answering the channel prompt that comes first.
+ */
+export const NOTHING_TO_RESUME_MS = 30_000;
 
 export function renderPlan(plan: LaunchPlan, multiplexer: Multiplexer, running: AgentPane[]): string {
   const lines = [
@@ -658,9 +670,9 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
 }
 
 /**
- * Settle a pane that was started with the resume args. An agent with nothing to
- * resume exits at once; start it once more without them rather than leave the
- * project without an agent.
+ * Settle a pane started with the plan's resume args, if it has any. An agent
+ * with nothing to resume exits at once; start it once more without them rather
+ * than leave the project without an agent.
  */
 function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean {
   const result = settle(plan, paneId, deps);
@@ -724,6 +736,8 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     log(`vdx ai: ${profilePath ?? 'profile'}: ${e?.message ?? e}`);
     return EXIT_USAGE;
   }
+  // A start continues the last conversation unless asked for a new one.
+  if (opts.fresh) plan = { ...plan, resumeArgs: [] };
 
   let multiplexer = plan.multiplexer;
   if (multiplexer === 'tmux' && !tmux.available()) {
@@ -751,11 +765,16 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       return EXIT_USAGE;
     }
     for (const c of plan.confirm) log(`note: the agent will ask "${c.screen}" — answer it with ${c.keys.join(' ')}`);
-    const args = [...plan.args, ...(opts.resume ? plan.resumeArgs : [])];
-    const res = spawnSync(plan.command, args, { cwd: projectRoot, stdio: 'inherit' });
+    const startedAt = Date.now();
+    let res = spawnSync(plan.command, [...plan.args, ...plan.resumeArgs], { cwd: projectRoot, stdio: 'inherit' });
     if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
       log(`vdx ai: \`${plan.command}\` not found on PATH`);
       return 127;
+    }
+    const failedAtOnce = res.status !== null && res.status !== 0 && Date.now() - startedAt < NOTHING_TO_RESUME_MS;
+    if (plan.resumeArgs.length > 0 && failedAtOnce) {
+      log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${commandLine(plan.command, plan.args)}`);
+      res = spawnSync(plan.command, plan.args, { cwd: projectRoot, stdio: 'inherit' });
     }
     return res.status ?? 1;
   }
@@ -769,14 +788,17 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
 
   if (current && !opts.restart) {
+    if (opts.fresh) log(`note: ${current.pane.session} already runs ${plan.command} — --new replaces it only with --restart`);
     const missing = missingArgs(current.proc.args, plan.args);
     if (missing.length > 0) {
       log(`✗ ${current.pane.session}: ${plan.command} is running without ${missing.join(' ')}`);
       log(
-        `  to apply the profile: vdx ai --restart ${shellQuote(projectRoot)}` +
+        `  to apply the profile: vdx ai --restart${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
           (plan.resumeArgs.length
             ? ` (stops the running agent, then resumes the conversation with ${plan.resumeArgs.join(' ')})`
-            : ' (stops the running agent; the conversation is not resumed — the profile has no resume_args)'),
+            : opts.fresh
+              ? ' (stops the running agent and starts a new conversation)'
+              : ' (stops the running agent; the conversation is not resumed — the profile has no resume_args)'),
       );
       return EXIT_DRIFT;
     }
@@ -791,14 +813,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return finish(settleResumed(plan, current.pane.paneId, deps), current.pane.session, current.pane.paneId, opts, deps);
   }
 
-  if (opts.restart) log(`note: no running ${plan.command} in this project — starting a new one`);
-  const line = commandLine(plan.command, [...plan.args, ...(opts.resume ? plan.resumeArgs : [])]);
+  if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);
+  const line = commandLine(plan.command, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell);
   const reuse = tmux.hasSession(plan.sessionName);
   const paneId = reuse
     ? tmux.newWindow(plan.sessionName, projectRoot, cmd)
     : tmux.newSession(plan.sessionName, projectRoot, cmd);
   log(`▶ ${plan.sessionName}${reuse ? ' (new window)' : ''}: ${line}`);
-  const ok = opts.resume ? settleResumed(plan, paneId, deps) : settle(plan, paneId, deps) === 'ok';
-  return finish(ok, plan.sessionName, paneId, opts, deps);
+  return finish(settleResumed(plan, paneId, deps), plan.sessionName, paneId, opts, deps);
 }

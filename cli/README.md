@@ -48,7 +48,7 @@ vdx publish <patch|minor|major> [--dry-run] [--force]
 vdx doctor [--format=ansi|markdown|json]
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai [project-path] [--restart] [--resume] [--detach] [--dry-run]   # default: cwd
+vdx ai [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd
 
 # MCP stdio server consumed by the Claude Code plugin
 vdx-mcp   --project <path>
@@ -67,7 +67,8 @@ vdx test            # → mise run test (which calls `vitest run` or whatever wa
 # 3. Ship a new minor release of a Node lib
 vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no push)
 
-# 4. Start the agent here; re-run to attach, --restart to apply a changed profile
+# 4. Start the agent here, continuing its last conversation (--new: a new one);
+#    re-run to attach, --restart to apply a changed profile
 vdx ai
 ```
 

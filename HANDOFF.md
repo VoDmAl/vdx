@@ -7,10 +7,14 @@
 
 ## ▶︎ Активная работа (2026-09-28)
 
-**Активного кристалла нет.** Последний —
-[docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), `status: done`
-(2026-09-28): команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и
-tmux из личного профиля `vdx-environment.yaml`. Итог:
+**Активный кристалл** —
+[docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), переоткрыт
+2026-09-29: `vdx ai` продолжает последний разговор по умолчанию, `--new` —
+новый (DL #15). Код и документация готовы, осталось: коммит, `vdx publish
+minor` (0.13.0), письмо nas-info поднять `VDX_VERSION`.
+
+Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
+личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:
 
 - `@vodmal/vdx-cli@0.12.1` в npm, сет `vdx-rubric-vodmal@v0.4.0` на GitHub.
 - vdx на m3 и lft ставит nas-info (закреплённая `VDX_VERSION`); порядок выпуска —

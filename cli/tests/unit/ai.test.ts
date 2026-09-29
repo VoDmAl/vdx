@@ -287,7 +287,7 @@ describe('runAi without tmux', () => {
     confirmTimeoutMs: 1000,
     ...over,
   });
-  const opts = { path: '', restart: false, resume: false, detach: false, dryRun: false };
+  const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
 
   beforeEach(() => {
     home = tmpDir('vdx-ai-home-');
@@ -322,6 +322,51 @@ describe('runAi without tmux', () => {
     expect(out).toContain('profile:  none');
     expect(out).toContain('agent:    codex\n');
     expect(out).toContain('this terminal');
+  });
+
+  describe('in this terminal', () => {
+    // Records its args; with --resume-me and no conversation it fails at once,
+    // as `claude --continue` does (exit 1, "No conversation found to continue").
+    const direct = () => {
+      const agent = path.join(home, 'fake-agent');
+      fs.writeFileSync(
+        agent,
+        [
+          '#!/bin/sh',
+          'echo "$*" >> "$(dirname "$0")/runs"',
+          'case " $* " in *" --resume-me "*)',
+          '  if [ -f "$(dirname "$0")/no-conversation" ]; then exit 1; fi;;',
+          'esac',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const profile = path.join(home, 'env.yaml');
+      fs.writeFileSync(
+        profile,
+        `agent: {command: ${agent}, args: [--base], resume_args: [--resume-me]}\nsession: {multiplexer: none}\n`,
+      );
+      return deps({ env: { VDX_ENVIRONMENT: profile, PATH: process.env['PATH'] }, interactive: true });
+    };
+    const runs = () => fs.readFileSync(path.join(home, 'runs'), 'utf8').trim().split('\n');
+
+    it('continues the last conversation by default', () => {
+      expect(runAi({ ...opts, path: root }, direct())).toBe(EXIT_OK);
+      expect(runs()).toEqual(['--base --resume-me']);
+    });
+
+    it('with nothing to resume, starts once more without the resume args', () => {
+      const d = direct();
+      fs.writeFileSync(path.join(home, 'no-conversation'), '');
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(runs()).toEqual(['--base --resume-me', '--base']);
+      expect(logs.join('\n')).toContain('nothing to resume — starting without --resume-me');
+    });
+
+    it('--new starts a new conversation', () => {
+      expect(runAi({ ...opts, path: root, fresh: true }, direct())).toBe(EXIT_OK);
+      expect(runs()).toEqual(['--base']);
+    });
   });
 });
 
@@ -370,7 +415,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     sleep: sleepSync,
     confirmTimeoutMs: 10_000,
   });
-  const opts = { path: '', restart: false, resume: false, detach: false, dryRun: false };
+  const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
   const agentArgs = () =>
     findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').map((f) => f.proc.args);
 
@@ -413,15 +458,15 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     fs.rmSync(base, { recursive: true, force: true });
   });
 
-  it('starts the agent in a new session, answers the expected prompt, verifies its args', () => {
+  it('starts the agent in a new session, continuing the conversation, answers the prompt, verifies its args', () => {
     writeProfile(['--base']);
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(tmux.hasSession('proj@testhost')).toBe(true);
     expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
     expect(agentArgs()).toHaveLength(1);
-    expect(agentArgs()[0]).toMatch(/fake-agent --base --chan plugin:x@y$/);
+    expect(agentArgs()[0]).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
     const pane = tmux.panes().find((p) => p.session === 'proj@testhost')!;
-    expect(tmux.capture(pane.paneId)).toContain('READY --base --chan plugin:x@y');
+    expect(tmux.capture(pane.paneId)).toContain('READY --base --chan plugin:x@y --resume-me');
   });
 
   it('is idempotent: a second run finds the running agent and starts nothing', () => {
@@ -485,8 +530,50 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     writeProfile(['--base', '--extra']);
     expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
     const out = logs.join('\n');
+    expect(out).toContain('resume:   --resume-me');
     expect(out).toContain('matched:  chan');
     expect(out).toContain('confirm:  "FAKE PROMPT" → Enter');
     expect(out).toMatch(/running:  proj@testhost %\d+ — matches the profile/);
+  });
+
+  it('--new leaves a running agent alone without --restart', () => {
+    writeProfile(['--base', '--extra']);
+    const before = agentArgs();
+    expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('--new replaces it only with --restart');
+    expect(agentArgs()).toEqual(before);
+  });
+
+  it('--restart --new replaces the agent in the same pane with a new conversation', () => {
+    writeProfile(['--base', '--extra']);
+    const paneBefore = tmux.panes().map((p) => p.paneId);
+    expect(runAi({ ...opts, path: root, restart: true, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(tmux.panes().map((p) => p.paneId)).toEqual(paneBefore);
+    expect(agentArgs()).toHaveLength(1);
+    expect(agentArgs()[0]).toMatch(/fake-agent --base --extra --chan plugin:x@y$/);
+  });
+
+  it('after a reboot with nothing to resume, a plain start runs the agent without the resume args', () => {
+    writeProfile(['--base', '--extra']);
+    tmux.tryRun(['kill-server']);
+    fs.writeFileSync(path.join(base, 'no-conversation'), '');
+    try {
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('nothing to resume — starting without --resume-me');
+      expect(agentArgs()).toHaveLength(1);
+      expect(agentArgs()[0]).toMatch(/fake-agent --base --extra --chan plugin:x@y$/);
+    } finally {
+      fs.rmSync(path.join(base, 'no-conversation'), { force: true });
+    }
+  }, 30_000); // "not running" is concluded after a 10 s wait
+
+  it('--new on a fresh start runs the agent without the resume args', () => {
+    writeProfile(['--base', '--extra']);
+    tmux.tryRun(['kill-server']);
+    expect(runAi({ ...opts, path: root, fresh: true, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('resume:   —');
+    expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).not.toContain('nothing to resume');
+    expect(agentArgs()).toEqual([expect.stringMatching(/fake-agent --base --extra --chan plugin:x@y$/)]);
   });
 });
