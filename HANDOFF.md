@@ -13,7 +13,7 @@
 новый (DL #15). `@vodmal/vdx-cli@0.13.0` в npm. Sidetrack #6 сделан: pre-flight
 `vdx publish` проверяет вход в npm (`npm-auth`); ждёт patch-выпуска.
 С 2026-09-29 vdx на станциях не закреплён по версии, релизы везёт topgrade
-(DL #16). Правка nas-info пока не закоммичена: на станциях 0.12.1.
+(DL #16): на lft 0.13.0, на m3 0.12.1 до ближайшего topgrade.
 
 Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
 личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:
