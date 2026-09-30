@@ -510,6 +510,24 @@ doctor` авторизацию npm уже проверяет — можно вз
 `cli/README.md`. Тест `tests/unit/cli.test.ts` запускает `bin/vdx.cjs` и
 сверяет вывод с `package.json`; без ветки `--version` падает. 2026-09-30.
 
+### #8. Два git-процесса на двух машинах в одном `.git` через Syncthing
+
+**Возникло в:** выпуск 0.13.1, 2026-09-30.
+**Описание:** `~/AI Projects` синхронизирует Syncthing вместе с `.git`. Пока
+владелец выпускал 0.13.1 на m3, мой цикл ожидания на lft каждые 15 с звал
+`git status`, а он переписывает `.git/index`. В 12:09:18 Syncthing получил
+индекс с обеих сторон: победил старый индекс lft, свежий индекс m3 лёг в
+`.git/index.sync-conflict-20260930-120918-N223K43` на обеих машинах. HEAD, тег
+и рабочее дерево были верны, `git fsck` чист; в индексе остался
+`cli/package.json` 0.13.0 — `git status` показывал `MM`. Вторая находка того же
+выпуска: в `cli/node_modules` на m3 лежал esbuild для x86_64 — копия с lft от
+3 сентября, до исключения `(?d)node_modules` из синка; `npm ci` на m3 это снял.
+
+**Status:** resolved — запись индекса возвращена к HEAD (`git reset --
+cli/package.json` на lft), конфликтная копия удалена. Правило: пока на другой
+машине идёт git, на этой не звать git, который пишет индекс; для опроса —
+`git --no-optional-locks status` или `git rev-parse`.
+
 ## Next actions
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
@@ -576,10 +594,12 @@ doctor` авторизацию npm уже проверяет — можно вз
 - [x] Sidetrack #6: проверка авторизации npm в pre-flight `vdx publish` —
       2026-09-29, живьём: с входом OK, с `NPM_CONFIG_USERCONFIG=/dev/null` FAIL
 - [x] Sidetrack #7: `vdx --version` — 2026-09-30, 171 тест, typecheck
-- [ ] Patch-выпуск 0.13.1: проверка `npm-auth` + `vdx --version` —
-      `vdx publish patch` (владелец, OTP), `git push --follow-tags`, lock
-      отдельным коммитом
-- [ ] 0.13.0 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
+- [x] Patch-выпуск 0.13.1: проверка `npm-auth` + `vdx --version` —
+      2026-09-30, владелец на m3 из клона (`npm run vdx -- publish patch`):
+      `8403c4e`, тег `v0.13.1`, push; npm `latest` 0.13.1. Pre-flight
+      `npm-auth` в первом деле: на lft вход истёк (E401) — отказ до bump.
+      Lock — отдельным коммитом. Попутно Sidetrack #8
+- [ ] 0.13.1 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
       стоит на обеих станциях. lft — 0.13.0 (2026-09-29 19:16 EDT). m3 — 0.12.1:
       topgrade там запускается руками (в launchd его нет), шаг npm в конфиге не
       выключен — видимо, после `23e7be7` topgrade не запускали. Проверка:

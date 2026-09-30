@@ -11,9 +11,10 @@
 [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), переоткрыт
 2026-09-29: `vdx ai` продолжает последний разговор по умолчанию, `--new` —
 новый (DL #15). `@vodmal/vdx-cli@0.13.0` в npm. Sidetrack #6 сделан: pre-flight
-`vdx publish` проверяет вход в npm (`npm-auth`); ждёт patch-выпуска.
+`vdx publish` проверяет вход в npm (`npm-auth`); вышло в 0.13.1 вместе с
+`vdx --version`.
 С 2026-09-29 vdx на станциях не закреплён по версии, релизы везёт topgrade
-(DL #16): на lft 0.13.0, на m3 0.12.1 до ближайшего topgrade.
+(DL #16): на lft 0.13.0, на m3 0.12.1 — 0.13.1 приедет с topgrade.
 
 Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
 личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:

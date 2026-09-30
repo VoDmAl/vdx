@@ -9,7 +9,7 @@
 Печатает версию установленного пакета и выходит с кодом 0. Раньше версию
 приходилось читать из `package.json` в `npm root -g`: `vdx --version` выводил
 справку с кодом 1 ([cli/src/index.ts](cli/src/index.ts),
-[Sidetrack #7](docs/tasks/vdx-ai/workitem.md)).
+[Sidetrack #7](docs/tasks/vdx-ai/workitem.md)). Вышло в 0.13.1.
 
 ## 2026-09-29
 
@@ -26,7 +26,7 @@ CLI», [DL #16](docs/tasks/vdx-ai/workitem.md)).
 пакет. Выпуск 0.13.0 сначала упал на самой публикации с E404 — сессия npm
 истекла, а на scoped-пакет npm отвечает 404, не 401. Теперь это отказ до bump с
 подсказкой `npm login` ([cli/src/publish.ts](cli/src/publish.ts),
-[Sidetrack #6](docs/tasks/vdx-ai/workitem.md)).
+[Sidetrack #6](docs/tasks/vdx-ai/workitem.md)). Вышло в 0.13.1.
 
 ### `vdx ai` продолжает последний разговор по умолчанию; `--new` — новый
 
