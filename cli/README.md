@@ -50,6 +50,9 @@ vdx doctor [--format=ansi|markdown|json]
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd
 
+# Print the installed version
+vdx --version
+
 # MCP stdio server consumed by the Claude Code plugin
 vdx-mcp   --project <path>
 ```

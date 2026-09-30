@@ -19,7 +19,7 @@ import {
   reportDoctorJson,
   reportDoctorAnsi,
 } from './report.ts';
-import { runDoctor, looksLikeProject } from './doctor.ts';
+import { runDoctor, looksLikeProject, readCliVersion } from './doctor.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -42,6 +42,7 @@ function usage(): never {
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
   vdx ai      [project_path]  [--new] [--restart] [--detach] [--dry-run]                                    (default: cwd)
+  vdx --version
 `,
   );
   process.exit(1);
@@ -283,7 +284,8 @@ function cmdAi(opts: ParsedArgs): void {
 }
 
 const parsed = parseArgs(process.argv);
-if (parsed.cmd === 'audit') cmdAudit(parsed);
+if (parsed.cmd === '--version') process.stdout.write(readCliVersion() + '\n');
+else if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
 else if (parsed.cmd === 'publish') cmdPublish(parsed);
 else if (parsed.cmd === 'doctor') cmdDoctor(parsed);

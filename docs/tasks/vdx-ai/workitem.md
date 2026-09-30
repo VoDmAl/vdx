@@ -5,7 +5,7 @@ description: "Запускает нужного агента в нужном р�
 status: in-progress
 session-type: prd-work
 created: 2026-09-28
-last-updated: 2026-09-29
+last-updated: 2026-09-30
 ---
 
 # vdx ai — запуск агента в проекте по личному профилю
@@ -505,7 +505,10 @@ doctor` авторизацию npm уже проверяет — можно вз
 Флаг `--version` ожидают по привычке — я сам вписал его в пункт проверки.
 Добавление — изменение поверхности CLI: README, `cli/README.md`, справка.
 
-**Status:** open
+**Status:** resolved — `vdx --version` печатает версию пакета
+(`readCliVersion()` из `doctor.ts`), код 0; строка в справке и в
+`cli/README.md`. Тест `tests/unit/cli.test.ts` запускает `bin/vdx.cjs` и
+сверяет вывод с `package.json`; без ветки `--version` падает. 2026-09-30.
 
 ## Next actions
 
@@ -572,7 +575,10 @@ doctor` авторизацию npm уже проверяет — можно вз
       2026-09-29, сессия nas-info разбужена
 - [x] Sidetrack #6: проверка авторизации npm в pre-flight `vdx publish` —
       2026-09-29, живьём: с входом OK, с `NPM_CONFIG_USERCONFIG=/dev/null` FAIL
-- [ ] Выпуск проверки `npm-auth` (patch)
+- [x] Sidetrack #7: `vdx --version` — 2026-09-30, 171 тест, typecheck
+- [ ] Patch-выпуск 0.13.1: проверка `npm-auth` + `vdx --version` —
+      `vdx publish patch` (владелец, OTP), `git push --follow-tags`, lock
+      отдельным коммитом
 - [ ] 0.13.0 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
       стоит на обеих станциях. lft — 0.13.0 (2026-09-29 19:16 EDT). m3 — 0.12.1:
       topgrade там запускается руками (в launchd его нет), шаг npm в конфиге не
