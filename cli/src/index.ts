@@ -29,7 +29,7 @@ import {
   type PublishOptions,
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
-import { runAi, defaultDeps } from './ai.ts';
+import { runAi, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -41,7 +41,7 @@ function usage(): never {
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
-  vdx ai      [project_path]  [--new] [--restart] [--detach] [--dry-run]                                    (default: cwd)
+  vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]         (default: cwd; @host: over ssh, in tmux there)
   vdx --version
 `,
   );
@@ -278,9 +278,19 @@ function cmdAi(opts: ParsedArgs): void {
   bool('resume');
   const detach = bool('detach');
   const dryRun = bool('dry-run');
-  process.exit(
-    runAi({ path: positionals[0] ?? '.', restart, fresh, detach, dryRun }, defaultDeps()),
-  );
+  const options = { path: positionals[0] ?? '.', restart, fresh, detach, dryRun };
+  // `ai@m3`: the same command on another machine. Its own label runs here.
+  const host = opts.cmd.startsWith('ai@') ? opts.cmd.slice(3) : null;
+  if (host !== null) {
+    if (!REMOTE_HOST_RE.test(host)) {
+      process.stderr.write(`vdx ai@host: "${host}" is not a host name (an ssh destination such as m3)\n`);
+      process.exit(2);
+    }
+    if (host.toLowerCase() !== hostLabel().toLowerCase()) {
+      process.exit(runAiRemote(options, host, defaultDeps(), readCliVersion()));
+    }
+  }
+  process.exit(runAi(options, defaultDeps()));
 }
 
 const parsed = parseArgs(process.argv);
@@ -289,7 +299,7 @@ else if (parsed.cmd === 'audit') cmdAudit(parsed);
 else if (parsed.cmd === 'init') cmdInit(parsed);
 else if (parsed.cmd === 'publish') cmdPublish(parsed);
 else if (parsed.cmd === 'doctor') cmdDoctor(parsed);
-else if (parsed.cmd === 'ai') cmdAi(parsed);
+else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(parsed);
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd))
   cmdRun(parsed.cmd as LifecycleVerb);
 else usage();

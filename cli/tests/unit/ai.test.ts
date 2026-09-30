@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   type AiDeps,
   type Environment,
@@ -24,6 +24,8 @@ import {
   planLaunch,
   processTree,
   projectIdentity,
+  remoteAiArgs,
+  remotePathWord,
   renderSessionName,
   resolveEnvironmentPath,
   runAi,
@@ -575,5 +577,68 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
     expect(logs.join('\n')).not.toContain('nothing to resume');
     expect(agentArgs()).toEqual([expect.stringMatching(/fake-agent --base --extra --chan plugin:x@y$/)]);
+  });
+});
+
+describe('vdx ai@host', () => {
+  const opts = { path: '.', restart: false, fresh: false, detach: false, dryRun: false };
+
+  it('maps a path under the local home to the remote home, anything else as is', () => {
+    expect(remotePathWord('/Users/vdm', '/Users/vdm')).toBe('"$HOME"');
+    expect(remotePathWord('/Users/vdm/AI Projects/vdx', '/Users/vdm')).toBe(`"$HOME"/'AI Projects/vdx'`);
+    expect(remotePathWord('/Users/vdm2/x', '/Users/vdm')).toBe('/Users/vdm2/x');
+    expect(remotePathWord('/opt/my proj', '/Users/vdm')).toBe(`'/opt/my proj'`);
+  });
+
+  it('asks ssh for a terminal only when it will attach', () => {
+    const base = { host: 'm3', projectPath: '/h/p', home: '/h', version: '1.0.0', opts };
+    expect(remoteAiArgs({ ...base, tty: true }).slice(0, 2)).toEqual(['-t', 'm3']);
+    expect(remoteAiArgs({ ...base, tty: false }).slice(0, 2)).toEqual(['-T', 'm3']);
+  });
+
+  describe('the remote script, run by a shell against a stub vdx', () => {
+    let dir: string;
+    beforeAll(() => {
+      dir = tmpDir('vdx-remote-');
+      fs.mkdirSync(path.join(dir, 'bin'));
+      fs.mkdirSync(path.join(dir, 'home', 'AI Projects', 'vdx'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'bin', 'vdx'),
+        '#!/bin/sh\nif [ "$1" = --version ]; then [ -n "$STUB_VERSION" ] || exit 1; echo "$STUB_VERSION"; exit 0; fi\nprintf \'%s\\n\' "$@"\n',
+        { mode: 0o755 },
+      );
+    });
+    afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    const run = (stubVersion: string, o = opts) => {
+      const script = remoteAiArgs({
+        host: 'm3',
+        projectPath: '/Users/vdm/AI Projects/vdx',
+        home: '/Users/vdm',
+        version: '0.14.0',
+        opts: o,
+        tty: false,
+      })[2]!;
+      const res = spawnSync('/bin/sh', ['-c', script], {
+        encoding: 'utf8',
+        env: { PATH: `${path.join(dir, 'bin')}:/usr/bin:/bin`, HOME: path.join(dir, 'home'), STUB_VERSION: stubVersion },
+      });
+      return { args: res.stdout.split('\n').filter(Boolean), note: res.stderr.trim(), status: res.status };
+    };
+
+    it('runs vdx ai there with the path under its own home, path first, then the flags', () => {
+      const r = run('0.14.0', { ...opts, fresh: true, restart: true });
+      expect(r.args).toEqual(['ai', path.join(dir, 'home', 'AI Projects', 'vdx'), '--new', '--restart']);
+      expect(r.note).toBe('');
+      expect(r.status).toBe(0);
+    });
+
+    it('names a different vdx version there', () => {
+      expect(run('0.13.1').note).toBe('note: vdx on m3 is 0.13.1, here 0.14.0');
+    });
+
+    it('names a vdx that predates --version', () => {
+      expect(run('').note).toBe('note: vdx on m3 is older than 0.13.1, here 0.14.0');
+    });
   });
 });

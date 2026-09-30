@@ -693,6 +693,61 @@ function finish(ok: boolean, session: string, paneId: string, opts: AiOptions, d
   return ok ? EXIT_OK : EXIT_LAUNCH_FAILED;
 }
 
+/** `vdx ai@<host>`: an ssh destination such as `m3` — never an option to ssh. */
+export const REMOTE_HOST_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** A path under the local home as a shell word under the remote home; any other path as is. */
+export function remotePathWord(abs: string, home: string): string {
+  const rel = path.relative(home, abs);
+  if (rel === '') return '"$HOME"';
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return shellQuote(abs);
+  return `"$HOME"/${shellQuote(rel)}`;
+}
+
+/**
+ * The ssh argv for `vdx ai@<host>`: the same `vdx ai` on the host, in its own
+ * tmux there. The path goes first: an older vdx hands the token after a flag it
+ * does not know to that flag. A different vdx version there is named, not fatal.
+ */
+export function remoteAiArgs(input: {
+  host: string;
+  projectPath: string;
+  home: string;
+  version: string;
+  opts: AiOptions;
+  tty: boolean;
+}): string[] {
+  const { host, opts, version } = input;
+  const flags = [
+    opts.fresh && '--new',
+    opts.restart && '--restart',
+    opts.detach && '--detach',
+    opts.dryRun && '--dry-run',
+  ].filter((f): f is string => Boolean(f));
+  const v = shellQuote(version);
+  const script =
+    `v=$(vdx --version 2>/dev/null) || v='older than 0.13.1'; ` +
+    `[ "$v" = ${v} ] || echo "note: vdx on ${host} is $v, here "${v} >&2; ` +
+    `exec vdx ai ${[remotePathWord(input.projectPath, input.home), ...flags].join(' ')}`;
+  return [input.tty ? '-t' : '-T', host, script];
+}
+
+export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version: string): number {
+  const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
+  const tty = deps.interactive && !opts.detach && !opts.dryRun;
+  const args = remoteAiArgs({ host, projectPath, home: deps.home, version, opts, tty });
+  deps.log(`→ ${host}: vdx ai ${shellQuote(projectPath)}`);
+  const res = spawnSync('ssh', args, { stdio: 'inherit' });
+  if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+    deps.log('vdx ai: `ssh` not found on PATH');
+    return 127;
+  }
+  if (opts.detach && res.status === EXIT_OK) {
+    deps.log(`attach from here: vdx ai@${host} ${shellQuote(projectPath)}`);
+  }
+  return res.status ?? 1;
+}
+
 export function runAi(opts: AiOptions, deps: AiDeps): number {
   const { log, tmux } = deps;
 

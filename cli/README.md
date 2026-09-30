@@ -48,7 +48,7 @@ vdx publish <patch|minor|major> [--dry-run] [--force]
 vdx doctor [--format=ansi|markdown|json]
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd
+vdx ai[@host] [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
 
 # Print the installed version
 vdx --version
@@ -73,11 +73,17 @@ vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no
 # 4. Start the agent here, continuing its last conversation (--new: a new one);
 #    re-run to attach, --restart to apply a changed profile
 vdx ai
+
+# 5. The same on another machine (an ssh host with vdx), attaching from here
+vdx ai@m3
 ```
 
 `vdx ai` reads a personal profile, never a bundled one: `$VDX_ENVIRONMENT`, else
 `~/.vdx-environment.yaml`, else a plain `claude`/`codex` with no flags. Format:
 [docs/specs/environment-format.md](../docs/specs/environment-format.md).
+`vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
+profile and tmux, the path taken under its home directory; `--detach` only
+starts it. The machine's own label (`$VDX_HOST`) runs here.
 
 By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal) at the time of
