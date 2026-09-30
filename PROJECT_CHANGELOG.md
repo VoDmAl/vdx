@@ -848,7 +848,7 @@ t23b L0, bookmap L1 — ниже моей ручной калибровки. Г�
 ### Шаг B: создан внешний репо `vdx-rubric-vodmal` локально, тегирован v0.2.0
 Локация `/Users/vdm/AI Projects/vdx-rubric-vodmal/`. Содержимое: `vdx-rubric.yaml`
 (переехавший из `docs/specs/vdx-rubric.example.yaml` с очищенным header'ом),
-`README.md`, `CHANGELOG.md`, `.gitignore`. Commit `c963b95`, аннотированный тег
+`README.md`, `CHANGELOG.md`, `.gitignore`. Commit `387059f`, аннотированный тег
 `v0.2.0`. Push на GitHub не делал — выходит за пределы локальной работы (требует
 явной авторизации). Манифесты проектов смогут ссылаться как
 `baseline: github.com/vodmal/vdx-rubric-vodmal@v0.2.0` после push.

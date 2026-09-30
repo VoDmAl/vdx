@@ -67,7 +67,7 @@ last-updated: 2026-09-30
   каждому старту, `--new` их убирает; без tmux «продолжать нечего» — ненулевой
   код в первые 30 с (DL #15).
 - **Версия сета** — `v0.4.0` для обоих документов (DL #10); тег на GitHub с
-  2026-09-28 (`bd004f2`).
+  2026-09-28 (`2e02e23`).
 - **Состояние на 2026-09-28:** на lft обе сессии с `mail.watch` работают по
   профилю, канал echelon доходит (DL #11). `@vodmal/vdx-cli@0.12.0` в npm, тег
   сета `v0.4.0` на GitHub. vdx на станциях ставит nas-info (`FEATURE_VDX`,
@@ -510,7 +510,7 @@ Syncthing'ом). nas-info — бриф: `~/.gitconfig` без `user.*`,
 
 **Возникло в:** чтение HANDOFF.md в начале сессии.
 **Описание:** «Висит в рабочем дереве: правка `cli/package-lock.json`» — уже
-закоммичено (`69a5438`). Поправить вместе с записью про `vdx ai`.
+закоммичено (`c80d29b`). Поправить вместе с записью про `vdx ai`.
 
 **Status:** resolved — HANDOFF переписан 2026-09-28
 
@@ -599,8 +599,8 @@ DL #17: брифы nas-info и ai-dev-plugins.
 `~/PhpstormProjects` свой автор есть у 28 (7 разных адресов, не по хосту
 remote), у 51 нет; 9 из них с коммитами за месяц — автор там по машине
 (space-hq 109 `limex.com` / 87 `.org`). Рабочий адрес ушёл в публичные
-`VoDmAl/vdx` (29 коммитов с `c4e6f17`, теги v0.12.0–v0.13.0) и
-`VoDmAl/vdx-rubric-vodmal` (`bd004f2`, тег v0.4.0). Форков и звёзд у обоих 0.
+`VoDmAl/vdx` (29 коммитов с `b75d27d`, теги v0.12.0–v0.13.0) и
+`VoDmAl/vdx-rubric-vodmal` (`2e02e23`, тег v0.4.0). Форков и звёзд у обоих 0.
 
 Решения владельца 2026-09-30: проверка автора в vdx — во всех трёх местах
 (`vdx ai` при запуске, `vdx doctor`, рубрика); машинная часть — брифом
@@ -622,12 +622,12 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       `ps` (закрывает непроверенное в DL #4) — DL #7, 2026-09-28
 - [x] `vdx-environment.yaml` в `vdx-rubric-vodmal` + CHANGELOG + README —
       2026-09-28, ветка `feature/vdx-environment`, не закоммичено
-- [x] Коммит, тег `v0.4.0` и push `vdx-rubric-vodmal` — 2026-09-28, `bd004f2`,
+- [x] Коммит, тег `v0.4.0` и push `vdx-rubric-vodmal` — 2026-09-28, `2e02e23`,
       тег `v0.4.0` на GitHub
 - [x] Документация: D14 в `docs/decisions.md`, спека профиля в `docs/specs/`,
       README и `cli/README.md`, PROJECT_CHANGELOG, HANDOFF (Sidetrack #3) —
       2026-09-28
-- [x] Коммит ветки `feature/vdx-ai` — 2026-09-28, `d498468` + `ad46c01`,
+- [x] Коммит ветки `feature/vdx-ai` — 2026-09-28, `8eccdda` + `b4f39d4`,
       fast-forward в `main`, push
 - [x] Установка на lft: CLI на PATH, `~/.vdx-environment.yaml`,
       `export VDX_HOST` — 2026-09-28: симлинк профиля на клон сета; строка
@@ -645,7 +645,7 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       машину), 2026-09-28
 - [x] Патч-релиз 0.12.1 с исправлением `-u` (DL #13): коммит, `vdx publish patch`
       (владелец, OTP), письмо nas-info поднять `VDX_VERSION` — 2026-09-28:
-      `9e254d6`, `36e84f1`, npm `latest` 0.12.1, письмо `vdx-0-12-1`
+      `a8ba235`, `29ade86`, npm `latest` 0.12.1, письмо `vdx-0-12-1`
 - [x] nas-info: `VDX_VERSION` 0.12.1 и коммит его правок vdx владельцем —
       nas-info `13a34a4`, 2026-09-28
 - [x] Перезапуск `t23b-program` и `global-auth-gap` через `vdx ai --restart` —
@@ -653,7 +653,7 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
 - [x] Ответ echelon письмом: как стартуют сессии, где это лежит, что проверено —
       `project-sessions-vdx-ai`, 2026-09-28; результат теста — сообщением
 - [x] Публикация CLI в npm — 2026-09-28, `@vodmal/vdx-cli@0.12.0`
-      (`26a5ba9`, тег `v0.12.0`); lock синхронизирован отдельным коммитом
+      (`8ac5482`, тег `v0.12.0`); lock синхронизирован отдельным коммитом
 - [x] Sidetrack #1: CLI на PATH на lft (закрывается пунктом установки выше) —
       модуль nas-info, 0.12.1 из npm, 2026-09-28
 - [x] Sidetrack #2: тест — репо без `origin` даёт `{project}` = имя каталога —
@@ -666,10 +666,10 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       `intercom-hook-registers-non-git-dirs`, 2026-09-28
 - [x] Продолжение по умолчанию и `--new` (DL #15): код, тесты (160, ключевые —
       мутацией), README, `cli/README.md`, спека, D14 — 2026-09-29
-- [x] Коммит правки DL #15 — `e522124`, 2026-09-29
+- [x] Коммит правки DL #15 — `93d7273`, 2026-09-29
 - [x] `vdx publish minor` → 0.13.0 (владелец, OTP), `git push --follow-tags`,
       синхронизация `cli/package-lock.json` отдельным коммитом — 2026-09-29:
-      `ffc1b62`, тег `v0.13.0`, npm `latest` 0.13.0 с 16:47:40Z (PUT 202 в
+      `810cb56`, тег `v0.13.0`, npm `latest` 0.13.0 с 16:47:40Z (PUT 202 в
       16:45:39Z — registry показал версию через ~2 мин). Первая попытка упала
       E404: сессия npm истекла (`npm whoami` → 401), помог `npm login` (Sidetrack #6)
 - [x] Письмо nas-info: поднять `VDX_VERSION` до 0.13.0 — `vdx-0-13-0`,
@@ -679,7 +679,7 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
 - [x] Sidetrack #7: `vdx --version` — 2026-09-30, 171 тест, typecheck
 - [x] Patch-выпуск 0.13.1: проверка `npm-auth` + `vdx --version` —
       2026-09-30, владелец на m3 из клона (`npm run vdx -- publish patch`):
-      `8403c4e`, тег `v0.13.1`, push; npm `latest` 0.13.1. Pre-flight
+      `a95a89b`, тег `v0.13.1`, push; npm `latest` 0.13.1. Pre-flight
       `npm-auth` в первом деле: на lft вход истёк (E401) — отказ до bump.
       Lock — отдельным коммитом. Попутно Sidetrack #8
 - [x] Брифы по DL #17 — 2026-09-30: nas-info `git-sync-conflicts` (настройка
@@ -690,9 +690,13 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
 - [x] Автор задан локально в 9 активных репо (DL #18) — 2026-09-30
 - [x] Бриф nas-info `git-identity-per-repo` (DL #18) — 2026-09-30, сессия
       разбужена
-- [ ] Переписать историю `VoDmAl/vdx` и `VoDmAl/vdx-rubric-vodmal` (DL #18):
-      зеркальная копия, `git filter-repo`, хэши в документах по `commit-map`,
-      force-push владельцем
+- [ ] Переписать историю `VoDmAl/vdx` и `VoDmAl/vdx-rubric-vodmal` (DL #18) —
+      локально сделано 2026-09-30: архивы `.git` и списки ссылок в
+      `~/.local/share/git-rewrite-backups/2026-09-30/`, `git filter-repo
+      --mailmap` (автор, коммитер, тегер → `dmitry@vorobyev.org`), в vdx 30
+      коммитов с новыми хэшами из 90, в рубрике все 7; хэши в документах vdx
+      заменены по `commit-map` (копия письма в `references/` оставлена как есть).
+      Осталось: force-push владельцем, проверка на GitHub
 - [ ] Проверка автора в vdx: `vdx ai` при запуске, `vdx doctor`, рубрика
       (DL #18) — отдельная работа
 - [ ] 0.13.1 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
