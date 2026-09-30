@@ -4,6 +4,15 @@
 
 ## 2026-09-30
 
+### `vdx ai` предлагает автора коммитов там, где его нет
+
+В репо без своего автора (git откажет при `user.useConfigOnly`) `vdx ai`
+перед запуском предлагает до трёх адресов из авторов соседних репо
+(`git.author_pool` профиля) — по истории, группе в remote и схожему имени;
+Enter записывает первый в `.git/config`. Замер на 38 репо: первым верный адрес
+в 31, в тройке — в 37. `vdx doctor` показывает автора или кандидата с командой
+([cli/src/author.ts](cli/src/author.ts), [DL #21](docs/tasks/vdx-ai/workitem.md)).
+
 ### Короткое имя проекта в сессии `vdx ai`: `vodmalbot@lft`, а не `telegram_vorobyev_name@lft`
 
 `{project}` в имени сессии (и workspace cmux) — `[vdx] name` в `mise.toml`

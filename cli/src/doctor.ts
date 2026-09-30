@@ -3,6 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { effectiveAuthor, isGitRepo, rankAuthors, scanPool } from './author.ts';
+import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
 
 export type CheckStatus = 'ok' | 'warning' | 'missing';
 
@@ -503,6 +505,40 @@ function checkGitHooks(ctx: DoctorCtx): CheckResult | null {
   };
 }
 
+/**
+ * The project's commit author. With `user.useConfigOnly` git refuses to commit
+ * in a repo that has none; the remedy names the likely one, as `vdx ai` does.
+ */
+export function checkGitAuthor(ctx: DoctorCtx): CheckResult | null {
+  const root = ctx.projectRoot;
+  if (root === null || !isGitRepo(root)) return null;
+  const id = 'git-author';
+  const label = 'git author';
+  const current = effectiveAuthor(root);
+  if (current) return { id, label, status: 'ok', message: `${current.email} (${current.scope})` };
+
+  let environment: Environment = {};
+  const profilePath = resolveEnvironmentPath();
+  try {
+    if (profilePath) environment = loadEnvironment(profilePath);
+  } catch {
+    /* a broken profile is vdx ai's report; the parent directory still gives neighbours */
+  }
+  const home = os.homedir();
+  const dirs = authorPoolDirs(environment, root, home, profilePath ? path.dirname(profilePath) : home);
+  const top = rankAuthors(root, scanPool(dirs))[0];
+  const q = shellQuote(root);
+  return {
+    id,
+    label,
+    status: 'warning',
+    message: `no author of its own — git refuses to commit here${top ? `; likely ${top.email}` : ''}`,
+    remedy: top
+      ? `git -C ${q} config --local user.name ${shellQuote(top.name)} && git -C ${q} config --local user.email ${shellQuote(top.email)}`
+      : `git -C ${q} config --local user.email <address>`,
+  };
+}
+
 const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkVdxVersion,
   checkVdx,
@@ -514,6 +550,7 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkNpmAuth,
   checkContainerRuntime,
   checkGitHooks,
+  checkGitAuthor,
 ];
 
 export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {

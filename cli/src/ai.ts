@@ -6,6 +6,7 @@ import YAML from 'js-yaml';
 import { evalPredicate } from './evaluator.ts';
 import { autoDetectStack, readStructured, resolveConfigPath, type Ctx } from './facts.ts';
 import { loadManifest } from './manifest.ts';
+import { type Author, effectiveAuthor, isGitRepo, rankAuthors, scanPool, writeAuthor } from './author.ts';
 import type { Predicate } from './rubric.ts';
 
 /**
@@ -61,11 +62,17 @@ export interface SessionProfile {
   project_names?: NameSource[];
 }
 
+export interface GitProfile {
+  /** Directories whose repos are the neighbours an author is proposed from; default — the project's parent. */
+  author_pool?: string[];
+}
+
 export interface Environment {
   schema_version?: string;
   metadata?: Record<string, unknown>;
   agent?: AgentProfile;
   session?: SessionProfile;
+  git?: GitProfile;
 }
 
 export const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
@@ -159,6 +166,14 @@ export function parseEnvironment(text: string, source: string): Environment {
           fail(`${at}.jsonpath`, 'must be a non-empty string (a dot path, e.g. names.0)');
         }
       });
+    }
+  }
+
+  const gitDoc = envDoc.git;
+  if (gitDoc !== undefined) {
+    if (typeof gitDoc !== 'object' || gitDoc === null) fail('git', 'must be a mapping');
+    if (gitDoc.author_pool !== undefined && !isStringList(gitDoc.author_pool)) {
+      fail('git.author_pool', 'must be a list of directories');
     }
   }
   return envDoc;
@@ -583,10 +598,35 @@ export interface AiDeps {
   processes: () => ProcInfo[];
   sleep: (ms: number) => void;
   confirmTimeoutMs: number;
+  /** One line from the person at the terminal, or null when there is none. */
+  ask: (prompt: string) => string | null;
 }
 
 export function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Read one line from the terminal, synchronously: the prompt runs before tmux takes it. */
+export function askLine(prompt: string): string | null {
+  process.stderr.write(prompt);
+  const buf = Buffer.alloc(256);
+  let text = '';
+  for (;;) {
+    let n: number;
+    try {
+      n = fs.readSync(0, buf, 0, buf.length, null);
+    } catch (e: any) {
+      if (e?.code === 'EAGAIN') {
+        sleepSync(50);
+        continue;
+      }
+      return null;
+    }
+    if (n === 0) return text === '' ? null : text.trim();
+    text += buf.toString('utf8', 0, n);
+    const nl = text.indexOf('\n');
+    if (nl >= 0) return text.slice(0, nl).trim();
+  }
 }
 
 export function defaultDeps(): AiDeps {
@@ -602,6 +642,7 @@ export function defaultDeps(): AiDeps {
     processes: listProcesses,
     sleep: sleepSync,
     confirmTimeoutMs: 30_000,
+    ask: askLine,
   };
 }
 
@@ -794,6 +835,61 @@ export function remoteAiArgs(input: {
   return [input.tty ? '-t' : '-T', host, script];
 }
 
+/** Where neighbour repos live: the profile's `git.author_pool`, else the project's parent directory. */
+export function authorPoolDirs(environment: Environment, projectRoot: string, home: string, profileDir: string): string[] {
+  const listed = environment.git?.author_pool;
+  if (!listed?.length) return [path.dirname(projectRoot)];
+  return listed.map((d) => path.resolve(profileDir, d.replace(/^~(?=$|\/)/, home)));
+}
+
+/**
+ * A repo without its own author makes git refuse to commit (`user.useConfigOnly`).
+ * At a terminal vdx proposes the likely author and Enter takes the first;
+ * without one it says so and goes on — a scripted start must not stop here.
+ * A running agent needs no restart: git reads the author at each commit.
+ */
+export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDeps, dryRun: boolean): void {
+  if (!isGitRepo(projectRoot)) return;
+  const current = effectiveAuthor(projectRoot);
+  if (current) {
+    if (dryRun) deps.out(`  author:   ${current.email} (${current.scope})\n`);
+    return;
+  }
+  const top = rankAuthors(projectRoot, scanPool(poolDirs)).slice(0, 3);
+  const q = shellQuote(projectRoot);
+  const command = (a: Author) =>
+    `git -C ${q} config --local user.name ${shellQuote(a.name)} && git -C ${q} config --local user.email ${shellQuote(a.email)}`;
+  if (dryRun) {
+    const proposal = top.length ? `; would propose ${top.map((c) => c.email).join(', ')}` : '';
+    deps.out(`  author:   none — git refuses to commit here${proposal}\n`);
+    return;
+  }
+  deps.log(`⚠ ${path.basename(projectRoot)}: no commit author of its own — git will refuse to commit here`);
+  if (!deps.interactive || top.length === 0) {
+    deps.log(`  set it: ${top[0] ? command(top[0]) : `git -C ${q} config --local user.email <address>`}`);
+    return;
+  }
+  top.forEach((c, i) => deps.log(`  ${i + 1}) ${c.name} <${c.email}>${c.why.length ? `   ${c.why.join('; ')}` : ''}`));
+  deps.log('  s) skip');
+  for (let tries = 0; tries < 2; tries++) {
+    const answer = deps.ask('Author [1]: ');
+    if (answer === null) return;
+    const a = answer.trim();
+    if (/^[sn]$/i.test(a)) {
+      deps.log('  skipped');
+      return;
+    }
+    const pick: Author | undefined =
+      a === '' ? top[0] : /^\d+$/.test(a) ? top[Number(a) - 1] : a.includes('@') ? { name: top[0]!.name, email: a } : undefined;
+    if (pick) {
+      if (writeAuthor(projectRoot, pick)) deps.log(`✓ ${pick.name} <${pick.email}> → .git/config`);
+      else deps.log(`✗ could not write .git/config — ${command(pick)}`);
+      return;
+    }
+    deps.log(`  1–${top.length}, an address, or s`);
+  }
+}
+
 export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version: string): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
@@ -839,12 +935,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return EXIT_USAGE;
   }
 
+  const profileDir = profilePath ? path.dirname(profilePath) : deps.home;
   const named = resolveProjectName({
     projectRoot,
     repo: projectIdentity(projectRoot),
     sources: environment.session?.project_names ?? [],
     home: deps.home,
-    profileDir: profilePath ? path.dirname(profilePath) : deps.home,
+    profileDir,
   });
 
   let plan: LaunchPlan;
@@ -876,10 +973,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command)
       : [];
 
+  const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
   if (opts.dryRun) {
     deps.out(renderPlan(plan, multiplexer, running));
+    ensureAuthor(projectRoot, poolDirs, deps, true);
     return EXIT_OK;
   }
+  ensureAuthor(projectRoot, poolDirs, deps, false);
 
   if (multiplexer === 'none') {
     if (opts.restart) {

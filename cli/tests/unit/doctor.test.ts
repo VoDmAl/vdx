@@ -1,14 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
+import { checkGitAuthor, runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
 import {
   reportDoctorMarkdown,
   reportDoctorJson,
   reportDoctorAnsi,
 } from '../../src/report.ts';
+
+// The machine's own profile would make the author check scan the owner's repos.
+const savedProfile = process.env['VDX_ENVIRONMENT'];
+beforeAll(() => {
+  process.env['VDX_ENVIRONMENT'] = path.join(os.tmpdir(), 'vdx-doctor-test-no-profile.yaml');
+});
+afterAll(() => {
+  if (savedProfile === undefined) delete process.env['VDX_ENVIRONMENT'];
+  else process.env['VDX_ENVIRONMENT'] = savedProfile;
+});
 
 describe('runDoctor', () => {
   it('returns a report with checks array and counters that sum correctly', () => {
@@ -90,9 +100,44 @@ describe('runDoctor with explicit ctx', () => {
   });
 
   it('machine-level checks are unaffected by projectRoot', () => {
+    const projectScoped = new Set(['git-hooks', 'git-author']);
+    const machine = (ids: string[]) => ids.filter((id) => !projectScoped.has(id));
     const withRoot = runDoctor({ projectRoot: process.cwd() });
     const without = runDoctor({ projectRoot: null });
-    expect(withRoot.checks.map((c) => c.id)).toEqual(without.checks.map((c) => c.id));
+    expect(machine(withRoot.checks.map((c) => c.id))).toEqual(machine(without.checks.map((c) => c.id)));
+    expect(without.checks.map((c) => c.id)).not.toContain('git-author');
+  }, 30_000);
+
+  it('names the commit author of a repo, or the likely one with a command', () => {
+    const saved = { g: process.env['GIT_CONFIG_GLOBAL'], s: process.env['GIT_CONFIG_NOSYSTEM'], e: process.env['VDX_ENVIRONMENT'] };
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-doctor-author-')));
+    fs.writeFileSync(path.join(dir, 'gitconfig'), '');
+    process.env['GIT_CONFIG_GLOBAL'] = path.join(dir, 'gitconfig');
+    process.env['GIT_CONFIG_NOSYSTEM'] = '1';
+    process.env['VDX_ENVIRONMENT'] = path.join(dir, 'no-profile.yaml');
+    try {
+      const repo = (name: string, email?: string) => {
+        const d = path.join(dir, name);
+        fs.mkdirSync(d);
+        execFileSync('git', ['-C', d, 'init', '-q']);
+        execFileSync('git', ['-C', d, 'remote', 'add', 'origin', `git@gitlab.work:team/${name}.git`]);
+        if (email) execFileSync('git', ['-C', d, 'config', '--local', 'user.email', email]);
+        return d;
+      };
+      const has = repo('svc-a', 'me@work.example');
+      const none = repo('svc-b');
+      const row = (root: string) => checkGitAuthor({ projectRoot: root });
+      expect(row(has)).toMatchObject({ status: 'ok', message: 'me@work.example (local)' });
+      expect(row(none)).toMatchObject({ status: 'warning' });
+      expect(row(none)!.message).toContain('likely me@work.example');
+      expect(row(none)!.remedy).toContain('config --local user.email me@work.example');
+    } finally {
+      for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.g], ['GIT_CONFIG_NOSYSTEM', saved.s], ['VDX_ENVIRONMENT', saved.e]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

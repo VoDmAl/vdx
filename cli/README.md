@@ -26,7 +26,7 @@ ephemeral environment.
 
 **First command after install: `vdx doctor`** — it inspects your environment
 (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude
-Code plugin) and points to remedies for everything that's missing or
+Code plugin; in a project — git hooks and the commit author) and points to remedies for everything that's missing or
 sub-optimal.
 
 ## Use
@@ -85,7 +85,8 @@ The session's `{project}` is `[vdx] name` from the project's `mise.toml`, else t
 first file in the profile's `session.project_names` that has one, else the repo
 name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
 profile and tmux, the path taken under its home directory; `--detach` only
-starts it. The machine's own label (`$VDX_HOST`) runs here.
+starts it. The machine's own label (`$VDX_HOST`) runs here. Where git knows no
+commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
 
 By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal) at the time of

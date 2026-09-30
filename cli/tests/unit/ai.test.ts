@@ -11,6 +11,7 @@ import {
   EXIT_USAGE,
   Tmux,
   commandLine,
+  ensureAuthor,
   fallbackAgent,
   findAgentPanes,
   hostLabel,
@@ -288,6 +289,7 @@ describe('runAi without tmux', () => {
     processes: () => [],
     sleep: () => {},
     confirmTimeoutMs: 1000,
+    ask: () => null,
     ...over,
   });
   const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
@@ -688,5 +690,106 @@ describe('project name: mise.toml, then profile sources, then the repository nam
     expect(bad('[{file: "a.json"}]')).toThrow(/project_names\[0\].jsonpath/);
     expect(bad('[{file: "{project}.json", jsonpath: a}]')).toThrow(/unknown placeholder \{project\}/);
     expect(() => bad('[{file: "~/{repo}.json", jsonpath: names.0}]')()).not.toThrow();
+  });
+});
+
+describe('vdx ai proposes an author where the repo has none', () => {
+  const saved = { global: process.env['GIT_CONFIG_GLOBAL'], nosystem: process.env['GIT_CONFIG_NOSYSTEM'] };
+  let dir: string;
+  let target: string;
+  let logs: string[];
+  const git = (d: string, ...a: string[]) =>
+    execFileSync('git', ['-C', d, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const localEmail = () => {
+    try {
+      return git(target, 'config', '--local', '--get', 'user.email');
+    } catch {
+      return null;
+    }
+  };
+  const repo = (name: string, email?: string, remote?: string) => {
+    const d = path.join(dir, name);
+    fs.mkdirSync(d);
+    git(d, 'init', '-q');
+    if (remote) git(d, 'remote', 'add', 'origin', remote);
+    if (email) {
+      git(d, 'config', '--local', 'user.email', email);
+      git(d, 'config', '--local', 'user.name', 'Me');
+    }
+    return d;
+  };
+  const deps = (answers: (string | null)[], interactive = true): AiDeps => ({
+    env: {},
+    home: dir,
+    tmux: new Tmux(`vdx-test-unused-${process.pid}`),
+    interactive,
+    shell: '/bin/sh',
+    log: (l) => logs.push(l),
+    out: (t) => logs.push(t),
+    onPath: () => false,
+    processes: () => [],
+    sleep: () => {},
+    confirmTimeoutMs: 1000,
+    ask: () => (answers.length ? answers.shift()! : null),
+  });
+
+  beforeEach(() => {
+    dir = tmpDir('vdx-author-');
+    fs.writeFileSync(path.join(dir, 'gitconfig'), '');
+    process.env['GIT_CONFIG_GLOBAL'] = path.join(dir, 'gitconfig');
+    process.env['GIT_CONFIG_NOSYSTEM'] = '1';
+    repo('svc-a', 'me@work.example', 'git@gitlab.work:team/svc-a.git');
+    repo('site', 'me@home.example', 'git@github.com:me/site.git');
+    target = repo('svc-b', undefined, 'git@gitlab.work:team/svc-b.git');
+    logs = [];
+  });
+  afterEach(() => {
+    for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.nosystem]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('Enter takes the first proposal and writes it into .git/config', () => {
+    ensureAuthor(target, [dir], deps(['']), false);
+    expect(localEmail()).toBe('me@work.example');
+    expect(logs.join('\n')).toContain('1) Me <me@work.example>');
+  });
+
+  it('a number picks another proposal; an address is taken as typed', () => {
+    ensureAuthor(target, [dir], deps(['2']), false);
+    expect(localEmail()).toBe('me@home.example');
+    git(target, 'config', '--local', '--unset', 'user.email');
+    ensureAuthor(target, [dir], deps(['other@x.example']), false);
+    expect(localEmail()).toBe('other@x.example');
+  });
+
+  it('s skips; an unclear answer is asked once more', () => {
+    ensureAuthor(target, [dir], deps(['s']), false);
+    expect(localEmail()).toBeNull();
+    ensureAuthor(target, [dir], deps(['what', '']), false);
+    expect(localEmail()).toBe('me@work.example');
+  });
+
+  it('without a terminal it only says how, and writes nothing', () => {
+    ensureAuthor(target, [dir], deps([''], false), false);
+    expect(localEmail()).toBeNull();
+    expect(logs.join('\n')).toMatch(/set it: git -C .* config --local user.email me@work.example/);
+  });
+
+  it('--dry-run names the proposals and asks nothing', () => {
+    ensureAuthor(target, [dir], deps([]), true);
+    expect(logs.join('')).toContain('author:   none — git refuses to commit here; would propose me@work.example, me@home.example');
+  });
+
+  it('says nothing to change where the repo has an author', () => {
+    ensureAuthor(path.join(dir, 'site'), [dir], deps(['2']), false);
+    expect(logs).toEqual([]);
+  });
+
+  it('checks the profile key', () => {
+    expect(() => parseEnvironment('git:\n  author_pool: x\n', 'p.yaml')).toThrow(/git.author_pool/);
+    expect(() => parseEnvironment('git:\n  author_pool: ["~/AI Projects"]\n', 'p.yaml')).not.toThrow();
   });
 });

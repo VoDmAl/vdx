@@ -13,7 +13,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "0.5.0"
+  version: "0.6.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -44,3 +44,11 @@ session:
   project_names:
     - file: "~/.claude/vdm/intercom/_registry/{repo}.json"
       jsonpath: names.0
+
+git:
+  # A repo without its own author makes git refuse to commit (user.useConfigOnly);
+  # vdx ai proposes one from the authors of the repos in these directories.
+  author_pool:
+    - "~/AI Projects"
+    - "~/PhpstormProjects"
+    - "~/PhpstormProjects/git.vorobyev.name"
