@@ -639,7 +639,9 @@ DL #17: брифы nas-info и ai-dev-plugins. Вторая копия того 
 `.git/index.sync-conflict-20260930-122528-N223K43` — от моей же диагностики:
 `git status` через ssh на m3 в ту же минуту, что `git reset` на lft. Нашлась
 при переписывании истории, удалена 2026-09-30; индекс на обеих машинах совпал
-с HEAD.
+с HEAD. Выпуск 0.14.0 дал ещё две копии — `refs/remotes/origin/main` (обе
+`cffd1d5`): push с lft и push выпуска с m3 в одно окно синхронизации. Коммит в
+ветке, копии удалены.
 
 ### #9. Автор коммитов зависит от машины, а не от репо
 
@@ -795,16 +797,16 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       `mise.toml`), спеки профиля и манифеста, оба README, D14, журнал; сет
       `vdx-rubric-vodmal` 0.5.0 — канон, CHANGELOG, README, зеркала,
       `DEFAULT_BASELINE` — 2026-09-30
-- [ ] Коммит, тег `v0.5.0` и push `vdx-rubric-vodmal` — владелец
-- [ ] Выпуск 0.14.0 (minor: `vdx ai@<host>`, короткое имя проекта) —
-      `vdx publish minor` владельцем
+- [x] Сет `vdx-rubric-vodmal` v0.5.0 — 2026-09-30: `242d7f1`, аннотированный тег
+      `v0.5.0` (тегер `dmitry@vorobyev.org`), push
+- [x] Выпуск 0.14.0 (`vdx ai@<host>`, короткое имя проекта) — 2026-09-30,
+      владелец на m3: `1b8e440`, тег `v0.14.0`, push; npm `latest` 0.14.0
+      (`gitHead` `cffd1d5`); lock — отдельным коммитом
 - [ ] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0
-- [ ] 0.13.1 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
-      стоит на обеих станциях. lft — 0.13.0 (2026-09-29 19:16 EDT). m3 — 0.12.1:
-      topgrade там запускается руками (в launchd его нет), шаг npm в конфиге не
-      выключен — видимо, после `23e7be7` topgrade не запускали. Проверка:
-      `node -p` версии из `$(npm root -g)/@vodmal/vdx-cli/package.json` —
-      `vdx --version` нет (Sidetrack #7)
+- [ ] 0.14.0 на m3 и lft (DL #16) — приедет с topgrade; сейчас lft 0.13.0, m3
+      0.12.1 (topgrade на m3 запускается руками, в launchd его нет). Проверка:
+      `vdx --version` (есть с 0.13.1), для старых — `node -p` версии из
+      `$(npm root -g)/@vodmal/vdx-cli/package.json`
 - [x] `CLAUDE.md` «Выпуск CLI»: версия не закреплена, письмо nas-info только
       для релизов с чем-то кроме пакета (DL #16) — владелец согласовал,
       2026-09-29
