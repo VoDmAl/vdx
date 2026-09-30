@@ -5,6 +5,8 @@ import YAML from 'js-yaml';
 
 export interface VdxManifest {
   schema_version?: string;
+  /** Short name people use for the project (a session name, a sidebar); defaults to the repository name. */
+  name?: string;
   baseline?: string;
   stack?: string;
   primary_language?: string;

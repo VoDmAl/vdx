@@ -4,6 +4,15 @@
 
 ## 2026-09-30
 
+### Короткое имя проекта в сессии `vdx ai`: `vodmalbot@lft`, а не `telegram_vorobyev_name@lft`
+
+`{project}` в имени сессии (и workspace cmux) — `[vdx] name` в `mise.toml`
+проекта, затем файлы из `session.project_names` профиля, затем имя репо.
+Профиль владельца берёт имя из каталога intercom; сет `vdx-rubric-vodmal`
+v0.5.0 ([cli/src/ai.ts](cli/src/ai.ts),
+[environment-format.md](docs/specs/environment-format.md),
+[DL #20](docs/tasks/vdx-ai/workitem.md)).
+
 ### `vdx ai@<host>` — агент на другой машине
 
 `vdx ai@m3 [path]` выполняет `vdx ai` на m3 через ssh: профиль и tmux той

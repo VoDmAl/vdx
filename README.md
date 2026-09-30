@@ -120,6 +120,8 @@ agent:
 session:
   multiplexer: tmux                     # falls back to this terminal without tmux
   name: "{project}@{host}"              # {host} = $VDX_HOST or the short hostname
+  project_names:                        # {project}: [vdx] name in mise.toml, then these, then the repo name
+    - {file: "~/.claude/vdm/intercom/_registry/{repo}.json", jsonpath: names.0}
 ```
 
 A start continues the project's last conversation with `resume_args`, so after a reboot a plain `vdx ai` brings the agent back where it was; with nothing to continue, the agent starts without them, and `vdx ai --new` starts a new conversation. A second `vdx ai` finds the running agent by its process instead of starting another. An agent running without the flags the profile asks for is reported (exit 3) and left alone; `vdx ai --restart` restarts it in the same tmux pane and resumes the conversation. `--dry-run` shows the plan and the state of running agents. `vdx ai@<host> [path]` does the same on another machine over ssh: that machine's `vdx`, profile and tmux, with the path taken under the home directory there; inside tmux here the remote session opens nested, and `--detach` only starts it. Without `@host`, `vdx ai` looks only at this machine. Format: [docs/specs/environment-format.md](docs/specs/environment-format.md); the owner's profile lives in [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal).

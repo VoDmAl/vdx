@@ -13,7 +13,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "0.4.0"
+  version: "0.5.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -39,3 +39,8 @@ agent:
 session:
   multiplexer: tmux          # tmux | none; without tmux installed, runs in this terminal
   name: "{project}@{host}"   # {host} = $VDX_HOST, else the short hostname
+  # {project}: `[vdx] name` in the project's mise.toml, else the first name the
+  # intercom directory (vdm plugin) keeps for the repo, else the repo name.
+  project_names:
+    - file: "~/.claude/vdm/intercom/_registry/{repo}.json"
+      jsonpath: names.0

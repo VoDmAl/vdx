@@ -27,6 +27,7 @@ import {
   remoteAiArgs,
   remotePathWord,
   renderSessionName,
+  resolveProjectName,
   resolveEnvironmentPath,
   runAi,
   shellQuote,
@@ -640,5 +641,52 @@ describe('vdx ai@host', () => {
     it('names a vdx that predates --version', () => {
       expect(run('').note).toBe('note: vdx on m3 is older than 0.13.1, here 0.14.0');
     });
+  });
+});
+
+describe('project name: mise.toml, then profile sources, then the repository name', () => {
+  let dir: string;
+  let project: string;
+  let home: string;
+  beforeEach(() => {
+    dir = tmpDir('vdx-name-');
+    project = path.join(dir, 'telegram.vorobyev.name');
+    home = path.join(dir, 'home');
+    fs.mkdirSync(project);
+    fs.mkdirSync(path.join(home, 'reg'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'reg', 'telegram.vorobyev.name.json'), JSON.stringify({ names: ['vodmalbot', 'bot'] }));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const resolve = (sources: { file: string; jsonpath: string }[], profileDir = home) =>
+    resolveProjectName({ projectRoot: project, repo: 'telegram.vorobyev.name', sources, home, profileDir });
+  const registry = { file: '~/reg/{repo}.json', jsonpath: 'names.0' };
+
+  it('takes a profile source: {repo} and ~ expanded, a dot path into the file', () => {
+    expect(resolve([registry])).toEqual({ name: 'vodmalbot', source: '~/reg/telegram.vorobyev.name.json names.0' });
+  });
+
+  it('prefers [vdx] name in the project mise.toml', () => {
+    fs.writeFileSync(path.join(project, 'mise.toml'), '[vdx]\nname = "tgbot"\n');
+    expect(resolve([registry])).toEqual({ name: 'tgbot', source: 'mise.toml [vdx] name' });
+  });
+
+  it('skips a missing file or a value that is not a string, then falls back to the repository name', () => {
+    const missing = { file: '~/reg/nope-{repo}.json', jsonpath: 'names.0' };
+    const notString = { file: '~/reg/{repo}.json', jsonpath: 'names' };
+    expect(resolve([missing, notString])).toEqual({ name: 'telegram.vorobyev.name', source: 'repository name' });
+    expect(resolve([missing, registry]).name).toBe('vodmalbot');
+  });
+
+  it("reads a relative file from the profile's directory", () => {
+    expect(resolve([{ file: 'reg/{repo}.json', jsonpath: 'names.1' }], home).name).toBe('bot');
+  });
+
+  it('rejects a malformed source in the profile', () => {
+    const bad = (names: string) => () => parseEnvironment(`session:\n  project_names: ${names}\n`, 'p.yaml');
+    expect(bad('x')).toThrow(/session.project_names must be a list/);
+    expect(bad('[{file: "a.json"}]')).toThrow(/project_names\[0\].jsonpath/);
+    expect(bad('[{file: "{project}.json", jsonpath: a}]')).toThrow(/unknown placeholder \{project\}/);
+    expect(() => bad('[{file: "~/{repo}.json", jsonpath: names.0}]')()).not.toThrow();
   });
 });

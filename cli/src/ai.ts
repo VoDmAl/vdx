@@ -4,7 +4,8 @@ import * as path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import YAML from 'js-yaml';
 import { evalPredicate } from './evaluator.ts';
-import { autoDetectStack, type Ctx } from './facts.ts';
+import { autoDetectStack, readStructured, resolveConfigPath, type Ctx } from './facts.ts';
+import { loadManifest } from './manifest.ts';
 import type { Predicate } from './rubric.ts';
 
 /**
@@ -46,9 +47,18 @@ export interface AgentProfile {
 
 export type Multiplexer = 'tmux' | 'none';
 
+/** A place a project's short name may come from: a structured file and a dot path into it. */
+export interface NameSource {
+  /** `{repo}` is the repository name; `~` the home directory; relative to the profile's directory. */
+  file: string;
+  jsonpath: string;
+}
+
 export interface SessionProfile {
   multiplexer?: Multiplexer;
   name?: string;
+  /** Tried after `[vdx] name` in the project's mise.toml; the first non-empty string wins. */
+  project_names?: NameSource[];
 }
 
 export interface Environment {
@@ -137,6 +147,19 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (session.name !== undefined && typeof session.name !== 'string') {
       fail('session.name', 'must be a string');
     }
+    if (session.project_names !== undefined) {
+      if (!Array.isArray(session.project_names)) fail('session.project_names', 'must be a list');
+      session.project_names.forEach((src, i) => {
+        const at = `session.project_names[${i}]`;
+        if (typeof src !== 'object' || src === null) fail(at, 'must be a mapping');
+        if (typeof src.file !== 'string' || src.file === '') fail(`${at}.file`, 'must be a non-empty string');
+        const unknown = src.file.match(/\{(?!repo\})\w+\}/);
+        if (unknown) fail(`${at}.file`, `has an unknown placeholder ${unknown[0]} (only {repo})`);
+        if (typeof src.jsonpath !== 'string' || src.jsonpath === '') {
+          fail(`${at}.jsonpath`, 'must be a non-empty string (a dot path, e.g. names.0)');
+        }
+      });
+    }
   }
   return envDoc;
 }
@@ -172,6 +195,8 @@ export function renderSessionName(template: string, vars: Record<string, string>
 export interface LaunchPlan {
   projectRoot: string;
   project: string;
+  /** Where `project` came from: mise.toml, a profile source, or the repository name. */
+  projectSource: string;
   host: string;
   profilePath: string | null;
   command: string;
@@ -190,6 +215,7 @@ export function planLaunch(input: {
   agent: AgentProfile;
   projectRoot: string;
   project: string;
+  projectSource?: string;
   host: string;
 }): LaunchPlan {
   const { environment, agent, projectRoot } = input;
@@ -206,6 +232,7 @@ export function planLaunch(input: {
   return {
     projectRoot,
     project: input.project,
+    projectSource: input.projectSource ?? 'repository name',
     host: input.host,
     profilePath: input.profilePath,
     command: agent.command,
@@ -384,6 +411,40 @@ export function projectIdentity(projectRoot: string): string {
   return path.basename(projectRoot);
 }
 
+export interface ProjectName {
+  name: string;
+  source: string;
+}
+
+/**
+ * `{project}`: `[vdx] name` in the project's mise.toml, else the first profile
+ * source holding a non-empty string, else the repository name. A source that is
+ * missing or unreadable is skipped — a name is a label, not a reason to fail.
+ */
+export function resolveProjectName(input: {
+  projectRoot: string;
+  repo: string;
+  sources: NameSource[];
+  home: string;
+  profileDir: string;
+}): ProjectName {
+  const own = loadManifest(input.projectRoot)?.name;
+  if (typeof own === 'string' && own.trim()) return { name: own.trim(), source: 'mise.toml [vdx] name' };
+  for (const src of input.sources) {
+    const file = path.resolve(
+      input.profileDir,
+      src.file.replace(/^~(?=$|\/)/, input.home).replace(/\{repo\}/g, input.repo),
+    );
+    // Readers take paths relative to a project root; from "/" an absolute path stays itself.
+    const value = resolveConfigPath(readStructured({ projectRoot: '/', stack: '', cache: new Map() }, file), src.jsonpath);
+    if (typeof value === 'string' && value.trim()) {
+      const shown = file.startsWith(input.home + path.sep) ? `~${file.slice(input.home.length)}` : file;
+      return { name: value.trim(), source: `${shown} ${src.jsonpath}` };
+    }
+  }
+  return { name: input.repo, source: 'repository name' };
+}
+
 /** `{host}`: `$VDX_HOST` when set (a machine label such as `lft`), else the short hostname. */
 export function hostLabel(env: NodeJS.ProcessEnv = process.env): string {
   const label = env[HOST_ENV_VAR]?.trim();
@@ -559,6 +620,7 @@ export const NOTHING_TO_RESUME_MS = 30_000;
 export function renderPlan(plan: LaunchPlan, multiplexer: Multiplexer, running: AgentPane[]): string {
   const lines = [
     `vdx ai — ${plan.projectRoot}`,
+    `  name:     ${plan.project} (${plan.projectSource})`,
     `  profile:  ${plan.profilePath ?? `none — built-in default (${FALLBACK_AGENTS.join(' or ')}, no flags, no tmux)`}`,
     `  agent:    ${commandLine(plan.command, plan.args)}`,
     `  resume:   ${plan.resumeArgs.length ? plan.resumeArgs.join(' ') : '—'}`,
@@ -777,6 +839,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return EXIT_USAGE;
   }
 
+  const named = resolveProjectName({
+    projectRoot,
+    repo: projectIdentity(projectRoot),
+    sources: environment.session?.project_names ?? [],
+    home: deps.home,
+    profileDir: profilePath ? path.dirname(profilePath) : deps.home,
+  });
+
   let plan: LaunchPlan;
   try {
     plan = planLaunch({
@@ -784,7 +854,8 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       profilePath,
       agent,
       projectRoot,
-      project: projectIdentity(projectRoot),
+      project: named.name,
+      projectSource: named.source,
       host: hostLabel(deps.env),
     });
   } catch (e: any) {

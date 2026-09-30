@@ -33,6 +33,7 @@ run = "composer test"
 # === vdx metadata ===
 [vdx]
 schema_version = "0.2"
+name = "vodmalbot"                   # optional: короткое имя проекта (сессия vdx ai)
 baseline = "github.com/vodmal/vdx-rubric@v0.2.0"
 stack = "php"                        # php | node | python | go | meta | mixed
 primary_language = "PHP"
@@ -60,6 +61,9 @@ acknowledged_drift = []              # axis_ids, дрейф осознанно �
 ## Поля
 
 - `schema_version` — версия формата манифеста.
+- `name` *(optional)* — короткое имя проекта для людей: `{project}` в имени
+  сессии `vdx ai` ([environment-format.md](environment-format.md)). Без него —
+  источники профиля, затем имя репозитория.
 - `baseline` — ссылка на owner-рубрику + версия. Формат `host/owner/repo@tag`
   (как Go modules). Аудит загружает **именно эту** версию (D11).
 - `stack` — общая характеристика; влияет на стек-специфичные оси.

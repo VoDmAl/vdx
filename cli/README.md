@@ -81,7 +81,9 @@ vdx ai@m3
 `vdx ai` reads a personal profile, never a bundled one: `$VDX_ENVIRONMENT`, else
 `~/.vdx-environment.yaml`, else a plain `claude`/`codex` with no flags. Format:
 [docs/specs/environment-format.md](../docs/specs/environment-format.md).
-`vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
+The session's `{project}` is `[vdx] name` from the project's `mise.toml`, else the
+first file in the profile's `session.project_names` that has one, else the repo
+name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
 profile and tmux, the path taken under its home directory; `--detach` only
 starts it. The machine's own label (`$VDX_HOST`) runs here.
 
