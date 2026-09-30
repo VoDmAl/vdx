@@ -429,6 +429,36 @@ nas-info (`~/PhpstormProjects/git.vorobyev.name/nas-info`): модуль
 0.13.0, а apply откатит к 0.12.1. Раздел «Выпуск CLI» в `CLAUDE.md` переписан
 под новый порядок.
 
+### #17 / 2026-09-30 / Конфликты `.git` в Syncthing — техническая защита, не правило для агентов
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Брейншторм после Sidetrack #8. Владелец: работать в одном
+репо с двух машин одновременно — нормальный режим; важны и потеря коммитов, и
+испорченный индекс; синхронизация `.git` через Syncthing остаётся. Выбраны
+рычаги 1–3, накопившиеся копии уходят в бриф nas-info. Замеры: на lft в
+`~/AI Projects` и `~/PhpstormProjects` (глубина ≤6, без `node_modules`) нашлось
+22 конфликтные копии внутри `.git` в 6 репо, 21 из них `.git/index`; одна —
+`space-hq/.git/refs/heads/main` (11.09): коммит `b15fb45` выпал из `main`,
+его изменения позже сделаны заново. Опыт на копии репо с новыми inode: `git
+status` по умолчанию переписывает чужой индекс; с `core.checkStat=minimal` +
+`core.trustctime=false` и с `--no-optional-locks` — нет. Цена `minimal`: правка
+без смены размера в ту же секунду mtime git не видна (воспроизведено).
+**Context:** Индекс, пришедший с другой машины, не совпадает по inode/ctime,
+поэтому каждый `git status` переписывает его, а Syncthing везёт обратно. Любая
+одновременная запись становится конфликтом. Ссылки ветки конфликтуют реже, но
+это потеря коммита; у space-hq нет remote.
+**Why:** Правило «не трогай git, пока работает другая машина» не работает: это
+нормальный режим, и агент его не видит. Блокировки между машинами у Syncthing
+нет — от конфликта ссылок полностью не защититься; реалистично узнать сразу и
+восстановить.
+**Implication:** (1) nas-info: `core.checkStat=minimal` и `core.trustctime=false`
+глобально на m3 и lft; (2) nas-info: детектор конфликтов в `.git`, громко — если
+проигравший коммит недостижим из ветки; уборка накопленного, ветка space-hq —
+с согласия space-hq; (3) ai-dev-plugins: `git-guard-prepare` отказывает, пока в
+`.git` есть конфликтные копии. Сужение окна (`fsWatcherDelayS`) и pre-commit по
+API Syncthing не берём. Правила в общий файл не пишем.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -526,7 +556,8 @@ doctor` авторизацию npm уже проверяет — можно вз
 **Status:** resolved — запись индекса возвращена к HEAD (`git reset --
 cli/package.json` на lft), конфликтная копия удалена. Правило: пока на другой
 машине идёт git, на этой не звать git, который пишет индекс; для опроса —
-`git --no-optional-locks status` или `git rev-parse`.
+`git --no-optional-locks status` или `git rev-parse`. Системный ответ —
+DL #17: брифы nas-info и ai-dev-plugins.
 
 ## Next actions
 
@@ -599,6 +630,11 @@ cli/package.json` на lft), конфликтная копия удалена. �
       `8403c4e`, тег `v0.13.1`, push; npm `latest` 0.13.1. Pre-flight
       `npm-auth` в первом деле: на lft вход истёк (E401) — отказ до bump.
       Lock — отдельным коммитом. Попутно Sidetrack #8
+- [x] Брифы по DL #17 — 2026-09-30: nas-info `git-sync-conflicts` (настройка
+      git, оповещение, уборка), ai-dev-plugins `git-guard-sync-conflicts`
+      (отказ `git-guard-prepare`); обе сессии разбужены
+- [ ] Ответы nas-info и ai-dev-plugins по DL #17: настройка git на m3 и lft,
+      оповещение ловит копию ветки в space-hq, отказ в `git-guard-prepare`
 - [ ] 0.13.1 на m3 и lft (DL #16). Правка nas-info закоммичена (`23e7be7`) и
       стоит на обеих станциях. lft — 0.13.0 (2026-09-29 19:16 EDT). m3 — 0.12.1:
       topgrade там запускается руками (в launchd его нет), шаг npm в конфиге не
