@@ -737,6 +737,22 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
 
 **Status:** resolved — DL #20, 2026-09-30
 
+### #12. topgrade на m3 не довёз 0.15.0; npm пропустил postinstall esbuild
+
+**Возникло в:** установка 0.15.0 на m3, 2026-09-30.
+**Описание:** `topgrade -y` на m3 2,5 часа стоял на первом шаге
+`softwareupdate --install --all` и до npm не дошёл. По DL #16 релизы на
+станции везёт topgrade, так что одно зависшее обновление macOS держит и vdx.
+vdx поставлен отдельно: `npm i -g @vodmal/vdx-cli@latest`. npm на m3
+предупредил, что не запускал `postinstall` у `esbuild@0.28.2` (зависимость
+`tsx`): скрипты установки ещё не разрешены через `allowScripts`. vdx при этом
+работает — `--version`, `ai --dry-run`, `ai@lft --dry-run`. Видимо, бинарь
+esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall его только
+проверяет; это не проверено.
+
+**Status:** open — сказать nas-info, если повторится: зависший шаг topgrade
+или отказ esbuild без postinstall
+
 ## Next actions
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
@@ -864,12 +880,18 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       Предел их защиты: `git diff` без ревизии и `git describe --dirty` пишут
       индекс и с `GIT_OPTIONAL_LOCKS=0`; `git-guard-prepare` (не хук) зовёт
       `git diff --name-only`
-- [ ] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0
-- [ ] 0.15.0 на m3 и lft (DL #16) — приедет с topgrade; 2026-09-30: lft 0.15.0
-      (`vdx --version`), m3 0.12.1 (topgrade на m3 запускается руками, в
-      launchd его нет). Проверка:
-      `vdx --version` (есть с 0.13.1), для старых — `node -p` версии из
-      `$(npm root -g)/@vodmal/vdx-cli/package.json`
+- [x] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0 —
+      2026-09-30 на 0.15.0 `--dry-run` в обе стороны без предупреждения о
+      версии; m3 → lft нашёл бегущую сессию `vdx@lft %2`. Живьём: владелец на
+      m3 в каталоге vdx — `vdx ai@lft`, подключился к `vdx@lft` («Да,
+      сработало»). lft → m3 живьём не запускали — поднял бы второго агента vdx
+- [x] 0.15.0 на m3 и lft (DL #16) — 2026-09-30: lft 0.15.0; m3 — владелец
+      `ssh m3 npm i -g @vodmal/vdx-cli@latest`, `vdx --version` → 0.15.0, в
+      `/opt/homebrew/lib/node_modules` (тот же корень у login и non-login
+      shell). topgrade на m3 до npm не дошёл — Sidetrack #12
+- [ ] Sidetrack #12: следующий выпуск на m3 приехал через topgrade и работает —
+      тогда закрыть; снова завис или esbuild без postinstall сломался — письмо
+      nas-info
 - [x] `CLAUDE.md` «Выпуск CLI»: версия не закреплена, письмо nas-info только
       для релизов с чем-то кроме пакета (DL #16) — владелец согласовал,
       2026-09-29
