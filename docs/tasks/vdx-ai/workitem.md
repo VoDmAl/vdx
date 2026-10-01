@@ -681,7 +681,9 @@ DL #17: брифы nas-info и ai-dev-plugins. Вторая копия того 
 совпадала с HEAD, удалена. Проверено: после `touch` отслеживаемого файла
 обычный `git status` переписывает индекс, `--no-optional-locks` — нет; бриф
 ai-dev-plugins `hooks-no-optional-locks` (2026-09-30) — семь вызовов
-`git status` в хуках `UserPromptSubmit`.
+`git status` в хуках `UserPromptSubmit`. Исправлено в vdm 2.40.1 и
+vdm-git 2.16.1 (`60a56d1`). Хуки пока только подозреваются: если копии будут
+появляться и после обновления, индекс пишет что-то другое.
 
 ### #9. Автор коммитов зависит от машины, а не от репо
 
@@ -847,8 +849,19 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
 - [x] Выпуск 0.14.0 (`vdx ai@<host>`, короткое имя проекта) — 2026-09-30,
       владелец на m3: `1b8e440`, тег `v0.14.0`, push; npm `latest` 0.14.0
       (`gitHead` `cffd1d5`); lock — отдельным коммитом
-- [ ] Ответ ai-dev-plugins на `hooks-no-optional-locks` (Sidetrack #8): хуки,
-      которые только читают git, не пишут `.git/index`
+- [x] Ответ ai-dev-plugins на `hooks-no-optional-locks` (Sidetrack #8): хуки,
+      которые только читают git, не пишут `.git/index` — 2026-09-30, письмо
+      `hooks-no-optional-locks-outcome`: `GIT_OPTIONAL_LOCKS=0` в трёх
+      reminder-хуках и `git-guard-hook.py` (vdm 2.40.1, vdm-git 2.16.1), тест
+      `tests/hook-index-writes.test.sh` в pre-commit. Проверено мной: коммит
+      `60a56d1` есть, в GitHub `master` (`d233ce8`) уже входит
+- [ ] После vdm ≥ 2.40.1 и vdm-git ≥ 2.16.1 (сейчас в кеше 2.39.2 и 2.16.0;
+      `~/.claude` в Dropbox — кеш общий для m3 и lft) смотреть, появляются ли
+      `.git/index.sync-conflict-*`. Появятся — индекс пишет не хук, письмо
+      ai-dev-plugins с `--reply-to ai-dev-plugins/hooks-no-optional-locks`.
+      Предел их защиты: `git diff` без ревизии и `git describe --dirty` пишут
+      индекс и с `GIT_OPTIONAL_LOCKS=0`; `git-guard-prepare` (не хук) зовёт
+      `git diff --name-only`
 - [ ] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0
 - [ ] 0.15.0 на m3 и lft (DL #16) — приедет с topgrade; сейчас lft 0.13.0, m3
       0.12.1 (topgrade на m3 запускается руками, в launchd его нет). Проверка:
