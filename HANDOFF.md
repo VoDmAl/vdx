@@ -28,11 +28,13 @@ topgrade завис на обновлении macOS).
   lft) работают с флагом канала echelon, доставка проверена тестовыми сигналами.
 - Отложено владельцем: команда, поднимающая все проекты с `mail.watch` разом.
 
-**На паузе:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
-— `status: dormant`. Остановились на треке A (false-green в `git_hook_installed`
-/ `git-hygiene` / `gh_workflow_blocks_pr`); трек B-персональный
-(`vdx-environment.yaml` + O40) теперь опирается на документ, заведённый для
-`vdx ai`.
+**В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
+— трек A (ложно-зелёные оценки в рубрике), разбор по темам в режиме grill.
+Тема 1 `ci` решена (DL #11–#14): `ci` — только сигнал по файлам, новая
+critical-ось `branch-protection` с L3 (пока везде «неизвестно»), schema 0.3,
+сет v1.0.0. Дальше темы 2 (`git-hygiene`) и 3 (предикаты с лживым именем),
+потом реализация одним выпуском. Трек B-персональный (`vdx-environment.yaml`
++ O40) опирается на документ, заведённый для `vdx ai`.
 
 > ⚠️ Всё, что ниже этой черты, описывает состояние на 2026-05-24 (шаги A–Z.2.c,
 > версия 0.8.1) и не обновлялось для релизов v0.10.0 / v0.11.0. Историю шагов
