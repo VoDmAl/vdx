@@ -855,16 +855,19 @@ nas-info (`~/.gitconfig` без `user.*`, `user.useConfigOnly=true`, бейдж)
       reminder-хуках и `git-guard-hook.py` (vdm 2.40.1, vdm-git 2.16.1), тест
       `tests/hook-index-writes.test.sh` в pre-commit. Проверено мной: коммит
       `60a56d1` есть, в GitHub `master` (`d233ce8`) уже входит
-- [ ] После vdm ≥ 2.40.1 и vdm-git ≥ 2.16.1 (сейчас в кеше 2.39.2 и 2.16.0;
-      `~/.claude` в Dropbox — кеш общий для m3 и lft) смотреть, появляются ли
-      `.git/index.sync-conflict-*`. Появятся — индекс пишет не хук, письмо
+- [ ] После vdm ≥ 2.40.1 и vdm-git ≥ 2.16.1 (установлены 2026-09-30,
+      `/reload-plugins` на lft; `~/.claude` в Dropbox — кеш общий для m3 и lft;
+      копий в `.git` vdx и рубрики на этот момент нет) смотреть, появляются ли
+      `.git/index.sync-conflict-*`. Решающая проверка — следующий выпуск на m3,
+      пока владелец пишет в сессию на lft. Появятся — индекс пишет не хук, письмо
       ai-dev-plugins с `--reply-to ai-dev-plugins/hooks-no-optional-locks`.
       Предел их защиты: `git diff` без ревизии и `git describe --dirty` пишут
       индекс и с `GIT_OPTIONAL_LOCKS=0`; `git-guard-prepare` (не хук) зовёт
       `git diff --name-only`
 - [ ] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0
-- [ ] 0.15.0 на m3 и lft (DL #16) — приедет с topgrade; сейчас lft 0.13.0, m3
-      0.12.1 (topgrade на m3 запускается руками, в launchd его нет). Проверка:
+- [ ] 0.15.0 на m3 и lft (DL #16) — приедет с topgrade; 2026-09-30: lft 0.15.0
+      (`vdx --version`), m3 0.12.1 (topgrade на m3 запускается руками, в
+      launchd его нет). Проверка:
       `vdx --version` (есть с 0.13.1), для старых — `node -p` версии из
       `$(npm root -g)/@vodmal/vdx-cli/package.json`
 - [x] `CLAUDE.md` «Выпуск CLI»: версия не закреплена, письмо nas-info только

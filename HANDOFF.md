@@ -15,7 +15,7 @@
 `vdx ai@<host>` (DL #19), короткое имя проекта (DL #20); 0.13.1 — pre-flight
 `npm-auth` и `vdx --version`.
 С 2026-09-29 vdx на станциях не закреплён по версии, релизы везёт topgrade
-(DL #16): на lft 0.13.0, на m3 0.12.1 — 0.15.0 приедет с topgrade.
+(DL #16): на lft 0.15.0, на m3 0.12.1 (2026-09-30) — на m3 приедет с topgrade.
 
 Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
 личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:
