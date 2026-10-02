@@ -573,7 +573,9 @@ action-release`) — из `ci` его убираем без потери.
   зная про echelon (например, команда из глобального конфига); форма — между
   ai-dev-plugins и echelon, письма `people-wiring-hq-decision` и
   `people-hq-single-source`. `comms.hq` не объявлен ни у одной руки —
-  переносить нечего.
+  переносить нечего. Итог echelon 02.10: команда `echelon hq <корень>` (пусто —
+  сам себе штаб), `head` теперь у всех семи рук, сверка `comms.hq` из
+  `echelon check` убрана; за ai-dev-plugins — перевести vdm-comms на неё.
 - vdx правило не берёт; Sidetrack #14 закрыт.
 - O40: в развилку добавлен третий кандидат — проверка doctor как внешняя
   команда инструмента: vdx запускает и показывает ok/warning + remedy, но не
