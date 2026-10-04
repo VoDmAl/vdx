@@ -69,7 +69,7 @@ Rule of thumb:
 - **Global** when you run `vdx` many times per session — pays no per-invocation latency.
 - **npx** when you don't want a global install or you're in a clean / ephemeral environment (CI runner, fresh VM, someone else's laptop). Each `npx` call adds ~200–500 ms for resolve+stat.
 
-Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin — itself launched via `npx` from the plugin manifest, so plugin users never need a global install).
+Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin — the plugin starts the installed `vdx-mcp` when it is on PATH and falls back to `npx`, so plugin users never need a global install).
 
 **Run `vdx doctor` first.** It checks your environment (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude Code plugin; in a project — git hooks and the commit author) and shows you exactly what to install or configure before using anything else.
 
@@ -97,6 +97,9 @@ vdx doctor
 
 # 6. Start your agent in a project, the way your profile says (see below)
 vdx ai
+
+# 7. What a command does, before running it; an unknown option is refused (exit 2)
+vdx init --help
 ```
 
 `vdx init` works deterministically on Node/PHP/Python/Go/Ruby projects. For unknown or `meta` (monorepo-with-subpackage) stacks, pass `--stack <id>` or — preferably — invoke vdx inside Claude Code with the plugin installed and let the `vdx-discover` skill bootstrap interactively.

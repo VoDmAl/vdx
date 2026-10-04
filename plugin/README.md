@@ -9,15 +9,17 @@ hook for success-path logging.
 ```
 plugin/
 ├── .claude-plugin/plugin.json       # plugin manifest
-├── .mcp.json                        # vdx-mcp stdio server (via npx)
+├── .mcp.json                        # vdx-mcp stdio server (installed, else via npx)
 ├── skills/vdx-discover/SKILL.md     # discover-and-record workflow
 ├── hooks/hooks.json                 # PostToolUse hook on vdx_up
 └── scripts/record-success-path.sh   # hook script
 ```
 
 The MCP server lives in [`@vodmal/vdx-cli`](https://www.npmjs.com/package/@vodmal/vdx-cli)
-on npm. `.mcp.json` spawns it via `npx -y -p @vodmal/vdx-cli@latest vdx-mcp`
-— no local clone of vdx required.
+on npm. `.mcp.json` starts the installed `vdx-mcp` when it is on PATH, and
+`npx -y -p @vodmal/vdx-cli@latest vdx-mcp` otherwise — no local clone of vdx
+required, and no npm round-trip per session where vdx is installed. The
+project is `${CLAUDE_PROJECT_DIR}`, else the server's working directory.
 
 ## Local installation (development)
 

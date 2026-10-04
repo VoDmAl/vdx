@@ -1,14 +1,12 @@
 {
   "mcpServers": {
     "vdx": {
-      "command": "npx",
+      "command": "sh",
       "args": [
-        "-y",
-        "-p",
-        "@vodmal/vdx-cli@latest",
+        "-c",
+        "d=$1; [ -n \"$d\" ] || d=.; if command -v vdx-mcp >/dev/null 2>&1; then exec vdx-mcp --project \"$d\"; fi; exec npx -y -p @vodmal/vdx-cli@latest vdx-mcp --project \"$d\"",
         "vdx-mcp",
-        "--project",
-        "${CLAUDE_PROJECT_DIR}"
+        "${CLAUDE_PROJECT_DIR:-.}"
       ]
     }
   }

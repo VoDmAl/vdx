@@ -33,27 +33,36 @@ import { runAi, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
-function usage(): never {
-  process.stderr.write(
-    `Usage:
+const USAGE = `Usage:
   vdx <up|down|build|test|check|fix>     run lifecycle verb (via mise run <verb>)
   vdx audit   [project_path]  [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]   (default: cwd)
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
   vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]         (default: cwd; @host: over ssh, in tmux there)
-  vdx ai --help                                                                   (launch flags, profile, exit codes)
+  vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
-`,
-  );
+`;
+
+function usage(): never {
+  process.stderr.write(USAGE);
   process.exit(1);
 }
 
-const AI_USAGE_LINE = 'Usage: vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]';
+/** What a command reads from its arguments; the rest is refused. */
+interface CommandSpec {
+  usage: string;
+  /** Printed under the usage line by `--help`. */
+  help: string;
+  /** Flags that take no value. */
+  bools?: string[];
+  /** Flags that take one (`--stack node`, `--format=json`). */
+  values?: string[];
+  /** How many positional arguments the command takes. */
+  positionals: number;
+}
 
-const AI_HELP = `${AI_USAGE_LINE}
-
-Starts your agent in the project, or attaches to the one already running there.
+const AI_HELP = `Starts your agent in the project, or attaches to the one already running there.
 Which agent, its flags and whether it runs in tmux come from your profile:
 $VDX_ENVIRONMENT, else ~/.vdx-environment.yaml, else a plain claude/codex.
 
@@ -75,12 +84,65 @@ was not confirmed.
 Profile format: https://github.com/VoDmAl/vdx/blob/main/docs/specs/environment-format.md
 `;
 
-const AI_FLAGS = ['new', 'restart', 'resume', 'detach', 'dry-run', 'help'];
-
-function aiUsageError(message: string): never {
-  process.stderr.write(`vdx ai: ${message}\n${AI_USAGE_LINE}\nMore: vdx ai --help\n`);
-  process.exit(2);
-}
+const COMMANDS: Record<string, CommandSpec> = {
+  audit: {
+    usage: 'vdx audit [project_path] [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]',
+    help: `Scores the project (default: cwd) against the rubric and prints the report.
+Reads only. The rubric is the bundled one unless --rubric or $VDX_RUBRIC names another.
+`,
+    bools: ['json'],
+    values: ['rubric', 'stack', 'format'],
+    positionals: 1,
+  },
+  init: {
+    usage: 'vdx init [project_path] [--stack <id>] [--baseline <ref>] [--dry-run] [--force]',
+    help: `Writes mise.toml for the project (default: cwd): the lifecycle verbs mapped to
+the project's own scripts. --dry-run prints it and writes nothing; an existing
+mise.toml is overwritten only with --force.
+`,
+    bools: ['dry-run', 'force'],
+    values: ['stack', 'baseline'],
+    positionals: 1,
+  },
+  publish: {
+    usage: 'vdx publish <patch|minor|major> [--dry-run] [--force]',
+    help: `Releases the library in the current directory: pre-flight checks, version bump,
+npm publish (npm asks for an OTP), git commit and tag. Does not push.
+--dry-run runs the pre-flight and prints the plan; --force goes on past a failed pre-flight.
+`,
+    bools: ['dry-run', 'force'],
+    positionals: 1,
+  },
+  doctor: {
+    usage: 'vdx doctor [--format=ansi|markdown|json] [--json]',
+    help: `Checks this machine for what vdx needs (Node, git, mise, npm auth, docker, the
+Claude Code plugin) and, inside a project, its commit author. Reads only.
+Exit 2 when something is missing.
+`,
+    bools: ['json'],
+    values: ['format'],
+    positionals: 0,
+  },
+  ai: {
+    usage: 'vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]',
+    help: AI_HELP,
+    // `--resume` asked to continue in 0.12; continuing is the default now.
+    bools: ['new', 'restart', 'resume', 'detach', 'dry-run'],
+    positionals: 1,
+  },
+  ...Object.fromEntries(
+    LIFECYCLE_VERBS.map((verb) => [
+      verb,
+      {
+        usage: `vdx ${verb}`,
+        help: `Runs \`mise run ${verb}\` in the current directory — the project's own ${verb}
+command, as mise.toml maps it. Takes no arguments.
+`,
+        positionals: 0,
+      },
+    ]),
+  ),
+};
 
 interface ParsedArgs {
   cmd: string;
@@ -114,6 +176,48 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
   }
   return { cmd, positionals, flags };
+}
+
+/**
+ * Keeps what the command reads and refuses the rest, before anything runs: a
+ * misread argument must not run the command. `vdx ai --help` started an agent,
+ * `vdx init --help` wrote mise.toml, `vdx down --help` ran `mise run down`.
+ */
+function checkArgs(name: string, opts: ParsedArgs): ParsedArgs {
+  const spec = COMMANDS[name]!;
+  const bools = [...(spec.bools ?? []), 'help'];
+  const values = spec.values ?? [];
+  // parseArgs hands the token after a bare flag to that flag as its value; a
+  // flag that takes none gives it back — it is the path (or `-h`).
+  const positionals = [...opts.positionals];
+  const flags: Record<string, string | boolean> = {};
+  for (const [flag, value] of Object.entries(opts.flags)) {
+    if (bools.includes(flag) && typeof value === 'string') {
+      positionals.push(value);
+      flags[flag] = true;
+    } else {
+      flags[flag] = value;
+    }
+  }
+  if (flags.help || positionals.includes('-h')) {
+    process.stdout.write(`Usage: ${spec.usage}\n\n${spec.help}`);
+    process.exit(0);
+  }
+  const fail = (message: string): never => {
+    process.stderr.write(`vdx ${name}: ${message}\nUsage: ${spec.usage}\nMore: vdx ${name} --help\n`);
+    process.exit(2);
+  };
+  const unknown = [
+    ...Object.keys(flags).filter((f) => !bools.includes(f) && !values.includes(f)).map((f) => `--${f}`),
+    ...positionals.filter((p) => p.startsWith('-')),
+  ];
+  if (unknown.length > 0) fail(`unknown option ${unknown.join(', ')}`);
+  const bare = values.filter((f) => flags[f] === true).map((f) => `--${f}`);
+  if (bare.length > 0) fail(`${bare.join(', ')} needs a value`);
+  if (positionals.length > spec.positionals) {
+    fail(`unexpected argument ${positionals.slice(spec.positionals).join(' ')}`);
+  }
+  return { cmd: opts.cmd, positionals, flags };
 }
 
 function cmdAudit(opts: ParsedArgs): void {
@@ -297,34 +401,13 @@ function cmdDoctor(opts: ParsedArgs): void {
 }
 
 function cmdAi(opts: ParsedArgs): void {
-  // parseArgs hands the token after a bare flag to that flag as its value;
-  // these flags take none, so such a token is the project path (or `-h`).
-  const positionals = [...opts.positionals];
-  const bool = (name: string): boolean => {
-    const v = opts.flags[name];
-    if (typeof v === 'string') positionals.push(v);
-    return v !== undefined;
+  const options = {
+    path: opts.positionals[0] ?? '.',
+    restart: opts.flags.restart === true,
+    fresh: opts.flags.new === true,
+    detach: opts.flags.detach === true,
+    dryRun: opts.flags['dry-run'] === true,
   };
-  const restart = bool('restart');
-  const fresh = bool('new');
-  // `--resume` asked to continue in 0.12; continuing is the default now.
-  // Still read, so the path after it is not taken for its value.
-  bool('resume');
-  const detach = bool('detach');
-  const dryRun = bool('dry-run');
-  // `vdx ai` starts an agent, so a misread argument must not run it: an agent
-  // that tried `vdx ai --help` got a launch in the current directory.
-  if (bool('help') || positionals.includes('-h')) {
-    process.stdout.write(AI_HELP);
-    process.exit(0);
-  }
-  const unknown = [
-    ...Object.keys(opts.flags).filter((f) => !AI_FLAGS.includes(f)).map((f) => `--${f}`),
-    ...positionals.filter((p) => p.startsWith('-')),
-  ];
-  if (unknown.length > 0) aiUsageError(`unknown option ${unknown.join(', ')}`);
-  if (positionals.length > 1) aiUsageError(`unexpected argument ${positionals.slice(1).join(' ')}`);
-  const options = { path: positionals[0] ?? '.', restart, fresh, detach, dryRun };
   // `ai@m3`: the same command on another machine. Its own label runs here.
   const host = opts.cmd.startsWith('ai@') ? opts.cmd.slice(3) : null;
   if (host !== null) {
@@ -341,11 +424,16 @@ function cmdAi(opts: ParsedArgs): void {
 
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === '--version') process.stdout.write(readCliVersion() + '\n');
-else if (parsed.cmd === 'audit') cmdAudit(parsed);
-else if (parsed.cmd === 'init') cmdInit(parsed);
-else if (parsed.cmd === 'publish') cmdPublish(parsed);
-else if (parsed.cmd === 'doctor') cmdDoctor(parsed);
-else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(parsed);
-else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd))
+else if (['--help', '-h', 'help'].includes(parsed.cmd)) process.stdout.write(USAGE);
+else if (parsed.cmd === 'audit') cmdAudit(checkArgs('audit', parsed));
+else if (parsed.cmd === 'init') cmdInit(checkArgs('init', parsed));
+else if (parsed.cmd === 'publish') cmdPublish(checkArgs('publish', parsed));
+else if (parsed.cmd === 'doctor') cmdDoctor(checkArgs('doctor', parsed));
+else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(checkArgs('ai', parsed));
+else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd)) {
+  checkArgs(parsed.cmd, parsed);
   cmdRun(parsed.cmd as LifecycleVerb);
-else usage();
+} else {
+  if (parsed.cmd !== '') process.stderr.write(`vdx: unknown command "${parsed.cmd}"\n`);
+  usage();
+}

@@ -49,7 +49,9 @@ vdx doctor [--format=ansi|markdown|json]
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
-vdx ai --help                                                             # flags, where launch flags live, exit codes
+
+# What a command does and takes; nothing runs (ai: also where launch flags live)
+vdx <command> --help
 
 # Print the installed version
 vdx --version
@@ -88,8 +90,11 @@ name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machin
 profile and tmux, the path taken under its home directory; `--detach` only
 starts it. The machine's own label (`$VDX_HOST`) runs here. Where git knows no
 commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
-`vdx ai --help` (`-h`) prints the help; an unknown option or a second path is
-refused with exit 2, and nothing starts.
+
+Every command takes `--help` (`-h`) and runs nothing with it. An unknown option,
+a stray argument or a value flag without its value is refused with exit 2
+before anything runs. In 0.16.0 and earlier the commands other than `vdx ai`
+dropped such arguments, and `vdx init --help` wrote `mise.toml`.
 
 By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal) at the time of
