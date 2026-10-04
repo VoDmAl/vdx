@@ -1102,7 +1102,11 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
       потребителям о `mail.watch` ссылаются на `vdx ai`, а не на ручной флаг —
       `echelon-channel-flag-vdx-ai` (`--reply-to echelon/project-sessions-vdx-ai`),
       2026-10-04, сессия разбужена
-- [ ] Ответ echelon на `echelon-channel-flag-vdx-ai` — коммит README
+- [x] Ответ echelon на `echelon-channel-flag-vdx-ai` — коммит README —
+      2026-10-04, `echelon-channel-flag-vdx-ai-outcome`: echelon `ce705a7`
+      (проверено: абзац о сигнале агенту ссылается на `vdx ai` и правило
+      `echelon-channel`, ручного флага нет); следующие письма о `mail.watch` —
+      тоже. Push echelon — за владельцем
 - [ ] Первый выпуск плагина после 0.7.0: после автообновления
       `installed_plugins.json` → `vdx@…` → `version` новая. Не доехала —
       сказать ai-dev-plugins (документация не говорит, перечитывает ли
