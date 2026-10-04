@@ -103,3 +103,15 @@ Canonical owner-baseline живёт в отдельном репо:
 - `npm i -g <клон>` на станции модуль nas-info заменяет пакетом из npm
   за цикл gather (~15 мин). Неопубликованное проверять в `cli/`:
   `npm run vdx -- ai --dry-run`.
+
+## Выпуск плагина
+
+- Плагин (`plugin/`) едет к агентам через маркетплейс vodmal
+  (`VoDmAl/ai-dev-plugins`, запись `git-subdir` → `VoDmAl/vdx`, `plugin`).
+  На машинах владельца маркетплейс зарегистрирован как
+  `vodmal-claude-code-marketplace`: плагин — `vdx@vodmal-claude-code-marketplace`.
+- Выпуск — поднять `version` в `plugin/.claude-plugin/plugin.json` и запушить
+  `main`; запись в маркетплейсе не трогать (ответ ai-dev-plugins 2026-10-04).
+  Пока `version` прежняя, установленные копии остаются на кешированной.
+- Хук плагина зовёт CLI: флаг, которого нет в старых vdx, — только после
+  проверки `vdx --version` (как `--check` в `scripts/session-start.sh`).
