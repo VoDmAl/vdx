@@ -22,7 +22,10 @@ The MCP server lives in [`@vodmal/vdx-cli`](https://www.npmjs.com/package/@vodma
 on npm. `.mcp.json` starts the installed `vdx-mcp` when it is on PATH, and
 `npx -y -p @vodmal/vdx-cli@latest vdx-mcp` otherwise — no local clone of vdx
 required, and no npm round-trip per session where vdx is installed. The
-project is `${CLAUDE_PROJECT_DIR}`, else the server's working directory.
+project is `${CLAUDE_PROJECT_DIR}`, else the server's working directory. In
+practice (Claude Code, 2026-10-04) the variable is not substituted for a
+plugin's MCP server: it runs `--project .`, started in the session's project
+directory.
 
 ## Local installation (development)
 

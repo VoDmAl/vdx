@@ -653,7 +653,11 @@ npx …`; плагин 0.6.0. Проверено 2026-10-04 на m3 тем же 
 сервер отвечает на `initialize`, 9 инструментов; `list_capabilities`
 вернул `mise.toml` vdx. Внутри Claude Code не проверено — плагин нигде не
 установлен. Версия установленного `vdx-mcp` может отставать от `latest` до
-ближайшего topgrade.
+ближайшего topgrade. Внутри Claude Code (2026-10-04, плагин 0.7.0 на m3):
+оба сервера запущены как `vdx-mcp --project .` — `${CLAUDE_PROJECT_DIR}`
+не подставился, вопреки ответу по документации; рабочий каталог сервера —
+корень проекта сессии (`lsof`: vdx и t23b-program), так что проект верный.
+Сработал запасной `:-.`.
 
 ### #26 / 2026-10-04 / При старте сессии — строка о `vdx ai` всегда, расхождение — подробно; глубже — скилл `vdx-ai`
 
@@ -1084,9 +1088,21 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
       в `plugin.json`; `version` в записи нет намеренно. `CLAUDE.md` → «Выпуск
       плагина». У владельца маркетплейс зарегистрирован как
       `vodmal-claude-code-marketplace`, не `vodmal`
-- [ ] Владелец ставит плагин (`vdx@vodmal-claude-code-marketplace`); в новой
+- [x] Владелец ставит плагин (`vdx@vodmal-claude-code-marketplace`); в новой
       сессии проверить живьём: хук отвечает, скилл `vdx-ai` подгружается, MCP
-      `vdx` поднят ⏰ 2026-10-06 (мяч из ответа ai-dev-plugins)
+      `vdx` поднят ⏰ 2026-10-06 (мяч из ответа ai-dev-plugins) — 2026-10-04:
+      плагин 0.7.0 (`6cff7b3`), vdx 0.18.0 на PATH. Новая сессия t23b-program
+      (`3363b4b9…`): хук в 22:12:15Z — `hook_additional_context` с первой
+      строкой и «✓ … (echelon-channel)», сессия запущена с флагом канала;
+      скилл `vdx:vdx-ai` в списке, 9 инструментов `mcp__plugin_vdx_vdx__*`.
+      Случай ✗ внутри Claude Code не видели — он проверен через CLI и тестами
+- [x] Итог obsidianvault по п.1–3 и смежному — `vdx-ai-agent-reach-outcome-2`,
+      2026-10-04, мяч — «nobody — closed», сессия разбужена
+- [x] Письмо echelon: README («Частый сбор и сигнал агенту») и письма
+      потребителям о `mail.watch` ссылаются на `vdx ai`, а не на ручной флаг —
+      `echelon-channel-flag-vdx-ai` (`--reply-to echelon/project-sessions-vdx-ai`),
+      2026-10-04, сессия разбужена
+- [ ] Ответ echelon на `echelon-channel-flag-vdx-ai` — коммит README
 - [ ] Первый выпуск плагина после 0.7.0: после автообновления
       `installed_plugins.json` → `vdx@…` → `version` новая. Не доехала —
       сказать ai-dev-plugins (документация не говорит, перечитывает ли
