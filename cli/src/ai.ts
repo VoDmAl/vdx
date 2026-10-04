@@ -906,12 +906,21 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version
   return res.status ?? 1;
 }
 
-export function runAi(opts: AiOptions, deps: AiDeps): number {
-  const { log, tmux } = deps;
+interface Prepared {
+  projectRoot: string;
+  environment: Environment;
+  profilePath: string | null;
+  profileDir: string;
+  plan: LaunchPlan;
+}
 
-  const projectRoot = resolveProjectRoot(opts.path);
+/** The project, the profile and the launch plan for `pathArg`; an exit code when there is none. */
+function prepare(pathArg: string, deps: AiDeps): Prepared | number {
+  const { log } = deps;
+
+  const projectRoot = resolveProjectRoot(pathArg);
   if (!projectRoot) {
-    log(`vdx ai: ${path.resolve(opts.path)} is not a directory`);
+    log(`vdx ai: ${path.resolve(pathArg)} is not a directory`);
     return EXIT_USAGE;
   }
 
@@ -959,6 +968,70 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     log(`vdx ai: ${profilePath ?? 'profile'}: ${e?.message ?? e}`);
     return EXIT_USAGE;
   }
+  return { projectRoot, environment, profilePath, profileDir, plan };
+}
+
+/** The nearest ancestor of `pid` that is the agent: the session a hook or a shell tool runs in. */
+export function findOwnAgent(procs: ProcInfo[], pid: number, command: string): ProcInfo | null {
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  let cur = byPid.get(pid);
+  for (let hops = 0; cur && cur.ppid > 1 && hops < 64; hops++) {
+    cur = byPid.get(cur.ppid);
+    if (cur && isAgentProcess(cur, command)) return cur;
+  }
+  return null;
+}
+
+/**
+ * `vdx ai --check`: what an agent should know about how it is launched here,
+ * and whether the session it runs in carries the profile's flags. Prints
+ * nothing without a profile — on such a machine `vdx ai` decides nothing.
+ */
+export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = process.pid): number {
+  if (!resolveEnvironmentPath(deps.env, deps.home)) return EXIT_OK;
+  const prepared = prepare(pathArg, deps);
+  if (typeof prepared === 'number') return prepared;
+  const { projectRoot, profilePath, plan } = prepared;
+
+  const lines = [
+    `vdx ai: the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
+      `${profilePath} — agent.args for every project, agent.when[] for a class of projects. ` +
+      `Hand the user \`vdx ai\`, not \`${plan.command} --<flag>\`; a flag a class of projects needs is a ` +
+      `condition in the profile, not an instruction to type. More: \`vdx ai --help\`.`,
+  ];
+  const own = findOwnAgent(deps.processes(), selfPid, plan.command);
+  if (!own) {
+    lines.push(`· no ${plan.command} among the ancestors of this process — no session to compare with the profile.`);
+    deps.out(lines.join('\n') + '\n');
+    return EXIT_OK;
+  }
+  const missing = missingArgs(own.args, plan.args);
+  const why = plan.matched.length ? ` (profile conditions met here: ${plan.matched.join(', ')})` : '';
+  if (missing.length === 0) {
+    lines.push(`✓ this session carries the profile's flags${why}.`);
+    deps.out(lines.join('\n') + '\n');
+    return EXIT_OK;
+  }
+  const root = shellQuote(projectRoot);
+  lines.push(
+    `✗ this session runs without ${missing.join(' ')}${why}. Hand the user the fix — ` +
+      (deps.env['TMUX']
+        ? `\`vdx ai --restart ${root}\`: it stops this session and starts it again with the profile's flags` +
+          (plan.resumeArgs.length ? `, resuming the conversation (${plan.resumeArgs.join(' ')})` : '') +
+          `. Do not run it yourself: it ends this session.`
+        : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`vdx ai ${root}\`.`),
+  );
+  deps.out(lines.join('\n') + '\n');
+  return EXIT_DRIFT;
+}
+
+export function runAi(opts: AiOptions, deps: AiDeps): number {
+  const { log, tmux } = deps;
+
+  const prepared = prepare(opts.path, deps);
+  if (typeof prepared === 'number') return prepared;
+  const { projectRoot, environment, profileDir } = prepared;
+  let { plan } = prepared;
   // A start continues the last conversation unless asked for a new one.
   if (opts.fresh) plan = { ...plan, resumeArgs: [] };
 

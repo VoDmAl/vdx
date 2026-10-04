@@ -1,8 +1,9 @@
 # vdx — Claude Code plugin
 
-Plugin v0.2 that exposes the vdx lifecycle interface and maturity audit
-to Claude Code as MCP tools, plus a `vdx-discover` skill and a PostToolUse
-hook for success-path logging.
+Plugin v0.7 that exposes the vdx lifecycle interface and maturity audit
+to Claude Code as MCP tools, tells the agent at session start how it is
+launched in the project (`vdx ai`), and ships the `vdx-discover` and `vdx-ai`
+skills plus a PostToolUse hook for success-path logging.
 
 ## Components
 
@@ -11,8 +12,10 @@ plugin/
 ├── .claude-plugin/plugin.json       # plugin manifest
 ├── .mcp.json                        # vdx-mcp stdio server (installed, else via npx)
 ├── skills/vdx-discover/SKILL.md     # discover-and-record workflow
-├── hooks/hooks.json                 # PostToolUse hook on vdx_up
-└── scripts/record-success-path.sh   # hook script
+├── skills/vdx-ai/SKILL.md           # how the agent is launched: vdx ai + profile
+├── hooks/hooks.json                 # SessionStart; PostToolUse on vdx_up
+├── scripts/session-start.sh         # SessionStart: `vdx ai --check` → agent context
+└── scripts/record-success-path.sh   # PostToolUse hook script
 ```
 
 The MCP server lives in [`@vodmal/vdx-cli`](https://www.npmjs.com/package/@vodmal/vdx-cli)
@@ -72,7 +75,15 @@ After install, the following MCP tools are available in any project:
 The `vdx-discover` skill auto-suggests itself when Claude enters a project
 that has no `mise.toml` manifest.
 
-## Limitations of v0.2
+At session start the plugin runs `vdx ai --check` and hands its answer to the
+agent: the agent here is started with `vdx ai`, its flags come from the
+profile, and whether this session carries them — with the command that fixes
+it when not. Silent without a `vdx ai` profile, and with a vdx older than
+0.18 (up to 0.15 `vdx ai` took an unknown flag for a launch, so the hook asks
+for the version first). The `vdx-ai` skill covers the rest: where the profile
+lives, `agent.when[]` for a class of projects, what to hand the user.
+
+## Limitations
 
 - `record-success-path.sh` only logs to `~/.cache/vdx/last-success-path.log`.
   Canonical record of the success path still goes through the

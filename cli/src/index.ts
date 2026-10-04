@@ -29,7 +29,7 @@ import {
   type PublishOptions,
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
-import { runAi, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
+import { runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -76,6 +76,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --restart     restart the running agent in its pane — applies a changed profile
   --detach      start without attaching; print the command that attaches
   --dry-run     print the plan and the project's running agents; start nothing
+  --check       for the agent's own session: how the agent here is launched, and
+                whether this session carries the profile's flags (the vdx plugin's
+                SessionStart hook); prints nothing without a profile; exit 3 on drift
   -h, --help    this help
 
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
@@ -127,7 +130,7 @@ Exit 2 when something is missing.
     usage: 'vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'restart', 'resume', 'detach', 'dry-run'],
+    bools: ['new', 'restart', 'resume', 'detach', 'dry-run', 'check'],
     positionals: 1,
   },
   ...Object.fromEntries(
@@ -401,6 +404,17 @@ function cmdDoctor(opts: ParsedArgs): void {
 }
 
 function cmdAi(opts: ParsedArgs): void {
+  if (opts.flags.check === true) {
+    // About the session this runs in — there is nothing to start, and no other machine.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'check');
+    if (others.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        `vdx ai: --check takes only the project path (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
+      );
+      process.exit(2);
+    }
+    process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps()));
+  }
   const options = {
     path: opts.positionals[0] ?? '.',
     restart: opts.flags.restart === true,

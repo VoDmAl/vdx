@@ -49,6 +49,7 @@ vdx doctor [--format=ansi|markdown|json]
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
+vdx ai --check [project-path]   # this session against the profile — what the plugin's SessionStart hook tells the agent
 
 # What a command does and takes; nothing runs (ai: also where launch flags live)
 vdx <command> --help

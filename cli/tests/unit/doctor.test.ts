@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { checkGitAuthor, runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
+import { checkClaudeCodePlugin, checkGitAuthor, runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
 import {
   reportDoctorMarkdown,
   reportDoctorJson,
@@ -292,5 +292,52 @@ describe('checkGitHooks (via runDoctor)', () => {
     writeHook('.githooks', 'pre-commit', '#!/bin/bash\necho "run $HOME/x"\nexit 0\n');
     git(tmp, 'config', 'core.hooksPath', '.githooks');
     expect(row(tmp)?.status).toBe('ok');
+  });
+});
+
+describe('claude-plugin: the vdx plugin as Claude Code records it', () => {
+  let dir: string;
+  const write = (file: string, data: unknown) => {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+    fs.writeFileSync(path.join(dir, file), JSON.stringify(data));
+  };
+  const record = { scope: 'user', installPath: '/x', version: '0.7.0' };
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-doctor-claude-'));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('is ok when installed from any marketplace and not disabled', () => {
+    write('plugins/installed_plugins.json', {
+      version: 2,
+      plugins: { 'vdm@vodmal-claude-code-marketplace': [record], 'vdx@vodmal-claude-code-marketplace': [record] },
+    });
+    const r = checkClaudeCodePlugin(dir);
+    expect(r.status).toBe('ok');
+    expect(r.message).toBe('vdx@vodmal-claude-code-marketplace 0.7.0');
+  });
+
+  it('warns when switched off in enabledPlugins', () => {
+    write('plugins/installed_plugins.json', { version: 2, plugins: { 'vdx@vodmal': [record] } });
+    write('settings.json', { enabledPlugins: { 'vdx@vodmal': false } });
+    const r = checkClaudeCodePlugin(dir);
+    expect(r.status).toBe('warning');
+    expect(r.message).toContain('installed but disabled');
+    expect(r.remedy).toBe('/plugin enable vdx@vodmal');
+  });
+
+  it('warns when not installed — a vdm plugin is not vdx, and names the marketplace', () => {
+    write('plugins/installed_plugins.json', { version: 2, plugins: { 'vdx-tools@other': [record], 'vdm@vodmal': [record] } });
+    // An old registration of a vdx marketplace in settings.json is not an install.
+    write('settings.json', { extraKnownMarketplaces: { vdx: { source: { source: 'github', repo: 'VoDmAl/vdx' } } } });
+    const r = checkClaudeCodePlugin(dir);
+    expect(r.status).toBe('warning');
+    expect(r.message).toBe('not installed');
+    expect(r.remedy).toContain('VoDmAl/ai-dev-plugins');
+  });
+
+  it('warns without plugin records at all', () => {
+    expect(checkClaudeCodePlugin(dir).message).toContain('no plugin records');
   });
 });

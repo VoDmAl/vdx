@@ -339,42 +339,45 @@ function checkClaudeCode(): CheckResult {
   };
 }
 
-function checkClaudeCodePlugin(): CheckResult {
-  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-  if (!fs.existsSync(settingsPath)) {
-    return {
-      id: 'claude-plugin',
-      label: 'Claude Code vdx plugin',
-      status: 'warning',
-      message: '~/.claude/settings.json not found',
-      remedy: 'Install Claude Code, then add vdx marketplace (see README)',
-    };
-  }
-  try {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
-    if (raw.includes('VoDmAl/vdx') || raw.includes('vdx/marketplace')) {
-      return {
-        id: 'claude-plugin',
-        label: 'Claude Code vdx plugin',
-        status: 'ok',
-        message: 'vdx marketplace registered',
-      };
+const PLUGIN_INSTALL_HINT =
+  'in Claude Code: /plugin marketplace add VoDmAl/ai-dev-plugins, then /plugin install vdx from it';
+
+/**
+ * The vdx plugin as Claude Code records it: `vdx@<marketplace>` in
+ * plugins/installed_plugins.json, and not switched off in settings.json
+ * enabledPlugins. Whichever marketplace brought it — the plugin ships through
+ * the owner's marketplace (VoDmAl/ai-dev-plugins), not a vdx one of its own.
+ */
+export function checkClaudeCodePlugin(
+  claudeDir: string = process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude'),
+): CheckResult {
+  const base = { id: 'claude-plugin', label: 'Claude Code vdx plugin' };
+  const readJson = (file: string): any => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(claudeDir, file), 'utf8'));
+    } catch {
+      return null;
     }
+  };
+  const installed = readJson(path.join('plugins', 'installed_plugins.json'));
+  if (!installed) {
     return {
-      id: 'claude-plugin',
-      label: 'Claude Code vdx plugin',
+      ...base,
       status: 'warning',
-      message: 'vdx marketplace not registered',
-      remedy: 'Add github.com/VoDmAl/vdx/marketplace to extraKnownMarketplaces',
-    };
-  } catch (e: any) {
-    return {
-      id: 'claude-plugin',
-      label: 'Claude Code vdx plugin',
-      status: 'warning',
-      message: `cannot read settings.json: ${e?.message ?? e}`,
+      message: `no plugin records in ${claudeDir}/plugins/installed_plugins.json`,
+      remedy: PLUGIN_INSTALL_HINT,
     };
   }
+  const key = Object.keys(installed.plugins ?? {}).find((k) => k.startsWith('vdx@'));
+  if (!key) {
+    return { ...base, status: 'warning', message: 'not installed', remedy: PLUGIN_INSTALL_HINT };
+  }
+  const version = installed.plugins[key]?.[0]?.version;
+  const label = `${key}${typeof version === 'string' ? ` ${version}` : ''}`;
+  if (readJson('settings.json')?.enabledPlugins?.[key] === false) {
+    return { ...base, status: 'warning', message: `${label} installed but disabled`, remedy: `/plugin enable ${key}` };
+  }
+  return { ...base, status: 'ok', message: label };
 }
 
 /**
@@ -543,7 +546,7 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkVdxVersion,
   checkVdx,
   checkClaudeCode,
-  checkClaudeCodePlugin,
+  () => checkClaudeCodePlugin(),
   checkNode,
   checkGit,
   checkMise,

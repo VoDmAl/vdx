@@ -79,6 +79,15 @@ describe('vdx ai --help and unknown options', () => {
     expect(r.stdout).toBe('');
   });
 
+  it('--check takes only the path — no other flag, no @host', () => {
+    for (const [cmd, ...args] of [['ai', '--check', '--dry-run'], ['ai', '--restart', '--check'], ['ai@zz-elsewhere', '--check']]) {
+      const r = vdxEnv(env(), cmd!, ...args);
+      expect(r.status, [cmd, ...args].join(' ')).toBe(2);
+      expect(r.stderr).toContain('--check takes only the project path');
+      expect(r.stdout).toBe('');
+    }
+  });
+
   it('still accepts --resume, a no-op since 0.13', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, '--resume', '--dry-run');
     expect(r.status).toBe(0);

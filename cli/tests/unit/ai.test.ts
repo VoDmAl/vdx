@@ -14,6 +14,7 @@ import {
   ensureAuthor,
   fallbackAgent,
   findAgentPanes,
+  findOwnAgent,
   hostLabel,
   isAgentProcess,
   listProcesses,
@@ -31,6 +32,7 @@ import {
   resolveProjectName,
   resolveEnvironmentPath,
   runAi,
+  runAiCheck,
   shellQuote,
   sleepSync,
   tmuxShellCommand,
@@ -791,5 +793,101 @@ describe('vdx ai proposes an author where the repo has none', () => {
   it('checks the profile key', () => {
     expect(() => parseEnvironment('git:\n  author_pool: x\n', 'p.yaml')).toThrow(/git.author_pool/);
     expect(() => parseEnvironment('git:\n  author_pool: ["~/AI Projects"]\n', 'p.yaml')).not.toThrow();
+  });
+});
+
+describe('vdx ai --check: the session the agent itself runs in', () => {
+  // The hook's chain: tmux pane shell → claude → sh (hook) → vdx (this process, pid 40).
+  const chain = (claudeArgs: string) => [
+    { pid: 10, ppid: 1, args: '/bin/zsh -lic claude --continue; exec /bin/zsh -l' },
+    { pid: 20, ppid: 10, args: `/opt/homebrew/bin/claude ${claudeArgs}` },
+    { pid: 30, ppid: 20, args: '/bin/sh /plugin/scripts/session-start.sh' },
+    { pid: 40, ppid: 30, args: 'node /usr/local/bin/vdx ai --check' },
+  ];
+  let home: string;
+  let root: string;
+  let out: string[];
+  let logs: string[];
+  const deps = (procs: ReturnType<typeof chain>, env: NodeJS.ProcessEnv = {}): AiDeps => ({
+    env: { VDX_ENVIRONMENT: path.join(home, 'env.yaml'), TMUX: '/tmp/tmux-501/default,1,0', ...env },
+    home,
+    tmux: new Tmux(`vdx-test-unused-${process.pid}`),
+    interactive: false,
+    shell: '/bin/sh',
+    log: (l) => logs.push(l),
+    out: (t) => out.push(t),
+    onPath: () => false,
+    processes: () => procs,
+    sleep: () => {},
+    confirmTimeoutMs: 1000,
+    ask: () => null,
+  });
+
+  beforeEach(() => {
+    home = tmpDir('vdx-ai-check-home-');
+    root = tmpDir('vdx-ai-check-root-');
+    fs.writeFileSync(path.join(home, 'env.yaml'), OWNER_LIKE);
+    fs.mkdirSync(path.join(root, 'signals'));
+    fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: America/New_York\n');
+    out = [];
+    logs = [];
+  });
+  afterEach(() => {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('finds the nearest agent among the ancestors — not the shell that started it', () => {
+    expect(findOwnAgent(chain('--x'), 40, 'claude')?.pid).toBe(20);
+    expect(findOwnAgent(chain('--x'), 30, 'claude')?.pid).toBe(20);
+    expect(findOwnAgent(chain('--x'), 20, 'claude')).toBeNull();
+    expect(findOwnAgent(chain('--x'), 40, 'codex')).toBeNull();
+  });
+
+  it('says how the agent is launched and that the session matches', () => {
+    const procs = chain(
+      '--dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon --continue',
+    );
+    expect(runAiCheck(root, deps(procs), 40)).toBe(EXIT_OK);
+    const text = out.join('');
+    expect(text).toContain('started with `vdx ai`');
+    expect(text).toContain('agent.when[]');
+    expect(text).toContain(path.join(home, 'env.yaml'));
+    expect(text).toContain("✓ this session carries the profile's flags (profile conditions met here: echelon-channel)");
+    expect(logs).toEqual([]);
+  });
+
+  it('names the missing flag and the restart in tmux — for the user to run', () => {
+    expect(runAiCheck(root, deps(chain('--dangerously-skip-permissions --continue')), 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text).toContain(
+      '✗ this session runs without --dangerously-load-development-channels plugin:echelon@echelon (profile conditions met here: echelon-channel)',
+    );
+    expect(text).toContain(`\`vdx ai --restart ${root}\``);
+    expect(text).toContain('resuming the conversation (--continue)');
+    expect(text).toContain('Do not run it yourself');
+  });
+
+  it('outside tmux, tells the user to exit and run vdx ai — --restart cannot reach it', () => {
+    const d = deps(chain('--dangerously-skip-permissions'), { TMUX: '' });
+    expect(runAiCheck(root, d, 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text).toContain('outside tmux');
+    expect(text).toContain(`exits it and runs \`vdx ai ${root}\``);
+    expect(text).not.toContain('--restart');
+  });
+
+  it('without an agent among the ancestors, says so and compares nothing', () => {
+    expect(runAiCheck(root, deps(chain('--x').filter((p) => p.pid !== 20)), 40)).toBe(EXIT_OK);
+    const text = out.join('');
+    expect(text).toContain('no claude among the ancestors');
+    expect(text).not.toContain('✗');
+  });
+
+  it('prints nothing without a profile — the machine has no `vdx ai` to speak of', () => {
+    fs.rmSync(path.join(home, 'env.yaml'));
+    expect(runAiCheck(root, deps(chain('--x'), { VDX_ENVIRONMENT: '' }), 40)).toBe(EXIT_OK);
+    expect(out).toEqual([]);
+    expect(logs).toEqual([]);
   });
 });

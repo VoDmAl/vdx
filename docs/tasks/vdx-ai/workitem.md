@@ -655,6 +655,30 @@ npx …`; плагин 0.6.0. Проверено 2026-10-04 на m3 тем же 
 установлен. Версия установленного `vdx-mcp` может отставать от `latest` до
 ближайшего topgrade.
 
+### #26 / 2026-10-04 / При старте сессии — строка о `vdx ai` всегда, расхождение — подробно; глубже — скилл `vdx-ai`
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Владелец выбрал из двух вариантов: «Согласен с
+рекомендацией» — (б) «одна строка всегда, подробности при расхождении»
+против (а) «только при расхождении, остальное — скилл». Проверено на m3: из
+этой сессии `--check` для vdx — ✓, для t23b-program — ✗ без флага канала, с
+`vdx ai --restart`; хук целиком — 0,2–0,6 с.
+**Context:** Письмо obsidianvault, п.1–2. Агент vault не знал, что искать:
+скилл подгружается по совпадению с задачей, а строка при старте — всегда.
+**Why:** Сессия вне tmux и запущенная руками в tmux для `vdx ai --dry-run`
+невидимы — он ищет агента по панелям. Поэтому `--check` ищет агента среди
+предков своего процесса: хук → shell → `claude`. Обёртку `zsh -lic claude …`
+`isAgentProcess` за агента не держит. Без профиля — тишина. Отдельный скилл, а
+не раздел в `vdx-discover`: у того другая тема и другие поводы подгрузиться.
+**Implication:** `runAiCheck`, `findOwnAgent` и общая `prepare` (план для `runAi`
+и `--check`) в `cli/src/ai.ts`; `--check` — только с путём. Хук
+`plugin/scripts/session-start.sh` сначала спрашивает `vdx --version` и зовёт
+`--check` только при ≥ 0.18: в 0.15 и раньше `vdx ai --check` запустил бы
+агента. На станциях сейчас 0.15.0; тест хука с заглушкой vdx ловит снятую
+проверку версии. Скилл `plugin/skills/vdx-ai`; плагин 0.7.0. Попутно
+Sidetrack #14: `vdx doctor` читает `plugins/installed_plugins.json`.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -869,7 +893,7 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
 `enabledPlugins` настроек. Совет `Add github.com/VoDmAl/vdx/marketplace` тоже
 устареет.
 
-**Status:** open — поправить вместе с записью в маркетплейс (п.3)
+**Status:** resolved — 2026-10-04, `checkClaudeCodePlugin` в `cli/src/doctor.ts`
 
 ## Next actions
 
@@ -1034,8 +1058,17 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
       команды; если да — сделано тем же приёмом, что в `vdx ai` — 2026-10-04,
       DL #24: `checkArgs` в `cli/src/index.ts`, тесты (209 всего; шесть новых
       на коде 0.16.0 падают), оба README, журнал. Не выпущено
-- [ ] Sidetrack #14: `vdx doctor` узнаёт плагин vdx, поставленный из
-      маркетплейса vodmal, и советует его, а не `VoDmAl/vdx/marketplace`
+- [x] Sidetrack #14: `vdx doctor` узнаёт плагин vdx, поставленный из
+      маркетплейса vodmal, и советует его, а не `VoDmAl/vdx/marketplace` —
+      2026-10-04: `vdx@<любой маркетплейс>` в `plugins/installed_plugins.json`,
+      выключенный в `enabledPlugins` — предупреждение; учтён
+      `CLAUDE_CONFIG_DIR`. На m3 — «not installed», верно
+- [ ] Выпуск 0.18.0 (minor: `vdx ai --check`, проверка плагина в doctor) —
+      владелец, OTP; lock — отдельным коммитом. Хук плагина без 0.18 молчит
+- [ ] После 0.18.0 на станциях: бриф ai-dev-plugins — запись `vdx` в
+      маркетплейсе vodmal (`git-subdir`, `VoDmAl/vdx`, `plugin`, DL #23);
+      затем владелец ставит плагин, и в новой сессии хук говорит — проверить
+      живьём (Claude Code ещё ни разу не загружал этот плагин)
 - [x] MCP-сервер плагина: установленный `vdx-mcp`, иначе `npx` (DL #25) —
       2026-10-04, `plugin/.mcp.json`, плагин 0.6.0, README плагина и корня,
       журнал; проверено вне Claude Code
@@ -1048,13 +1081,15 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
       `git-subdir`, `VoDmAl/vdx`, `plugin` — брифом ai-dev-plugins после п.1–2;
       затем владелец ставит плагин. На m3 его сейчас нет в
       `~/.claude/plugins/cache/`
-- [ ] Там же, п.1: SessionStart-хук плагина сверяет сессию каталога с профилем
+- [x] Там же, п.1: SessionStart-хук плагина сверяет сессию каталога с профилем
       (та же проверка, что в `vdx ai`) и отдаёт расхождение и команду
-      `vdx ai --restart <корень>` через `additionalContext`
-- [ ] Там же, п.2: агенту — как запускается агент в проекте: флаги — профиль и
+      `vdx ai --restart <корень>` через `additionalContext` — 2026-10-04,
+      DL #26: `vdx ai --check`, `plugin/scripts/session-start.sh`
+- [x] Там же, п.2: агенту — как запускается агент в проекте: флаги — профиль и
       `agent.when[]`, пользователю даётся `vdx ai …`, а не `claude --…`; новый
       флаг для класса проектов — условие в профиле. Сейчас `vdx-discover` про
-      `vdx ai` молчит
+      `vdx ai` молчит — 2026-10-04, DL #26: первая строка `--check` и скилл
+      `plugin/skills/vdx-ai`
 - [ ] Там же, смежное: README и письма echelon советуют набирать флаг канала
       руками — когда п.1–2 готовы, сказать echelon ссылаться на `vdx ai` (сами
       или через obsidianvault — он предложил)
