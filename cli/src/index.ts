@@ -42,10 +42,44 @@ function usage(): never {
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
   vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]         (default: cwd; @host: over ssh, in tmux there)
+  vdx ai --help                                                                   (launch flags, profile, exit codes)
   vdx --version
 `,
   );
   process.exit(1);
+}
+
+const AI_USAGE_LINE = 'Usage: vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]';
+
+const AI_HELP = `${AI_USAGE_LINE}
+
+Starts your agent in the project, or attaches to the one already running there.
+Which agent, its flags and whether it runs in tmux come from your profile:
+$VDX_ENVIRONMENT, else ~/.vdx-environment.yaml, else a plain claude/codex.
+
+Launch flags live in the profile, not in a command to type: agent.args for
+every project, agent.when[] for a class of projects (a rubric predicate over
+the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
+
+  project_path  the project (default: cwd); its git toplevel is used
+  @host         the same command on <host> over ssh: its vdx, profile and tmux
+  --new         a new conversation instead of continuing the last one
+  --restart     restart the running agent in its pane — applies a changed profile
+  --detach      start without attaching; print the command that attaches
+  --dry-run     print the plan and the project's running agents; start nothing
+  -h, --help    this help
+
+Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
+3 the running agent lacks profile flags (rerun with --restart); 4 the start
+was not confirmed.
+Profile format: https://github.com/VoDmAl/vdx/blob/main/docs/specs/environment-format.md
+`;
+
+const AI_FLAGS = ['new', 'restart', 'resume', 'detach', 'dry-run', 'help'];
+
+function aiUsageError(message: string): never {
+  process.stderr.write(`vdx ai: ${message}\n${AI_USAGE_LINE}\nMore: vdx ai --help\n`);
+  process.exit(2);
 }
 
 interface ParsedArgs {
@@ -264,7 +298,7 @@ function cmdDoctor(opts: ParsedArgs): void {
 
 function cmdAi(opts: ParsedArgs): void {
   // parseArgs hands the token after a bare flag to that flag as its value;
-  // these flags take none, so such a token is the project path.
+  // these flags take none, so such a token is the project path (or `-h`).
   const positionals = [...opts.positionals];
   const bool = (name: string): boolean => {
     const v = opts.flags[name];
@@ -278,6 +312,18 @@ function cmdAi(opts: ParsedArgs): void {
   bool('resume');
   const detach = bool('detach');
   const dryRun = bool('dry-run');
+  // `vdx ai` starts an agent, so a misread argument must not run it: an agent
+  // that tried `vdx ai --help` got a launch in the current directory.
+  if (bool('help') || positionals.includes('-h')) {
+    process.stdout.write(AI_HELP);
+    process.exit(0);
+  }
+  const unknown = [
+    ...Object.keys(opts.flags).filter((f) => !AI_FLAGS.includes(f)).map((f) => `--${f}`),
+    ...positionals.filter((p) => p.startsWith('-')),
+  ];
+  if (unknown.length > 0) aiUsageError(`unknown option ${unknown.join(', ')}`);
+  if (positionals.length > 1) aiUsageError(`unexpected argument ${positionals.slice(1).join(' ')}`);
   const options = { path: positionals[0] ?? '.', restart, fresh, detach, dryRun };
   // `ai@m3`: the same command on another machine. Its own label runs here.
   const host = opts.cmd.startsWith('ai@') ? opts.cmd.slice(3) : null;
