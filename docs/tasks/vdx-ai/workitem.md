@@ -899,6 +899,29 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
 
 **Status:** resolved — 2026-10-04, `checkClaudeCodePlugin` в `cli/src/doctor.ts`
 
+### #15. `vdx ai` на m3 продолжил беседу, живую на lft: `--continue` видит транскрипты другой машины
+
+**Возникло в:** письмо ai-dev-plugins `vdx-shared-session-two-machines`,
+2026-10-04 — про сессию `dfdb42a9-…`, в которой это и пишется.
+**Описание:** Беседу `dfdb42a9` создал `/clear` в `vdx@lft` (живёт с 09-29) в
+03:14Z — 25 записей Claude Code 2.1.284. В 19:23:08Z на m3 `vdx ai` поднял
+`vdx@m3`: панель `%21`, `exec /bin/zsh -lic 'claude
+--dangerously-skip-permissions --continue; exec /bin/zsh -l'` — форма
+`tmuxShellCommand`, `--continue` из `resume_args` профиля (DL #15). `~/.claude`
+→ `~/Dropbox/settings/claude/.claude`, `~/Dropbox` синхронизирует Syncthing
+(папка «Dropbox»), в `.stignore` про `.claude` ничего — `projects/` общий для
+m3 и lft. Самой свежей беседой каталога на m3 оказалась беседа lft, и
+`--continue` её продолжил: 1131 запись 2.1.288 с 19:23:10Z. Конфликтная копия
+`…sync-conflict-20261004-161533-N223K43.jsonl`: 590 из 591 записи есть в
+основном файле, лишняя — только `away_summary` m3 в 20:15:13Z. DL #15 знал
+риск «посторонней беседы в каталоге» на одной машине, но не на двух. У Claude
+Code есть `--session-id <uuid>` и `--resume <id>` (`claude --help`, 2.1.288).
+Попутно: мой первый ответ в этой сессии назвал `vodmal-work-imac` машиной не
+из числа станций — это и есть lft.
+
+**Status:** open — решение владельца: как `vdx ai` выбирает беседу
+(свою по id на машине / исключить транскрипты из Syncthing / оба)
+
 ## Next actions
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
@@ -1107,6 +1130,10 @@ esbuild приходит пакетом `@esbuild/darwin-arm64`, а postinstall 
       (проверено: абзац о сигнале агенту ссылается на `vdx ai` и правило
       `echelon-channel`, ручного флага нет); следующие письма о `mail.watch` —
       тоже. Push echelon — за владельцем
+- [ ] Sidetrack #15: владелец выбрал, как `vdx ai` продолжает только беседу
+      своей машины; сделано; ответ ai-dev-plugins на
+      `vdx-shared-session-two-machines` (как запустилась `vdx@m3`, что
+      исправлено, что с конфликтной копией и общей беседой)
 - [ ] Первый выпуск плагина после 0.7.0: после автообновления
       `installed_plugins.json` → `vdx@…` → `version` новая. Не доехала —
       сказать ai-dev-plugins (документация не говорит, перечитывает ли
