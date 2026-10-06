@@ -1015,8 +1015,13 @@ Code есть `--session-id <uuid>` и `--resume <id>` (`claude --help`, 2.1.288
 #27: `vdx ai@m3` и передача беседы на m3 идут через ssh и попадают в 0.15.0,
 которая молча отбрасывает `--conversation` и стартует с `--continue`.
 
-**Status:** open — бриф nas-info `vdx-two-installs-m3` (2026-10-06, сессия
-разбужена); ждём ответа, живая проверка передачи беседы на m3 — после
+**Status:** open — ответ nas-info `vdx-two-installs-m3-outcome` (2026-10-06):
+общий `~/.zshenv` ставит первым каталог fnm default — ssh и терминал на m3
+запускают один файл (0.18.0), действует сразу; на lft без изменений. Модуль
+`vdx.sh` ставит и сверяет vdx тем npm, что видит ssh, и снимает копию другого
+npm; бейдж `f:vdx` сравнивает ssh с терминалом. Копия brew 0.15.0 на m3 ещё
+лежит (не запускается) — снимет apply после коммита и пуша nas-info владельцем.
+Закрыть, когда копии brew нет и обе машины на ≥ 0.19
 
 ## Next actions
 
@@ -1237,8 +1242,12 @@ Code есть `--session-id <uuid>` и `--resume <id>` (`claude --help`, 2.1.288
       `--check`) — владелец, OTP; lock — отдельным коммитом. Плагин 0.8.0 едет
       push'ем `main` — 2026-10-06: `992daa8`, тег `v0.19.0`, push; npm `latest`
       0.19.0 с 19:35:08Z (`PUT 202` в 19:33Z); lock — отдельным коммитом
-- [ ] Ответ nas-info на `vdx-two-installs-m3` (Sidetrack #16): на m3 и lft
-      `ssh <host> 'command -v vdx; vdx --version'` = терминал той машины
+- [x] Ответ nas-info на `vdx-two-installs-m3` (Sidetrack #16): на m3 и lft
+      `ssh <host> 'command -v vdx; vdx --version'` = терминал той машины —
+      2026-10-06, `vdx-two-installs-m3-outcome`: проверено, ssh на m3 —
+      `~/.local/share/fnm/aliases/default/bin/vdx` 0.18.0
+- [ ] Владелец: коммит и пуш nas-info (снимет копию brew на m3), topgrade на
+      m3 и lft до 0.20.0 (мяч из ответа nas-info)
 - [x] Выпуск 0.20.0 (minor: `vdx publish` пушит, lock в коммите выпуска,
       `npm login` по ходу, ожидание registry; DL #28) — владелец; сам выпуск
       уже новым конвейером из клона: `cli/node_modules/.bin/tsx cli/src/index.ts
