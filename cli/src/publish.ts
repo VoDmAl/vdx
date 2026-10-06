@@ -392,6 +392,8 @@ export interface PublishDeps {
   sleep: (ms: number) => void;
   /** How long to wait for the registry to show the new version. */
   registryWaitMs: number;
+  /** Rewrites one status line in place (a terminal); without it the wait logs a line now and then. */
+  progress?: (text: string) => void;
 }
 
 function sleepSync(ms: number): void {
@@ -407,6 +409,7 @@ export function defaultPublishDeps(): PublishDeps {
     log: (line) => process.stderr.write(line + '\n'),
     sleep: sleepSync,
     registryWaitMs: 180_000,
+    progress: process.stderr.isTTY ? (text) => process.stderr.write(`\r${text}\x1b[K`) : undefined,
   };
 }
 
@@ -427,19 +430,38 @@ export function bumpLockText(text: string, version: string): string {
 export function waitForRegistry(name: string, version: string, deps: PublishDeps): boolean {
   const started = Date.now();
   const deadline = started + deps.registryWaitMs;
-  deps.log(`→ waiting for the registry to show ${name}@${version}...`);
-  for (;;) {
+  const limit = Math.round(deps.registryWaitMs / 1000);
+  const seconds = () => Math.round((Date.now() - started) / 1000);
+  deps.log(
+    `→ waiting for the registry to show ${name}@${version} — npm has taken it; ` +
+      `the registry usually shows it within ~2 min (giving it ${limit} s)`,
+  );
+  const shown = () => {
     try {
-      if (deps.npm(['view', `${name}@${version}`, 'version', '--prefer-online']).trim() === version) {
-        deps.log(`✓ ${name}@${version} is on the registry (${Math.round((Date.now() - started) / 1000)} s after publish)`);
-        return true;
-      }
+      return deps.npm(['view', `${name}@${version}`, 'version', '--prefer-online']).trim() === version;
     } catch {
-      /* E404 until it is processed */
+      return false; // E404 until it is processed
+    }
+  };
+  // Ask npm every 10 s; between the asks, count the seconds on one line.
+  let lastLogged = 0;
+  for (let found = shown(); ; found = shown()) {
+    if (found) {
+      deps.progress?.('');
+      deps.log(`✓ ${name}@${version} is on the registry (${seconds()} s after publish)`);
+      return true;
     }
     if (Date.now() >= deadline) break;
-    deps.sleep(10_000);
+    for (let i = 0; i < 10 && Date.now() < deadline; i++) {
+      if (deps.progress) deps.progress(`  … ${seconds()} s of ${limit} s`);
+      else if (seconds() - lastLogged >= 30) {
+        lastLogged = seconds();
+        deps.log(`  … ${lastLogged} s`);
+      }
+      deps.sleep(1_000);
+    }
   }
+  deps.progress?.('');
   deps.log(
     `! ${name}@${version} not visible on the registry after ${Math.round(deps.registryWaitMs / 60_000)} min — ` +
       `npm accepted it; check later: npm view ${name}@${version} version`,

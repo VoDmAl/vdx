@@ -466,6 +466,15 @@ describe('the release goes out whole: lock, push, registry', () => {
     expect(git(['log', '--format=%s'])).toBe('init\n');
   });
 
+  it('counts the seconds on one line while it waits — a silent wait looked hung', () => {
+    const lines: string[] = [];
+    expect(waitForRegistry('demo', '1.1.0', deps({ progress: (t) => lines.push(t) }))).toBe(true);
+    expect(lines.slice(0, 10)).toEqual(Array(10).fill('  … 0 s of 60 s'));
+    expect(lines.at(-1)).toBe(''); // the counter line is cleared before the result
+    expect(logs[0]).toContain('npm has taken it; the registry usually shows it within ~2 min');
+    expect(logs.at(-1)).toMatch(/✓ demo@1\.1\.0 is on the registry/);
+  });
+
   it('a version the registry has not shown in time is reported, not failed — npm took it', () => {
     const d = deps({ npm: () => { throw new Error('E404'); }, registryWaitMs: 0 });
     expect(waitForRegistry('demo', '1.1.0', d)).toBe(false);
