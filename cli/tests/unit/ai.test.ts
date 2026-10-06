@@ -487,6 +487,16 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(remoteRuns()[0]![2]).toContain(`exec vdx ai ${root} --conversation ${ID.b}`);
   });
 
+  it('Ctrl-D at the question starts nothing — it is a cancel, not "no terminal"', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    answers = []; // ask() answers null: end of input
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+    expect(runs()).toEqual([]);
+    expect(remoteRuns()).toEqual([]);
+    expect(text()).toContain('no answer — nothing started');
+  });
+
   it("a number picks this machine's conversation instead; n — a new one", () => {
     conv(ID.a, 'lft', 30);
     conv(ID.b, 'm3', 5);

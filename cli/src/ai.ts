@@ -957,6 +957,8 @@ export interface ConversationChoice {
   remote?: { host: string; id: string; reachable: boolean };
   /** Continue it here only after a yes: another machine's that cannot be asked, or one running here already. */
   askHere?: { id: string; why: string };
+  /** The person ended the question (Ctrl-D): start nothing. */
+  abort?: boolean;
   /** For the person: what was found and what is taken. */
   lines: string[];
 }
@@ -1047,7 +1049,8 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     deps.log('  n) a new conversation');
     for (let tries = 0; tries < 2; tries++) {
       const answer = deps.ask(`Which one to continue? [1]: `);
-      if (answer === null) break;
+      // Ctrl-D at the question is a cancel, not "no terminal": start nothing.
+      if (answer === null) return { args: [], abort: true, lines: ['no answer — nothing started'] };
       const a = answer.trim();
       if (/^n(ew)?$/i.test(a)) return { args: [], lines: ['a new conversation'] };
       const c = a === '' ? found[0] : /^\d+$/.test(a) ? found[Number(a) - 1] : undefined;
@@ -1244,6 +1247,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return EXIT_OK;
   }
   for (const l of choice?.lines ?? []) log(l);
+  if (choice?.abort) return EXIT_LAUNCH_FAILED;
 
   let askHere = choice?.askHere;
   if (choice?.remote) {
