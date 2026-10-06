@@ -90,7 +90,7 @@ vdx up    # bring services up
 vdx down  # tear down
 
 # 4. Publish a library (Node MVP; PHP/Python coming in Y.3)
-vdx publish minor   # bump, npm publish (with OTP), git commit+tag
+vdx publish minor   # bump (+lock), npm publish (with OTP), git commit+tag+push, wait for the registry
 
 # 5. Check your local environment (Node version, mise, git, docker, Claude Code plugin)
 vdx doctor

@@ -4,6 +4,17 @@
 
 ## 2026-10-06
 
+### `vdx publish` — выпуск одной командой
+
+Раньше выпуск занимал до четырёх команд: `vdx publish`, `npm login` при истёкшем
+входе, `git push --follow-tags` и отдельный коммит lock. Теперь `vdx publish`
+сам запускает `npm login` в терминале и повторяет проверки. Версию в
+`package.json` и `package-lock.json` он кладёт в один коммит, после тега пушит
+в upstream и ждёт, пока registry покажет версию. `--no-push` оставляет коммит
+и тег локальными. Ветку, отставшую от upstream, pre-flight отклоняет ещё до
+bump ([cli/src/publish.ts](cli/src/publish.ts),
+[DL #28](docs/tasks/vdx-ai/workitem.md)).
+
 ### `vdx ai` продолжает разговор на той машине, где он идёт
 
 Для Claude Code `vdx ai` больше не передаёт `--continue`: тот брал самый свежий

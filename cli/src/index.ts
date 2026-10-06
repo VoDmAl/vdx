@@ -23,8 +23,10 @@ import { runDoctor, looksLikeProject, readCliVersion } from './doctor.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
+  preflightFixable,
   renderPublishPlan,
   executePublish,
+  defaultPublishDeps,
   type BumpKind,
   type PublishOptions,
 } from './publish.ts';
@@ -38,7 +40,7 @@ const USAGE = `Usage:
   vdx <up|down|build|test|check|fix>     run lifecycle verb (via mise run <verb>)
   vdx audit   [project_path]  [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]   (default: cwd)
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
-  vdx publish <patch|minor|major> [--dry-run] [--force]
+  vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
   vdx doctor  [--format=ansi|markdown|json] [--json]
   vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
@@ -119,12 +121,18 @@ mise.toml is overwritten only with --force.
     positionals: 1,
   },
   publish: {
-    usage: 'vdx publish <patch|minor|major> [--dry-run] [--force]',
-    help: `Releases the library in the current directory: pre-flight checks, version bump,
-npm publish (npm asks for an OTP), git commit and tag. Does not push.
---dry-run runs the pre-flight and prints the plan; --force goes on past a failed pre-flight.
+    usage: 'vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]',
+    help: `Releases the library in the current directory, start to finish:
+  pre-flight checks — at a terminal an expired npm login is renewed (\`npm login\`)
+  and the checks run again;
+  the version bump in package.json and package-lock.json;
+  npm publish (npm asks for an OTP);
+  git commit and tag, then \`git push --follow-tags\` to the branch's upstream;
+  a wait until the registry shows the new version (up to 3 min).
+--dry-run runs the pre-flight and prints the plan; --force goes on past a failed
+pre-flight; --no-push leaves the commit and the tag local.
 `,
-    bools: ['dry-run', 'force'],
+    bools: ['dry-run', 'force', 'no-push'],
     positionals: 1,
   },
   doctor: {
@@ -320,7 +328,7 @@ function cmdPublish(opts: ParsedArgs): void {
   const bumpArg = opts.positionals[0];
   if (!bumpArg || !['patch', 'minor', 'major'].includes(bumpArg)) {
     process.stderr.write(
-      'Usage: vdx publish <patch|minor|major> [--dry-run] [--force]\n',
+      'Usage: vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]\n',
     );
     process.exit(1);
   }
@@ -340,15 +348,18 @@ function cmdPublish(opts: ParsedArgs): void {
     bump,
     dryRun: Boolean(opts.flags['dry-run']),
     force: Boolean(opts.flags.force),
+    push: !opts.flags['no-push'],
   };
 
-  let plan;
-  try {
-    plan = planPublish(planOpts, auditResult, ctx);
-  } catch (e: any) {
-    process.stderr.write(`error: ${e?.message ?? String(e)}\n`);
-    process.exit(2);
-  }
+  const replan = () => {
+    try {
+      return planPublish(planOpts, auditResult, ctx);
+    } catch (e: any) {
+      process.stderr.write(`error: ${e?.message ?? String(e)}\n`);
+      process.exit(2);
+    }
+  };
+  let plan = replan();
 
   process.stdout.write(renderPublishPlan(plan));
 
@@ -357,13 +368,30 @@ function cmdPublish(opts: ParsedArgs): void {
     return;
   }
 
+  // A failure a command fixes (an expired npm login): run it here, then check again.
+  const deps = defaultPublishDeps();
+  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  if (!plan.preflightPassed && !planOpts.force && interactive && preflightFixable(plan)) {
+    for (const c of plan.preflight.filter((c) => !c.ok && c.fix)) {
+      process.stderr.write(`\n→ ${c.name}: ${c.fix!.cmd} ${c.fix!.args.join(' ')}\n`);
+      try {
+        deps.run(c.fix!.cmd, c.fix!.args, projectRoot);
+      } catch {
+        process.stderr.write(`error: \`${c.fix!.cmd} ${c.fix!.args.join(' ')}\` failed\n`);
+        process.exit(2);
+      }
+    }
+    plan = replan();
+    process.stdout.write('\n' + renderPublishPlan(plan));
+  }
+
   if (!plan.preflightPassed && !planOpts.force) {
     process.stderr.write('\nerror: pre-flight failed (use --force to bypass)\n');
     process.exit(2);
   }
 
   try {
-    executePublish(plan);
+    executePublish(plan, deps);
   } catch (e: any) {
     process.stderr.write(`\nerror: ${e?.message ?? String(e)}\n`);
     process.exit(3);

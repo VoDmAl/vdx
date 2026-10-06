@@ -42,7 +42,7 @@ vdx audit [project-path] [--format=ansi|markdown|json] [--rubric <path>] [--stac
 vdx init  [project-path] [--baseline github.com/org/repo@vX.Y] [--stack <id>] [--dry-run] [--force]   # default: cwd
 
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
-vdx publish <patch|minor|major> [--dry-run] [--force]
+vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
 
 # Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin)
 vdx doctor [--format=ansi|markdown|json]
@@ -72,7 +72,7 @@ vdx init --stack node
 vdx test            # → mise run test (which calls `vitest run` or whatever was detected)
 
 # 3. Ship a new minor release of a Node lib
-vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no push)
+vdx publish minor   # npm login if expired → bump package.json + lock → npm publish (OTP) → commit + tag → push → wait for the registry
 
 # 4. Start the agent here, continuing its last conversation (--new: a new one;
 #    another machine's conversation is continued on that machine);

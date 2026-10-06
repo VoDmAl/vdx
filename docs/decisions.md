@@ -94,6 +94,8 @@ Node `!private + bin/main/exports/module/publishConfig`; PHP composer
 **Subverb-style** (вдохновлено пользовательским паттерном `build:db:migration`):
 - `vdx publish [patch|minor|major]` — full default pipeline (vdx
   институциализирует stack-specific impl: Node = `npm version X && npm publish && git push --follow-tags`;
+  реализация до 0.19 не пушила и не трогала lock — догнали 2026-10-06, DL #28
+  кристалла vdx-ai: lock в коммите выпуска, push, `npm login` по ходу, ожидание registry;
   PHP = edit composer.json + git tag + push; Python = build + twine + tag).
   Транзакционно: bump→pre-flight→upload→commit/tag/push в одной
   операции с rollback при upload-failure.
