@@ -16,6 +16,10 @@ from a personal profile, not from a command anyone types:
   project's files (`config_value`, `has_file`, …) and the `args` it adds,
   plus `confirm` for a prompt the flag causes;
 - `resume_args` — continue the last conversation on every start except `--new`.
+  For Claude Code vdx picks which one: the session-start line opens with the
+  machine this session runs on (``vdx ai: this machine is `lft` ``), and that
+  line, kept in the transcript, tells later starts whose conversation it is.
+  Another machine's conversation is continued on that machine.
 
 Format: `docs/specs/environment-format.md` in the vdx repository.
 
@@ -44,6 +48,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --check [path]` | this session against the profile; what the session-start hook prints |
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one |
+| `vdx ai --conversation <id> [path]` | continue this Claude Code conversation (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |
 | `vdx ai --help` | flags and exit codes |
 

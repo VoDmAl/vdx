@@ -30,6 +30,7 @@ import {
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 import { runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
+import { isConversationId } from './conversations.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -39,7 +40,7 @@ const USAGE = `Usage:
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force]
   vdx doctor  [--format=ansi|markdown|json] [--json]
-  vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]         (default: cwd; @host: over ssh, in tmux there)
+  vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
 `;
@@ -73,6 +74,8 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   project_path  the project (default: cwd); its git toplevel is used
   @host         the same command on <host> over ssh: its vdx, profile and tmux
   --new         a new conversation instead of continuing the last one
+  --conversation <id>
+                continue this Claude Code conversation
   --restart     restart the running agent in its pane — applies a changed profile
   --detach      start without attaching; print the command that attaches
   --dry-run     print the plan and the project's running agents; start nothing
@@ -80,6 +83,14 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 whether this session carries the profile's flags (the vdx plugin's
                 SessionStart hook); prints nothing without a profile; exit 3 on drift
   -h, --help    this help
+
+Which conversation a start continues (Claude Code): each one is marked with the
+machine it was last started on (the vdx plugin's hook writes it in), and the
+other machines are asked over ssh which ones run there now. Another machine's
+conversation is continued on that machine; if it does not answer, vdx asks
+before continuing it here. When the choice is not plain, vdx lists them, the
+running ones marked — Enter takes the newest; without a terminal it takes this
+machine's.
 
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
 3 the running agent lacks profile flags (rerun with --restart); 4 the start
@@ -127,10 +138,11 @@ Exit 2 when something is missing.
     positionals: 0,
   },
   ai: {
-    usage: 'vdx ai[@host] [project_path] [--new] [--restart] [--detach] [--dry-run]',
+    usage: 'vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: ['new', 'restart', 'resume', 'detach', 'dry-run', 'check'],
+    values: ['conversation'],
     positionals: 1,
   },
   ...Object.fromEntries(
@@ -415,13 +427,24 @@ function cmdAi(opts: ParsedArgs): void {
     }
     process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps()));
   }
+  const conversation = typeof opts.flags.conversation === 'string' ? opts.flags.conversation : undefined;
+  if (conversation !== undefined && !isConversationId(conversation)) {
+    process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${conversation}"\n`);
+    process.exit(2);
+  }
+  if (conversation !== undefined && opts.flags.new === true) {
+    process.stderr.write('vdx ai: --new and --conversation ask for different conversations — pick one\n');
+    process.exit(2);
+  }
   const options = {
     path: opts.positionals[0] ?? '.',
     restart: opts.flags.restart === true,
     fresh: opts.flags.new === true,
+    conversation,
     detach: opts.flags.detach === true,
     dryRun: opts.flags['dry-run'] === true,
   };
+  const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.
   const host = opts.cmd.startsWith('ai@') ? opts.cmd.slice(3) : null;
   if (host !== null) {
@@ -430,10 +453,10 @@ function cmdAi(opts: ParsedArgs): void {
       process.exit(2);
     }
     if (host.toLowerCase() !== hostLabel().toLowerCase()) {
-      process.exit(runAiRemote(options, host, defaultDeps(), readCliVersion()));
+      process.exit(runAiRemote(options, host, deps));
     }
   }
-  process.exit(runAi(options, defaultDeps()));
+  process.exit(runAi(options, deps));
 }
 
 const parsed = parseArgs(process.argv);

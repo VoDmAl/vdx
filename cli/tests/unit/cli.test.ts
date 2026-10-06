@@ -139,7 +139,7 @@ describe('every command: --help, unknown options, stray arguments', () => {
       }
     }
     expect(fs.existsSync(path.join(dir, 'mise.toml'))).toBe(false);
-  });
+  }, 60_000); // 22 starts of the CLI, ~0.6 s each — past the default 5 s on a loaded machine
 
   it('<command> refuses an unknown option with exit 2 and runs nothing', () => {
     for (const cmd of COMMANDS) {
@@ -150,7 +150,7 @@ describe('every command: --help, unknown options, stray arguments', () => {
       expect(r.stdout, cmd).toBe('');
     }
     expect(fs.existsSync(path.join(dir, 'mise.toml'))).toBe(false);
-  });
+  }, 30_000); // 11 starts of the CLI
 
   it('refuses a stray argument and a value flag without its value', () => {
     for (const [args, message] of [

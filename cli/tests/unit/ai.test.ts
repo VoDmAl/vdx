@@ -7,6 +7,7 @@ import {
   type AiDeps,
   type Environment,
   EXIT_DRIFT,
+  EXIT_LAUNCH_FAILED,
   EXIT_OK,
   EXIT_USAGE,
   Tmux,
@@ -37,6 +38,8 @@ import {
   sleepSync,
   tmuxShellCommand,
 } from '../../src/ai.ts';
+import { type LiveSession, readConversation } from '../../src/conversations.ts';
+import { ID, hookLine, promptLine, startedOn, userLine, writeConversation, writeHistory } from './transcripts.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
@@ -377,6 +380,258 @@ describe('runAi without tmux', () => {
   });
 });
 
+describe('vdx ai picks the conversation to continue (Claude Code)', () => {
+  let home: string;
+  let root: string;
+  let logs: string[];
+  let sshCalls: { args: string[]; capture: boolean }[];
+  let answers: string[];
+  /** What another machine answers over ssh: its live session files; null — it does not answer. */
+  let remoteLive: object[] | null;
+  let liveHere: LiveSession[];
+  const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
+  const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[5]);
+  const remoteRuns = () => sshCalls.filter((c) => !c.capture).map((c) => c.args);
+
+  beforeEach(() => {
+    home = tmpDir('vdx-ai-conv-home-');
+    root = tmpDir('vdx-ai-conv-root-');
+    logs = [];
+    sshCalls = [];
+    answers = [];
+    remoteLive = [];
+    liveHere = [];
+    // A `claude` that records its args and exits: what `vdx ai` ran it with.
+    fs.mkdirSync(path.join(home, 'bin'));
+    fs.writeFileSync(path.join(home, 'bin', 'claude'), '#!/bin/sh\necho "$*" >> "$(dirname "$0")/../runs"\n', { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(home, 'env.yaml'),
+      `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue]}\nsession: {multiplexer: none}\n`,
+    );
+  });
+  afterEach(() => {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const deps = (over: Partial<AiDeps> = {}): AiDeps => ({
+    env: {
+      VDX_ENVIRONMENT: path.join(home, 'env.yaml'),
+      VDX_HOST: 'lft',
+      CLAUDE_CONFIG_DIR: path.join(home, 'cc'),
+      PATH: process.env['PATH'],
+    },
+    home,
+    tmux: new Tmux(`vdx-test-unused-${process.pid}`),
+    interactive: true,
+    shell: '/bin/sh',
+    log: (l) => logs.push(l),
+    out: (t) => logs.push(t),
+    onPath: () => false,
+    processes: () => [],
+    sleep: () => {},
+    confirmTimeoutMs: 1000,
+    ask: () => answers.shift() ?? null,
+    version: '0.19.0',
+    ssh: (args, capture) => {
+      sshCalls.push({ args, capture });
+      if (!capture) return { status: 0, stdout: '' };
+      return remoteLive ? { status: 0, stdout: remoteLive.map((o) => JSON.stringify(o)).join('\n') } : { status: 255, stdout: '' };
+    },
+    liveHere: () => liveHere,
+    ...over,
+  });
+  const conv = (id: string, machine: string | null, minutesAgo: number) =>
+    writeConversation(
+      path.join(home, 'cc'),
+      root,
+      id,
+      [...(machine ? [startedOn(machine)] : []), userLine('hi'), promptLine(`prompt ${id.slice(0, 4)}`)],
+      minutesAgo,
+    );
+  const runs = () => {
+    const f = path.join(home, 'runs');
+    return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n') : [];
+  };
+  const text = () => logs.join('\n');
+
+  it("continues this machine's newest conversation and asks nothing when no other machine has one", () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, null, 60);
+    writeHistory(path.join(home, 'cc'), root, [ID.b]); // typed in here before vdx named the machine
+    answers = ['should not be read'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([`--base --resume ${ID.a}`]);
+    expect(answers).toHaveLength(1);
+    expect(text()).toContain('continuing lft');
+  });
+
+  it('starts a new conversation when the project has none — not --continue', () => {
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual(['--base']);
+    expect(text()).toContain('no conversation of this project yet');
+  });
+
+  it("Enter takes the newest overall; another machine's is continued on that machine, over ssh", () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    answers = [''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([]);
+    expect(text()).toMatch(/1\) m3 .*bbbbbbbb.*← newest/);
+    expect(text()).toMatch(/2\) lft .*aaaaaaaa.*← this machine/);
+    expect(sshCalls[0]!.args.slice(0, 5)).toEqual(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'm3']);
+    expect(asked()).toEqual([expect.stringMatching(/^sh -c .*sessions/)]);
+    expect(remoteRuns()).toHaveLength(1);
+    expect(remoteRuns()[0]!.slice(0, 2)).toEqual(['-t', 'm3']);
+    expect(remoteRuns()[0]![2]).toContain(`exec vdx ai ${root} --conversation ${ID.b}`);
+  });
+
+  it("a number picks this machine's conversation instead; n — a new one", () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    answers = ['2'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    answers = ['n'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([`--base --resume ${ID.a}`, '--base']);
+    expect(remoteRuns()).toEqual([]);
+  });
+
+  it('the other machine does not answer: vdx asks, and y continues the conversation here', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    remoteLive = null;
+    answers = ['', 'y'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(sshCalls).toHaveLength(1); // asked once; nothing run there
+    expect(text()).toContain('m3 does not answer over ssh');
+    expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+  });
+
+  it('…and without a yes starts nothing', () => {
+    conv(ID.b, 'm3', 5);
+    remoteLive = null;
+    answers = ['', ''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+    expect(runs()).toEqual([]);
+    expect(text()).toContain('nothing started');
+    expect(text()).toContain(`--conversation ${ID.b}`);
+  });
+
+  it("without a terminal: this machine's newest, and the other machine's named with the command for it", () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    answers = ['should not be read'];
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(answers).toHaveLength(1);
+    expect(text()).toContain(`resume:   --resume ${ID.a}`);
+    expect(text()).toContain('conversation: continuing lft');
+    expect(text()).toContain(`note: m3 has a newer conversation bbbbbbbb — continue it there: vdx ai@m3 ${root} --conversation ${ID.b}`);
+  });
+
+  it('with only another machine\'s conversation and no terminal, a new one here — never theirs', () => {
+    conv(ID.b, 'm3', 5);
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('resume:   —');
+    expect(text()).toContain('no idle conversation of this machine — starting a new one');
+  });
+
+  it('a conversation of an unknown machine is never taken without a terminal (the t23b-program case)', () => {
+    conv(ID.a, null, 300);
+    conv(ID.b, null, 55);
+    writeHistory(path.join(home, 'cc'), root, [ID.a]);
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`resume:   --resume ${ID.a}`);
+    expect(text()).toContain('note: a newer conversation bbbbbbbb is of an unknown machine (never typed in here)');
+  });
+
+  it('…at a terminal it is offered, marked, and continued here only after a yes', () => {
+    conv(ID.b, null, 55);
+    answers = ['', 'y'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toMatch(/1\) \? .*bbbbbbbb.*← newest, machine unknown/);
+    expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+    expect(sshCalls).toEqual([]); // no machine to ask: none is named
+    answers = ['', ''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+    expect(runs()).toHaveLength(1);
+  });
+
+  it('--conversation continues that one and asks nothing', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    expect(runAi({ ...opts, path: root, conversation: ID.c }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([`--base --resume ${ID.c}`]);
+    expect(sshCalls).toEqual([]);
+  });
+
+  it("a conversation running on another machine right now is listed and marked, even when it is not that machine's newest", () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 5);
+    conv(ID.c, 'm3', 120);
+    remoteLive = [{ pid: 10984, sessionId: ID.c, tmux: 'proj@m3:@25.%25', status: 'busy' }];
+    answers = ['3'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toMatch(/3\) m3 .*cccccccc.*← running on m3 now \(proj@m3, busy\)/);
+    expect(remoteRuns()).toHaveLength(1);
+    expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+    expect(runs()).toEqual([]);
+  });
+
+  it('a running session tells the machine of a conversation from before vdx named machines', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 300);
+    conv(ID.c, null, 5); // the t23b-program case: newest, never typed in here
+    remoteLive = [{ pid: 10984, sessionId: ID.c, status: 'waiting' }];
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`resume:   --resume ${ID.a}`);
+    expect(text()).toContain(
+      `note: m3 has a newer conversation cccccccc, running on m3 now (pid 10984, waiting) — continue it there: vdx ai@m3 ${root} --conversation ${ID.c}`,
+    );
+  });
+
+  it('a conversation running here outside tmux is continued only after a yes — two sessions would write to it', () => {
+    conv(ID.a, 'lft', 30);
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    answers = ['', ''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+    expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running here now \(pid 4242, busy\)/);
+    answers = ['', 'y'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([`--base --resume ${ID.a}`]);
+  });
+
+  it('…without a terminal it is not taken, and a machine that does not answer is named', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.b, 'm3', 300);
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    remoteLive = null;
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('resume:   —');
+    expect(text()).toContain('no idle conversation of this machine — starting a new one');
+    expect(text()).toContain('note: a newer conversation aaaaaaaa, running here now (pid 4242, busy) — not taken: it would have two sessions');
+    expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
+  });
+
+  it('--conversation is refused for an agent that is not Claude Code', () => {
+    fs.writeFileSync(path.join(home, 'env.yaml'), 'agent: {command: codex, resume_args: [resume]}\nsession: {multiplexer: none}\n');
+    expect(runAi({ ...opts, path: root, conversation: ID.c }, deps())).toBe(EXIT_USAGE);
+    expect(text()).toContain('--conversation names a Claude Code conversation');
+  });
+
+  it('another agent keeps the profile resume_args — vdx reads no conversations for it', () => {
+    fs.writeFileSync(path.join(home, 'bin', 'codex'), fs.readFileSync(path.join(home, 'bin', 'claude')), { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(home, 'env.yaml'),
+      `agent: {command: ${path.join(home, 'bin', 'codex')}, args: [--base], resume_args: [resume, --last]}\nsession: {multiplexer: none}\n`,
+    );
+    conv(ID.b, 'm3', 5);
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual(['--base resume --last']);
+  });
+});
+
 const tmuxAvailable = new Tmux().available();
 
 describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
@@ -574,6 +829,46 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     }
   }, 30_000); // "not running" is concluded after a 10 s wait
 
+  it('--restart of a Claude Code agent resumes the conversation it is in, not the newest in the folder', () => {
+    tmux.tryRun(['kill-server']);
+    const claude = path.join(base, 'bin', 'claude');
+    fs.mkdirSync(path.dirname(claude), { recursive: true });
+    fs.copyFileSync(path.join(base, 'fake-agent'), claude);
+    fs.chmodSync(claude, 0o755);
+    fs.writeFileSync(
+      profile,
+      [
+        'agent:',
+        `  command: ${claude}`,
+        '  args: [--base]',
+        '  resume_args: [--continue]',
+        '  when:',
+        '    - id: chan',
+        '      if: {config_value: {path: signals/sources.yaml, jsonpath: mail.watch}}',
+        '      confirm: [{screen: "FAKE PROMPT", keys: [Enter]}]',
+        'session: {multiplexer: tmux, name: "{project}@{host}"}',
+        '',
+      ].join('\n'),
+    );
+    const cc = path.join(base, 'cc');
+    const d = (): AiDeps => ({ ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } });
+    try {
+      expect(runAi({ ...opts, path: root }, d())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('no conversation of this project yet');
+      const agent = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')[0]!;
+      fs.mkdirSync(path.join(cc, 'sessions'), { recursive: true });
+      fs.writeFileSync(path.join(cc, 'sessions', `${agent.proc.pid}.json`), JSON.stringify({ sessionId: ID.c }));
+      writeConversation(cc, root, ID.d, [startedOn('testhost'), userLine('newer, another session')], 0);
+      expect(runAi({ ...opts, path: root, restart: true }, d())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('the agent is in conversation cccccccc — resuming it');
+      expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').map((f) => f.proc.args)).toEqual([
+        expect.stringMatching(new RegExp(`claude --base --resume ${ID.c}$`)),
+      ]);
+    } finally {
+      tmux.tryRun(['kill-server']);
+    }
+  }, 30_000); // two starts, each answering the prompt and seeing the agent twice a second apart
+
   it('--new on a fresh start runs the agent without the resume args', () => {
     writeProfile(['--base', '--extra']);
     tmux.tryRun(['kill-server']);
@@ -636,6 +931,11 @@ describe('vdx ai@host', () => {
       expect(r.args).toEqual(['ai', path.join(dir, 'home', 'AI Projects', 'vdx'), '--new', '--restart']);
       expect(r.note).toBe('');
       expect(r.status).toBe(0);
+    });
+
+    it('passes the conversation to continue there', () => {
+      const r = run('0.14.0', { ...opts, conversation: ID.b });
+      expect(r.args).toEqual(['ai', path.join(dir, 'home', 'AI Projects', 'vdx'), '--conversation', ID.b]);
     });
 
     it('names a different vdx version there', () => {
@@ -855,6 +1155,16 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     expect(text).toContain(path.join(home, 'env.yaml'));
     expect(text).toContain("✓ this session carries the profile's flags (profile conditions met here: echelon-channel)");
     expect(logs).toEqual([]);
+  });
+
+  it('opens with the machine — the line vdx later reads back from the transcript', () => {
+    const procs = chain('--dangerously-skip-permissions --continue');
+    expect(runAiCheck(root, deps(procs, { VDX_HOST: 'm3' }), 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text.startsWith('vdx ai: this machine is `m3`;')).toBe(true);
+    const file = path.join(home, `${ID.a}.jsonl`);
+    fs.writeFileSync(file, [hookLine(text.trimEnd()), userLine('hi')].join('\n') + '\n');
+    expect(readConversation(file, new Date())?.machine).toBe('m3');
   });
 
   it('names the missing flag and the restart in tmux — for the user to run', () => {

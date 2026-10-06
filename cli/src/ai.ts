@@ -8,6 +8,20 @@ import { autoDetectStack, readStructured, resolveConfigPath, type Ctx } from './
 import { loadManifest } from './manifest.ts';
 import { type Author, effectiveAuthor, isGitRepo, rankAuthors, scanPool, writeAuthor } from './author.ts';
 import type { Predicate } from './rubric.ts';
+import {
+  type Conversation,
+  describeConversation,
+  describeLive,
+  LIVE_SESSIONS_SCRIPT,
+  type LiveSession,
+  latestPerMachine,
+  listConversations,
+  liveConversationId,
+  liveSessionsHere,
+  machineLine,
+  machineOf,
+  parseLiveSessions,
+} from './conversations.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -17,7 +31,9 @@ import type { Predicate } from './rubric.ts';
  *
  * A start continues the project's last conversation (the profile's
  * `resume_args`) — after a reboot `vdx ai` brings the agent back where it was;
- * `--new` starts a new conversation.
+ * `--new` starts a new conversation. For Claude Code vdx picks the
+ * conversation itself, and continues another machine's on that machine
+ * (see chooseConversation).
  *
  * The profile is personal (which agent, which permissions), so it is never
  * bundled into the CLI: it is read from `$VDX_ENVIRONMENT` or
@@ -581,6 +597,8 @@ export interface AiOptions {
   restart: boolean;
   /** `--new`: start a new conversation — leave out the profile's resume args. */
   fresh: boolean;
+  /** `--conversation <id>`: continue this Claude Code conversation. */
+  conversation?: string;
   detach: boolean;
   dryRun: boolean;
 }
@@ -600,6 +618,18 @@ export interface AiDeps {
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
+  /** This vdx's version, named to the vdx on another machine. */
+  version?: string;
+  /** Run ssh — capturing its output, or on this terminal; null when ssh is not on PATH. */
+  ssh?: (args: string[], capture: boolean) => { status: number; stdout: string } | null;
+  /** Claude Code processes alive on this machine; read from its session files when not given. */
+  liveHere?: () => LiveSession[];
+}
+
+export function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
+  const res = spawnSync('ssh', args, { stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'inherit', encoding: 'utf8' });
+  if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return null;
+  return { status: res.status ?? 1, stdout: res.stdout ?? '' };
 }
 
 export function sleepSync(ms: number): void {
@@ -643,6 +673,7 @@ export function defaultDeps(): AiDeps {
     sleep: sleepSync,
     confirmTimeoutMs: 30_000,
     ask: askLine,
+    ssh: runSsh,
   };
 }
 
@@ -826,6 +857,7 @@ export function remoteAiArgs(input: {
     opts.restart && '--restart',
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
+    opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
   ].filter((f): f is string => Boolean(f));
   const v = shellQuote(version);
   const script =
@@ -890,20 +922,159 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
   }
 }
 
-export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version: string): number {
+export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version: string = deps.version ?? ''): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
   const args = remoteAiArgs({ host, projectPath, home: deps.home, version, opts, tty });
-  deps.log(`→ ${host}: vdx ai ${shellQuote(projectPath)}`);
-  const res = spawnSync('ssh', args, { stdio: 'inherit' });
-  if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+  deps.log(`→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`);
+  const res = (deps.ssh ?? runSsh)(args, false);
+  if (res === null) {
     deps.log('vdx ai: `ssh` not found on PATH');
     return 127;
   }
   if (opts.detach && res.status === EXIT_OK) {
     deps.log(`attach from here: vdx ai@${host} ${shellQuote(projectPath)}`);
   }
-  return res.status ?? 1;
+  return res.status;
+}
+
+/**
+ * The Claude Code sessions alive on `host` right now; null when it does not
+ * answer over ssh (BatchMode: a password prompt counts as no answer).
+ */
+export function askMachine(host: string, deps: AiDeps): LiveSession[] | null {
+  const res = (deps.ssh ?? runSsh)(
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, `sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`],
+    true,
+  );
+  return res && res.status === 0 ? parseLiveSessions(res.stdout) : null;
+}
+
+/** What a start continues: resume args here, or a conversation on another machine. */
+export interface ConversationChoice {
+  args: string[];
+  /** Continue it on that machine (`vdx ai@<host>`); `reachable` — it answered over ssh just now. */
+  remote?: { host: string; id: string; reachable: boolean };
+  /** Continue it here only after a yes: another machine's that cannot be asked, or one running here already. */
+  askHere?: { id: string; why: string };
+  /** For the person: what was found and what is taken. */
+  lines: string[];
+}
+
+export function isClaude(command: string): boolean {
+  return path.basename(command) === 'claude';
+}
+
+const resumeId = (id: string) => ['--resume', id];
+
+/**
+ * Which conversation a start continues. Other agents keep the profile's
+ * resume_args. For Claude Code vdx reads the project's conversations and the
+ * machine each belongs to (conversations.ts): `--continue` would take the
+ * newest one in the folder, and with the folder synced between machines that
+ * can be a conversation another machine is still writing to.
+ *
+ * Every other machine this project's conversations name is asked over ssh
+ * which of them run there right now; this machine's running ones come from
+ * its own session files. A running conversation is listed even when it is not
+ * its machine's newest.
+ *
+ * Another machine's conversation is continued on that machine, so two
+ * machines never write to one conversation; one whose machine is unknown, or
+ * cannot be reached, or that already runs here, is continued here only after a
+ * yes. When the choice is not plain, a person at a terminal picks — Enter
+ * takes the newest overall; without a terminal it is this machine's newest
+ * idle one, never another's.
+ */
+export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
+  if (plan.resumeArgs.length === 0 || !isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
+  const host = plan.host;
+  const same = (a: string | null, b: string | null) => (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+  const all = listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+  if (all.length === 0) return { args: [], lines: ['no conversation of this project yet — starting a new one'] };
+
+  // Who runs what right now: this machine from its session files, the others over ssh.
+  const reach = new Map<string, LiveSession[] | null>();
+  for (const c of all) {
+    if (c.machine && !same(c.machine, host) && ![...reach.keys()].some((m) => same(m, c.machine))) {
+      reach.set(c.machine, askMachine(c.machine, deps));
+    }
+  }
+  const live = new Map<string, { machine: string; session: LiveSession; here: boolean }[]>();
+  const addLive = (machine: string, session: LiveSession, here: boolean) =>
+    live.set(session.conversation, [...(live.get(session.conversation) ?? []), { machine, session, here }]);
+  for (const l of (deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))()) addLive(host, l, true);
+  for (const [m, sessions] of reach) for (const l of sessions ?? []) addLive(m, l, false);
+
+  const machine = (c: Conversation) => live.get(c.id)?.find((l) => !l.here)?.machine ?? machineOf(c, host);
+  const runsHere = (c: Conversation) => live.get(c.id)?.find((l) => l.here);
+  const isOurs = (c: Conversation) => same(machine(c), host);
+  const idleHere = (c: Conversation) => isOurs(c) && !runsHere(c);
+  const found = [...new Set([...latestPerMachine(all, machine), ...all.filter((c) => live.has(c.id))])].sort(
+    (a, b) => b.updated.getTime() - a.updated.getTime(),
+  );
+  const show = (c: Conversation) => describeConversation(c, machine(c));
+  const running = (c: Conversation) => (live.get(c.id) ?? []).map((l) => describeLive(l.machine, l.session, l.here));
+
+  const take = (c: Conversation): ConversationChoice => {
+    const m = machine(c);
+    const here = runsHere(c);
+    if (here) {
+      return {
+        args: [],
+        askHere: { id: c.id, why: `It runs here right now (${here.session.tmux ?? `pid ${here.session.pid}`}); two sessions would write to it` },
+        lines: [`chosen: ${show(c)}`],
+      };
+    }
+    if (isOurs(c)) return { args: resumeId(c.id), lines: [`continuing ${show(c)}`] };
+    if (m) return { args: [], remote: { host: m, id: c.id, reachable: reach.get(m) != null }, lines: [`continuing on ${m}: ${show(c)}`] };
+    return {
+      args: [],
+      askHere: { id: c.id, why: 'Its machine is unknown (never typed in here); if it runs there, both machines will write to it' },
+      lines: [`chosen: ${show(c)}`],
+    };
+  };
+  if (found.every(idleHere)) return take(found[0]!);
+
+  const firstIdle = found.find(idleHere);
+  if (canAsk && deps.interactive) {
+    deps.log('conversations of this project:');
+    found.forEach((c, i) => {
+      const marks = [i === 0 && 'newest', c === firstIdle && 'this machine', !machine(c) && 'machine unknown', ...running(c)];
+      const m = marks.filter(Boolean);
+      deps.log(`  ${i + 1}) ${show(c)}${m.length ? `   ← ${m.join(', ')}` : ''}`);
+    });
+    deps.log('  n) a new conversation');
+    for (let tries = 0; tries < 2; tries++) {
+      const answer = deps.ask(`Which one to continue? [1]: `);
+      if (answer === null) break;
+      const a = answer.trim();
+      if (/^n(ew)?$/i.test(a)) return { args: [], lines: ['a new conversation'] };
+      const c = a === '' ? found[0] : /^\d+$/.test(a) ? found[Number(a) - 1] : undefined;
+      if (c) return take(c);
+      deps.log(`  1–${found.length}, or n`);
+    }
+  }
+  const root = shellQuote(plan.projectRoot);
+  const notes = found
+    .filter((c) => !idleHere(c))
+    .map((c) => {
+      const m = machine(c);
+      const now = running(c);
+      const which =
+        `${c.updated > (firstIdle?.updated ?? new Date(0)) ? 'a newer' : 'another'} conversation ${c.id.slice(0, 8)}` +
+        (now.length ? `, ${now.join(', ')}` : '');
+      if (runsHere(c)) return `note: ${which} — not taken: it would have two sessions`;
+      return m
+        ? `note: ${m} has ${which} — continue it there: vdx ai@${m} ${root} --conversation ${c.id}`
+        : `note: ${which} is of an unknown machine (never typed in here) — on its machine: vdx ai@<machine> ${root} --conversation ${c.id}`;
+    });
+  for (const [m, sessions] of reach) if (sessions === null) notes.push(`note: ${m} does not answer over ssh — what runs there is not known`);
+  if (firstIdle) {
+    const chosen = take(firstIdle);
+    return { ...chosen, lines: [...chosen.lines, ...notes] };
+  }
+  return { args: [], lines: ['no idle conversation of this machine — starting a new one', ...notes] };
 }
 
 interface Prepared {
@@ -994,10 +1165,11 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
   const { projectRoot, profilePath, plan } = prepared;
 
   const lines = [
-    `vdx ai: the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
+    `${machineLine(plan.host)}; the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
       `${profilePath} — agent.args for every project, agent.when[] for a class of projects. ` +
       `Hand the user \`vdx ai\`, not \`${plan.command} --<flag>\`; a flag a class of projects needs is a ` +
-      `condition in the profile, not an instruction to type. More: \`vdx ai --help\`.`,
+      `condition in the profile, not an instruction to type. A project's agent on another machine: ` +
+      `\`vdx ai@<machine>\`. More: \`vdx ai --help\`.`,
   ];
   const own = findOwnAgent(deps.processes(), selfPid, plan.command);
   if (!own) {
@@ -1032,6 +1204,10 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
+  if (opts.conversation && !isClaude(plan.command)) {
+    log(`vdx ai: --conversation names a Claude Code conversation; the agent here is ${plan.command}`);
+    return EXIT_USAGE;
+  }
   // A start continues the last conversation unless asked for a new one.
   if (opts.fresh) plan = { ...plan, resumeArgs: [] };
 
@@ -1045,12 +1221,48 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     multiplexer === 'tmux'
       ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command)
       : [];
+  const current = running[0];
+
+  // What a start continues. A restart keeps the conversation the agent is in.
+  let choice: ConversationChoice | null = null;
+  if (!current || opts.restart) {
+    if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
+    else if (current && plan.resumeArgs.length > 0 && isClaude(plan.command)) {
+      const live = liveConversationId(deps.env, deps.home, current.proc.pid);
+      choice = live
+        ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
+        : chooseConversation(plan, deps, false);
+    } else choice = chooseConversation(plan, deps, !opts.dryRun);
+    plan = { ...plan, resumeArgs: choice.args };
+  }
 
   const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
   if (opts.dryRun) {
     deps.out(renderPlan(plan, multiplexer, running));
+    for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
     return EXIT_OK;
+  }
+  for (const l of choice?.lines ?? []) log(l);
+
+  let askHere = choice?.askHere;
+  if (choice?.remote) {
+    const { host, id, reachable } = choice.remote;
+    if (reachable) return runAiRemote({ ...opts, path: projectRoot, conversation: id }, host, deps);
+    log(`✗ ${host} does not answer over ssh — its conversation ${id.slice(0, 8)} cannot be continued there`);
+    askHere = { id, why: `If it still runs on ${host}, both machines will write to it` };
+  }
+  if (askHere) {
+    const { id, why } = askHere;
+    const answer = deps.interactive ? deps.ask(`Continue ${id.slice(0, 8)} here, on ${plan.host}? ${why}. [y/N]: `) : null;
+    if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
+      log(
+        `nothing started. Here: vdx ai ${shellQuote(projectRoot)} --conversation ${id}` +
+          ` · a new conversation: vdx ai --new ${shellQuote(projectRoot)}`,
+      );
+      return EXIT_LAUNCH_FAILED;
+    }
+    plan = { ...plan, resumeArgs: resumeId(id) };
   }
   ensureAuthor(projectRoot, poolDirs, deps, false);
 
@@ -1078,7 +1290,6 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return res.status ?? 1;
   }
 
-  const current = running[0];
   if (running.length > 1) {
     log(
       `note: ${running.length} panes run ${plan.command} in this project: ` +
@@ -1088,13 +1299,22 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
 
   if (current && !opts.restart) {
     if (opts.fresh) log(`note: ${current.pane.session} already runs ${plan.command} — --new replaces it only with --restart`);
+    if (opts.conversation) {
+      const live = liveConversationId(deps.env, deps.home, current.proc.pid);
+      if (live !== opts.conversation) {
+        log(
+          `note: ${current.pane.session} is in ${live ? `conversation ${live.slice(0, 8)}` : 'another conversation'} — ` +
+            `to switch it: vdx ai --restart ${shellQuote(projectRoot)} --conversation ${opts.conversation}`,
+        );
+      }
+    }
     const missing = missingArgs(current.proc.args, plan.args);
     if (missing.length > 0) {
       log(`✗ ${current.pane.session}: ${plan.command} is running without ${missing.join(' ')}`);
       log(
         `  to apply the profile: vdx ai --restart${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
           (plan.resumeArgs.length
-            ? ` (stops the running agent, then resumes the conversation with ${plan.resumeArgs.join(' ')})`
+            ? ` (stops the running agent, then resumes its conversation)`
             : opts.fresh
               ? ' (stops the running agent and starts a new conversation)'
               : ' (stops the running agent; the conversation is not resumed — the profile has no resume_args)'),

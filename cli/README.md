@@ -48,7 +48,7 @@ vdx publish <patch|minor|major> [--dry-run] [--force]
 vdx doctor [--format=ansi|markdown|json]
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai[@host] [project-path] [--new] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
+vdx ai[@host] [project-path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
 vdx ai --check [project-path]   # this session against the profile — what the plugin's SessionStart hook tells the agent
 
 # What a command does and takes; nothing runs (ai: also where launch flags live)
@@ -74,7 +74,8 @@ vdx test            # → mise run test (which calls `vitest run` or whatever wa
 # 3. Ship a new minor release of a Node lib
 vdx publish minor   # bump → npm publish (OTP prompt) → git commit + tag (no push)
 
-# 4. Start the agent here, continuing its last conversation (--new: a new one);
+# 4. Start the agent here, continuing its last conversation (--new: a new one;
+#    another machine's conversation is continued on that machine);
 #    re-run to attach, --restart to apply a changed profile
 vdx ai
 
@@ -91,6 +92,11 @@ name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machin
 profile and tmux, the path taken under its home directory; `--detach` only
 starts it. The machine's own label (`$VDX_HOST`) runs here. Where git knows no
 commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
+For Claude Code `vdx ai` picks the conversation: each one is marked with the
+machine it was last started on (`vdx ai --check`, run by the plugin's hook, writes
+the label in), the running ones are asked of the other machines over ssh, and
+another machine's conversation is continued there. When the choice is not plain
+it lists them — Enter takes the newest; without a terminal, this machine's.
 
 Every command takes `--help` (`-h`) and runs nothing with it. An unknown option,
 a stray argument or a value flag without its value is refused with exit 2
