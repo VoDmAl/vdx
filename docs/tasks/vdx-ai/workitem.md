@@ -1184,9 +1184,10 @@ Code есть `--session-id <uuid>` и `--resume <id>` (`claude --help`, 2.1.288
 - [x] Sidetrack #15: владелец выбрал, как `vdx ai` продолжает только беседу
       своей машины; сделано — 2026-10-06, DL #27: машина из строки `--check` в
       транскрипте, чужой разговор — на своей машине, идущие видны; копии удалены
-- [ ] Ответ ai-dev-plugins на `vdx-shared-session-two-machines` (как
+- [x] Ответ ai-dev-plugins на `vdx-shared-session-two-machines` (как
       запустилась `vdx@m3`, что исправлено, что с конфликтной копией и общей
-      беседой) — `intercom.sh reply`, после коммита
+      беседой) — 2026-10-06: `vdx-shared-session-two-machines-outcome`
+      (`db8b1df`), мяч — у нас: выпуск 0.19.0
 - [ ] Выпуск 0.19.0 (minor: `--conversation`, выбор разговора, строка машины в
       `--check`) — владелец, OTP; lock — отдельным коммитом. Плагин 0.8.0 едет
       push'ем `main`
