@@ -13,7 +13,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "0.6.0"
+  version: "0.7.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -44,6 +44,10 @@ session:
   project_names:
     - file: "~/.claude/vdm/intercom/_registry/{repo}.json"
       jsonpath: names.0
+  # Where a project's agent may run. Before a start vdx asks the others over ssh
+  # what runs there: a running conversation is continued on its machine, and a
+  # new one while an agent of the project runs elsewhere starts after a yes.
+  machines: [lft, m3]
 
 git:
   # A repo without its own author makes git refuse to commit (user.useConfigOnly);

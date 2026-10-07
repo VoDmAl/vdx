@@ -12,6 +12,7 @@ import {
   type Conversation,
   describeConversation,
   describeLive,
+  isMachineLabel,
   LIVE_SESSIONS_SCRIPT,
   type LiveSession,
   latestPerMachine,
@@ -19,8 +20,10 @@ import {
   liveConversationId,
   liveSessionsHere,
   machineLine,
+  type MachineReport,
   machineOf,
-  parseLiveSessions,
+  parseMachineReport,
+  runsInProject,
 } from './conversations.ts';
 
 /**
@@ -76,6 +79,8 @@ export interface SessionProfile {
   name?: string;
   /** Tried after `[vdx] name` in the project's mise.toml; the first non-empty string wins. */
   project_names?: NameSource[];
+  /** The machines a project's agent may run on, as ssh destinations; vdx asks the others what runs there. */
+  machines?: string[];
 }
 
 export interface GitProfile {
@@ -183,6 +188,12 @@ export function parseEnvironment(text: string, source: string): Environment {
         }
       });
     }
+    if (session.machines !== undefined) {
+      if (!isStringList(session.machines)) fail('session.machines', 'must be a list of machine names');
+      session.machines.forEach((m, i) => {
+        if (!isMachineLabel(m)) fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
+      });
+    }
   }
 
   const gitDoc = envDoc.git;
@@ -238,6 +249,8 @@ export interface LaunchPlan {
   confirm: ConfirmRule[];
   multiplexer: Multiplexer;
   sessionName: string;
+  /** The profile's other machines — asked over ssh what runs there before a start. */
+  machines: string[];
 }
 
 export function planLaunch(input: {
@@ -276,6 +289,7 @@ export function planLaunch(input: {
       project: input.project,
       host: input.host,
     }),
+    machines: (environment.session?.machines ?? []).filter((m) => m.toLowerCase() !== input.host.toLowerCase()),
   };
 }
 
@@ -942,12 +956,12 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version
  * The Claude Code sessions alive on `host` right now; null when it does not
  * answer over ssh (BatchMode: a password prompt counts as no answer).
  */
-export function askMachine(host: string, deps: AiDeps): LiveSession[] | null {
+export function askMachine(host: string, deps: AiDeps): MachineReport | null {
   const res = (deps.ssh ?? runSsh)(
     ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, `sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`],
     true,
   );
-  return res && res.status === 0 ? parseLiveSessions(res.stdout) : null;
+  return res && res.status === 0 ? parseMachineReport(res.stdout) : null;
 }
 
 /** What a start continues: resume args here, or a conversation on another machine. */
@@ -959,6 +973,8 @@ export interface ConversationChoice {
   askHere?: { id: string; why: string };
   /** The person ended the question (Ctrl-D): start nothing. */
   abort?: boolean;
+  /** A new conversation nobody picked, while an agent of the project runs on these machines: only after a yes. */
+  elsewhere?: string[];
   /** For the person: what was found and what is taken. */
   lines: string[];
 }
@@ -976,10 +992,15 @@ const resumeId = (id: string) => ['--resume', id];
  * newest one in the folder, and with the folder synced between machines that
  * can be a conversation another machine is still writing to.
  *
- * Every other machine this project's conversations name is asked over ssh
- * which of them run there right now; this machine's running ones come from
- * its own session files. A running conversation is listed even when it is not
- * its machine's newest.
+ * The profile's other machines, and every other machine this project's
+ * conversations name, are asked over ssh what runs there right now; this
+ * machine's running ones come from its own session files. A running
+ * conversation is listed even when it is not its machine's newest.
+ *
+ * A new conversation the person did not pick from the list — `--new`, a
+ * project with none yet, none of this machine's idle — while an agent of this
+ * project runs on another machine (by the directory it runs in) is started
+ * only after a yes: two agents would work in one repository from two machines.
  *
  * Another machine's conversation is continued on that machine, so two
  * machines never write to one conversation; one whose machine is unknown, or
@@ -989,24 +1010,34 @@ const resumeId = (id: string) => ['--resume', id];
  * idle one, never another's.
  */
 export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
-  if (plan.resumeArgs.length === 0 || !isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
+  if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const host = plan.host;
   const same = (a: string | null, b: string | null) => (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
-  const all = listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
-  if (all.length === 0) return { args: [], lines: ['no conversation of this project yet — starting a new one'] };
+  const all = plan.resumeArgs.length === 0 ? [] : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+  const root = shellQuote(plan.projectRoot);
 
   // Who runs what right now: this machine from its session files, the others over ssh.
-  const reach = new Map<string, LiveSession[] | null>();
-  for (const c of all) {
-    if (c.machine && !same(c.machine, host) && ![...reach.keys()].some((m) => same(m, c.machine))) {
-      reach.set(c.machine, askMachine(c.machine, deps));
-    }
+  const reach = new Map<string, MachineReport | null>();
+  for (const m of [...plan.machines, ...all.map((c) => c.machine)]) {
+    if (m && !same(m, host) && ![...reach.keys()].some((k) => same(k, m))) reach.set(m, askMachine(m, deps));
   }
+  const silent = [...reach].filter(([, r]) => r === null).map(([m]) => `note: ${m} does not answer over ssh — what runs there is not known`);
+  const elsewhere = [...reach].flatMap(([m, r]) =>
+    (r?.sessions ?? []).filter((l) => runsInProject(l, r!.home, plan.projectRoot, deps.home)).map((l) => ({ m, l })),
+  );
+  const fresh = (lines: string[]): ConversationChoice => {
+    if (elsewhere.length === 0) return { args: [], lines };
+    const agents = elsewhere.map(({ m, l }) => `an agent of this project is ${describeLive(m, l, false)} — there: vdx ai@${m} ${root}`);
+    return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
+  };
+  if (plan.resumeArgs.length === 0) return fresh(silent);
+  if (all.length === 0) return fresh(['no conversation of this project yet — starting a new one', ...silent]);
+
   const live = new Map<string, { machine: string; session: LiveSession; here: boolean }[]>();
   const addLive = (machine: string, session: LiveSession, here: boolean) =>
     live.set(session.conversation, [...(live.get(session.conversation) ?? []), { machine, session, here }]);
   for (const l of (deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))()) addLive(host, l, true);
-  for (const [m, sessions] of reach) for (const l of sessions ?? []) addLive(m, l, false);
+  for (const [m, r] of reach) for (const l of r?.sessions ?? []) addLive(m, l, false);
 
   const machine = (c: Conversation) => live.get(c.id)?.find((l) => !l.here)?.machine ?? machineOf(c, host);
   const runsHere = (c: Conversation) => live.get(c.id)?.find((l) => l.here);
@@ -1058,7 +1089,6 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
       deps.log(`  1–${found.length}, or n`);
     }
   }
-  const root = shellQuote(plan.projectRoot);
   const notes = found
     .filter((c) => !idleHere(c))
     .map((c) => {
@@ -1072,12 +1102,12 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
         ? `note: ${m} has ${which} — continue it there: vdx ai@${m} ${root} --conversation ${c.id}`
         : `note: ${which} is of an unknown machine (never typed in here) — on its machine: vdx ai@<machine> ${root} --conversation ${c.id}`;
     });
-  for (const [m, sessions] of reach) if (sessions === null) notes.push(`note: ${m} does not answer over ssh — what runs there is not known`);
+  notes.push(...silent);
   if (firstIdle) {
     const chosen = take(firstIdle);
     return { ...chosen, lines: [...chosen.lines, ...notes] };
   }
-  return { args: [], lines: ['no idle conversation of this machine — starting a new one', ...notes] };
+  return fresh(['no idle conversation of this machine — starting a new one', ...notes]);
 }
 
 interface Prepared {
@@ -1230,7 +1260,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   let choice: ConversationChoice | null = null;
   if (!current || opts.restart) {
     if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
-    else if (current && plan.resumeArgs.length > 0 && isClaude(plan.command)) {
+    // A restart into a new conversation replaces the agent here: no second agent, nothing to ask.
+    else if (current && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
+    else if (current && isClaude(plan.command)) {
       const live = liveConversationId(deps.env, deps.home, current.proc.pid);
       choice = live
         ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
@@ -1248,6 +1280,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
   for (const l of choice?.lines ?? []) log(l);
   if (choice?.abort) return EXIT_LAUNCH_FAILED;
+  if (choice?.elsewhere && !current) {
+    const answer = deps.interactive ? deps.ask(`Start a new conversation here, on ${plan.host}, anyway? [y/N]: `) : null;
+    if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
+      log('nothing started');
+      return EXIT_LAUNCH_FAILED;
+    }
+  }
 
   let askHere = choice?.askHere;
   if (choice?.remote) {

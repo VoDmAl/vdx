@@ -38,6 +38,11 @@ export function machineLine(label: string): string {
   return `${MACHINE_LINE_PREFIX} \`${label}\``;
 }
 
+/** A machine label vdx may hand to ssh as the destination. */
+export function isMachineLabel(s: string): boolean {
+  return LABEL_RE.test(s);
+}
+
 export function isConversationId(s: string): boolean {
   return ID_RE.test(s);
 }
@@ -206,6 +211,8 @@ export interface LiveSession {
   tmux: string | null;
   /** Claude Code's own word for it: `busy`, `waiting`, … */
   status: string | null;
+  /** The directory it was started in — on its own machine. */
+  cwd: string | null;
 }
 
 /** Session files, one JSON object per line — a file read here, or the output of LIVE_SESSIONS_SCRIPT. */
@@ -225,9 +232,30 @@ export function parseLiveSessions(text: string): LiveSession[] {
       conversation: data.sessionId,
       tmux: typeof data.tmux === 'string' ? data.tmux : null,
       status: typeof data.status === 'string' ? data.status : null,
+      cwd: typeof data.cwd === 'string' ? data.cwd : null,
     });
   }
   return out;
+}
+
+/** `~/AI Projects/x` for a path under `home`; any other path as is. */
+function fromHome(p: string, home: string): string {
+  const rel = path.relative(home, p);
+  if (rel === '') return '~';
+  return rel.startsWith('..') || path.isAbsolute(rel) ? p : `~/${rel}`;
+}
+
+/**
+ * The session runs in the project: its directory is the project's root or
+ * below it. Paths of two machines are compared from their homes — `vdx
+ * ai@<host>` puts a project under the same place in the other home; with that
+ * home unknown, as they are.
+ */
+export function runsInProject(live: LiveSession, liveHome: string | null, projectRoot: string, home: string): boolean {
+  if (!live.cwd) return false;
+  const cwd = liveHome ? fromHome(live.cwd, liveHome) : live.cwd;
+  const root = liveHome ? fromHome(projectRoot, home) : projectRoot;
+  return cwd === root || cwd.startsWith(root.endsWith('/') ? root : `${root}/`);
 }
 
 function pidAlive(pid: number): boolean {
@@ -244,8 +272,11 @@ function pidAlive(pid: number): boolean {
  * runs on, one per line — what `vdx ai` asks another machine over ssh. Claude
  * removes the file of a process that ended, but not after a crash or a reboot:
  * the pid is checked. `<pid>.sync-conflict-….json` is not a session file.
+ * The first line, `home=<dir>`, places the sessions' directories in that
+ * machine's home (see runsInProject).
  */
 export const LIVE_SESSIONS_SCRIPT =
+  'printf "home=%s\\n" "$HOME"; ' +
   'd="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions"; for f in "$d"/*.json; do ' +
   'p=${f##*/}; p=${p%.json}; case $p in ""|*[!0-9]*) continue;; esac; ' +
   'kill -0 "$p" 2>/dev/null && tr -d "\\n" < "$f" && echo; done; exit 0';
@@ -270,6 +301,17 @@ export function liveSessionsHere(env: NodeJS.ProcessEnv, home: string, alive: (p
     }
   }
   return parseLiveSessions(lines.join('\n'));
+}
+
+/** What another machine runs right now: its home and the Claude Code sessions alive there. */
+export interface MachineReport {
+  home: string | null;
+  sessions: LiveSession[];
+}
+
+/** The output of LIVE_SESSIONS_SCRIPT. */
+export function parseMachineReport(text: string): MachineReport {
+  return { home: text.match(/^home=(.+)$/m)?.[1] ?? null, sessions: parseLiveSessions(text) };
 }
 
 /** "running on m3 now (t23b-program@m3, waiting)" — where a live session is, for a person choosing. */

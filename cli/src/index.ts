@@ -88,11 +88,13 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
 
 Which conversation a start continues (Claude Code): each one is marked with the
 machine it was last started on (the vdx plugin's hook writes it in), and the
-other machines are asked over ssh which ones run there now. Another machine's
-conversation is continued on that machine; if it does not answer, vdx asks
-before continuing it here. When the choice is not plain, vdx lists them, the
-running ones marked — Enter takes the newest; without a terminal it takes this
-machine's.
+other machines (session.machines in the profile, and those the conversations
+name) are asked over ssh what runs there now. Another machine's conversation
+is continued on that machine; if it does not answer, vdx asks before
+continuing it here. When the choice is not plain, vdx lists them, the running
+ones marked — Enter takes the newest; without a terminal it takes this
+machine's. A new conversation (--new, or none to continue) while an agent of
+the project runs on another machine starts only after a yes.
 
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
 3 the running agent lacks profile flags (rerun with --restart); 4 the start

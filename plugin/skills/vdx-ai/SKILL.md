@@ -20,6 +20,9 @@ from a personal profile, not from a command anyone types:
   machine this session runs on (``vdx ai: this machine is `lft` ``), and that
   line, kept in the transcript, tells later starts whose conversation it is.
   Another machine's conversation is continued on that machine.
+- `session.machines` — the machines a project's agent may run on; before a
+  start vdx asks the others over ssh what runs there. A new conversation while
+  an agent of the project runs on one of them starts only after a yes.
 
 Format: `docs/specs/environment-format.md` in the vdx repository.
 

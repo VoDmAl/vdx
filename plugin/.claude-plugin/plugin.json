@@ -1,7 +1,7 @@
 {
   "name": "vdx",
   "displayName": "vdx — Lifecycle Interface",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Unified lifecycle interface (up/down/build/test/check/fix/publish) + versioned maturity audit + AI bootstrap skill + how the agent is launched (vdx ai: session-start check, skill). MCP server: the installed vdx-mcp, else npx from @vodmal/vdx-cli on npm.",
   "repository": "https://github.com/VoDmAl/vdx",
   "hooks": "./hooks/hooks.json",

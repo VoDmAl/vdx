@@ -59,6 +59,7 @@ agent:
 session:
   multiplexer: tmux
   name: "{project}@{host}"
+  machines: [lft, M3]
 `;
 
 describe('resolveEnvironmentPath', () => {
@@ -99,6 +100,8 @@ describe('parseEnvironment', () => {
     ['agent: {command: claude, when: [{id: a}]}', 'agent.when[0].if'],
     ['agent: {command: claude, when: [{id: a, if: true, confirm: [{screen: x, keys: []}]}]}', 'agent.when[0].confirm[0].keys'],
     ['session: {multiplexer: screen}', 'session.multiplexer'],
+    ['session: {machines: m3}', 'session.machines'],
+    ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
     ['- just a list', 'top level'],
   ])('rejects %s naming %s', (yaml, key) => {
     expect(() => parseEnvironment(yaml, 'p.yaml')).toThrow(key);
@@ -132,6 +135,7 @@ describe('planLaunch', () => {
     expect(p.confirm).toEqual([{ screen: 'Loading development channels', keys: ['Enter'] }]);
     expect(p.sessionName).toBe('proj@lft');
     expect(p.resumeArgs).toEqual(['--continue']);
+    expect(p.machines).toEqual(['M3']); // this machine is not asked about itself
   });
 
   it('leaves the flag out when sources.yaml has mail but no watch (the space-hq case)', () => {
@@ -149,6 +153,7 @@ describe('planLaunch', () => {
     expect(p.multiplexer).toBe('none');
     expect(p.sessionName).toBe('proj');
     expect(p.args).toEqual([]);
+    expect(p.machines).toEqual([]);
   });
 });
 
@@ -388,6 +393,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   let answers: string[];
   /** What another machine answers over ssh: its live session files; null — it does not answer. */
   let remoteLive: object[] | null;
+  let remoteHome: string;
   let liveHere: LiveSession[];
   const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
   const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[5]);
@@ -400,6 +406,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     sshCalls = [];
     answers = [];
     remoteLive = [];
+    remoteHome = '/Users/elsewhere';
     liveHere = [];
     // A `claude` that records its args and exits: what `vdx ai` ran it with.
     fs.mkdirSync(path.join(home, 'bin'));
@@ -436,7 +443,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     ssh: (args, capture) => {
       sshCalls.push({ args, capture });
       if (!capture) return { status: 0, stdout: '' };
-      return remoteLive ? { status: 0, stdout: remoteLive.map((o) => JSON.stringify(o)).join('\n') } : { status: 255, stdout: '' };
+      if (!remoteLive) return { status: 255, stdout: '' };
+      return { status: 0, stdout: [`home=${remoteHome}`, ...remoteLive.map((o) => JSON.stringify(o))].join('\n') };
     },
     liveHere: () => liveHere,
     ...over,
@@ -622,6 +630,79 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(text()).toContain('no idle conversation of this machine — starting a new one');
     expect(text()).toContain('note: a newer conversation aaaaaaaa, running here now (pid 4242, busy) — not taken: it would have two sessions');
     expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
+  });
+
+  describe('the profile names the machines (session.machines)', () => {
+    const agentOnM3 = (cwd: string, id: string = ID.c) => ({ pid: 10984, sessionId: id, tmux: 'proj@m3:@25.%25', status: 'idle', cwd });
+    const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[4]);
+    beforeEach(() => {
+      fs.writeFileSync(
+        path.join(home, 'env.yaml'),
+        `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue]}\n` +
+          'session: {multiplexer: none, machines: [lft, m3]}\n',
+      );
+    });
+
+    it('asks them even when no conversation names them — the t23b-program case', () => {
+      conv(ID.a, 'lft', 300);
+      conv(ID.c, null, 5); // started on m3 before vdx named machines; never typed in here
+      remoteLive = [agentOnM3(root)];
+      answers = [''];
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+      expect(asked()).toEqual(['m3']); // never this machine
+      expect(text()).toMatch(/1\) m3 .*cccccccc.*← newest, running on m3 now \(proj@m3, idle\)/);
+      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+      expect(runs()).toEqual([]);
+    });
+
+    it('--new while an agent of this project runs there: a new conversation here only after a yes', () => {
+      const proj = path.join(home, 'AI Projects', 'proj'); // m3 keeps it under its own home
+      fs.mkdirSync(proj, { recursive: true });
+      remoteLive = [agentOnM3(path.join(remoteHome, 'AI Projects', 'proj'))];
+      answers = [''];
+      expect(runAi({ ...opts, path: proj, fresh: true }, deps())).toBe(EXIT_LAUNCH_FAILED);
+      expect(text()).toContain(`an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 '${proj}'`);
+      expect(text()).toContain('nothing started');
+      expect(runs()).toEqual([]);
+      answers = ['y'];
+      expect(runAi({ ...opts, path: proj, fresh: true }, deps())).toBe(EXIT_OK);
+      expect(runs()).toEqual(['--base']);
+    });
+
+    it('…without a terminal nothing starts', () => {
+      remoteLive = [agentOnM3(root)];
+      answers = ['should not be read'];
+      expect(runAi({ ...opts, path: root, fresh: true }, deps({ interactive: false }))).toBe(EXIT_LAUNCH_FAILED);
+      expect(answers).toHaveLength(1);
+      expect(text()).toContain('nothing started');
+    });
+
+    it('a project without conversations asks the same — the agent there has not synced one yet', () => {
+      remoteLive = [agentOnM3(root)];
+      answers = [''];
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+      expect(text()).toContain('no conversation of this project yet');
+      expect(text()).toContain('an agent of this project is running on m3 now');
+      expect(runs()).toEqual([]);
+    });
+
+    it('with no idle conversation of this machine and no terminal, the new one waits for a yes too', () => {
+      conv(ID.c, 'm3', 5);
+      remoteLive = [agentOnM3(root)];
+      expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+      expect(text()).toContain('no idle conversation of this machine — starting a new one');
+      expect(text()).toContain(`conversation: an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 ${root}`);
+    });
+
+    it("an agent of another project there is not in the way; a machine that does not answer is named", () => {
+      remoteLive = [agentOnM3('/Users/elsewhere/AI Projects/other')];
+      expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+      remoteLive = null;
+      expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+      expect(runs()).toEqual(['--base', '--base']);
+      expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
+      expect(text()).not.toContain('an agent of this project');
+    });
   });
 
   it('--conversation is refused for an agent that is not Claude Code', () => {

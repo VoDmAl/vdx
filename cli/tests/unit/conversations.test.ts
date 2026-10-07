@@ -12,10 +12,13 @@ import {
   LIVE_SESSIONS_SCRIPT,
   liveConversationId,
   liveSessionsHere,
+  type LiveSession,
   machineLine,
   machineOf,
+  parseMachineReport,
   projectDirName,
   readConversation,
+  runsInProject,
 } from '../../src/conversations.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -163,25 +166,52 @@ describe('sessions running right now', () => {
     fs.mkdirSync(sessions(), { recursive: true });
     const file = (pid: number, id: string, extra: object = {}) =>
       fs.writeFileSync(path.join(sessions(), `${pid}.json`), JSON.stringify({ pid, sessionId: id, ...extra }, null, 2));
-    file(process.pid, ID.a, { tmux: 'proj@lft:@3.%3', status: 'waiting' });
+    file(process.pid, ID.a, { tmux: 'proj@lft:@3.%3', status: 'waiting', cwd: '/Users/vdm/AI Projects/proj' });
     file(999_999_9, ID.b); // its process is gone: Claude leaves the file after a crash or a reboot
     fs.writeFileSync(path.join(sessions(), `${process.pid}.sync-conflict-20260514-163124-INHMB34.json`), '{"pid":1,"sessionId":"' + ID.c + '"}');
   });
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
   it('this machine: the session files of processes alive, not a dead pid or a conflict copy', () => {
-    expect(liveSessionsHere({}, home)).toEqual([{ pid: process.pid, conversation: ID.a, tmux: 'proj@lft:@3.%3', status: 'waiting' }]);
+    expect(liveSessionsHere({}, home)).toEqual([
+      { pid: process.pid, conversation: ID.a, tmux: 'proj@lft:@3.%3', status: 'waiting', cwd: '/Users/vdm/AI Projects/proj' },
+    ]);
   });
 
-  it('another machine: the script prints the same, one per line, under sh', () => {
+  it('another machine: the script prints its home, then the same, one per line, under sh', () => {
     const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], { encoding: 'utf8', env: { HOME: home, PATH: '/usr/bin:/bin' } });
     expect(res.status).toBe(0);
-    expect(res.stdout.trim().split('\n')).toHaveLength(1);
-    expect(JSON.parse(res.stdout).sessionId).toBe(ID.a);
+    expect(res.stdout.trim().split('\n')).toHaveLength(2);
+    expect(parseMachineReport(res.stdout)).toEqual({ home, sessions: liveSessionsHere({}, home) });
   });
 
-  it('…and prints nothing, exit 0, where Claude Code never ran', () => {
-    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], { encoding: 'utf8', env: { HOME: path.join(home, 'none'), PATH: '/usr/bin:/bin' } });
-    expect([res.status, res.stdout]).toEqual([0, '']);
+  it('…and only its home, exit 0, where Claude Code never ran', () => {
+    const none = path.join(home, 'none');
+    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], { encoding: 'utf8', env: { HOME: none, PATH: '/usr/bin:/bin' } });
+    expect(res.status).toBe(0);
+    expect(parseMachineReport(res.stdout)).toEqual({ home: none, sessions: [] });
+  });
+});
+
+describe('runsInProject: a session of another machine, by the directory it runs in', () => {
+  const at = (cwd: string | null): LiveSession => ({ pid: 1, conversation: ID.a, tmux: null, status: null, cwd });
+  const root = '/Users/vdm/AI Projects/proj';
+
+  it('compares the two machines from their homes', () => {
+    expect(runsInProject(at('/Users/vdm/AI Projects/proj'), '/Users/vdm', root, '/Users/vdm')).toBe(true);
+    expect(runsInProject(at('/home/dm/AI Projects/proj'), '/home/dm', root, '/Users/vdm')).toBe(true);
+    expect(runsInProject(at('/home/dm/AI Projects/proj/cli'), '/home/dm', root, '/Users/vdm')).toBe(true);
+  });
+
+  it('not a sibling whose name starts the same, not another place under that home', () => {
+    expect(runsInProject(at('/home/dm/AI Projects/proj2'), '/home/dm', root, '/Users/vdm')).toBe(false);
+    expect(runsInProject(at('/home/dm/old/AI Projects/proj'), '/home/dm', root, '/Users/vdm')).toBe(false);
+  });
+
+  it('outside the homes, or with the other home unknown — the paths as they are', () => {
+    expect(runsInProject(at('/srv/proj'), '/home/dm', '/srv/proj', '/Users/vdm')).toBe(true);
+    expect(runsInProject(at('/Users/vdm/AI Projects/proj'), null, root, '/Users/vdm')).toBe(true);
+    expect(runsInProject(at('/home/dm/AI Projects/proj'), null, root, '/Users/vdm')).toBe(false);
+    expect(runsInProject(at(null), '/Users/vdm', root, '/Users/vdm')).toBe(false);
   });
 });
