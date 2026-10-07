@@ -5,7 +5,7 @@ description: "Ось vdx, проверяющая что pre-commit гейт vdm 
 status: in-progress
 session-type: prd-prep
 created: 2026-09-01
-last-updated: 2026-10-01
+last-updated: 2026-10-07
 ---
 
 # Гейт vdm: правило в environment-документе персонального сета, не ось
@@ -49,6 +49,15 @@ baseline этого требует; O41 `--fix` чинит. Бриф явно р
 закрывается лекарством, а не оценкой.
 
 ## Текущая модель
+
+**Состояние на 2026-10-07.** Трек A разобран целиком (DL #11–#20): `ci` —
+сигнал по файлам, `branch-protection` — critical с L3 («неизвестно», пока нет
+расширения хостинга), `git-hygiene` — L2 ставит сам / L3 хук зовёт словарь /
+L4 хук повторяет CI, три лживых предиката уходят из schema 0.3, сет v1.0.0.
+Дальше — реализация одним выпуском (Next actions). Трек B сменил носитель
+(DL #19): личные хуки `vdm` и echelon — в конфиге git пользователя (Git 2.54),
+не в репо; ждёт git ≥ 2.54 на m3 и письма nas-info / echelon. Ниже —
+модель на 2026-09-03, её механизм (`.githooks` + переменная) снят DL #19.
 
 **Срочности нет, и это измерено:** 371 воркайтем в 12 репозиториях, нарушений
 инварианта `status: done` при непогашенных `- [ ]` — **0**. Два ассистент-хука
@@ -582,6 +591,168 @@ action-release`) — из `ci` его убираем без потери.
   знает предметной области. Триггер O40 «N ≥ 10» формально достигнут — в
   `CHECKS` 11 проверок.
 
+### #16 / 2026-10-07 / `git-hygiene` меряет «репо ставит свои хуки сам»; «включены ли» проверяется тоже, но не в уровне
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** Grill Q13–Q14 темы 2. Владелец: «Да, согласен. Но мы должны
+проверять и то, что он включен, а не просто задекларирован»; Q14 — «Окей».
+Замеры — Sidetrack #15, #16.
+**Context:** L2 засчитывает файл `.husky` и пакет `husky`; лестница — набор
+хуков telegram (Sidetrack #15). Варианты Q13: (a) репо ставит хуки сам на
+обычной установке проекта, (b) объявлено, (c) хуки из оси убрать — гейт на
+хостинге (DL #11).
+**Why:**
+- Q13 — (a). Для агента локальный хук — единственная точка, где коммит
+  останавливается до ухода с машины; на ней держится гейт `vdm`. (b) — та же
+  ложная зелень, (c) теряет сигнал. Уровни сегодня не меняются ни у кого: три
+  репо с фреймворком ставят его сами; cc-vdm-plugins остаётся L1 честно — его
+  клон в маркетплейсе vodmal с теми же `.githooks` хуков не исполняет.
+- «Включён ли в этом клоне» — проверяется, но рядом с уровнем, не в нём:
+  иначе тот же репо и тот же тег дают разный отчёт по клонам (DL #8), а в CI
+  ось навсегда на L1 — lefthook при `CI=true` хуки не ставит.
+- Q14 — рамка без изменений: L1 `.gitignore`, supporting, цель L4. Хук
+  обходится `--no-verify`; гейт `main` — `branch-protection`.
+**Implication:** Где показывать «включён» и кто это увидит без ручного
+`vdx doctor` — Q15–Q16; общий распознаватель фреймворков для «ставит сам» и
+«включён» — Q17.
+
+### #17 / 2026-10-07 / Один распознаватель на audit и doctor; «включено» — пометкой в audit и строкой при старте сессии; L3 — хук зовёт задачу словаря
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** Grill Q15–Q19 темы 2, владелец согласился со всеми пятью.
+Замеры той же сессии: хуки global-auth — pre-commit `npm test`, pre-push
+`npm run lint && npm run test`; limeflow — pre-commit `yarn lint`, pre-push
+нет; telegram — `composer check:before:commit` / `check:before:push`. Ни у
+одного из трёх нет `mise.toml`, но `has_task` берёт задачи и из
+`composer.json` / `package.json` (`fact_sources` оси `lifecycle-interface`).
+**Context:** DL #16 оставил открытым, где видно «включено» и как его узнать без
+ручного doctor; Sidetrack #16 — doctor слеп к `.git/hooks/`, при старте
+сессии не запускается.
+**Why:**
+- Q15 — «включено в этом клоне» видно и в doctor, и пометкой рядом с осью в
+  `vdx audit`; уровень пометка не меняет, обе поверхности печатают одну
+  проверку. О состоянии репо спрашивают audit — без пометки «объявлено, но
+  выключено» снова видит только тот, кто специально запустил doctor.
+- Q16 — хук плагина при старте сессии выдаёт агенту одну строку с remedy, только
+  когда хуки объявлены и выключены; при порядке молчит. Чинит O41 `--fix` по
+  просьбе, не сам. Новый флаг — только после проверки `vdx --version`.
+- Q17 — один распознаватель на фреймворк (husky, lefthook, simple-git-hooks,
+  cghooks, `.githooks`): где объявлены хуки, какой шаг установки их включает,
+  куда они ложатся (`core.hooksPath` или `.git/hooks/`). audit спрашивает у него
+  «ставит ли репо сам», doctor — «каждый объявленный хук исполним там, где его
+  возьмёт git». Два разных распознавания разошлись бы — тот самый класс дефекта.
+- Q18 — «ставит сам» (L2): husky — `husky` в `prepare`/`postinstall` (пакет мало:
+  9.1.7 не ставит сам); lefthook и simple-git-hooks — пакет в зависимостях
+  `package.json` (их `postinstall`), бинарный lefthook — `lefthook install` в
+  шаге установки; cghooks — `cghooks add` в `post-install-cmd`; `.githooks` —
+  `git config core.hooksPath` в шаге установки. Шаги установки: npm
+  `prepare`/`postinstall`, composer `post-install-cmd`, задача `up` словаря vdx.
+  Прочие фреймворки — по тому же правилу, когда появится проект.
+- Q19 — L3–L4 по тому, что хуки проверяют, не по набору хуков. L3: pre-commit
+  или pre-push зовёт задачу словаря (`test`, `check`, `check:*`, `test:*`)
+  через раннер проекта — паритет, как у L3 `ci` (DL #13). Референсы: telegram
+  и global-auth — L3, limeflow — L2 (`lint` не слово словаря; pre-push у него
+  нет и сейчас).
+**Implication:** Открыто: L4; хук, чьё тело зависит от машины. Расхождение
+`maturity-rubric.md` и YAML снимается переписыванием обеих лестниц. В
+реализацию: распознаватель — общий модуль CLI; `git-hooks` в doctor
+переписывается на него; пометка в audit; флаг для хука сессии.
+
+### #18 / 2026-10-07 / husky учитывает Yarn 2+; L4 — хук повторяет CI; машинные пути и устаревшие копии — забота doctor
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** Grill Q18′, Q20–Q22 темы 2, владелец согласился со всеми.
+Замеры — Sidetrack #17; telegram: `check:before:push` после раскрытия
+`@`-ссылок покрывает все три задачи CI (`check:config:composer`,
+`check:code:lint`, `test`).
+**Context:** Правило Q18 (DL #17) засчитывало `prepare: husky` как «ставит
+сам», а Yarn 2+ `prepare` не запускает — limeflow получил бы ложный L2.
+**Why:**
+- Q18′ — `prepare` засчитывается для npm, pnpm и Yarn 1; при Yarn 2+
+  (`packageManager: yarn@2…` или `.yarnrc.yml`) — только `postinstall`.
+  limeflow L2 → L1, честно: хуки не встают ни в одном его клоне.
+- Q20 — L4: pre-push вызывает все задачи словаря, которые вызывает CI
+  (`@`-ссылки composer и `npm run` раскрываются); без CI на L3 сравнивать не с
+  чем — не выполнено; CI не на GitHub Actions — «неизвестно» (DL #14). Пуш,
+  прошедший хук, не падает в CI на проверках. `commit-msg`, `post-commit`,
+  `post-merge` из лестницы уходят — удобства, не проверки. Референсы: telegram
+  L4, global-auth L3 (CI нет), limeflow L1.
+- Q21 — пути вне репо в теле хука проверяет doctor (существуют на этой машине),
+  тот же класс, что переменные в позиции теста. audit их не штрафует: сниппет
+  гейта `vdm` — сам путь вне репо, штраф ударил бы по гейту трека B.
+- Q22 — для копирующих фреймворков (cghooks, simple-git-hooks) «включено» =
+  каждая объявленная команда есть в установленном хуке; иначе warning «хуки
+  устарели → `composer install`».
+**Implication:** Лестница темы 2 закрыта: L1 `.gitignore`, L2 ставит сам,
+L3 хук зовёт словарь, L4 хук повторяет CI. Откуда в telegram машинный путь —
+Sidetrack #18, вопрос Q23.
+
+### #19 / 2026-10-07 / Личные хуки (vdm, echelon) — в конфиге git пользователя, не в репо
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** Grill Q23, владелец: «Окей». Механизм — Sidetrack #18. Проверено
+после ответа в scratch-репо через `git hook run`: локальный
+`hook.<имя>.command` переопределяет глобальный (last-one-wins), локальный
+`hook.<имя>.enabled=false` выключает, `git hook list --show-scope` печатает
+`global disabled <имя>`. `git-hook.adoc` из поставки 2.54: «when you run
+'git commit', first `~/bin/linter --cpp20` will have a chance…» — что
+`git commit` берёт хуки из конфига, документировано; руками не проверено.
+**Context:** DL #8 вынес правило про `vdm` из рубрики на машину, но механизм
+оставался прежним — `.githooks` + `core.hooksPath` + переменная в каждом репо;
+он воюет с husky за `core.hooksPath`, страж echelon — с cghooks за
+`.git/hooks/` (Sidetrack #18).
+**Why:** Личный хук — свойство машины владельца, и с Git 2.54 у него есть
+своё место: `hook.<имя>.*` в `~/.gitconfig` (при нужде — `includeIf` по
+каталогам проектов). Репо о нём не знают, фреймворк репо не трогается,
+хуки идут рядом. Требование «стоит vdm → хук активен в каждом репо» становится
+одной настройкой на машину. Исключение для репо — локальным переопределением
+команды (`--allow .env` у t23b) или `enabled=false`.
+**Implication:**
+- `vdx-environment.yaml` объявляет личные хуки; doctor проверяет через
+  `git hook list --show-scope` и версию git ≥ 2.54; O41 `--fix` пишет
+  `hook.<имя>.*` в глобальный конфиг.
+- Снимаются: `.githooks` + `core.hooksPath` + переменная для `vdm`; запись гейта
+  в репо через `vdx init` (O43 соблюдается сам собой); предикаты
+  `env_var_set` / `git_config_equals` для этого.
+- Старый git хуки из конфига молча игнорирует, на m3 — Apple git 2.50.1. До
+  переезда стража echelon на m3 нужен git ≥ 2.54 — письмо nas-info. echelon —
+  письмо: перенести страж в конфиг, убрать путь из `extra.hooks` telegram.
+  Порядок: сначала git на m3, потом переезд.
+**Supersedes:** механизм DL #8 (не решение): правило на машине остаётся, меняется
+носитель
+
+### #20 / 2026-10-07 / Три лживых предиката уходят из schema 0.3; сеты 0.2 CLI читает как было
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** Grill Q24–Q27 темы 3, владелец согласился со всеми. Замеры той
+же сессии: `gh_workflow_blocks_pr` — только в `ci` сета v0.7.0 (`:210`, `:221`);
+`git_hook_installed` и `command_succeeds` не использует ни одна рубрика —
+реестр и спека (`rubric-format.md:193–195`); старые теги закреплены у mediko
+(`@v0.3.1`) и vdx (`@v0.7.0`), оба schema 0.2 с `gh_workflow_blocks_pr`;
+неизвестный предикат — warning в stderr и `false` (`evaluator.ts:45`).
+**Context:** Тема 3 трека A — предикаты, чьё имя обещает больше тела
+(Sidetracks #2, #5).
+**Why:**
+- Q24 — `gh_workflow_blocks_pr` убрать: тело видит лишь `pull_request` в `on:`,
+  а PR-триггер после DL #13 не засчитывается нигде; гейт — `branch-protection`.
+- Q25 — `git_hook_installed` убрать: «установлен» — свойство клона, audit честно
+  на него не ответит при любом теле (DL #7). Новая лестница — на
+  распознавателе: `git_hooks_arranged` (L2), `git_hook_runs_task` (L3),
+  `git_hook_covers_ci` (L4).
+- Q26 — `command_succeeds` убрать из спеки и реестра: заглушка с вечным `false`
+  — та же ложь, а shell из скачанного сета — решение уровня supply-chain без
+  нужды. Команда для проверки — кандидат doctor «внешняя команда» (DL #15).
+- Q27 — CLI читает schema 0.2 как было: удалённые предикаты остаются в реестре
+  только для сетов 0.2, сет 0.3 с ними не загружается. Тот же тег — та же
+  оценка при любом CLI; зеркало DL #14 (новее — отказ, старее — как было).
+**Implication:** Трек A разобран целиком (DL #11–#20); дальше реализация одним
+выпуском. Sidetracks #2, #5, #13 закрыты решениями.
+
 ## Sidetracks
 
 ### #1. `cli/README.md:103` устарел — `config_value` больше не заглушка
@@ -593,7 +764,8 @@ stubs (warning at evaluation). Для `command_succeeds` это верно, дл
 операторами `present`/`equals`/`gte`/`matches`. Читатель README получает
 неверную картину доступных предикатов.
 
-**Status:** open
+**Status:** closed — 2026-10-07: `cli/README.md:142` называет заглушкой только
+`command_succeeds`, это верно
 
 ### #2. `command_succeeds` объявлен в спеке, но не реализован — дефект того же класса
 
@@ -609,7 +781,7 @@ stubs (warning at evaluation). Для `command_succeeds` это верно, дл
 разрешить скачанной YAML-рубрике выполнять shell в репозитории пользователя —
 отдельное решение по безопасности) или пометить в спеке как нереализованный.
 
-**Status:** open
+**Status:** closed — DL #20 (Q26): убрать из спеки и реестра в schema 0.3
 
 ### #3. Дерево `node_modules/` принесено с другой платформы (arm64 → x64)
 
@@ -646,7 +818,7 @@ protection, ни required status checks не проверяются, то ест
 (DL #7), но опаснее: здесь ложное обещание зашито в название, поэтому автор
 рубрики не заподозрит подмены.
 
-**Status:** open
+**Status:** closed — DL #20 (Q24): убрать из schema 0.3
 
 ### #6. `DEFAULT_BASELINE` раздаёт личный baseline всем пользователям
 
@@ -697,7 +869,9 @@ protection, ни required status checks не проверяются, то ест
 это не отдельные баги, а системная слепота в том, как в vdx строятся проверки:
 берётся самый дешёвый наблюдаемый признак, а называется он гарантией.
 
-**Status:** open
+**Status:** closed — 2026-10-07: `checkClaudeCodePlugin` читает
+`plugins/installed_plugins.json` и `enabledPlugins`; doctor 0.21.1 печатает
+установленную версию (`vdx@vodmal-claude-code-marketplace 0.8.1`)
 
 ### #10. `package-lock.json` отстал от `package.json` на три релиза
 
@@ -780,7 +954,8 @@ protection, ни required status checks не проверяются, то ест
 Уровни сейчас: vdx `ci=L4 git-hygiene=L1`; telegram `L2 / L4`; t23b `L2 / L1`;
 bookmap `L2 / L1`; cc-vdm-plugins `L0 / L1`.
 
-**Status:** open — развилки трека A у владельца
+**Status:** closed — развилки решены: `ci` DL #11–#14, `git-hygiene`
+DL #16–#18, предикаты DL #20
 
 ### #14. Кандидат в правило doctor: проводка `people/` от руки к штабу
 
@@ -815,6 +990,108 @@ DL #75. Варианты: выводить (есть `people-dir` → штаб; 
 **Status:** closed — не берём (DL #15): «чья это рука» только у echelon,
 проводку проверять не нужно
 
+### #15. Замеры к теме 2 (`git-hygiene`), 2026-10-07
+
+**Возникло в:** возобновлении темы 2 трека A.
+**Описание:**
+
+- **Лестница описывает telegram, а не зрелость.** `docs/maturity-rubric.md:46`:
+  L2 «husky/lefthook/cghooks **установлен**», L3 «+ pre-commit + pre-push +
+  commit-msg», L4 «+ post-commit + post-merge»; в калибровке (`:102`) telegram —
+  «L4 (cghooks полный набор)». Ступени — это набор хуков одного референса.
+- **YAML разошёлся с документом:** в `vdx-rubric.yaml:382` L3 — только
+  `pre-push`, `commit-msg` уехал в L4; `pre-commit` не проверяется нигде. L2
+  засчитывает файл `.husky` и пакет `husky`, хотя документ говорит
+  «установлен».
+- **Кто ставит хуки сам (npm, 2026-10-07):** `lefthook` 2.2.0 и
+  `simple-git-hooks` 2.14.0 — `postinstall` запускает установку (lefthook
+  пропускает при `CI`); `husky` 9.1.7 — без `postinstall`, нужен
+  `"prepare": "husky"` в `package.json`; cghooks — `cghooks add` в
+  `post-install-cmd`; `.githooks` — только если install-шаг проекта выставляет
+  `core.hooksPath`.
+- **Тело хука telegram зависит от машины:** `extra.hooks.pre-commit` зовёт
+  `"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"`, при
+  `stop-on-failure: [pre-commit, pre-push]`. На машине без этого клона echelon
+  коммит упадёт. Активен в клоне на lft (`.git/hooks/` — все пять хуков).
+- Что гоняют хуки telegram: pre-commit — `composer check:before:commit`,
+  pre-push — `composer check:before:push`, commit-msg — формат `[+] …`,
+  post-commit — sonar/coverage/measure, post-merge — `composer install`.
+
+**Status:** open — вход для раундов темы 2
+
+### #16. Проверка `git-hooks` слепа к хукам в `.git/hooks/`; doctor никто не запускает
+
+**Возникло в:** Q13 темы 2, 2026-10-07 — «проверять, что включён».
+**Описание:**
+
+- `checkGitHooks` (`cli/src/doctor.ts:406`) смотрит только `core.hooksPath` и
+  каталоги `.githooks` / `.husky`. cghooks, lefthook и simple-git-hooks пишут
+  в `.git/hooks/`. `vdx doctor` 0.21.1 в telegram: строки `git hooks` нет —
+  включены хуки или нет, doctor молчит одинаково.
+- Хук плагина при старте сессии (`plugin/scripts/session-start.sh:16`) зовёт
+  только `vdx ai --check`. Результат doctor не доходит ни до агента, ни до
+  владельца без ручного запуска.
+
+**Status:** open — решается Q16–Q17
+
+### #17. Хуки включены у одного из трёх; у limeflow `prepare: husky` не запускается никогда
+
+**Возникло в:** замерах к Q20, 2026-10-07, машина lft.
+**Описание:** Опровергает строку Sidetrack #13 «во всех трёх он ставится сам».
+
+- telegram — включены: cghooks записал все пять хуков в `.git/hooks/`.
+- limeflow — **не включены и не включатся**: `packageManager: yarn@4.9.2`,
+  `.yarnrc.yml`, а хуки ставит `"prepare": "husky"`. Yarn 2+ скрипт `prepare` не
+  запускает — документация husky (`docs/how-to.md`): «Yarn doesn't support
+  prepare script», для Yarn — `"postinstall": "husky"` (+ `pinst` при
+  публикации). `node_modules` есть, `core.hooksPath` пуст, `.husky/_` нет.
+- global-auth — не включены в этом клоне: npm (`package-lock.json`),
+  `prepare: husky` сработал бы, но `npm install` здесь не запускался —
+  `node_modules` нет. Это честное «ставит сам, в клоне выключено».
+- cghooks **копирует** команды в `.git/hooks/<hook>` при установке: правка
+  `extra.hooks` без `composer install` оставляет в клоне старые хуки. husky 9
+  и lefthook читают конфиг при каждом запуске — у них устареть нечему.
+
+**Status:** open — правка Q18 и Q22 у владельца; limeflow — дефект в чужом
+репо, сообщить его агенту
+
+### #18. Личным хукам нет своего места — их вытесняет в репо; в Git 2.54 место появилось
+
+**Возникло в:** вопросе владельца к Q21 — «пахнет, что такой хук появился»,
+2026-10-07.
+**Описание:**
+
+- **Что вызывает хук telegram.** `echelon/plugin/scripts/check-raw-staged.sh` —
+  страж echelon: не пускает в коммит сырьё чужих систем (`signals/.snapshot/`,
+  `signals/mirror/`, `signals/manual/`) и учётные данные сбора (`.env`,
+  `.env.*`, `*.session`). Довод в шапке: `.gitignore` — совет, `git add -f` и
+  `git add -A` из параллельной сессии проходят мимо, а историю git удалением
+  файла не вычистить.
+- **Почему в tracked-файле.** В семи репо страж — строка в `.git/hooks/pre-commit`
+  (клон). В telegram `.git/hooks/` владеет cghooks, `cghooks update` строку
+  стёр бы — поэтому коммит `7c243d51` (2026-09-30) перенёс страж в
+  `extra.hooks`, вместе с путём машины владельца.
+- **Тот же корень, что у гейта `vdm`.** Два личных инструмента (vdm, echelon)
+  хотят свой хук в каждом репо и воюют с фреймворком репо за одно место:
+  echelon — за `.git/hooks/pre-commit` (стирает cghooks), vdm — за
+  `core.hooksPath` (husky 9 сам ставит `core.hooksPath=.husky/_`, они
+  выключают друг друга). Своего места у личного хука нет — его вытесняет в
+  репо.
+- **Git 2.54 даёт место.** RelNotes 2.54.0: «Hook commands are now allowed to
+  be defined (possibly centrally) in the configuration files, and run multiple
+  of them for the same hook event». Проверено в scratch-репо через
+  `git hook run pre-commit`: хук из глобального конфига (`hook.<имя>.event`,
+  `hook.<имя>.command`) идёт вместе с хуком из `core.hooksPath`; падение любого
+  — exit 1; без хуков репо тоже работает; `git hook list --show-scope`
+  называет источник (`global` / `hook from hookdir`). **Не проверено:**
+  настоящий `git commit` (страж коммитов не пускает); переопределение
+  глобального хука локальным (нужно для `--allow .env` в t23b).
+- **Ограничение:** на m3 только Apple git 2.50.1 (`/usr/bin/git`, и в
+  интерактивном шелле), на lft — brew 2.54 (`/usr/local/bin/git`). Старый git
+  хуки из конфига молча игнорирует — тот же класс тихого отказа.
+
+**Status:** open — вопрос Q23 (трек B)
+
 ## Next actions
 
 Порядок: B закрывает боль, A — самостоятельная общая работа, C снят (DL #8).
@@ -828,17 +1105,24 @@ DL #75. Варианты: выводить (есть `people-dir` → штаб; 
       2026-09-03: тип `DoctorCtx`, `resolveDoctorCtx(cwd)`, `CHECKS` принимает ctx;
       существующие проверки не тронуты (zero-arg присваивается типу с аргументом).
       +5 тестов (104→109)
-- [ ] Завести `vdx-environment.yaml` в `vdx-rubric-vodmal` (тот же репозиторий,
-      тот же semver-тег, что и `vdx-rubric.yaml`)
-- [ ] Новые предикаты машинного уровня: `env_var_set` + исполнимость,
-      `git_config_equals` (читает `.git/config` — сегодня `.git` исключён в
-      `facts.ts:228`), `path_exists_in_home`. Детект самого скилла — по
+- [x] Завести `vdx-environment.yaml` в `vdx-rubric-vodmal` — заведён в v0.4.0
+      для `vdx ai` (D14), тот же репо и тег; раздела про хуки в нём пока нет
+- [ ] Раздел личных хуков в `vdx-environment.yaml`: имя, событие, команда,
+      условие «инструмент стоит» (DL #19). Детект `vdm` — по
       неверсионированному `~/.claude/plugins/marketplaces/vodmal/plugins/vdm/`
-- [ ] Научить `vdx doctor` читать environment-документ (O40, развилка «два shape»;
-      третий кандидат — проверка как внешняя команда инструмента, DL #15)
-- [ ] `vdx init` ставит гейт, когда baseline требует — ограничение O43
-- [ ] O41 `--fix`: переменная → профиль оболочки, `core.hooksPath` → `git config`
-- [ ] Догфудинг: поставить гейт в самом `vdx` — сейчас его тут нет
+- [ ] Научить `vdx doctor` читать этот раздел: `git hook list --show-scope`
+      и git ≥ 2.54 (O40, развилка «два shape»; третий кандидат — проверка как
+      внешняя команда инструмента, DL #15)
+- [ ] O41 `--fix`: `hook.<имя>.*` в глобальный конфиг git (DL #19)
+- [ ] Догфудинг: личные хуки в конфиге git lft и m3 — покрывают и `vdx`
+- [ ] Письмо nas-info: git ≥ 2.54 на m3 (сейчас Apple git 2.50.1) — до
+      переезда стража echelon
+- [ ] Письмо echelon: страж в конфиг git, путь из `extra.hooks` telegram убрать;
+      после git на m3
+- ~~Предикаты `env_var_set` / `git_config_equals` / `path_exists_in_home`~~ —
+  сняты DL #19: личный хук живёт в конфиге git, не в репо
+- ~~`vdx init` ставит гейт, когда baseline требует~~ — снято DL #19: в репо
+  писать нечего
 - [ ] Обновить `docs/decisions.md`: O40 закрыт, зафиксировать развилку и триггер
 - [x] Sidetrack #14: правило doctor про проводку `people/` не берём — «чья это
       рука» только у echelon (DL #15), 2026-10-02
@@ -867,17 +1151,21 @@ DL #75. Варианты: выводить (есть `people-dir` → штаб; 
 (DL #11–#14); дальше тема 2 `git-hygiene`, тема 3 — предикаты с лживым
 именем:**
 
-- [ ] Sidetrack #13: развилки по замерам 2026-09-30 решены владельцем и
-      записаны в Decision Log — `ci` ✓ (DL #11–#14); `git-hygiene` и
-      `git_hook_installed`/`gh_workflow_blocks_pr` — открыты
-- [ ] Тема 2 — `git-hygiene`: ужесточать ли L2 до «ставится сам»; данные —
-      Sidetracks #12, #13. Поправка к #12: `.githooks` + `core.hooksPath`
-      может быть arranged, если install-шаг проекта выставляет `core.hooksPath`
-- [ ] Тема 3 — предикаты, чьё имя обещает больше тела: `git_hook_installed`
-      (`predicates.ts:103`) и `gh_workflow_blocks_pr` (`:84`), оба после
-      DL #13 не используются каноническим сетом; переименовать / удалить /
-      только спека
-- [ ] Sidetrack #5: `gh_workflow_blocks_pr` — закрывается решением темы 3
+- [x] Sidetrack #13: развилки по замерам 2026-09-30 решены владельцем —
+      `ci` DL #11–#14, `git-hygiene` DL #16–#18, предикаты DL #20
+- [x] Тема 2 — `git-hygiene`: решена 2026-10-07 (DL #16–#18): L2 ставит сам,
+      L3 хук зовёт словарь, L4 хук повторяет CI; «включено» — doctor + пометка
+      в audit + строка при старте сессии
+- [ ] Sidetrack #15: замеры использованы раундами темы 2, решения в Decision Log
+- [ ] Sidetrack #16: `git-hooks` видит хуки в `.git/hooks/`; «включено» доходит
+      без ручного `vdx doctor`
+- [ ] Sidetrack #17: правило husky учитывает Yarn 2+; limeflow узнал о
+      `prepare` под yarn 4
+- [ ] Sidetrack #18: место личных хуков решено (Q23); echelon и nas-info в курсе
+- [x] Тема 3 — предикаты, чьё имя обещает больше тела: решена 2026-10-07
+      (DL #20) — `gh_workflow_blocks_pr`, `git_hook_installed`,
+      `command_succeeds` уходят из schema 0.3
+- [x] Sidetrack #5: `gh_workflow_blocks_pr` — закрыт DL #20
 
 Реализация `ci` (после тем 2 и 3, одним выпуском):
 
@@ -885,7 +1173,10 @@ DL #75. Варианты: выводить (есть `people-dir` → штаб; 
       «неизвестно» с причиной — в общем уровне «не выполнено», отчёт называет
       непроверенное (DL #12)
 - [ ] CLI отказывается читать сет со `schema_version` новее поддерживаемой
-      (DL #14)
+      (DL #14); сеты 0.2 читает как было — удалённые предикаты живут только
+      для них (DL #20)
+- [ ] Из schema 0.3 убрать `gh_workflow_blocks_pr`, `git_hook_installed`,
+      `command_succeeds` — реестр и спека; `drift-algorithm.md:137` (DL #20)
 - [ ] Сигнальный `ci` (GitHub Actions): L2 — тесты на push в основную ветку,
       маскировка (`|| true`, `continue-on-error`, `allow_failure`) обрывает;
       L3 — CI вызывает задачи `check` и `test` словаря `lifecycle-interface`;
@@ -893,6 +1184,17 @@ DL #75. Варианты: выводить (есть `people-dir` → штаб; 
       выше L1 — «неизвестно» (DL #13, #14)
 - [ ] Ось `branch-protection`: critical, требования с L3, пока везде
       «неизвестно (хостинг не поддерживается)» (DL #12)
+- [ ] Распознаватель фреймворков хуков — общий модуль CLI для audit и doctor
+      (husky с учётом Yarn 2+, lefthook, simple-git-hooks, cghooks, `.githooks`)
+      (DL #17, #18)
+- [ ] `git-hygiene` на новой лестнице: L2 ставит сам, L3 хук зовёт задачу
+      словаря, L4 pre-push покрывает задачи CI; `commit-msg` / `post-*` уходят
+      (DL #17, #18)
+- [ ] doctor `git-hooks` на распознавателе: хуки в `.git/hooks/`, пути вне
+      репо существуют, копии cghooks не устарели (DL #17, #18)
+- [ ] Пометка «в этом клоне не включены» рядом с осью в `vdx audit`; флаг для
+      хука плагина при старте сессии, вызов — после проверки `vdx --version`
+      (DL #17)
 - [ ] Спека `rubric-format.md`: новые предикаты, состояния, таблица предикатов
       без «+ branch protection» у `gh_workflow_blocks_pr`
 - [ ] Сет `vdx-rubric-vodmal` v1.0.0: канон, CHANGELOG, README, зеркала
