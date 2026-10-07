@@ -1127,8 +1127,9 @@ m3` → `Permission denied (publickey…)`. Список о неответивш
 Воспроизведено в pty без `SSH_AUTH_SOCK`: тот же список.
 
 **Status:** open — vdx: строка `note: m3 does not answer over ssh` под
-списком и при выборе без вопроса (не выпущено, 0.21.1). Инфраструктура —
-письмо nas-info (`ssh-peers-agent`, продолжение `ssh-self-alias`)
+списком и при выборе без вопроса — выпущено в 0.21.1, проверено живьём.
+Инфраструктура — письмо nas-info (`ssh-peers-agent`, продолжение
+`ssh-self-alias`); закрыть по их ответу
 
 ## Next actions
 
@@ -1422,9 +1423,17 @@ m3` → `Permission denied (publickey…)`. Список о неответивш
       (Sidetrack #18). Повторить после 0.21.1 в локальном терминале lft (там
       агент ключей); `ssh -A` с m3 не поможет: перешлёт ключ m3, а m3 свой
       ключ не пускает
-- [ ] Выпуск 0.21.1 (patch: неответившая машина названа под списком,
+- [x] Выпуск 0.21.1 (patch: неответившая машина названа под списком,
       Sidetrack #18) — владелец: коммит, `vdx publish patch`, затем `npm i -g`
-      на обеих станциях
+      на обеих станциях — 2026-10-07: `27df4c7`, `b010bc3 release: v0.21.1`,
+      npm `latest` 0.21.1 с 21:49:53Z; `npm i -g` на lft и (по ssh) на m3 — обе
+      0.21.1. Живьём в pty на lft, t23b-program: без `SSH_AUTH_SOCK` — под
+      списком `note: m3 does not answer over ssh — what runs there is not
+      known`; с агентом — `4789f1f8` «running on m3 now (t23b-program@m3,
+      idle)». Ctrl-D — ничего не запущено
+- [ ] Ответ nas-info на `ssh-peers-agent` (2026-10-07): BatchMode-ssh между
+      станциями из ssh-сессии, без агента ключей — сейчас отказ в обе стороны
+      (Sidetrack #18)
 - [ ] Ответ nas-info на `ssh-self-alias` (2026-10-07): `ssh <своя метка>` на
       каждой станции — псевдоним себя, свой ключ в `authorized_keys`, свой host
       key в `known_hosts`. Повод: строка `… && ssh m3 '…'`, запущенная на m3, —
