@@ -1,34 +1,25 @@
-# vdx — Handoff (2026-09-28, @vodmal/vdx-cli@0.11.0)
+# vdx — Handoff (2026-10-07, @vodmal/vdx-cli@0.21.1)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
 
 ---
 
-## ▶︎ Активная работа (2026-09-28)
+## ▶︎ Активная работа (2026-10-07)
 
-**Активный кристалл** —
-[docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md), переоткрыт
-2026-09-29: `vdx ai` продолжает последний разговор по умолчанию, `--new` —
-новый (DL #15). 2026-10-06 (DL #27, не выпущено — 0.19.0): для Claude Code
-разговор выбирается по машине, где он идёт; чужой — продолжается на своей
-машине через ssh. `@vodmal/vdx-cli@0.15.0` в npm (2026-09-30): автор коммитов —
-`vdx ai` предлагает, `vdx doctor` показывает (DL #21, сет v0.6.0); 0.14.0 —
-`vdx ai@<host>` (DL #19), короткое имя проекта (DL #20); 0.13.1 — pre-flight
-`npm-auth` и `vdx --version`.
-С 2026-09-29 vdx на станциях не закреплён по версии, релизы везёт topgrade
-(DL #16): на lft и m3 0.15.0 (2026-09-30; на m3 поставлен отдельно через npm —
-topgrade завис на обновлении macOS).
+**Кристалл `vdx-ai`** — [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md).
+Где мы — его раздел «Текущая модель» (строки «Состояние на …»), что дальше —
+открытые `- [ ]` в Next actions. Команда **`vdx ai`** ([D14](docs/decisions.md))
+— агент, флаги и tmux из личного профиля `vdx-environment.yaml`; разговор
+Claude Code продолжается на машине, где он идёт (DL #27); машины проекта —
+`session.machines` профиля (DL #29).
 
-Команда **`vdx ai`** ([D14](docs/decisions.md)) — агент, флаги и tmux из
-личного профиля `vdx-environment.yaml`. Итог на 2026-09-28:
-
-- `@vodmal/vdx-cli@0.12.1` в npm, сет `vdx-rubric-vodmal@v0.4.0` на GitHub.
-- vdx на m3 и lft ставит nas-info, обновляет topgrade (DL #16); порядок выпуска —
-  раздел «Выпуск CLI» в [CLAUDE.md](CLAUDE.md).
-- Сессии проектов с `mail.watch` (`t23b-program` на lft и m3, `global-auth-gap` на
-  lft) работают с флагом канала echelon, доставка проверена тестовыми сигналами.
-- Отложено владельцем: команда, поднимающая все проекты с `mail.watch` разом.
+- `@vodmal/vdx-cli@0.21.1` в npm и на обеих станциях; сет
+  `vdx-rubric-vodmal@v0.7.0`; плагин vdx 0.8.1. Порядок выпуска — «Выпуск CLI» и
+  «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
+- На 2026-10-07 с нашей стороны сделано всё; ждём: ответы nas-info на письма
+  `ssh-self-alias` и `ssh-peers-agent` (ssh станции на себя и без агента ключей,
+  Sidetrack #18) и живую проверку владельца в локальном терминале lft.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — трек A (ложно-зелёные оценки в рубрике), разбор по темам в режиме grill.
