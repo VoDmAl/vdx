@@ -1067,7 +1067,10 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
       lines: [`chosen: ${show(c)}`],
     };
   };
-  if (found.every(idleHere)) return take(found[0]!);
+  if (found.every(idleHere)) {
+    const chosen = take(found[0]!);
+    return { ...chosen, lines: [...chosen.lines, ...silent] };
+  }
 
   const firstIdle = found.find(idleHere);
   if (canAsk && deps.interactive) {
@@ -1078,6 +1081,8 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
       deps.log(`  ${i + 1}) ${show(c)}${m.length ? `   ← ${m.join(', ')}` : ''}`);
     });
     deps.log('  n) a new conversation');
+    // A machine that did not answer may run any of these: say so before the person picks.
+    for (const n of silent) deps.log(`  ${n}`);
     for (let tries = 0; tries < 2; tries++) {
       const answer = deps.ask(`Which one to continue? [1]: `);
       // Ctrl-D at the question is a cancel, not "no terminal": start nothing.

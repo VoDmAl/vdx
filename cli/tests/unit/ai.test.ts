@@ -463,6 +463,19 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   };
   const text = () => logs.join('\n');
 
+  it('a plain choice still names a machine that did not answer', () => {
+    fs.writeFileSync(
+      path.join(home, 'env.yaml'),
+      `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue]}\n` +
+        'session: {multiplexer: none, machines: [m3]}\n',
+    );
+    conv(ID.a, 'lft', 30);
+    remoteLive = null; // an ssh session here without the key agent: m3 refuses the key
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual([`--base --resume ${ID.a}`]);
+    expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
+  });
+
   it("continues this machine's newest conversation and asks nothing when no other machine has one", () => {
     conv(ID.a, 'lft', 30);
     conv(ID.b, null, 60);
@@ -523,6 +536,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     answers = ['', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(sshCalls).toHaveLength(1); // asked once; nothing run there
+    // said under the list, before the person picks — not only after Enter
+    expect(text()).toMatch(/n\) a new conversation\n  note: m3 does not answer over ssh — what runs there is not known\n/);
     expect(text()).toContain('m3 does not answer over ssh');
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
   });
