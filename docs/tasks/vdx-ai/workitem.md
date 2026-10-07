@@ -99,10 +99,10 @@ last-updated: 2026-10-07
   (поставлено точечно `npm i -g` тем npm, что видит ssh; на m3 это fnm — nas-info
   `vdx-two-installs-m3-outcome`). Плагин 0.8.0 в `main`. Передача разговора на
   m3 проверена живьём (Next actions).
-- **Состояние на 2026-10-07:** плагин 0.8.0 доехал. DL #29 (`session.machines`)
-  в рабочем дереве vdx и сета, не выпущен: сет `v0.7.0`, CLI 0.21.0, плагин
-  0.8.1 — за владельцем. Конфликтные копии транскриптов разобраны (Sidetrack
-  #17).
+- **Состояние на 2026-10-07:** DL #29 (`session.machines`) выпущен: сет
+  `v0.7.0` на GitHub, `@vodmal/vdx-cli@0.21.0` в npm, плагин 0.8.1 в `main`.
+  На станциях пока 0.20.1 — ключ `machines` она пропускает. Конфликтные копии
+  транскриптов разобраны (Sidetrack #17).
 
 ## Decision Log
 
@@ -1377,14 +1377,36 @@ space-hq `01b81fec`, t23b-program `1bd1a625` ×3, cc-vdm-plugins `aae78752`
       2026-10-06T21:14:09Z; в этой сессии хук ответил («✓ this session carries
       the profile's flags»), скилл `vdx:vdx-ai` в списке. Сам ли доехал или
       обновлён руками — не видно
-- [ ] Выпуск DL #29 — владелец: (1) коммит сета `vdx-rubric-vodmal`, тег
+- [x] Выпуск DL #29 — владелец: (1) коммит сета `vdx-rubric-vodmal`, тег
       `v0.7.0`, push; (2) коммит vdx, затем `vdx publish minor` (0.21.0; push
       `main` везёт и плагин 0.8.1). Порядок важен: `mise.toml` и
-      `DEFAULT_BASELINE` уже ссылаются на `v0.7.0`
-- [ ] После 0.21.0 на обеих станциях: живой `vdx ai` на lft в t23b-program —
-      список с `3363b4b9` «running on m3 now», Enter → подключение к
-      `t23b-program@m3`; `vdx ai --new` там же — вопрос `[y/N]`, Enter —
-      ничего не запущено. Плагин 0.8.1 в `installed_plugins.json`
+      `DEFAULT_BASELINE` уже ссылаются на `v0.7.0` — 2026-10-07: сет `2ca6ed5`,
+      тег `v0.7.0` на GitHub (проверено `ls-remote`); vdx `0fd6ba1`; выпуск —
+      на m3: `07f91ed release: v0.21.0`, тег и push; npm `latest` 0.21.0 с
+      20:21:06Z. На lft `.git` догнал Syncthing через ~2 мин; до того `git
+      status` видел изменённый lock, а `package.json` (версия той же длины) —
+      нет: `core.checkStat=minimal` (DL #17)
+- [x] После 0.21.0 на обеих станциях: `vdx ai --new` в t23b-program на lft —
+      вопрос `[y/N]`, Enter — ничего не запущено. Плагин 0.8.1 в
+      `installed_plugins.json` — 2026-10-07: 0.21.0 поставлена `npm i -g` на
+      обеих (lft `/usr/local/bin`, m3 — fnm, его же видит ssh). В pty
+      (`script`): «an agent of this project is running on m3 now
+      (t23b-program@m3, busy) — there: vdx ai@m3 …», «Start a new conversation
+      here, on lft, anyway? [y/N]», Enter → «nothing started», код 4, сессии
+      t23b на lft нет. Плагин 0.8.1 (`07f91ed`, 20:24:45Z — через 3 мин после
+      push). Агент на m3 к этому времени перешёл в разговор `4789f1f8` (dry-run
+      видит его «running on m3 now»), а `3363b4b9` снова «машина неизвестна» —
+      предел из DL #29
+- [ ] Владелец, в своём терминале на lft: `vdx ai ~/AI\ Projects/t23b-program`
+      — в списке идущий разговор m3 с пометкой «running on m3 now», Enter →
+      подключение к `t23b-program@m3`, второго агента нет. Мной не делалось:
+      подключение из моего pty слало бы нажатия живому агенту
+- [ ] Ответ nas-info на `ssh-self-alias` (2026-10-07): `ssh <своя метка>` на
+      каждой станции — псевдоним себя, свой ключ в `authorized_keys`, свой host
+      key в `known_hosts`. Повод: строка `… && ssh m3 '…'`, запущенная на m3, —
+      `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
+      имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
+      запуск здесь)
 - [x] MCP-сервер плагина: установленный `vdx-mcp`, иначе `npx` (DL #25) —
       2026-10-04, `plugin/.mcp.json`, плагин 0.6.0, README плагина и корня,
       журнал; проверено вне Claude Code
