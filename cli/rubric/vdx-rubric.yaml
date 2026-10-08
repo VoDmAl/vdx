@@ -11,7 +11,7 @@ schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "1.0.0"
+  version: "1.1.0"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"

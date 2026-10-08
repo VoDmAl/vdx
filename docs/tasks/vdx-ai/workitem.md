@@ -1498,10 +1498,10 @@ there: vdx ai@<m>» и переход к разговору другой маш�
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
       запуск здесь)
-- [ ] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код готов
-      2026-10-08 (DL #30); владелец — `vdx publish patch` (0.22.1), после
-      topgrade на m3 — `vdx ai@m3 --new` с lft в проекте с агентом на lft:
-      «running on lft, where you are, now», вопрос «on m3 anyway?»
+- [ ] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
+      0.22.1 2026-10-08 (DL #30, `bf974dd`); после topgrade на m3 —
+      `vdx ai@m3 --new` с lft в проекте с агентом на lft: «running on lft,
+      where you are, now», вопрос «on m3 anyway?»
 - [x] MCP-сервер плагина: установленный `vdx-mcp`, иначе `npx` (DL #25) —
       2026-10-04, `plugin/.mcp.json`, плагин 0.6.0, README плагина и корня,
       журнал; проверено вне Claude Code

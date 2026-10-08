@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.0.0"
+  version: "1.1.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -73,3 +73,11 @@ git:
       event: pre-commit
       command: '"$HOME/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"'
       when_exists: "~/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"
+    # echelon's guard. No arguments: it asks `bin/echelon guard args` whose
+    # repo this is — echelon itself, a consumer (with the exceptions from its
+    # guard.allow), or neither, and then it passes. Lives in the echelon clone.
+    - name: echelon-guard
+      description: "echelon: raw data of other systems and collection credentials do not get committed"
+      event: pre-commit
+      command: '"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"'
+      when_exists: "~/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"

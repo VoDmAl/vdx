@@ -4,6 +4,14 @@
 
 ## 2026-10-08
 
+### Сет v1.1.0: страж echelon — личный хук профиля
+
+`git.hooks` в `vdx-environment.yaml` получил `echelon-guard` (pre-commit, без
+аргументов: чей репо, страж спрашивает echelon). `vdx doctor --fix` пишет его в
+`~/.gitconfig` рядом с гейтом vdm; зеркала и `DEFAULT_BASELINE` — на `v1.1.0`
+([профиль](docs/specs/vdx-environment.example.yaml),
+[кристалл](docs/tasks/vdm-gates-wiring-axis/workitem.md)).
+
 ### `vdx ai@<host>` говорит с места человека
 
 Под `vdx ai@m3` с lft vdx на m3 писал от своего лица: «Start a new conversation

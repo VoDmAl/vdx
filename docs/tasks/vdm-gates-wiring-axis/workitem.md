@@ -54,7 +54,8 @@ baseline этого требует; O41 `--fix` чинит. Бриф явно р
 распознаватель хуков, `doctor --check/--fix`, личные хуки), сет
 `vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0 в `main`. На станциях пока 0.21.1 —
 ждём topgrade, затем `vdx doctor --fix` на lft. Письма ушли (DL #21): ждём
-nas-info (git ≥ 2.54 везде) и echelon (страж в профиль).
+nas-info (git ≥ 2.54 везде). echelon готов — страж в профиле с сета v1.1.0
+(2026-10-08).
 
 **Состояние на 2026-10-07, днём.** Трек A разобран целиком (DL #11–#20): `ci` —
 сигнал по файлам, `branch-protection` — critical с L3 («неизвестно», пока нет
@@ -1215,10 +1216,15 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
       `signals/sources.yaml` проекта (`guard: {allow: […]}`); `check` примет и
       строку в pre-commit, и `git hook list` при git ≥ 2.54; локальный
       `hook.echelon-guard.command` никто не пишет
-- [ ] echelon: страж и `check` под ключ в конфиге — «напишу» ⏰ 2026-10-09
-- [ ] Затем страж в `git.hooks` профиля: `echelon-guard`, pre-commit,
+- [x] echelon: страж и `check` под ключ в конфиге — 2026-10-08,
+      `echelon-guard-ready`: без аргументов страж спрашивает `bin/echelon guard
+      args` (echelon / потребитель с `guard.allow` / чужой — код 0); `check` и
+      `admit` видят ключ через `git hook list`
+- [x] Затем страж в `git.hooks` профиля: `echelon-guard`, pre-commit,
       `"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"`, без
-      аргументов и без локальных переопределений
+      аргументов и без локальных переопределений — сет v1.1.0, 2026-10-08;
+      `vdx doctor` клона: «echelon-guard: not in ~/.gitconfig» — до `--fix`
+      (пункт «Выпуск» ниже)
 - ~~Предикаты `env_var_set` / `git_config_equals` / `path_exists_in_home`~~ —
   сняты DL #19: личный хук живёт в конфиге git, не в репо
 - ~~`vdx init` ставит гейт, когда baseline требует~~ — снято DL #19: в репо
@@ -1312,10 +1318,12 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
 - [x] Коммит `vdx-rubric-vodmal`, тег `v1.0.0`, push — сразу после выпуска CLI
       — 2026-10-08: `bac310c`, тег на GitHub (`ls-remote`)
 - [ ] 0.22.0 на обеих станциях (topgrade; проверить `vdx --version` по ssh)
-- [ ] `vdx doctor --fix` на lft — гейт vdm в `~/.gitconfig`; на m3 — после
-      git ≥ 2.54 (ответ nas-info)
-- [ ] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
-      стража (выше)
+- [ ] `vdx doctor --fix` на lft — гейт vdm и страж echelon в `~/.gitconfig`,
+      `git hook list pre-commit --show-scope` — оба `global`; на m3 — после
+      git ≥ 2.54 (ответ nas-info). Затем echelon убирает старые строки стража
+      (его правило — `global echelon-guard` на обеих машинах)
+- [x] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
+      стража (выше) — сет v1.1.0, 2026-10-08
 - [ ] Sidetrack #19: CI vdx зовёт словарь
 
 **Ответ отправителю (`cc-vdm-plugins`, по intercom):**
