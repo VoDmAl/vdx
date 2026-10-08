@@ -831,6 +831,30 @@ minor (0.21.0), плагин 0.8.1 — скилл. Предел: агенты к
 неизвестна»; агент, чей разговор ещё не доехал, в списке разговоров не виден
 (вопрос о новом разговоре его видит).
 
+### #30 / 2026-10-08 / `vdx ai@<host>` передаёт машину человека; vdx там говорит с неё
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Владелец на предложение Sidetrack #19 — «чини».
+**Context:** Sidetrack #19: `vdx ai@m3 --new` с lft — «Start a new conversation
+here, on m3», к агенту на lft — `vdx ai@lft`, ssh на саму себя.
+**Why:** Проверку машин делает vdx той машины, где запускается агент, — так и
+задумано в DL #19: там свой профиль и свои сессии. Но читает его вывод человек
+на другой машине. Метка в переменной, а не флаг: с 0.17 vdx отвергает
+незнакомый аргумент (DL #24), и флаг сломал бы `vdx ai@` к машине, где vdx ещё
+старый; переменную старый vdx пропускает. Команду к
+агенту вне tmux vdx не даёт ни с какой машины: `vdx ai` подключается только к
+tmux, а к такому агенту вела бы в список, где его разговор — «две сессии».
+**Implication:** `SEAT_ENV_VAR` (`VDX_AI_FROM`), `seatLabel`, `plan.seat`
+(`cli/src/ai.ts`): `remoteAiArgs` экспортирует метку в скрипте ssh; переход к
+разговору другой машины передаёт её дальше; `runAi` убирает её из окружения
+запускаемого агента. Формулировки `chooseConversation` и вопросов `runAi` — от
+места человека; `describeLive` получает место, а не машину. 374 теста (+5).
+Живой `--dry-run` клона в limeflow на lft с `VDX_AI_FROM=m3`: «running on lft
+now (pid 67107, idle)», «no idle conversation on lft», «running on m3, where
+you are, now (limeflow@m3, idle) — attach: vdx ai '…/limeflow'». Сторону m3
+живьём — после выпуска 0.22.1 (patch) и topgrade на m3.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -1135,6 +1159,35 @@ m3` → `Permission denied (publickey…)`. Список о неответивш
 списком и при выборе без вопроса — выпущено в 0.21.1, проверено живьём.
 Инфраструктура — письмо nas-info (`ssh-peers-agent`, продолжение
 `ssh-self-alias`); закрыть по их ответу
+
+### #19. `vdx ai@m3` с lft говорит от лица m3: «here, on m3» и подсказка `vdx ai@lft` на саму lft
+
+**Возникло в:** запуск владельца на lft, 2026-10-08: `vdx ai@m3 --new` в limeflow.
+**Описание:** Вывод:
+
+```
+→ m3: vdx ai '/Users/vdm/AI Projects/limeflow'
+an agent of this project is running on lft now (pid 67107, idle) — there: vdx ai@lft '/Users/vdm/AI Projects/limeflow'
+Start a new conversation here, on m3, anyway? [y/N]:
+```
+
+Агент найден верно: pid 67107 на lft — `claude` в cmux, `cwd` limeflow, с
+13:24. Вопрос задан по DL #29. Неверно, от чьего лица: `vdx ai@<host>` (DL #19)
+запускает на m3 тот же `vdx ai`, и проверка машин (`chooseConversation`,
+`cli/src/ai.ts`) пишет как будто человек сидит на m3. Он сидит на lft: «here,
+on m3» для него — там; `vdx ai@lft` с lft — ssh на саму себя, а он не работает
+(Sidetrack #18, письмо `ssh-self-alias`). Так же устроены строка «continue it
+there: vdx ai@<m>» и переход к разговору другой машины (`choice.remote`): с m3
+обратно на lft — второй прыжок ssh. Агент вне tmux (в строке `pid`, а не имя
+сессии): `vdx ai` ищет своего агента только в tmux и к нему не подключит —
+подсказка «перейти туда» для такого агента неверна с любой машины.
+**Предложение:** `vdx ai@<host>` передаёт метку своей машины в скрипте ssh
+(`VDX_AI_FROM=lft exec vdx ai …` — старый vdx переменную пропустит), а
+удалённый vdx пишет с места человека: его машина — «where you are», подсказка
+к ней — без `@`, вопрос — «on m3», без «here». Решение владельца.
+
+**Status:** open — исправлено в коде (DL #30), закрыть после выпуска 0.22.1 и
+живой проверки `vdx ai@m3` с lft
 
 ## Next actions
 
@@ -1445,6 +1498,10 @@ m3` → `Permission denied (publickey…)`. Список о неответивш
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
       запуск здесь)
+- [ ] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код готов
+      2026-10-08 (DL #30); владелец — `vdx publish patch` (0.22.1), после
+      topgrade на m3 — `vdx ai@m3 --new` с lft в проекте с агентом на lft:
+      «running on lft, where you are, now», вопрос «on m3 anyway?»
 - [x] MCP-сервер плагина: установленный `vdx-mcp`, иначе `npx` (DL #25) —
       2026-10-04, `plugin/.mcp.json`, плагин 0.6.0, README плагина и корня,
       журнал; проверено вне Claude Code

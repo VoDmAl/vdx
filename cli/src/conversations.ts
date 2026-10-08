@@ -314,10 +314,13 @@ export function parseMachineReport(text: string): MachineReport {
   return { home: text.match(/^home=(.+)$/m)?.[1] ?? null, sessions: parseLiveSessions(text) };
 }
 
-/** "running on m3 now (t23b-program@m3, waiting)" — where a live session is, for a person choosing. */
-export function describeLive(machine: string, live: LiveSession, here: boolean): string {
+/**
+ * "running on m3 now (t23b-program@m3, waiting)" — where a live session is, for
+ * a person choosing; `place` is the machine as they see it: "here", "on m3".
+ */
+export function describeLive(place: string, live: LiveSession): string {
   const where = live.tmux ? live.tmux.replace(/:.*$/, '') : `pid ${live.pid}`;
-  return `running ${here ? 'here' : `on ${machine}`} now (${where}${live.status ? `, ${live.status}` : ''})`;
+  return `running ${place} now (${where}${live.status ? `, ${live.status}` : ''})`;
 }
 
 /** "3 min ago", "yesterday 14:05", "2026-09-30 14:05" — for a person choosing. */

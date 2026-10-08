@@ -647,6 +647,34 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
   });
 
+  it('started by `vdx ai@lft` from m3: lft goes by its name, and m3 is where the person is', () => {
+    conv(ID.a, 'lft', 30);
+    conv(ID.c, 'm3', 5);
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    const d = deps();
+    d.env['VDX_AI_FROM'] = 'm3';
+    expect(runAi({ ...opts, path: root, dryRun: true }, d)).toBe(EXIT_OK);
+    expect(text()).toContain('no idle conversation on lft — starting a new one');
+    expect(text()).toContain('note: a newer conversation aaaaaaaa, running on lft now (pid 4242, busy) — not taken');
+    // No `vdx ai@m3` for a person sitting at m3: that is ssh to itself.
+    expect(text()).toContain(`note: m3 has a newer conversation cccccccc — continue it where you are: vdx ai ${root} --conversation ${ID.c}`);
+    expect(text()).not.toMatch(/\bhere\b/);
+    expect(d.env['VDX_AI_FROM']).toBeUndefined(); // the agent started on lft does not inherit it
+  });
+
+  it('…and a conversation that runs on lft is asked about on lft, not "here"', () => {
+    conv(ID.a, 'lft', 30);
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    const questions: string[] = [];
+    answers = ['', ''];
+    const d = deps({ ask: (q) => (questions.push(q), answers.shift() ?? null) });
+    d.env['VDX_AI_FROM'] = 'm3';
+    expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_LAUNCH_FAILED);
+    expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running on lft now \(pid 4242, busy\)/);
+    expect(questions[1]).toBe(`Continue aaaaaaaa on lft? It runs on lft right now (pid 4242); two sessions would write to it. [y/N]: `);
+    expect(text()).toContain(`nothing started. On lft: vdx ai@lft ${root} --conversation ${ID.a} · a new conversation: vdx ai@lft --new ${root}`);
+  });
+
   describe('the profile names the machines (session.machines)', () => {
     const agentOnM3 = (cwd: string, id: string = ID.c) => ({ pid: 10984, sessionId: id, tmux: 'proj@m3:@25.%25', status: 'idle', cwd });
     const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[4]);
@@ -682,6 +710,28 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = ['y'];
       expect(runAi({ ...opts, path: proj, fresh: true }, deps())).toBe(EXIT_OK);
       expect(runs()).toEqual(['--base']);
+    });
+
+    it('started by `vdx ai@lft` from m3: the agent on m3 is where the person is — attach there without ssh', () => {
+      const proj = path.join(home, 'AI Projects', 'proj');
+      fs.mkdirSync(proj, { recursive: true });
+      remoteLive = [agentOnM3(path.join(remoteHome, 'AI Projects', 'proj'))];
+      const questions: string[] = [];
+      answers = [''];
+      const d = deps({ ask: (q) => (questions.push(q), answers.shift() ?? null) });
+      d.env['VDX_AI_FROM'] = 'm3';
+      expect(runAi({ ...opts, path: proj, fresh: true }, d)).toBe(EXIT_LAUNCH_FAILED);
+      expect(text()).toContain(
+        `an agent of this project is running on m3, where you are, now (proj@m3, idle) — attach: vdx ai '${path.join(remoteHome, 'AI Projects', 'proj')}'`,
+      );
+      expect(questions).toEqual(['Start a new conversation on lft anyway? [y/N]: ']);
+    });
+
+    it('an agent outside tmux gets no command — `vdx ai` attaches only to one in tmux', () => {
+      remoteLive = [{ ...agentOnM3(root), tmux: null }];
+      answers = [''];
+      expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_LAUNCH_FAILED);
+      expect(logs).toContain('an agent of this project is running on m3 now (pid 10984, idle)');
     });
 
     it('…without a terminal nothing starts', () => {
@@ -997,7 +1047,7 @@ describe('vdx ai@host', () => {
   });
 
   it('asks ssh for a terminal only when it will attach', () => {
-    const base = { host: 'm3', projectPath: '/h/p', home: '/h', version: '1.0.0', opts };
+    const base = { host: 'm3', from: 'lft', projectPath: '/h/p', home: '/h', version: '1.0.0', opts };
     expect(remoteAiArgs({ ...base, tty: true }).slice(0, 2)).toEqual(['-t', 'm3']);
     expect(remoteAiArgs({ ...base, tty: false }).slice(0, 2)).toEqual(['-T', 'm3']);
   });
@@ -1010,7 +1060,7 @@ describe('vdx ai@host', () => {
       fs.mkdirSync(path.join(dir, 'home', 'AI Projects', 'vdx'), { recursive: true });
       fs.writeFileSync(
         path.join(dir, 'bin', 'vdx'),
-        '#!/bin/sh\nif [ "$1" = --version ]; then [ -n "$STUB_VERSION" ] || exit 1; echo "$STUB_VERSION"; exit 0; fi\nprintf \'%s\\n\' "$@"\n',
+        '#!/bin/sh\nif [ "$1" = --version ]; then [ -n "$STUB_VERSION" ] || exit 1; echo "$STUB_VERSION"; exit 0; fi\nprintf \'%s\\n\' "$@"\necho "from=$VDX_AI_FROM"\n',
         { mode: 0o755 },
       );
     });
@@ -1019,6 +1069,7 @@ describe('vdx ai@host', () => {
     const run = (stubVersion: string, o = opts) => {
       const script = remoteAiArgs({
         host: 'm3',
+        from: 'lft',
         projectPath: '/Users/vdm/AI Projects/vdx',
         home: '/Users/vdm',
         version: '0.14.0',
@@ -1029,7 +1080,13 @@ describe('vdx ai@host', () => {
         encoding: 'utf8',
         env: { PATH: `${path.join(dir, 'bin')}:/usr/bin:/bin`, HOME: path.join(dir, 'home'), STUB_VERSION: stubVersion },
       });
-      return { args: res.stdout.split('\n').filter(Boolean), note: res.stderr.trim(), status: res.status };
+      const out = res.stdout.split('\n').filter(Boolean);
+      return {
+        args: out.filter((l) => !l.startsWith('from=')),
+        from: out.find((l) => l.startsWith('from='))?.slice(5),
+        note: res.stderr.trim(),
+        status: res.status,
+      };
     };
 
     it('runs vdx ai there with the path under its own home, path first, then the flags', () => {
@@ -1050,6 +1107,10 @@ describe('vdx ai@host', () => {
 
     it('names a vdx that predates --version', () => {
       expect(run('').note).toBe('note: vdx on m3 is older than 0.13.1, here 0.14.0');
+    });
+
+    it('tells the vdx there which machine the person sits at', () => {
+      expect(run('0.14.0').from).toBe('lft');
     });
   });
 });

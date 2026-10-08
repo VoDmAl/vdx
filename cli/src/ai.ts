@@ -116,6 +116,8 @@ export interface Environment {
 
 export const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
 export const HOST_ENV_VAR = 'VDX_HOST';
+/** Set by `vdx ai@<host>` for the vdx it starts there: the machine the person sits at. */
+export const SEAT_ENV_VAR = 'VDX_AI_FROM';
 export const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
 /** Tried in order when no profile names an agent. Started plain, with no flags. */
 export const FALLBACK_AGENTS = ['claude', 'codex'] as const;
@@ -279,6 +281,8 @@ export interface LaunchPlan {
   /** Where `project` came from: mise.toml, a profile source, or the repository name. */
   projectSource: string;
   host: string;
+  /** The machine the person sits at: `host`, or the one that ran `vdx ai@<host>`. */
+  seat: string;
   profilePath: string | null;
   command: string;
   /** agent.args plus the args of every matched `when` rule — what a running agent must carry. */
@@ -300,6 +304,7 @@ export function planLaunch(input: {
   project: string;
   projectSource?: string;
   host: string;
+  seat?: string;
 }): LaunchPlan {
   const { environment, agent, projectRoot } = input;
   const ctx: Ctx = { projectRoot, stack: autoDetectStack(projectRoot), cache: new Map() };
@@ -317,6 +322,7 @@ export function planLaunch(input: {
     project: input.project,
     projectSource: input.projectSource ?? 'repository name',
     host: input.host,
+    seat: input.seat ?? input.host,
     profilePath: input.profilePath,
     command: agent.command,
     args,
@@ -533,6 +539,16 @@ export function resolveProjectName(input: {
 export function hostLabel(env: NodeJS.ProcessEnv = process.env): string {
   const label = env[HOST_ENV_VAR]?.trim();
   return label || os.hostname().split('.')[0]!;
+}
+
+/** The machine the person sits at: the one whose `vdx ai@<host>` started this vdx, else this one. */
+export function seatLabel(env: NodeJS.ProcessEnv = process.env): string {
+  return env[SEAT_ENV_VAR]?.trim() || hostLabel(env);
+}
+
+/** Machine labels compare without case: `M3` in the profile is `m3` in a transcript. */
+export function sameMachine(a: string | null, b: string | null): boolean {
+  return (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
 }
 
 export function onPath(bin: string, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -895,9 +911,12 @@ export function remotePathWord(abs: string, home: string): string {
  * The ssh argv for `vdx ai@<host>`: the same `vdx ai` on the host, in its own
  * tmux there. The path goes first: an older vdx hands the token after a flag it
  * does not know to that flag. A different vdx version there is named, not fatal.
+ * `from` — the machine the person sits at, so the vdx there speaks from it; an
+ * older vdx leaves the variable alone.
  */
 export function remoteAiArgs(input: {
   host: string;
+  from: string;
   projectPath: string;
   home: string;
   version: string;
@@ -916,6 +935,7 @@ export function remoteAiArgs(input: {
   const script =
     `v=$(vdx --version 2>/dev/null) || v='older than 0.13.1'; ` +
     `[ "$v" = ${v} ] || echo "note: vdx on ${host} is $v, here "${v} >&2; ` +
+    `export ${SEAT_ENV_VAR}=${shellQuote(input.from)}; ` +
     `exec vdx ai ${[remotePathWord(input.projectPath, input.home), ...flags].join(' ')}`;
   return [input.tty ? '-t' : '-T', host, script];
 }
@@ -975,10 +995,11 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
   }
 }
 
-export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, version: string = deps.version ?? ''): number {
+/** `from` — where the person sits; a vdx that `vdx ai@<host>` started passes its own on. */
+export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: string = seatLabel(deps.env)): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
-  const args = remoteAiArgs({ host, projectPath, home: deps.home, version, opts, tty });
+  const args = remoteAiArgs({ host, from, projectPath, home: deps.home, version: deps.version ?? '', opts, tty });
   deps.log(`→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`);
   const res = (deps.ssh ?? runSsh)(args, false);
   if (res === null) {
@@ -1051,9 +1072,12 @@ const resumeId = (id: string) => ['--resume', id];
 export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
   if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const host = plan.host;
-  const same = (a: string | null, b: string | null) => (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+  const same = sameMachine;
   const all = plan.resumeArgs.length === 0 ? [] : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
   const root = shellQuote(plan.projectRoot);
+  // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
+  const atSeat = same(plan.seat, host);
+  const on = (m: string) => (same(m, plan.seat) ? (atSeat ? 'here' : `on ${m}, where you are,`) : `on ${m}`);
 
   // Who runs what right now: this machine from its session files, the others over ssh.
   const reach = new Map<string, MachineReport | null>();
@@ -1064,9 +1088,18 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   const elsewhere = [...reach].flatMap(([m, r]) =>
     (r?.sessions ?? []).filter((l) => runsInProject(l, r!.home, plan.projectRoot, deps.home)).map((l) => ({ m, l })),
   );
+  // The project's path on the machine `m`, by its home: the person types it there.
+  const rootOn = (m: string) => {
+    const theirs = [...reach].find(([k]) => same(k, m))?.[1]?.home;
+    const rel = path.relative(deps.home, plan.projectRoot);
+    return theirs && !rel.startsWith('..') && !path.isAbsolute(rel) ? shellQuote(path.join(theirs, rel)) : root;
+  };
+  // `vdx ai` attaches to an agent in tmux; one in a terminal of its own has no command to reach it.
+  const reachAgent = (m: string, l: LiveSession) =>
+    !l.tmux ? '' : same(m, plan.seat) ? ` — attach: vdx ai ${rootOn(m)}` : ` — there: vdx ai@${m} ${root}`;
   const fresh = (lines: string[]): ConversationChoice => {
     if (elsewhere.length === 0) return { args: [], lines };
-    const agents = elsewhere.map(({ m, l }) => `an agent of this project is ${describeLive(m, l, false)} — there: vdx ai@${m} ${root}`);
+    const agents = elsewhere.map(({ m, l }) => `an agent of this project is ${describeLive(on(m), l)}${reachAgent(m, l)}`);
     return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
   };
   if (plan.resumeArgs.length === 0) return fresh(silent);
@@ -1086,7 +1119,7 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     (a, b) => b.updated.getTime() - a.updated.getTime(),
   );
   const show = (c: Conversation) => describeConversation(c, machine(c));
-  const running = (c: Conversation) => (live.get(c.id) ?? []).map((l) => describeLive(l.machine, l.session, l.here));
+  const running = (c: Conversation) => (live.get(c.id) ?? []).map((l) => describeLive(on(l.machine), l.session));
 
   const take = (c: Conversation): ConversationChoice => {
     const m = machine(c);
@@ -1094,7 +1127,7 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     if (here) {
       return {
         args: [],
-        askHere: { id: c.id, why: `It runs here right now (${here.session.tmux ?? `pid ${here.session.pid}`}); two sessions would write to it` },
+        askHere: { id: c.id, why: `It runs ${on(host)} right now (${here.session.tmux ?? `pid ${here.session.pid}`}); two sessions would write to it` },
         lines: [`chosen: ${show(c)}`],
       };
     }
@@ -1102,7 +1135,7 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     if (m) return { args: [], remote: { host: m, id: c.id, reachable: reach.get(m) != null }, lines: [`continuing on ${m}: ${show(c)}`] };
     return {
       args: [],
-      askHere: { id: c.id, why: 'Its machine is unknown (never typed in here); if it runs there, both machines will write to it' },
+      askHere: { id: c.id, why: `Its machine is unknown (never typed in ${on(host)}); if it runs there, both machines will write to it` },
       lines: [`chosen: ${show(c)}`],
     };
   };
@@ -1115,7 +1148,7 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   if (canAsk && deps.interactive) {
     deps.log('conversations of this project:');
     found.forEach((c, i) => {
-      const marks = [i === 0 && 'newest', c === firstIdle && 'this machine', !machine(c) && 'machine unknown', ...running(c)];
+      const marks = [i === 0 && 'newest', c === firstIdle && (atSeat ? 'this machine' : `idle on ${host}`), !machine(c) && 'machine unknown', ...running(c)];
       const m = marks.filter(Boolean);
       deps.log(`  ${i + 1}) ${show(c)}${m.length ? `   ← ${m.join(', ')}` : ''}`);
     });
@@ -1142,16 +1175,17 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
         `${c.updated > (firstIdle?.updated ?? new Date(0)) ? 'a newer' : 'another'} conversation ${c.id.slice(0, 8)}` +
         (now.length ? `, ${now.join(', ')}` : '');
       if (runsHere(c)) return `note: ${which} — not taken: it would have two sessions`;
+      if (m && same(m, plan.seat)) return `note: ${m} has ${which} — continue it where you are: vdx ai ${rootOn(m)} --conversation ${c.id}`;
       return m
         ? `note: ${m} has ${which} — continue it there: vdx ai@${m} ${root} --conversation ${c.id}`
-        : `note: ${which} is of an unknown machine (never typed in here) — on its machine: vdx ai@<machine> ${root} --conversation ${c.id}`;
+        : `note: ${which} is of an unknown machine (never typed in ${on(host)}) — on its machine: vdx ai@<machine> ${root} --conversation ${c.id}`;
     });
   notes.push(...silent);
   if (firstIdle) {
     const chosen = take(firstIdle);
     return { ...chosen, lines: [...chosen.lines, ...notes] };
   }
-  return fresh(['no idle conversation of this machine — starting a new one', ...notes]);
+  return fresh([`no idle conversation ${atSeat ? 'of this machine' : `on ${host}`} — starting a new one`, ...notes]);
 }
 
 interface Prepared {
@@ -1211,6 +1245,7 @@ function prepare(pathArg: string, deps: AiDeps): Prepared | number {
       project: named.name,
       projectSource: named.source,
       host: hostLabel(deps.env),
+      seat: seatLabel(deps.env),
     });
   } catch (e: any) {
     log(`vdx ai: ${profilePath ?? 'profile'}: ${e?.message ?? e}`);
@@ -1281,6 +1316,12 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
+  // The agent started here runs on this machine: it does not inherit where the person sat.
+  delete deps.env[SEAT_ENV_VAR];
+  // Under `vdx ai@<host>` the person is not here: this machine goes by its name.
+  const atSeat = sameMachine(plan.seat, plan.host);
+  const here = atSeat ? `here, on ${plan.host}` : `on ${plan.host}`;
+  const vdxAiHere = atSeat ? 'vdx ai' : `vdx ai@${plan.host}`;
   if (opts.conversation && !isClaude(plan.command)) {
     log(`vdx ai: --conversation names a Claude Code conversation; the agent here is ${plan.command}`);
     return EXIT_USAGE;
@@ -1325,7 +1366,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   for (const l of choice?.lines ?? []) log(l);
   if (choice?.abort) return EXIT_LAUNCH_FAILED;
   if (choice?.elsewhere && !current) {
-    const answer = deps.interactive ? deps.ask(`Start a new conversation here, on ${plan.host}, anyway? [y/N]: `) : null;
+    const answer = deps.interactive ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `) : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
       log('nothing started');
       return EXIT_LAUNCH_FAILED;
@@ -1335,17 +1376,17 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   let askHere = choice?.askHere;
   if (choice?.remote) {
     const { host, id, reachable } = choice.remote;
-    if (reachable) return runAiRemote({ ...opts, path: projectRoot, conversation: id }, host, deps);
+    if (reachable) return runAiRemote({ ...opts, path: projectRoot, conversation: id }, host, deps, plan.seat);
     log(`✗ ${host} does not answer over ssh — its conversation ${id.slice(0, 8)} cannot be continued there`);
     askHere = { id, why: `If it still runs on ${host}, both machines will write to it` };
   }
   if (askHere) {
     const { id, why } = askHere;
-    const answer = deps.interactive ? deps.ask(`Continue ${id.slice(0, 8)} here, on ${plan.host}? ${why}. [y/N]: `) : null;
+    const answer = deps.interactive ? deps.ask(`Continue ${id.slice(0, 8)} ${here}? ${why}. [y/N]: `) : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
       log(
-        `nothing started. Here: vdx ai ${shellQuote(projectRoot)} --conversation ${id}` +
-          ` · a new conversation: vdx ai --new ${shellQuote(projectRoot)}`,
+        `nothing started. ${atSeat ? 'Here' : `On ${plan.host}`}: ${vdxAiHere} ${shellQuote(projectRoot)} --conversation ${id}` +
+          ` · a new conversation: ${vdxAiHere} --new ${shellQuote(projectRoot)}`,
       );
       return EXIT_LAUNCH_FAILED;
     }

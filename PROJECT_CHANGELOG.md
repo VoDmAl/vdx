@@ -2,6 +2,17 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-10-08
+
+### `vdx ai@<host>` говорит с места человека
+
+Под `vdx ai@m3` с lft vdx на m3 писал от своего лица: «Start a new conversation
+here, on m3», а к агенту на lft — `vdx ai@lft`, то есть ssh с lft на саму себя.
+Теперь `vdx ai@<host>` передаёт метку своей машины (`VDX_AI_FROM`), и vdx там
+называет её «where you are», команду к ней даёт без `@`, а себя — по имени;
+к агенту вне tmux команды нет — `vdx ai` к нему не подключается
+([spec](docs/specs/environment-format.md), [Sidetrack #19](docs/tasks/vdx-ai/workitem.md)).
+
 ## 2026-10-07
 
 ### Рубрика schema 0.3: `ci` — сигнал, `branch-protection`, хуки по существу
