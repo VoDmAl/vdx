@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-07, @vodmal/vdx-cli@0.21.1)
+# vdx — Handoff (2026-10-08, @vodmal/vdx-cli@0.22.0)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -14,22 +14,20 @@
 Claude Code продолжается на машине, где он идёт (DL #27); машины проекта —
 `session.machines` профиля (DL #29).
 
-- `@vodmal/vdx-cli@0.21.1` в npm и на обеих станциях; сет
-  `vdx-rubric-vodmal@v0.7.0`; плагин vdx 0.8.1. Порядок выпуска — «Выпуск CLI» и
+- `@vodmal/vdx-cli@0.22.0` в npm (на станциях пока 0.21.1); сет
+  `vdx-rubric-vodmal@v1.0.0`; плагин vdx 0.9.0. Порядок выпуска — «Выпуск CLI» и
   «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
 - На 2026-10-07 с нашей стороны сделано всё; ждём: ответы nas-info на письма
   `ssh-self-alias` и `ssh-peers-agent` (ssh станции на себя и без агента ключей,
   Sidetrack #18) и живую проверку владельца в локальном терминале lft.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
-— трек A (ложно-зелёные оценки в рубрике) и трек B (личные хуки) реализованы
-2026-10-07 одним выпуском (DL #22), **не выпущено**: vdx 0.22.0 (schema 0.3,
-распознаватель хуков, `vdx doctor --check/--fix`), сет `vdx-rubric-vodmal`
-v1.0.0 (рабочая копия, без тега), плагин 0.9.0. Порядок выпуска — блок
-«Выпуск» в Next actions кристалла: CLI раньше тега сета (DL #14). Письма ушли
-2026-10-07 (DL #21): nas-info `git-2-54-everywhere`, echelon
-`guard-in-git-config`, limeflow `husky-hooks-yarn4`; ждём nas-info и echelon
-до 2026-10-14.
+— треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08
+(DL #22): `@vodmal/vdx-cli@0.22.0` (schema 0.3, распознаватель хуков,
+`vdx doctor --check/--fix`), сет `vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0. На
+станциях пока 0.21.1 — после topgrade `vdx doctor --fix` на lft (гейт vdm в
+`~/.gitconfig`), на m3 — после git ≥ 2.54. Письма 2026-10-07 (DL #21): ждём
+nas-info `git-2-54-everywhere` и echelon `guard-in-git-config` до 2026-10-14.
 
 > ⚠️ Всё, что ниже этой черты, описывает состояние на 2026-05-24 (шаги A–Z.2.c,
 > версия 0.8.1) и не обновлялось для релизов v0.10.0 / v0.11.0. Историю шагов

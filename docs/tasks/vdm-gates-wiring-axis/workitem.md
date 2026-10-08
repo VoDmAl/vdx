@@ -50,11 +50,11 @@ baseline этого требует; O41 `--fix` чинит. Бриф явно р
 
 ## Текущая модель
 
-**Состояние на 2026-10-07, вечер.** Реализовано одним выпуском (DL #22), не
-выпущено: vdx 0.22.0 (schema 0.3, распознаватель хуков, `doctor --check/--fix`,
-личные хуки), сет v1.0.0 (рабочая копия, без тега), плагин 0.9.0. Письма ушли
-(DL #21): ждём nas-info (git ≥ 2.54 везде) и echelon (страж в профиль). Дальше
-— выпуск по Next actions.
+**Состояние на 2026-10-08.** Выпущено (DL #22): vdx 0.22.0 в npm (schema 0.3,
+распознаватель хуков, `doctor --check/--fix`, личные хуки), сет
+`vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0 в `main`. На станциях пока 0.21.1 —
+ждём topgrade, затем `vdx doctor --fix` на lft. Письма ушли (DL #21): ждём
+nas-info (git ≥ 2.54 везде) и echelon (страж в профиль).
 
 **Состояние на 2026-10-07, днём.** Трек A разобран целиком (DL #11–#20): `ci` —
 сигнал по файлам, `branch-protection` — critical с L3 («неизвестно», пока нет
@@ -1209,7 +1209,16 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
 - [x] Письмо echelon: страж в конфиг git, вопросы о границе, `check` и
       исключениях — отправлено 2026-10-07, `guard-in-git-config` (DL #21)
 - [ ] Ответ nas-info: git ≥ 2.54 везде на обеих станциях ⏰ 2026-10-14
-- [ ] Ответ echelon по вопросам 1–3 → запись стража в профиль ⏰ 2026-10-14
+- [x] Ответ echelon по вопросам 1–3 — 2026-10-08, `guard-in-git-config-outcome`:
+      ключ в `~/.gitconfig` годится; роль страж определяет сам (корень echelon,
+      репо из `consumers.yaml`, прочие — код 0); `--allow` — в
+      `signals/sources.yaml` проекта (`guard: {allow: […]}`); `check` примет и
+      строку в pre-commit, и `git hook list` при git ≥ 2.54; локальный
+      `hook.echelon-guard.command` никто не пишет
+- [ ] echelon: страж и `check` под ключ в конфиге — «напишу» ⏰ 2026-10-09
+- [ ] Затем страж в `git.hooks` профиля: `echelon-guard`, pre-commit,
+      `"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"`, без
+      аргументов и без локальных переопределений
 - ~~Предикаты `env_var_set` / `git_config_equals` / `path_exists_in_home`~~ —
   сняты DL #19: личный хук живёт в конфиге git, не в репо
 - ~~`vdx init` ставит гейт, когда baseline требует~~ — снято DL #19: в репо
@@ -1297,13 +1306,16 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
 
 **Выпуск (порядок DL #14: CLI раньше тега сета):**
 
-- [ ] Коммит vdx (CLI 0.22.0, плагин 0.9.0, зеркала, доки) → `vdx publish
-      minor` → 0.22.0 в npm и `main` с плагином на GitHub
-- [ ] Коммит `vdx-rubric-vodmal`, тег `v1.0.0`, push — сразу после выпуска CLI
+- [x] Коммит vdx (CLI 0.22.0, плагин 0.9.0, зеркала, доки) → `vdx publish
+      minor` → 0.22.0 в npm и `main` с плагином на GitHub — 2026-10-08:
+      `5159a9d`, `d2d6aaf release: v0.22.0`; npm `latest` 0.22.0 (17:56 UTC)
+- [x] Коммит `vdx-rubric-vodmal`, тег `v1.0.0`, push — сразу после выпуска CLI
+      — 2026-10-08: `bac310c`, тег на GitHub (`ls-remote`)
 - [ ] 0.22.0 на обеих станциях (topgrade; проверить `vdx --version` по ssh)
 - [ ] `vdx doctor --fix` на lft — гейт vdm в `~/.gitconfig`; на m3 — после
       git ≥ 2.54 (ответ nas-info)
-- [ ] Страж echelon в `git.hooks` профиля — по ответу echelon на вопросы 1–3
+- [ ] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
+      стража (выше)
 - [ ] Sidetrack #19: CI vdx зовёт словарь
 
 **Ответ отправителю (`cc-vdm-plugins`, по intercom):**
