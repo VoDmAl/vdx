@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import YAML from 'js-yaml';
 import { evalPredicate } from './evaluator.ts';
+import { GIT_HOOK_EVENTS } from './hooks.ts';
 import { autoDetectStack, readStructured, resolveConfigPath, type Ctx } from './facts.ts';
 import { loadManifest } from './manifest.ts';
 import { type Author, effectiveAuthor, isGitRepo, rankAuthors, scanPool, writeAuthor } from './author.ts';
@@ -83,9 +84,26 @@ export interface SessionProfile {
   machines?: string[];
 }
 
+/**
+ * A personal hook: the owner's own gate, kept in git's user config
+ * (`hook.<name>.event` / `.command`, Git 2.54) instead of in every repository.
+ * `vdx doctor` checks it is there, `vdx doctor --fix` writes it.
+ */
+export interface PersonalHook {
+  name: string;
+  /** Git hook event(s): `pre-commit`, … */
+  event: string | string[];
+  /** Run by git through the shell; `$HOME` and quotes work as in a hook script. */
+  command: string;
+  /** The hook applies on a machine where this path exists (the tool is installed); `~` is home. */
+  when_exists?: string;
+  description?: string;
+}
+
 export interface GitProfile {
   /** Directories whose repos are the neighbours an author is proposed from; default — the project's parent. */
   author_pool?: string[];
+  hooks?: PersonalHook[];
 }
 
 export interface Environment {
@@ -201,6 +219,27 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (typeof gitDoc !== 'object' || gitDoc === null) fail('git', 'must be a mapping');
     if (gitDoc.author_pool !== undefined && !isStringList(gitDoc.author_pool)) {
       fail('git.author_pool', 'must be a list of directories');
+    }
+    if (gitDoc.hooks !== undefined) {
+      if (!Array.isArray(gitDoc.hooks)) fail('git.hooks', 'must be a list');
+      const names = new Set<string>();
+      gitDoc.hooks.forEach((h, i) => {
+        const at = `git.hooks[${i}]`;
+        if (typeof h !== 'object' || h === null) fail(at, 'must be a mapping');
+        if (typeof h.name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(h.name)) {
+          fail(`${at}.name`, 'must be a name of letters, digits, . _ - (the git config subsection)');
+        }
+        if (names.has(h.name)) fail(`${at}.name`, `"${h.name}" is declared twice`);
+        names.add(h.name);
+        const events = Array.isArray(h.event) ? h.event : [h.event];
+        if (events.length === 0 || !events.every((e) => typeof e === 'string' && GIT_HOOK_EVENTS.has(e))) {
+          fail(`${at}.event`, 'must be a git hook event (pre-commit, pre-push, …) or a list of them');
+        }
+        if (typeof h.command !== 'string' || h.command.trim() === '') fail(`${at}.command`, 'must be a non-empty string');
+        if (h.when_exists !== undefined && (typeof h.when_exists !== 'string' || h.when_exists === '')) {
+          fail(`${at}.when_exists`, 'must be a path');
+        }
+      });
     }
   }
   return envDoc;

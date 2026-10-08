@@ -1,8 +1,9 @@
 # Спека: формат рубрики (baseline)
 
-Статус: **draft v0.2**. Описывает структуру файла owner-baseline. См.
+Статус: **schema 0.3** (vdx 0.22+). Описывает структуру файла owner-baseline. См.
 [../decisions.md](../decisions.md) D1 (owner-baseline), D7 (скоринг), D11
-(хранение в отдельном репо с semver-тегами).
+(хранение в отдельном репо с semver-тегами). Что поменялось в 0.3 — раздел
+«Schema 0.3» ниже; разбор — `docs/tasks/vdm-gates-wiring-axis/` (DL #11–#20).
 
 ## Расположение
 Корневой файл репозитория-рубрики: `vdx-rubric.yaml`.
@@ -12,10 +13,10 @@
 ## Схема (верхний уровень)
 
 ```yaml
-schema_version: "0.2"             # версия формата (НЕ рубрики)
+schema_version: "0.3"             # версия формата (НЕ рубрики)
 metadata:
   name: vdx-rubric-vodmal
-  version: "0.2.0"                # совпадает с git-тегом
+  version: "1.0.0"                # совпадает с git-тегом
   description: "Personal maturity rubric"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -45,6 +46,7 @@ axes:                             # массив осей (см. ниже)
   description: "..."
   applies_to: [<stack-id>, ...]   # optional, v0.2.2+ — см. ниже
   applies_when: <predicate-expr>  # optional, v0.3.1+ — см. ниже
+  clone_check: git-hooks          # optional, schema 0.3 — пометка клона рядом с осью
   storage: level | flags          # default: level
   default_target: L4              # целевое значение для этой оси в этой версии
   fact_sources: [<path>...]       # подсказка движку
@@ -54,7 +56,7 @@ axes:                             # массив осей (см. ниже)
     L1: { requires: <predicate-expr> }
     L2: { requires: <predicate-expr> }
     L3: { requires: <predicate-expr> }
-    L4: { requires: <predicate-expr> }
+    L4: { requires: <predicate-expr> }   # или { not_required: true } — schema 0.3
 
   # для storage=flags (D2 — TS флаги ортогональны):
   stack_implementations:
@@ -78,6 +80,49 @@ for L in [L1, L2, L3, L4]:
 
 Это позволяет писать каждый уровень компактно (только то, что добавляется), без
 повторения нижних условий. L0 не описывается — это «всегда true», fallback.
+
+## Schema 0.3
+
+**Версия схемы читается строго.** CLI знает, до какой схемы читает (vdx 0.22 —
+до `0.3`), и сет новее отвергает с ошибкой «обнови vdx», а не читает молча по
+старым правилам. Сеты старее читаются как раньше: тот же тег — та же оценка при
+любом CLI.
+
+**Предикат отвечает «да», «нет» или «неизвестно» с причиной.** «Неизвестно» —
+факт, которого vdx здесь прочесть не может: CI-система, которую он не разбирает,
+защита ветки, которую знает только хостинг. Композиты трёхзначные: `any_of`
+истинно только по истинной ветке, `all_of` ложно по любой ложной, иначе —
+«неизвестно»; `not` оставляет «неизвестно» как есть. Подъём по уровням на
+«неизвестно» останавливается: в общем уровне это «не выполнено», а отчёт
+называет непроверенный уровень и причину (раздел «Not checked»). Не L0
+(ложно-красное без сети) и не исключение оси (ложно-зелёное).
+
+**`not_required: true` — уровень, на котором ось ничего не требует.**
+`branch-protection` гейт — свойство L3, ниже ось уровень не ограничивает:
+
+```yaml
+levels:
+  L1: { not_required: true }
+  L2: { not_required: true }
+  L3: { requires: { branch_requires_checks: {} } }
+  L4: { not_required: true }
+```
+
+Для общего уровня такой уровень засчитан; в отчёте достижением не
+показывается: незащищённый репозиторий видит «—», а не «L2». В JSON-отчёте
+`achieved` — засчитанный уровень, `not_required` — список таких уровней,
+`unknown` — `{ level, reason }`.
+
+**`clone_check` — свойство клона рядом с осью.** Включены ли хуки в этом клоне
+— не уровень: тот же репо и тот же тег дали бы разный отчёт по клонам. Ось
+называет проверку (`git-hooks`), `vdx audit` печатает её результат пометкой
+(⚑ и раздел «In this clone»), уровень не меняется. Ту же проверку печатает
+строкой `vdx doctor`.
+
+**Три предиката ушли.** `gh_workflow_blocks_pr`, `git_hook_installed`,
+`command_succeeds` обещали больше, чем проверяли. Сет schema 0.3, который
+называет любой из них — или незнакомое имя, — не загружается. Для сетов 0.2
+они остаются в реестре как были.
 
 ### `applies_to` — stack-фильтр (v0.2.2+)
 
@@ -177,7 +222,7 @@ requires:
     - has_task: down
 ```
 
-### Базовая библиотека (v0.2)
+### Базовая библиотека
 
 | Имя | Аргументы | Что проверяет |
 |-----|-----------|---------------|
@@ -190,9 +235,36 @@ requires:
 | `config_value` | path, jsonpath, op | значение в JSON/YAML/TOML |
 | `tsc_flag` | name, equals? | флаг в `tsconfig.json` `compilerOptions` |
 | `phpstan_level_at_least` | n | level в `phpstan.neon` |
-| `gh_workflow_blocks_pr` | check_name? | анализ `.github/workflows/*.yml` + branch protection |
-| `git_hook_installed` | hook | husky/lefthook/cghooks с `hook` |
-| `command_succeeds` | cmd | escape-hatch, sandboxed shell |
+
+Ось `ci` — сигнал, по файлам GitHub Actions (schema 0.3). У других CI-систем
+(GitLab CI, CircleCI) — «неизвестно»; «нет» из GHA рядом с другой системой —
+тоже «неизвестно»: та может делать то, чего нет в GHA.
+
+| Имя | Аргументы | Что проверяет |
+|-----|-----------|---------------|
+| `gha_tests_on_push` | pattern? | workflow, запускаемый push'ем в `main`/`master` (фильтр веток или без него), выполняет шаг тестов; шаг с `\|\| true` / `continue-on-error` не засчитывается, PR-триггер — тоже |
+| `gha_runs_tasks` | tasks | на том же push'е CI вызывает каждую задачу `tasks` (или её `name:*`) через раннер проекта — `mise run`, `vdx`, `composer`, `npm run`, `yarn`, `pnpm`, `make` |
+| `gha_test_matrix` | pattern? | проверяющая задача идёт по `strategy.matrix` |
+| `gha_ship_needs_checks` | pattern? | каждая задача, что выкладывает или выпускает (`deploy`/`release`/`publish` в id или имени), ждёт проверяющую через `needs:` |
+
+Ось `branch-protection` (schema 0.3):
+
+| Имя | Аргументы | Что проверяет |
+|-----|-----------|---------------|
+| `branch_requires_checks` | — | основная ветка принимает изменения только после обязательной проверки. Знает только хостинг; расширения нет — «неизвестно» везде |
+
+Ось `git-hygiene` (schema 0.3) — на общем распознавателе фреймворков хуков
+(husky, lefthook, simple-git-hooks, cghooks, `.githooks`), тот же у `vdx doctor`:
+
+| Имя | Аргументы | Что проверяет |
+|-----|-----------|---------------|
+| `git_hooks_arranged` | — | репо объявляет хуки, и каждый фреймворк включается шагом установки сам: husky в `prepare`/`postinstall` (под Yarn 2+ — только `postinstall`), пакеты lefthook / simple-git-hooks, `cghooks add` в composer `post-install-cmd`, `git config core.hooksPath` в шаге установки или задаче `up` |
+| `git_hook_runs_task` | tasks | pre-commit или pre-push вызывает задачу словаря (`test`, `check`, их `name:*`) через раннер проекта |
+| `git_hook_covers_ci` | tasks | pre-push вызывает все задачи словаря, которые CI вызывает на push в main; composer `@`-ссылки, `npm run` и mise `depends` раскрываются |
+
+Только для сетов schema 0.2: `gh_workflow_blocks_pr` (видел лишь
+`pull_request` в `on:`, а не защиту ветки), `git_hook_installed` (наличие файла
+хука — не установка), `command_succeeds` (заглушка с вечным `false`).
 
 ### Композитные
 

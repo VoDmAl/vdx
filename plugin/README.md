@@ -72,7 +72,7 @@ After install, the following MCP tools are available in any project:
 - `vdx_up`, `vdx_down`, `vdx_build`, `vdx_test`, `vdx_check`, `vdx_fix` —
   lifecycle wrappers over `mise run <verb>`
 - `vdx_audit` — maturity audit against the canonical rubric
-  (`github.com/VoDmAl/vdx-rubric-vodmal@v0.7.0` by default)
+  (`github.com/VoDmAl/vdx-rubric-vodmal@v1.0.0` by default)
 - `vdx_record_success_path` — persist discovered commands into `mise.toml`
 
 The `vdx-discover` skill auto-suggests itself when Claude enters a project
@@ -88,13 +88,19 @@ whose conversation it is. Silent without a `vdx ai` profile, and with a vdx olde
 for the version first). The `vdx-ai` skill covers the rest: where the profile
 lives, `agent.when[]` for a class of projects, what to hand the user.
 
+With vdx 0.22+ the same hook adds `vdx doctor --check`: one line per hook
+that is declared but does not run here — a hook framework of this repository
+that is off in this clone, or a personal hook of the profile (`git.hooks`)
+missing from `~/.gitconfig` or skipped by a git older than 2.54 — with the fix
+for the agent to hand the user. Silent when the hooks are in order.
+
 ## Limitations
 
 - `record-success-path.sh` only logs to `~/.cache/vdx/last-success-path.log`.
   Canonical record of the success path still goes through the
   `vdx_record_success_path` MCP tool (called by the agent, not by the hook).
 - Bundled rubric in `@vodmal/vdx-cli` is a snapshot of canonical
-  `vdx-rubric-vodmal@v0.7.0` at CLI release time. Newer canonical tags
+  `vdx-rubric-vodmal@v1.0.0` at CLI release time. Newer canonical tags
   require either a CLI republish or per-project override of the rubric path.
 - See open questions O26 (TOML round-trip with comments) and O27 (real
   shared-infra precheck) in `../docs/decisions.md`.

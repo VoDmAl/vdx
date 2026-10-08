@@ -154,7 +154,7 @@ describe('every command: --help, unknown options, stray arguments', () => {
 
   it('refuses a stray argument and a value flag without its value', () => {
     for (const [args, message] of [
-      [['doctor', 'extra'], 'unexpected argument extra'],
+      [['doctor', '.', 'extra'], 'unexpected argument extra'],
       [['down', 'extra'], 'unexpected argument extra'],
       [['init', '.', 'extra'], 'unexpected argument extra'],
       [['audit', '--stack'], '--stack needs a value'],

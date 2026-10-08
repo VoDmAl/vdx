@@ -12,9 +12,70 @@ import {
   readStructured,
   resolveConfigPath,
 } from './facts.ts';
+import { checkingJobs, ciSystems, ciTaskCalls, mainPushSteps, readWorkflows, shippingJobs, upstream } from './gha.ts';
+import { detectHookFrameworks } from './hooks.ts';
+import { covers, expandTasks, isVocabularyTask, projectTaskCalls } from './vocabulary.ts';
 
 type Args = Record<string, any>;
-type PredicateFn = (args: Args, ctx: Ctx) => boolean;
+
+/** A fact vdx could not read here — a CI system or a hosting it does not inspect. */
+export interface Unknown {
+  unknown: string;
+}
+export type Verdict = boolean | Unknown;
+type PredicateFn = (args: Args, ctx: Ctx) => Verdict;
+
+export function isUnknown(v: Verdict): v is Unknown {
+  return typeof v === 'object' && v !== null;
+}
+
+/**
+ * Removed from schema 0.3: each name promised more than its body checked
+ * (DL #20 of docs/tasks/vdm-gates-wiring-axis). They stay in the registry for
+ * sets of schema 0.2 only — the same tag gives the same score on any CLI — and
+ * a 0.3 set that names one does not load.
+ */
+export const REMOVED_IN_0_3 = new Set(['gh_workflow_blocks_pr', 'git_hook_installed', 'command_succeeds']);
+
+const DEFAULT_TEST_PATTERN =
+  '\\b(phpunit|pest|composer test|npm test|npm run test|yarn test|pnpm test|jest|vitest|pytest|go test|cargo test|mocha|mix test|rspec|vdx test|mise run test)\\b';
+
+function testPattern(args: Args): RegExp {
+  try {
+    return new RegExp(String(args.pattern ?? DEFAULT_TEST_PATTERN));
+  } catch {
+    return new RegExp(DEFAULT_TEST_PATTERN);
+  }
+}
+
+/**
+ * Above "a CI config exists" vdx reads GitHub Actions only (DL #14). What the
+ * workflows show decides when it says yes; a no is only a no when no other CI
+ * system could say otherwise.
+ */
+function ciVerdict(ctx: Ctx, readGha: () => boolean): Verdict {
+  const systems = ciSystems(ctx);
+  if (systems.length === 0) return false;
+  if (systems.includes('gha') && readGha()) return true;
+  const others = systems.filter((s) => s !== 'gha');
+  if (others.length > 0) return { unknown: `vdx reads GitHub Actions only, not ${others.join(', ')}` };
+  return false;
+}
+
+function hookWords(args: Args): string[] {
+  return Array.isArray(args.tasks) ? args.tasks.map(String) : ['test', 'check'];
+}
+
+/** Tasks the hooks of `events` call, through the project's runner. */
+function hookTaskCalls(ctx: Ctx, events: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const fw of detectHookFrameworks(ctx)) {
+    for (const e of events) {
+      for (const cmd of fw.hooks.get(e) ?? []) for (const t of projectTaskCalls(cmd, ctx)) out.add(t);
+    }
+  }
+  return out;
+}
 
 const warned = new Set<string>();
 function warnOnce(name: string) {
@@ -157,4 +218,65 @@ export const REGISTRY: Record<string, PredicateFn> = {
     warnOnce('command_succeeds');
     return false;
   },
+
+  // --- ci: the signal, read from GitHub Actions workflows (schema 0.3) ---
+
+  /** L2: tests run on a push to main/master, and their failure fails the job. */
+  gha_tests_on_push: (args, ctx) =>
+    ciVerdict(ctx, () => {
+      const re = testPattern(args);
+      return mainPushSteps(ctx).some(({ step }) => re.test(step.run!));
+    }),
+
+  /** L3: on that push CI calls the project's own tasks — each of `tasks` (or its `name:*` form). */
+  gha_runs_tasks: (args, ctx) =>
+    ciVerdict(ctx, () => {
+      const calls = [...ciTaskCalls(ctx)];
+      return hookWords(args).every((w) => calls.some((t) => isVocabularyTask(t, [w])));
+    }),
+
+  /** L4 (library): the testing job runs across a matrix. */
+  gha_test_matrix: (args, ctx) =>
+    ciVerdict(ctx, () => [...checkingJobs(ctx, testPattern(args))].some((j) => j.matrix)),
+
+  /** L4 (service): whatever CI ships on a push to main waits, via `needs:`, for a checking job. */
+  gha_ship_needs_checks: (args, ctx) =>
+    ciVerdict(ctx, () => {
+      const checking = checkingJobs(ctx, testPattern(args));
+      const shipping = readWorkflows(ctx)
+        .filter((wf) => wf.pushesMain)
+        .flatMap((wf) => shippingJobs(wf).map((job) => ({ wf, job })));
+      if (shipping.length === 0) return false;
+      return shipping.every(({ wf, job }) => [...upstream(wf, job)].some((j) => checking.has(j)));
+    }),
+
+  // --- branch-protection: only the hosting knows (schema 0.3) ---
+
+  /** L3: main takes changes only after a required check. No hosting extension yet — unknown everywhere (DL #12). */
+  branch_requires_checks: () => ({
+    unknown: 'only the hosting knows whether main is protected — vdx has no extension for it yet',
+  }),
+
+  // --- git-hygiene: the hook recognizer (schema 0.3) ---
+
+  /** L2: the repository declares hooks, and every framework it declares them with is switched on by an install step. */
+  git_hooks_arranged: (_args, ctx) => {
+    const fws = detectHookFrameworks(ctx);
+    return fws.length > 0 && fws.every((f) => f.installedBy !== null);
+  },
+
+  /** L3: pre-commit or pre-push calls a task of the vocabulary (`test`, `check`, `check:*`, `test:*`). */
+  git_hook_runs_task: (args, ctx) => {
+    const calls = [...hookTaskCalls(ctx, ['pre-commit', 'pre-push'])];
+    return calls.some((t) => isVocabularyTask(t, hookWords(args)));
+  },
+
+  /** L4: pre-push calls every vocabulary task CI calls on a push to main — a push past the hook does not fail CI on a check. */
+  git_hook_covers_ci: (args, ctx) =>
+    ciVerdict(ctx, () => {
+      const ci = [...ciTaskCalls(ctx)].filter((t) => isVocabularyTask(t, hookWords(args)));
+      if (ci.length === 0) return false;
+      const hook = expandTasks(ctx, hookTaskCalls(ctx, ['pre-push']));
+      return ci.every((t) => covers(ctx, hook, t));
+    }),
 };

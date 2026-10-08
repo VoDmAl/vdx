@@ -26,8 +26,9 @@ ephemeral environment.
 
 **First command after install: `vdx doctor`** — it inspects your environment
 (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude
-Code plugin; in a project — git hooks and the commit author) and points to remedies for everything that's missing or
-sub-optimal.
+Code plugin; in a project — whether its git hooks are on in this clone, and the
+commit author; with a profile — whether your personal hooks run on this machine)
+and points to remedies for everything that's missing or sub-optimal.
 
 ## Use
 
@@ -44,8 +45,10 @@ vdx init  [project-path] [--baseline github.com/org/repo@vX.Y] [--stack <id>] [-
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
 
-# Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin)
-vdx doctor [--format=ansi|markdown|json]
+# Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project)
+vdx doctor [project-path] [--format=ansi|markdown|json]   # default: cwd
+vdx doctor --check [project-path]   # one line per hook declared but not running here — the plugin's SessionStart hook tells the agent
+vdx doctor --fix                    # write the profile's personal hooks (git.hooks) into ~/.gitconfig
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
@@ -123,9 +126,14 @@ npm run typecheck
 - `src/rubric.ts`     — types + YAML loader
 - `src/manifest.ts`   — parser for `[vdx]` block in `mise.toml` + `.vdx-overrides.yml`
 - `src/facts.ts`      — fact source loaders (tasks, packages, configs, sub-package detection)
-- `src/predicates.ts` — predicate registry (11 functions)
+- `src/predicates.ts` — predicate registry; true / false / unknown with a reason (schema 0.3)
 - `src/evaluator.ts`  — recursive evaluator + sugar notation
-- `src/scoring.ts`    — delta-style levels, flags for orthogonal axes
+- `src/scoring.ts`    — delta-style levels, `not_required` levels, flags for orthogonal axes
+- `src/gha.ts`        — GitHub Actions workflows as the `ci` axis reads them
+- `src/vocabulary.ts` — which project tasks a command calls through the project's runner
+- `src/hooks.ts`      — one recognizer of hook frameworks for audit and doctor
+- `src/clone-checks.ts` — clone checks printed by doctor and next to an axis in audit
+- `src/personal-hooks.ts` — the profile's personal hooks in ~/.gitconfig: check and `--fix`
 - `src/audit.ts`      — orchestrator: overrides + applies_to filter + subpackage-ctx
 - `src/init.ts`       — `vdx init` planner (`selectVerbTask` + mise.toml renderer)
 - `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
@@ -139,7 +147,9 @@ npm run typecheck
 
 ## Not implemented yet
 
-- `command_succeeds` predicate is a stub (warning at evaluation).
+- Above L1 the `ci` axis reads GitHub Actions only; other CI systems answer
+  "unknown". `branch-protection` is "unknown" everywhere until a hosting
+  extension exists.
 - Baseline loading from a git ref is documented but evaluator still reads file
   paths only — `baseline:` in `mise.toml` is recorded but does not auto-fetch.
 - Watermark drift (phase 2 of `drift-algorithm.md`).

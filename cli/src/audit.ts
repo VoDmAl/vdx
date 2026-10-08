@@ -4,7 +4,8 @@ import type { Rubric, LevelName } from './rubric.ts';
 import { findSubPackages, stackForDir, type Ctx } from './facts.ts';
 import { evalPredicate } from './evaluator.ts';
 import type { Override, VdxManifest } from './manifest.ts';
-import { evalAxis, projectLevel, type AxisResult } from './scoring.ts';
+import { evalAxisDetailed, projectLevel, type AxisResult } from './scoring.ts';
+import { cloneCheck } from './clone-checks.ts';
 
 function levelToInt(L: LevelName): number {
   return parseInt(L.slice(1), 10);
@@ -126,7 +127,7 @@ export function audit(
       });
       continue;
     }
-    const achieved = evalAxis(axis, evalCtx);
+    const { achieved, not_required, unknown } = evalAxisDetailed(axis, evalCtx);
     const ov = overrideByAxis.get(axis.id);
     const target = (ov?.target as LevelName) ?? axis.default_target;
     const drift: 'aligned' | 'gap' | 'over' =
@@ -143,6 +144,12 @@ export function audit(
       drift_kind: drift,
     };
     if (ov?.target) entry.override_target = ov.target as LevelName;
+    if (not_required) entry.not_required = not_required;
+    if (unknown) entry.unknown = unknown;
+    if (axis.clone_check) {
+      const c = cloneCheck(axis.clone_check, ctx.projectRoot);
+      if (c && c.status !== 'ok') entry.note = c.remedy ? `${c.message} → ${c.remedy}` : c.message;
+    }
     perAxis.push(entry);
   }
 

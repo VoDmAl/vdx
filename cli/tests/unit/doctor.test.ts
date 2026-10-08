@@ -282,7 +282,7 @@ describe('checkGitHooks (via runDoctor)', () => {
     try {
       const r = row(tmp);
       expect(r?.status).toBe('ok');
-      expect(r?.message).toContain('active via .githooks');
+      expect(r?.message).toContain('active in .githooks');
     } finally {
       delete process.env.VDX_TEST_GATE;
     }

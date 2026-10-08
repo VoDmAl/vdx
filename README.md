@@ -71,7 +71,7 @@ Rule of thumb:
 
 Either way you get two binaries: **`vdx`** (the CLI) and **`vdx-mcp`** (the MCP server consumed by the Claude Code plugin — the plugin starts the installed `vdx-mcp` when it is on PATH and falls back to `npx`, so plugin users never need a global install).
 
-**Run `vdx doctor` first.** It checks your environment (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude Code plugin; in a project — git hooks and the commit author) and shows you exactly what to install or configure before using anything else.
+**Run `vdx doctor` first.** It checks your environment (Node version, `vdx` on PATH, git, mise, npm auth, container runtime, Claude Code plugin; in a project — whether the git hooks it declares are on in this clone, and the commit author; with a profile — whether your personal hooks run on this machine) and shows you exactly what to install or configure before using anything else. `vdx doctor --fix` writes the profile's personal hooks (`git.hooks`: your own gates for every repository, kept in git's user config — Git 2.54) into `~/.gitconfig`; `vdx doctor --check` is the one-line form the Claude Code plugin hands the agent at session start.
 
 ## Quick start
 

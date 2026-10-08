@@ -4,8 +4,8 @@
 запускает агента в проекте. Проектная половина — `vdx-rubric.yaml`
 ([rubric-format.md](rubric-format.md)). См. [../decisions.md](../decisions.md) D14.
 
-Читает `vdx ai`. Проверки окружения для `vdx doctor` (O40) лягут в этот же
-документ отдельной секцией позже; сейчас их нет.
+Читают `vdx ai` и `vdx doctor`: doctor — личные хуки (`git.hooks`, vdx 0.22+),
+первую проверку окружения из этого документа (O40).
 
 ## Где лежит и как vdx его находит
 
@@ -141,6 +141,38 @@ session:
   git:
     author_pool: ["~/AI Projects", "~/PhpstormProjects"]
   ```
+
+- `hooks` (vdx 0.22+) — личные хуки: гейты владельца, которые действуют в
+  каждом репозитории машины. Живут в конфиге git пользователя (`hook.<имя>.*`
+  в `~/.gitconfig`, Git 2.54), а не в каждом репо, где воевали бы с фреймворком
+  хуков самого репо за одно место. Поля:
+
+  - `name` — имя хука, подраздел конфига git: буквы, цифры, `. _ -`;
+    уникально;
+  - `event` — событие git (`pre-commit`, `pre-push`, …) или список;
+  - `command` — команда; git запускает её через shell, `$HOME` и кавычки
+    работают как в скрипте хука;
+  - `when_exists` — хук действует на машине, где есть этот путь (инструмент
+    установлен); `~` — домашний каталог. Без поля — на любой;
+  - `description` — свободный текст.
+
+  ```yaml
+  git:
+    hooks:
+      - name: vdm-crystal
+        event: pre-commit
+        command: '"$HOME/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"'
+        when_exists: "~/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"
+  ```
+
+  `vdx doctor` проверяет строкой `personal hooks`: хук есть в `~/.gitconfig`
+  с той же командой и событием; git на этой машине не старше 2.54 — старый
+  git такие ключи пропускает молча, и doctor говорит об этом вслух; программа,
+  которую зовёт команда, есть на машине. Репозиторий, где хук не нужен,
+  выключает его у себя: `git config hook.<имя>.enabled false` (или своей
+  командой, `hook.<имя>.command`), — doctor называет это, но не считает
+  ошибкой. `vdx doctor --fix` пишет недостающие и разошедшиеся хуки в
+  `~/.gitconfig`; больше ничего не трогает.
 
 ## Поведение `vdx ai [path]`
 

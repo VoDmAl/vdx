@@ -1,6 +1,8 @@
-# Рубрика зрелости — v0.2 (откалибровано по 3 референсам)
+# Рубрика зрелости — v1.0 (schema 0.3)
 
-Статус: **калибровано** по фактам из 3 проектов (2026-05-22). Версия рубрики — `0.2`.
+Статус: **калибровано** по фактам из 3 проектов (2026-05-22); оси `ci`,
+`branch-protection` и `git-hygiene` пересобраны и перекалиброваны 2026-10-07
+(сет `vdx-rubric-vodmal@v1.0.0`, разбор — `docs/tasks/vdm-gates-wiring-axis/`).
 Скоринг — weighted с двумя классами осей (D7).
 
 > Калибровочные референсы — НЕ «эталоны», а образцы разных состояний реального
@@ -26,8 +28,8 @@
 | L0 | Хаос | Не поднимается, знание в голове |
 | L1 | Воспроизводимый | Поднимается одной задокументированной командой |
 | L2 | Тестируемый | Тесты есть; единый словарь `up/test/build` |
-| L3 | Защищённый | Статанализ + стиль + CI-гейты на PR (реальные!) |
-| L4 | Образец | Полная глубина: хуки, mock-инфра, observability, версионированная общая инфра |
+| L3 | Защищённый | Статанализ + стиль; CI зовёт словарь проекта; `main` на хостинге принимает только проверенное |
+| L4 | Образец | Полная глубина: хуки повторяют CI, mock-инфра, observability, версионированная общая инфра |
 
 ---
 
@@ -38,18 +40,29 @@
 | **lifecycle-interface** | **critical** | Хаос | bare-вызовы (`npm install && node ...`) | 3-4 глагола (up/down/build) | Полный `up/down/build/test/check/fix` | + иерархия (`check:before:commit/push`, `build:*`, `test:*`) |
 | **tests** | **critical** | Нет | Один прогон | unit/integration разделены | + coverage measured | + threshold + e2e + mutation |
 | **static-analysis** | **critical** | Нет | Один линтер базово | tsc strict / phpstan low | + полная строгость (см. стек) | + двойной слой (phpstan+psalm / tsc+eslint+typed-rules) + кастомные метрики |
-| **ci** | **critical** | Нет | Только deploy | check/test есть | + **реально гейтит** PR (нет `\|\| true`!) | + matrix + блок merge + sentry release |
+| **ci** | **critical** | Нет | Конфиг CI есть | Тесты на каждый push в `main`, падение не замаскировано (`\|\| true`, `continue-on-error` не в счёт) | + CI вызывает задачи проекта `check` и `test` (паритет с локальным) | + `matrix` у проверяющей задачи, или всё, что CI выкладывает, ждёт её через `needs:` |
+| **branch-protection** | **critical** | — | не требуется | не требуется | `main` на хостинге принимает изменения только после обязательной проверки (пока «неизвестно» у всех — нет расширения хостинга) | не требуется сверх L3 (позже: force-push, удаление, ревью) |
 | **reproducibility** | supporting | Прозой | docker-compose | + version диапазон | + pinned versions (`.tool-versions` / `mise.toml`) | + onboarding одной командой |
 | **code-style** | supporting | Нет | Маньяк | Форматтер настроен | enforced в `check` | + комбинация (ECS+PHPCS / prettier+eslint-stylistic) |
 | **dependency-hygiene** | supporting | Lockfile не закоммичен | Lockfile | + `audit` / `security-advisories` | + Renovate/Dependabot | + require-checker / deptrac / knip + jack/outdated |
 | **secrets-config** | supporting | Секреты в репо | `.env` | `.env.example` | + linter | + vault/sops |
-| **git-hygiene** | supporting | Нет | `.gitignore` | husky/lefthook/cghooks установлен | + pre-commit + pre-push + commit-msg | + post-commit + post-merge |
+| **git-hygiene** | supporting | Нет | `.gitignore` | Репо ставит свои хуки сам на обычной установке | + pre-commit или pre-push зовёт задачу словаря (`test`, `check`, `*:*`) | + pre-push повторяет все задачи словаря, что зовёт CI |
 | **observability** | supporting | Нет | print/console.log | structured logging | + Sentry/error tracking | + healthcheck + uptime monitor + auto-release |
 | **docs** | supporting | Нет | README базово | + структурированный `docs/` | + `CLAUDE.md` + `CHANGELOG` (или `PROJECT_CHANGELOG.md`) | + ADR + onboarding.md + architecture.md |
 | **mock-infra** | supporting | Внешние API в тестах | hand-rolled fixtures | mock-сервер (`msw`/nock) | + dedicated docker-сервис | + CI-валидация что mock не утечёт в prod |
 | **shared-infra** | supporting | Голые порты, конфликты | Docker, hardcoded порты | Shared proxy (Traefik/nginx-proxy) — ручное | + автоподъём в `up` (precheck) | + **отдельный версионированный репо/пакет** с self-provisioning |
 | **shared-infra-drift** | supporting | Никогда не сверялось | Скопировано без pointer | Pointer-комментарий (`Based on:`) | + хеш-сверка с источником | + автообновление от источника (n/a если shared-infra уже L4) |
 
+> Принципиальные изменения v1.0 (schema 0.3) vs v0.7:
+> - `ci` — только **сигнал**, по файлам GitHub Actions; гейт до слияния — новая
+>   critical-ось `branch-protection`: его знает только хостинг. У прочих
+>   CI-систем выше L1 — «неизвестно», в общем уровне это «не выполнено»;
+> - `git-hygiene` мерит, ставит ли репо хуки **сам**, и что они проверяют, а не
+>   набор хуков одного референса; включены ли хуки в этом клоне — пометка рядом
+>   с осью и строка `vdx doctor`, не уровень;
+> - уровни, где ось ничего не требует (`not_required`), и состояние
+>   «неизвестно» с причиной; три предиката с лживым именем ушли.
+>
 > Принципиальные изменения v0.2 vs v0.1:
 > - ось `ci` проверяет **реальное гейтование**, не наличие workflow;
 > - ось `static-analysis` хранится как **набор флагов**, не одно число;
@@ -117,6 +130,21 @@
 **Главный сигнал калибровки**: все три проекта **упираются в `ci`-ось при L3+**.
 Локальные git-hooks (telegram) и обёртки `|| true` (bookmap) не считаются за CI.
 Это самый высокий рычаг для роста зрелости портфеля проектов.
+
+### Перекалибровка `ci` / `branch-protection` / `git-hygiene` (2026-10-07, lft)
+
+| Проект | ci | branch-protection | git-hygiene | Итог |
+|--------|----|-------------------|-------------|------|
+| vdx | L2 (CI зовёт `npm run typecheck`, не задачу `check`) — было L4 | — (L3 ?) | L1 (хуков нет) | L1 |
+| telegram | **L4** (`deployment` и `sentry-release` ждут `testing`) — было L2 | — (L3 ?) | **L4** (cghooks сам; pre-push покрывает CI) | L2 |
+| t23b | L2 (phpunit напрямую, не задачей) | — (L3 ?) | L1 | L1 |
+| bookmap | L1 · L2 ? (тесты в `.gitlab-ci.yml`, и те `\|\| true`) — было L2 | — (L3 ?) | L1 | L1 |
+| cc-vdm-plugins | L0 | — (L3 ?) | L1 (`.githooks` без шага установки) | L0 |
+| limeflow | L1 · L2 ? (GitLab CI) | — (L3 ?) | L1 ⚑ (husky в `prepare` под Yarn 4) — было L2 | L0 |
+| global-auth | L0 | — (L3 ?) | L3 ⚑ (в этом клоне не установлены) | L0 |
+
+Общий уровень не сменился ни у кого. L3 недостижим, пока у `branch-protection`
+нет расширения хостинга, — но и раньше на L3 не стоял никто.
 
 ---
 

@@ -4,6 +4,28 @@
 
 ## 2026-10-07
 
+### Рубрика schema 0.3: `ci` — сигнал, `branch-protection`, хуки по существу
+
+Сет `vdx-rubric-vodmal` v1.0.0 и vdx 0.22.0. `ci` мерит сигнал по файлам GitHub
+Actions (тесты на push в `main`, без маскировки; CI зовёт задачи словаря;
+matrix или конвейер через `needs:`), гейт до слияния — новая critical-ось
+`branch-protection`, пока «неизвестно» у всех. `git-hygiene` — ставит ли репо
+хуки сам и что они зовут; включены ли в клоне — пометка в audit и строка
+doctor, не уровень. Предикат отвечает «да / нет / неизвестно с причиной»,
+уровни `not_required`, CLI отвергает схему новее своей, три предиката с
+лживым именем ушли ([spec](docs/specs/rubric-format.md),
+[рубрика](docs/maturity-rubric.md), [DL #11–#22](docs/tasks/vdm-gates-wiring-axis/workitem.md)).
+
+### Личные хуки — в конфиге git: `git.hooks`, `vdx doctor --check` и `--fix`
+
+Гейт vdm и страж echelon переезжают из каждого репо в `hook.<имя>.*` пользователя
+(Git 2.54). Профиль объявляет их в `git.hooks`; `vdx doctor` проверяет, что они
+в `~/.gitconfig` и что git их исполняет, `--fix` пишет. Хук плагина (0.9.0)
+при старте сессии отдаёт агенту строку `vdx doctor --check` — что объявлено и
+не работает здесь ([spec](docs/specs/environment-format.md),
+[cli/src/personal-hooks.ts](cli/src/personal-hooks.ts),
+[cli/src/hooks.ts](cli/src/hooks.ts)).
+
 ### `vdx ai` называет машину, которая не ответила, и в списке
 
 Список разговоров молчал о соседней машине, не ответившей по ssh, — её идущий

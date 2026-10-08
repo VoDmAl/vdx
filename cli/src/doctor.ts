@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { effectiveAuthor, isGitRepo, rankAuthors, scanPool } from './author.ts';
 import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
+import { checkRepoHooks } from './clone-checks.ts';
+import { checkPersonalHooks, defaultPersonalHookDeps, fixPersonalHooks, type PersonalHookDeps } from './personal-hooks.ts';
 
 export type CheckStatus = 'ok' | 'warning' | 'missing';
 
@@ -381,134 +383,6 @@ export function checkClaudeCodePlugin(
 }
 
 /**
- * Variables a hook body *gates on*: `[ -n "${VAR:-}" ]`, `[ -x "$VAR" ]` and
- * friends. Restricted to test-expression positions on purpose — a bare `$VAR`
- * anywhere in a script says nothing about whether the hook still does its job,
- * while an unset variable inside the guard means the guarded block never runs.
- */
-const GATING_VAR_RE =
-  /\[\s+-[nxfse]\s+"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}"|\[\s+-[nxfse]\s+"\$([A-Z][A-Z0-9_]*)"/g;
-
-/**
- * Git hooks: declared vs actually wired.
- *
- * A hook framework leaves two separable traces: files in the repository
- * (tracked, same for every clone) and activation in `.git/config` (per-clone,
- * never committed). Presence of the first says nothing about the second, and a
- * hook that is present but inert fails exactly like success — nothing is
- * printed, the commit goes through. Same for a hook whose body is gated on an
- * environment variable nobody set: the guard short-circuits and the gate is a
- * no-op.
- *
- * Returns null (row omitted) when the repo declares no hooks at all — there is
- * nothing to be wrong about.
- */
-function checkGitHooks(ctx: DoctorCtx): CheckResult | null {
-  const root = ctx.projectRoot;
-  if (root === null) return null;
-  if (!fs.existsSync(path.join(root, '.git'))) return null;
-
-  const id = 'git-hooks';
-  const label = 'git hooks';
-
-  let hooksPath: string | null = null;
-  try {
-    const out = execFileSync('git', ['-C', root, 'config', '--get', 'core.hooksPath'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    hooksPath = out.trim() || null;
-  } catch {
-    hooksPath = null;
-  }
-
-  // Directories a framework would have written into the repo.
-  const declaredDirs = ['.githooks', '.husky'].filter((d) =>
-    fs.existsSync(path.join(root, d)),
-  );
-
-  if (hooksPath === null) {
-    if (declaredDirs.length === 0) return null; // nothing declared — not applicable
-    return {
-      id,
-      label,
-      status: 'warning',
-      message: `${declaredDirs.join(', ')} present but core.hooksPath is unset — hooks never run`,
-      remedy: `git -C ${root} config core.hooksPath ${declaredDirs[0]}`,
-    };
-  }
-
-  const dir = path.resolve(root, hooksPath);
-  if (!fs.existsSync(dir)) {
-    return {
-      id,
-      label,
-      status: 'missing',
-      message: `core.hooksPath=${hooksPath} but that directory does not exist`,
-      remedy: `git -C ${root} config --unset core.hooksPath, or create ${hooksPath}/`,
-    };
-  }
-
-  let entries: string[] = [];
-  try {
-    entries = fs.readdirSync(dir).filter((f) => !f.startsWith('.') && !f.endsWith('.sample'));
-  } catch {
-    entries = [];
-  }
-  const executable = entries.filter((f) => {
-    try {
-      fs.accessSync(path.join(dir, f), fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-
-  if (executable.length === 0) {
-    return {
-      id,
-      label,
-      status: 'warning',
-      message: `core.hooksPath=${hooksPath} but it holds no executable hook`,
-      remedy: `chmod +x ${hooksPath}/*`,
-    };
-  }
-
-  // A hook gated on an unset variable is inert while looking installed.
-  const unresolved = new Set<string>();
-  for (const f of executable) {
-    let body = '';
-    try {
-      body = fs.readFileSync(path.join(dir, f), 'utf8');
-    } catch {
-      continue;
-    }
-    for (const m of body.matchAll(GATING_VAR_RE)) {
-      const name = m[1] ?? m[2];
-      if (name && !process.env[name]) unresolved.add(name);
-    }
-  }
-
-  if (unresolved.size > 0) {
-    const names = [...unresolved].sort();
-    return {
-      id,
-      label,
-      status: 'warning',
-      message: `${executable.length} hook(s) via ${hooksPath}, but gated on unset ${names.join(', ')} — those gates are no-ops`,
-      remedy: `export ${names[0]}=... in your shell profile (see the tool that ships the hook)`,
-    };
-  }
-
-  return {
-    id,
-    label,
-    status: 'ok',
-    message: `${executable.length} hook(s) active via ${hooksPath}`,
-  };
-}
-
-/**
  * The project's commit author. With `user.useConfigOnly` git refuses to commit
  * in a repo that has none; the remedy names the likely one, as `vdx ai` does.
  */
@@ -552,7 +426,8 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkMise,
   checkNpmAuth,
   checkContainerRuntime,
-  checkGitHooks,
+  (ctx) => checkRepoHooks(ctx.projectRoot),
+  (ctx) => checkPersonalHooks(ctx.projectRoot),
   checkGitAuthor,
 ];
 
@@ -566,6 +441,37 @@ export function runDoctor(ctx: DoctorCtx = resolveDoctorCtx()): DoctorReport {
   const warning = checks.filter((c) => c.status === 'warning').length;
   const missing = checks.filter((c) => c.status === 'missing').length;
   return { cliVersion: readCliVersion(), checks, ok, warning, missing };
+}
+
+/**
+ * For the agent's own session (the vdx plugin's SessionStart hook): one line
+ * per hook that is declared but does not run — in this clone, or a personal
+ * hook on this machine. Nothing when they are in order; the fix is the user's
+ * call, so the line names it rather than applying it.
+ */
+export function runDoctorCheck(
+  ctx: DoctorCtx = resolveDoctorCtx(),
+  deps: PersonalHookDeps = defaultPersonalHookDeps(),
+): string {
+  const rows = [checkRepoHooks(ctx.projectRoot), checkPersonalHooks(ctx.projectRoot, deps)].filter(
+    (c): c is CheckResult => c !== null && c.status !== 'ok',
+  );
+  return rows
+    .map(
+      (c) =>
+        `vdx doctor: ${c.label} — ${c.message}.` +
+        (c.remedy ? ` Fix, on the user's word: \`${c.remedy}\`.` : ''),
+    )
+    .join('\n');
+}
+
+/**
+ * `vdx doctor --fix`: what doctor can put right without installing anything —
+ * the profile's personal hooks in ~/.gitconfig. Repository hooks are switched
+ * on by the project's own install step; doctor names it and leaves it to you.
+ */
+export function runDoctorFix(deps: PersonalHookDeps = defaultPersonalHookDeps()): string[] {
+  return fixPersonalHooks(deps);
 }
 
 const PROJECT_MARKER_FILES = [

@@ -7,11 +7,11 @@
 # дельту относительно L(N-1). Уровень оси = max L, для которого истинны
 # requires(L1), ..., requires(L) подряд (без разрывов).
 
-schema_version: "0.2"
+schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "0.7.0"
+  version: "1.0.0"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -24,8 +24,8 @@ levels:
   L0: { name: chaos,        description: "Не поднимается, знание в голове" }
   L1: { name: reproducible, description: "Поднимается одной задокументированной командой" }
   L2: { name: testable,     description: "Тесты есть; единый словарь up/test/build" }
-  L3: { name: gated,        description: "Статанализ + стиль + CI-гейты на PR (реальные!)" }
-  L4: { name: exemplar,     description: "Полная глубина: хуки, mock-инфра, observability, версионированная общая инфра" }
+  L3: { name: gated,        description: "Статанализ + стиль; CI зовёт словарь проекта; main на хостинге принимает только проверенное" }
+  L4: { name: exemplar,     description: "Полная глубина: хуки повторяют CI, mock-инфра, observability, версионированная общая инфра" }
 
 axes:
 
@@ -183,13 +183,15 @@ axes:
 
   - id: ci
     class: critical
-    description: "Реальное гейтование PR (no `|| true`!)"
+    description: "Сигнал: тесты на каждый push в основную ветку, падение не замаскировано. Гейт до слияния — ось branch-protection"
     storage: level
     default_target: L4
     fact_sources:
       - .github/workflows/
       - .gitlab-ci.yml
       - .circleci/config.yml
+    # Выше L1 vdx читает только GitHub Actions; у прочих CI-систем L2+ —
+    # «неизвестно», в общем уровне это «не выполнено».
     levels:
       L1:
         requires:
@@ -197,28 +199,45 @@ axes:
             - has_file: .github/workflows
             - has_file: .gitlab-ci.yml
             - has_file: .circleci/config.yml
+      # Тесты на push в main/master (фильтр веток или без него). Шаг с `|| true`
+      # или continue-on-error не засчитывается. Только PR-триггер — тоже: в репо
+      # с пушами в main такой CI не запускается никогда.
       L2:
         requires:
-          any_of:
-            - file_contains:
-                paths: [.github/workflows/*.yml, .gitlab-ci.yml]
-                pattern: "(phpstan|phpunit|composer test|npm test|jest|pytest)"
+          gha_tests_on_push:
+            pattern: "\\b(phpunit|pest|composer test|npm test|npm run test|yarn test|pnpm test|jest|vitest|pytest|go test|cargo test|mocha|mix test|rspec|vdx test|mise run test)\\b"
+      # Паритет: CI вызывает задачи проекта check и test (или check:* / test:*)
+      # через его раннер — то же, что человек и агент запускают локально.
       L3:
         requires:
-          all_of:
-            - any_of:
-                - gh_workflow_blocks_pr: {}
-                - file_contains: { path: .gitlab-ci.yml, pattern: "rules:.+merge_request" }
-            - not:
-                file_contains:
-                  paths: [.github/workflows/*.yml, .gitlab-ci.yml]
-                  pattern: "\\|\\| true"
+          gha_runs_tasks: { tasks: [check, test] }
+      # Ширина или конвейер: проверяющая задача идёт по matrix, либо всё, что CI
+      # выкладывает или выпускает (deploy/release/publish), ждёт её через needs:.
       L4:
         requires:
           any_of:
-            - file_contains: { path: .github/workflows/*.yml, pattern: "matrix:" }
-            - file_contains: { path: .github/workflows/*.yml, pattern: "sentry-release|action-release" }
-            - gh_workflow_blocks_pr: { check_name: "deploy" }
+            - gha_test_matrix:
+                pattern: "\\b(phpunit|pest|composer test|npm test|npm run test|yarn test|pnpm test|jest|vitest|pytest|go test|cargo test|mocha|mix test|rspec|vdx test|mise run test)\\b"
+            - gha_ship_needs_checks:
+                pattern: "\\b(phpunit|pest|composer test|npm test|npm run test|yarn test|pnpm test|jest|vitest|pytest|go test|cargo test|mocha|mix test|rspec|vdx test|mise run test)\\b"
+
+  - id: branch-protection
+    class: critical
+    description: "Основная ветка на хостинге принимает изменения только после обязательной проверки"
+    storage: level
+    default_target: L4
+    fact_sources: [hosting API]
+    # Гейт — свойство L3 общей лестницы; ниже ось ничего не требует и уровень
+    # не ограничивает. Знает о защите только хостинг: пока расширения для него
+    # нет, L3 — «неизвестно» у всех. L4 — позже: force-push, удаление ветки,
+    # ревью (как Branch-Protection у Scorecard).
+    levels:
+      L1: { not_required: true }
+      L2: { not_required: true }
+      L3:
+        requires:
+          branch_requires_checks: {}
+      L4: { not_required: true }
 
   # =========================================================================
   # SUPPORTING
@@ -364,32 +383,36 @@ axes:
 
   - id: git-hygiene
     class: supporting
+    description: "Хуки репозитория: ставятся сами, зовут словарь проекта, повторяют проверки CI"
     storage: level
     default_target: L4
-    fact_sources: [.husky/, .lefthook.yml, lefthook.yml, composer.json, package.json]
+    fact_sources: [.gitignore, .husky/, lefthook.yml, .lefthook.yml, .githooks/, package.json, composer.json, mise.toml]
+    # Включены ли хуки в этом клоне — пометка рядом с осью в `vdx audit` и строка
+    # `vdx doctor`; уровень не меняет: тот же репо и тот же тег дают тот же отчёт
+    # в любом клоне.
+    clone_check: git-hooks
     levels:
       L1:
         requires:
           has_file: .gitignore
+      # Репо ставит свои хуки сам на обычной установке: husky в prepare/postinstall
+      # (под Yarn 2+ — только postinstall), пакеты lefthook / simple-git-hooks,
+      # `cghooks add` в post-install-cmd, `git config core.hooksPath` в шаге
+      # установки или в задаче up. Объявленный, но не ставящийся сам — не L2.
       L2:
         requires:
-          any_of:
-            - has_file: .husky
-            - has_file: .lefthook.yml
-            - has_file: lefthook.yml
-            - package_present: { name: brainmaestro/composer-git-hooks, ecosystem: composer }
-            - package_present: { name: husky, ecosystem: npm }
+          git_hooks_arranged: {}
+      # pre-commit или pre-push зовёт задачу словаря (test, check, check:*, test:*)
+      # через раннер проекта.
       L3:
         requires:
-          any_of:
-            - file_contains: { path: composer.json, pattern: "\"pre-push\"" }
-            - file_contains: { paths: [.lefthook.yml, lefthook.yml], pattern: "pre-push:" }
-            - has_file: .husky/pre-push
+          git_hook_runs_task: { tasks: [test, check] }
+      # pre-push вызывает все задачи словаря, которые вызывает CI на push в main
+      # (@-ссылки composer и npm run раскрываются): пуш, прошедший хук, не падает
+      # в CI на проверках.
       L4:
         requires:
-          any_of:
-            - file_contains: { path: composer.json, pattern: "\"(post-commit|commit-msg|post-merge)\"" }
-            - file_contains: { paths: [.lefthook.yml, lefthook.yml], pattern: "(post-commit|commit-msg|post-merge):" }
+          git_hook_covers_ci: { tasks: [test, check] }
 
   - id: observability
     class: supporting

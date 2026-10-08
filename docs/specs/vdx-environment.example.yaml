@@ -1,7 +1,8 @@
 # vdx-environment.yaml — personal environment profile (vodmal)
 #
 # The person-and-machine half of the vodmal set; vdx-rubric.yaml is the
-# project half. Read by `vdx ai` to start an agent in a project.
+# project half. Read by `vdx ai` to start an agent in a project, and by
+# `vdx doctor` for the personal hooks (git.hooks).
 #
 # Never bundled into vdx — which agent runs, and with which permissions, is
 # a personal choice. Point vdx at this file with $VDX_ENVIRONMENT or a
@@ -13,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "0.7.0"
+  version: "1.0.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -56,3 +57,19 @@ git:
     - "~/AI Projects"
     - "~/PhpstormProjects"
     - "~/PhpstormProjects/git.vorobyev.name"
+  # Personal hooks: the owner's gates in every repository on the machine. They
+  # live in git's user config (hook.<name>.*, Git 2.54), not in each repo, where
+  # they fought the repo's own hook framework for one slot. `vdx doctor` checks
+  # them, `vdx doctor --fix` writes them into ~/.gitconfig; a repo that must
+  # not run one sets hook.<name>.enabled=false locally. Older git skips these
+  # keys without a word — doctor says so.
+  hooks:
+    # The assistant's hooks hold the crystal invariant; this catches a workitem
+    # flipped to status: done with open items from outside the assistant (an
+    # IDE). Fail-open, silent in a repo without crystals. The marketplace clone
+    # is unversioned and updated with the plugin.
+    - name: vdm-crystal
+      description: "vdm: a crystal set to status: done with open items does not get committed"
+      event: pre-commit
+      command: '"$HOME/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"'
+      when_exists: "~/.claude/plugins/marketplaces/vodmal/plugins/vdm-git/scripts/crystal-precommit-check.sh"

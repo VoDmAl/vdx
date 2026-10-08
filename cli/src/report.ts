@@ -2,6 +2,7 @@ import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import Table from 'cli-table3';
 import type { AuditResult } from './audit.ts';
+import { shownLevel } from './scoring.ts';
 import type { DoctorReport, CheckStatus } from './doctor.ts';
 
 const ANSI = {
@@ -43,7 +44,27 @@ export function reportMarkdown(r: AuditResult): string {
   for (const a of r.per_axis) {
     const cls = a.class === 'critical' ? '**C**' : 's';
     const drift = a.suppressed ? '— suppressed —' : `${SYMBOL[a.drift_kind] ?? ''} ${a.drift_kind}`;
-    lines.push(`| \`${a.axis_id}\` | ${cls} | ${a.achieved} | ${a.target} | ${drift} |`);
+    lines.push(`| \`${a.axis_id}\` | ${cls} | ${achievedCell(a)} | ${a.target} | ${drift} |`);
+  }
+
+  const unknown = r.per_axis.filter((a) => a.unknown);
+  if (unknown.length > 0) {
+    lines.push('');
+    lines.push(`## Not checked`);
+    lines.push('');
+    lines.push(`Counted as not met; the level stops below.`);
+    lines.push('');
+    for (const a of unknown) lines.push(`- \`${a.axis_id}\` ${a.unknown!.level}: ${a.unknown!.reason}`);
+  }
+
+  const notes = r.per_axis.filter((a) => a.note);
+  if (notes.length > 0) {
+    lines.push('');
+    lines.push(`## In this clone`);
+    lines.push('');
+    lines.push(`Not part of the level: the same repository scores the same in every clone.`);
+    lines.push('');
+    for (const a of notes) lines.push(`- \`${a.axis_id}\`: ${a.note}`);
   }
 
   if (r.overrides.length > 0) {
@@ -63,6 +84,16 @@ export function reportMarkdown(r: AuditResult): string {
   }
 
   return lines.join('\n') + '\n';
+}
+
+/** `L1`, `— (L3 ?)` for an axis that asks nothing below an unchecked L3, `L1 · L2 ?`, `L2 ⚑` with a clone note. */
+function achievedCell(a: AuditResult['per_axis'][number]): string {
+  if (a.suppressed || a.drift_kind === 'excluded') return a.achieved;
+  const shown = shownLevel(a);
+  let cell = shown ?? '—';
+  if (a.unknown) cell += shown ? ` · ${a.unknown.level} ?` : ` (${a.unknown.level} ?)`;
+  if (a.note) cell += ' ⚑';
+  return cell;
 }
 
 export function reportJson(r: AuditResult): string {

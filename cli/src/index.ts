@@ -19,7 +19,7 @@ import {
   reportDoctorJson,
   reportDoctorAnsi,
 } from './report.ts';
-import { runDoctor, looksLikeProject, readCliVersion } from './doctor.ts';
+import { runDoctor, runDoctorCheck, runDoctorFix, resolveDoctorCtx, looksLikeProject, readCliVersion } from './doctor.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -41,7 +41,7 @@ const USAGE = `Usage:
   vdx audit   [project_path]  [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]   (default: cwd)
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
-  vdx doctor  [--format=ansi|markdown|json] [--json]
+  vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
   vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
@@ -138,14 +138,22 @@ pre-flight; --no-push leaves the commit and the tag local.
     positionals: 1,
   },
   doctor: {
-    usage: 'vdx doctor [--format=ansi|markdown|json] [--json]',
+    usage: 'vdx doctor [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]',
     help: `Checks this machine for what vdx needs (Node, git, mise, npm auth, docker, the
-Claude Code plugin) and, inside a project, its commit author. Reads only.
+Claude Code plugin) and, inside a project (default: cwd), its commit author and
+its git hooks: are the hooks the repository declares on in this clone, and do
+the personal hooks of your profile (git.hooks) run on this machine. Reads only.
 Exit 2 when something is missing.
+
+  --check  for the agent's own session (the vdx plugin's SessionStart hook): one
+           line per hook that is declared but does not run here; nothing when in order
+  --fix    write the profile's personal hooks into ~/.gitconfig where they are
+           missing or differ; repository hooks are switched on by the project's
+           install step, which the report names
 `,
-    bools: ['json'],
+    bools: ['json', 'check', 'fix'],
     values: ['format'],
-    positionals: 0,
+    positionals: 1,
   },
   ai: {
     usage: 'vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]',
@@ -423,7 +431,26 @@ function cmdRun(verb: LifecycleVerb): void {
 }
 
 function cmdDoctor(opts: ParsedArgs): void {
-  const report = runDoctor();
+  const ctx = resolveDoctorCtx(path.resolve(opts.positionals[0] ?? '.'));
+  if (opts.flags.check === true && opts.flags.fix === true) {
+    process.stderr.write('vdx doctor: --check reports and --fix writes — pick one\n');
+    process.exit(2);
+  }
+  if (opts.flags.check === true) {
+    const text = runDoctorCheck(ctx);
+    if (text) process.stdout.write(text + '\n');
+    return;
+  }
+  if (opts.flags.fix === true) {
+    try {
+      const done = runDoctorFix();
+      process.stderr.write(done.length > 0 ? done.map((d) => `✓ ${d}`).join('\n') + '\n' : 'nothing to fix in ~/.gitconfig\n');
+    } catch (e: any) {
+      process.stderr.write(`vdx doctor --fix: ${e?.message ?? String(e)}\n`);
+      process.exit(2);
+    }
+  }
+  const report = runDoctor(ctx);
 
   const formatFlag =
     typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
