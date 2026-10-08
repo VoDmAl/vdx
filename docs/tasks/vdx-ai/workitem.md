@@ -1186,8 +1186,11 @@ there: vdx ai@<m>» и переход к разговору другой маш�
 удалённый vdx пишет с места человека: его машина — «where you are», подсказка
 к ней — без `@`, вопрос — «on m3», без «here». Решение владельца.
 
-**Status:** open — исправлено в коде (DL #30), закрыть после выпуска 0.22.1 и
-живой проверки `vdx ai@m3` с lft
+**Status:** resolved — 2026-10-08, DL #30, 0.22.1. Живьём на lft:
+`vdx ai@m3 '/Users/vdm/AI Projects/vdx' --new --dry-run` — m3 (0.22.1) пишет
+«an agent of this project is running on lft, where you are, now (vdx@lft,
+busy) — attach: vdx ai '/Users/vdm/AI Projects/vdx'». Вопрос «on m3 anyway?»
+`--dry-run` не задаёт — он проверен тестом
 
 ## Next actions
 
@@ -1498,10 +1501,9 @@ there: vdx ai@<m>» и переход к разговору другой маш�
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
       запуск здесь)
-- [ ] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
-      0.22.1 2026-10-08 (DL #30, `bf974dd`); после topgrade на m3 —
-      `vdx ai@m3 --new` с lft в проекте с агентом на lft: «running on lft,
-      where you are, now», вопрос «on m3 anyway?»
+- [x] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
+      0.22.1 2026-10-08 (DL #30, `bf974dd`); живьём с lft на m3 — 2026-10-08
+      (Sidetrack #19, Status)
 - [x] MCP-сервер плагина: установленный `vdx-mcp`, иначе `npx` (DL #25) —
       2026-10-04, `plugin/.mcp.json`, плагин 0.6.0, README плагина и корня,
       журнал; проверено вне Claude Code

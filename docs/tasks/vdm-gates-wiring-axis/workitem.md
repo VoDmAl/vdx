@@ -1317,11 +1317,20 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
       `5159a9d`, `d2d6aaf release: v0.22.0`; npm `latest` 0.22.0 (17:56 UTC)
 - [x] Коммит `vdx-rubric-vodmal`, тег `v1.0.0`, push — сразу после выпуска CLI
       — 2026-10-08: `bac310c`, тег на GitHub (`ls-remote`)
-- [ ] 0.22.0 на обеих станциях (topgrade; проверить `vdx --version` по ssh)
-- [ ] `vdx doctor --fix` на lft — гейт vdm и страж echelon в `~/.gitconfig`,
-      `git hook list pre-commit --show-scope` — оба `global`; на m3 — после
-      git ≥ 2.54 (ответ nas-info). Затем echelon убирает старые строки стража
-      (его правило — `global echelon-guard` на обеих машинах)
+- [x] 0.22.0 на обеих станциях (topgrade; проверить `vdx --version` по ssh) —
+      2026-10-08, по слову владельца не ждали topgrade: 0.22.1 из npm тем npm,
+      чья копия стоит (lft — `/usr/local`; m3 — fnm, не brew из login-shell
+      ssh: тот поставил бы вторую копию, Sidetrack #16 кристалла vdx-ai).
+      По одной копии на машине. `vdx doctor`: lft — оба хука «not in
+      ~/.gitconfig»; m3 — «git 2.50.1 skips hooks from config»
+- [x] `vdx doctor --fix` на lft — 2026-10-08, по слову владельца: в
+      `~/.gitconfig` `[hook "vdm-crystal"]` и `[hook "echelon-guard"]`
+      (pre-commit); git 2.54.0: `git hook list pre-commit --show-scope` —
+      `global vdm-crystal`, `global echelon-guard`; `GIT_TRACE=1 git hook run
+      pre-commit` в vdx запускает оба, код 0; `vdx doctor` — personal hooks ok
+- [ ] m3: `vdx doctor --fix` после git ≥ 2.54 там (ответ nas-info ⏰
+      2026-10-14); затем письмо echelon: `global echelon-guard` на обеих
+      машинах — старые строки стража в репо можно убирать (его правило)
 - [x] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
       стража (выше) — сет v1.1.0, 2026-10-08
 - [ ] Sidetrack #19: CI vdx зовёт словарь
