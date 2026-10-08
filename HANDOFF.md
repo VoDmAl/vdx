@@ -22,6 +22,9 @@ Claude Code продолжается на машине, где он идёт (DL
   Sidetrack #18) и живую проверку владельца в локальном терминале lft.
 - 0.22.1 (2026-10-08, DL #30): `vdx ai@<host>` говорит с места человека —
   проверено живьём с lft на m3 (Sidetrack #19 закрыт).
+- В выпуске 2026-10-08: 0.23.0 — `vdx ai --focused` (DL #32), плагин 0.9.1,
+  сет v1.2.0 — флаг канала echelon каждому потребителю и `wakes: true`
+  (DL #31–#32). Порядок и ответы echelon — Next actions кристалла.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08

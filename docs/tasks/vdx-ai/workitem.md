@@ -855,6 +855,55 @@ now (pid 67107, idle)», «no idle conversation on lft», «running on m3, where
 you are, now (limeflow@m3, idle) — attach: vdx ai '…/limeflow'». Сторону m3
 живьём — после выпуска 0.22.1 (patch) и topgrade на m3.
 
+### #31 / 2026-10-08 / Флаг канала echelon — каждому потребителю: `has_file signals/sources.yaml`
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Письмо echelon `echelon-channel-all-consumers`; владелец на
+разбор с проверкой — «Да можно оба».
+**Context:** DL #3 поставил флаг канала по `mail.watch`. echelon 08.10 (его
+DL #89) шлёт в канал и «срез проекта полный» — всем потребителям.
+**Why:** Без флага Claude Code событие канала молча отбрасывает. Признак
+потребителя — `signals/sources.yaml`: echelon без него проект не обслуживает
+(слова echelon), и замер совпал — файл у всех семи проектов `consumers.yaml`
+(на lft; на m3 — у тех, что там лежат) и ни у кого больше в `~/AI Projects` и
+`~/PhpstormProjects`. Список echelon «с `mail.watch` — трое» отстал: у
+space-hq `mail.watch` с 08.10.
+**Implication:** Правило `echelon-channel` профиля — `has_file: {path:
+signals/sources.yaml}`, сет v1.2.0. Флаг впервые получают telegram.vorobyev.name,
+www.t23b.org, global-auth-risk-model: их идущие сессии хук плагина назовёт
+«runs without …channels» до `vdx ai --restart`. Живьём (0.22.1, профиль
+живой): telegram, risk-model, space-hq, ObsidianVault — `matched:
+echelon-channel`; vdx, limeflow — нет.
+
+### #32 / 2026-10-08 / `vdx ai --focused`: `VDX_FOCUSED=1`, правила `wakes` пропускаются, режим агента — из его окружения
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Слова владельца 08.10 в письме echelon `vdx-focused-flag`:
+«мне нужен режим когда он не будет лезть читать письма сам и когда ты не
+будешь его nudge делать… Я ок если это будет vdx ai ключик… Ну или focused».
+На предложенный дизайн — «Да можно оба».
+**Context:** Сессию global-auth-gap, открытую как «изолированную, без
+intercom», дважды разбудили указателями, и она пошла читать неподанное.
+Контракт echelon: `VDX_FOCUSED=1` в окружении агента; кто будит — молчит;
+от vdx — ключ, без флага канала, строка при старте.
+**Why:** Какие правила будят, знает профиль, а не vdx: имени флага echelon в
+коде нет — правило помечено `wakes: true`. Режим идущего агента берётся из его
+окружения (`ps -E`; у `claude` видно, у бинарников Apple скрыто — тест на
+sh-агенте помечает режим сам): иначе простой `vdx ai` к focused-агенту видел
+бы «нет флага канала» и отказывал в подключении. `--restart` ставит режим
+вызова — так выйти из focused можно без нового флага. `VDX_FOCUSED` из
+окружения самого vdx не наследуется: режим — флаг, а не оболочка.
+**Implication:** `FOCUSED_ENV_VAR`, `WhenRule.wakes`, `plan.focused` /
+`plan.skipped`, `processFocused`, `agentLine` (`cli/src/ai.ts`); `--check`
+пишет строку focused и не требует пропущенного; `vdx ai@<host> --focused`
+передаёт флаг. 381 тест (+7), три мутации пойманы. Живьём (клон): telegram
+`--focused --dry-run` — `VDX_FOCUSED=1 claude --dangerously-skip-permissions`,
+«left out: echelon-channel»; space-hq — бегущий `space-hq@lft` «not focused».
+CLI 0.23.0 (minor), плагин 0.9.1 (скилл), `wakes: true` — в сете v1.2.0.
+Сторона echelon и intercom — их (письмо ai-dev-plugins ушло от echelon).
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -1501,6 +1550,9 @@ busy) — attach: vdx ai '/Users/vdm/AI Projects/vdx'». Вопрос «on m3 an
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
       запуск здесь)
+- [ ] Выпуск DL #31–#32: коммит vdx → `vdx publish minor` (0.23.0, плагин
+      0.9.1 в `main`) → коммит сета, тег `v1.2.0`, push → ответы echelon на
+      `echelon-channel-all-consumers` и `vdx-focused-flag` → pickup обоих
 - [x] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
       0.22.1 2026-10-08 (DL #30, `bf974dd`); живьём с lft на m3 — 2026-10-08
       (Sidetrack #19, Status)

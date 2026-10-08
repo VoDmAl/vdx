@@ -57,6 +57,8 @@ export interface WhenRule {
   if: Predicate;
   args?: string[];
   confirm?: ConfirmRule[];
+  /** The rule is there to wake the agent: a focused session (`vdx ai --focused`) leaves it out. */
+  wakes?: boolean;
 }
 
 export interface AgentProfile {
@@ -118,6 +120,11 @@ export const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
 export const HOST_ENV_VAR = 'VDX_HOST';
 /** Set by `vdx ai@<host>` for the vdx it starts there: the machine the person sits at. */
 export const SEAT_ENV_VAR = 'VDX_AI_FROM';
+/**
+ * `1` in the environment of an agent started with `vdx ai --focused`, and so of
+ * its hooks and MCP servers: nothing wakes this session or reads its inbox for it.
+ */
+export const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
 export const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
 /** Tried in order when no profile names an agent. Started plain, with no flags. */
 export const FALLBACK_AGENTS = ['claude', 'codex'] as const;
@@ -170,6 +177,7 @@ export function parseEnvironment(text: string, source: string): Environment {
         if (rule.args !== undefined && !isStringList(rule.args)) {
           fail(`${at}.args`, 'must be a list of strings');
         }
+        if (rule.wakes !== undefined && typeof rule.wakes !== 'boolean') fail(`${at}.wakes`, 'must be true or false');
         if (rule.confirm !== undefined) {
           if (!Array.isArray(rule.confirm)) fail(`${at}.confirm`, 'must be a list');
           rule.confirm.forEach((c, j) => {
@@ -289,6 +297,10 @@ export interface LaunchPlan {
   args: string[];
   resumeArgs: string[];
   matched: string[];
+  /** `vdx ai --focused`: the agent gets VDX_FOCUSED=1, and the rules that wake it are left out. */
+  focused: boolean;
+  /** Matched rules a focused session leaves out (`wakes: true`). */
+  skipped: string[];
   confirm: ConfirmRule[];
   multiplexer: Multiplexer;
   sessionName: string;
@@ -305,14 +317,21 @@ export function planLaunch(input: {
   projectSource?: string;
   host: string;
   seat?: string;
+  focused?: boolean;
 }): LaunchPlan {
   const { environment, agent, projectRoot } = input;
+  const focused = input.focused === true;
   const ctx: Ctx = { projectRoot, stack: autoDetectStack(projectRoot), cache: new Map() };
   const args = [...(agent.args ?? [])];
   const matched: string[] = [];
+  const skipped: string[] = [];
   const confirm: ConfirmRule[] = [];
   for (const rule of agent.when ?? []) {
     if (!evalPredicate(rule.if, ctx)) continue;
+    if (focused && rule.wakes) {
+      skipped.push(rule.id);
+      continue;
+    }
     matched.push(rule.id);
     args.push(...(rule.args ?? []));
     confirm.push(...(rule.confirm ?? []));
@@ -328,6 +347,8 @@ export function planLaunch(input: {
     args,
     resumeArgs: [...(agent.resume_args ?? [])],
     matched,
+    focused,
+    skipped,
     confirm,
     multiplexer: environment.session?.multiplexer ?? 'none',
     sessionName: renderSessionName(environment.session?.name ?? DEFAULT_SESSION_NAME, {
@@ -670,6 +691,8 @@ export interface AiOptions {
   conversation?: string;
   detach: boolean;
   dryRun: boolean;
+  /** `--focused`: a session nothing wakes — VDX_FOCUSED=1, the profile's `wakes` rules left out. */
+  focused?: boolean;
 }
 
 export interface AiDeps {
@@ -683,6 +706,8 @@ export interface AiDeps {
   out: (text: string) => void;
   onPath: (bin: string) => boolean;
   processes: () => ProcInfo[];
+  /** Was this agent process started focused; default: its environment (`processFocused`). */
+  agentFocused?: (pid: number) => boolean;
   sleep: (ms: number) => void;
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
@@ -758,15 +783,21 @@ export const EXIT_LAUNCH_FAILED = 4;
  */
 export const NOTHING_TO_RESUME_MS = 30_000;
 
-export function renderPlan(plan: LaunchPlan, multiplexer: Multiplexer, running: AgentPane[]): string {
+export function renderPlan(
+  plan: LaunchPlan,
+  multiplexer: Multiplexer,
+  running: AgentPane[],
+  focusedOf: (pid: number) => boolean = () => false,
+): string {
   const lines = [
     `vdx ai — ${plan.projectRoot}`,
     `  name:     ${plan.project} (${plan.projectSource})`,
     `  profile:  ${plan.profilePath ?? `none — built-in default (${FALLBACK_AGENTS.join(' or ')}, no flags, no tmux)`}`,
-    `  agent:    ${commandLine(plan.command, plan.args)}`,
+    `  agent:    ${agentLine(plan, plan.args)}`,
     `  resume:   ${plan.resumeArgs.length ? plan.resumeArgs.join(' ') : '—'}`,
     `  matched:  ${plan.matched.length ? plan.matched.join(', ') : '—'}`,
   ];
+  if (plan.focused) lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
     multiplexer === 'tmux'
@@ -777,10 +808,11 @@ export function renderPlan(plan: LaunchPlan, multiplexer: Multiplexer, running: 
     if (running.length === 0) lines.push('  running:  —');
     for (const r of running) {
       const missing = missingArgs(r.proc.args, plan.args);
+      const focused = focusedOf(r.proc.pid);
       lines.push(
         `  running:  ${r.pane.session} ${r.pane.paneId} — ${
           missing.length ? `missing ${missing.join(' ')}` : 'matches the profile'
-        }`,
+        }${focused ? ', focused' : plan.focused ? ', not focused' : ''}`,
       );
     }
   }
@@ -880,7 +912,7 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
 function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean {
   const result = settle(plan, paneId, deps);
   if (result !== 'not-running' || plan.resumeArgs.length === 0) return result === 'ok';
-  const line = commandLine(plan.command, plan.args);
+  const line = agentLine(plan, plan.args);
   deps.log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${line}`);
   deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell));
   return settle(plan, paneId, deps) === 'ok';
@@ -926,6 +958,7 @@ export function remoteAiArgs(input: {
   const { host, opts, version } = input;
   const flags = [
     opts.fresh && '--new',
+    opts.focused && '--focused',
     opts.restart && '--restart',
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
@@ -1194,10 +1227,12 @@ interface Prepared {
   profilePath: string | null;
   profileDir: string;
   plan: LaunchPlan;
+  /** The same plan for a focused session or a plain one. */
+  replan: (focused: boolean) => LaunchPlan;
 }
 
 /** The project, the profile and the launch plan for `pathArg`; an exit code when there is none. */
-function prepare(pathArg: string, deps: AiDeps): Prepared | number {
+function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | number {
   const { log } = deps;
 
   const projectRoot = resolveProjectRoot(pathArg);
@@ -1235,9 +1270,8 @@ function prepare(pathArg: string, deps: AiDeps): Prepared | number {
     profileDir,
   });
 
-  let plan: LaunchPlan;
-  try {
-    plan = planLaunch({
+  const replan = (asFocused: boolean) =>
+    planLaunch({
       environment,
       profilePath,
       agent,
@@ -1246,12 +1280,37 @@ function prepare(pathArg: string, deps: AiDeps): Prepared | number {
       projectSource: named.source,
       host: hostLabel(deps.env),
       seat: seatLabel(deps.env),
+      focused: asFocused,
     });
+  let plan: LaunchPlan;
+  try {
+    plan = replan(focused);
   } catch (e: any) {
     log(`vdx ai: ${profilePath ?? 'profile'}: ${e?.message ?? e}`);
     return EXIT_USAGE;
   }
-  return { projectRoot, environment, profilePath, profileDir, plan };
+  return { projectRoot, environment, profilePath, profileDir, plan, replan };
+}
+
+/** Was the process started focused — VDX_FOCUSED=1 in its environment (`ps -E` on macOS, /proc on Linux)? */
+export function processFocused(pid: number): boolean {
+  const mark = `${FOCUSED_ENV_VAR}=1`;
+  try {
+    const environ = `/proc/${pid}/environ`;
+    if (fs.existsSync(environ)) return fs.readFileSync(environ, 'utf8').split('\0').includes(mark);
+    const out = execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out.split(/\s+/).includes(mark);
+  } catch {
+    return false;
+  }
+}
+
+/** The agent's command line; a focused one carries VDX_FOCUSED=1 in front, for the shell in its tmux pane. */
+function agentLine(plan: LaunchPlan, args: string[]): string {
+  return `${plan.focused ? `${FOCUSED_ENV_VAR}=1 ` : ''}${commandLine(plan.command, args)}`;
 }
 
 /** The nearest ancestor of `pid` that is the agent: the session a hook or a shell tool runs in. */
@@ -1272,9 +1331,12 @@ export function findOwnAgent(procs: ProcInfo[], pid: number, command: string): P
  */
 export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = process.pid): number {
   if (!resolveEnvironmentPath(deps.env, deps.home)) return EXIT_OK;
-  const prepared = prepare(pathArg, deps);
+  // The hook runs in the agent's environment: a focused session's carries VDX_FOCUSED=1.
+  const focused = deps.env[FOCUSED_ENV_VAR] === '1';
+  const prepared = prepare(pathArg, deps, focused);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, profilePath, plan } = prepared;
+  const vdxAi = `vdx ai${focused ? ' --focused' : ''}`;
 
   const lines = [
     `${machineLine(plan.host)}; the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
@@ -1283,6 +1345,14 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
       `condition in the profile, not an instruction to type. A project's agent on another machine: ` +
       `\`vdx ai@<machine>\`. More: \`vdx ai --help\`.`,
   ];
+  if (focused) {
+    lines.push(
+      `· this session is focused (\`vdx ai --focused\`): it works on what the user gave it — nothing should wake it, ` +
+        `and it does not read its inbox unless the user asks` +
+        (plan.skipped.length ? `; the profile's ${plan.skipped.join(', ')} is left out` : '') +
+        '.',
+    );
+  }
   const own = findOwnAgent(deps.processes(), selfPid, plan.command);
   if (!own) {
     lines.push(`· no ${plan.command} among the ancestors of this process — no session to compare with the profile.`);
@@ -1300,10 +1370,10 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
   lines.push(
     `✗ this session runs without ${missing.join(' ')}${why}. Hand the user the fix — ` +
       (deps.env['TMUX']
-        ? `\`vdx ai --restart ${root}\`: it stops this session and starts it again with the profile's flags` +
+        ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again with the profile's flags` +
           (plan.resumeArgs.length ? `, resuming the conversation (${plan.resumeArgs.join(' ')})` : '') +
           `. Do not run it yourself: it ends this session.`
-        : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`vdx ai ${root}\`.`),
+        : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`${vdxAi} ${root}\`.`),
   );
   deps.out(lines.join('\n') + '\n');
   return EXIT_DRIFT;
@@ -1312,12 +1382,14 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
 export function runAi(opts: AiOptions, deps: AiDeps): number {
   const { log, tmux } = deps;
 
-  const prepared = prepare(opts.path, deps);
+  const prepared = prepare(opts.path, deps, opts.focused === true);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
-  // The agent started here runs on this machine: it does not inherit where the person sat.
+  // The agent started here runs on this machine: it does not inherit where the person sat,
+  // and it is focused by this start's flag, not by the shell vdx runs in.
   delete deps.env[SEAT_ENV_VAR];
+  delete deps.env[FOCUSED_ENV_VAR];
   // Under `vdx ai@<host>` the person is not here: this machine goes by its name.
   const atSeat = sameMachine(plan.seat, plan.host);
   const here = atSeat ? `here, on ${plan.host}` : `on ${plan.host}`;
@@ -1340,6 +1412,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command)
       : [];
   const current = running[0];
+  // A running agent keeps its mode: plain `vdx ai` takes a focused one as it is,
+  // and the rules it leaves out are not missing from it.
+  const focusedOf = deps.agentFocused ?? processFocused;
+  const runningFocused = current ? focusedOf(current.proc.pid) : false;
+  if (current && !opts.restart && runningFocused && !plan.focused) {
+    plan = { ...prepared.replan(true), resumeArgs: plan.resumeArgs };
+  }
 
   // What a start continues. A restart keeps the conversation the agent is in.
   let choice: ConversationChoice | null = null;
@@ -1358,7 +1437,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
 
   const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
   if (opts.dryRun) {
-    deps.out(renderPlan(plan, multiplexer, running));
+    deps.out(renderPlan(plan, multiplexer, running, focusedOf));
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
     return EXIT_OK;
@@ -1404,16 +1483,17 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       return EXIT_USAGE;
     }
     for (const c of plan.confirm) log(`note: the agent will ask "${c.screen}" — answer it with ${c.keys.join(' ')}`);
+    const env = plan.focused ? { ...process.env, [FOCUSED_ENV_VAR]: '1' } : undefined;
     const startedAt = Date.now();
-    let res = spawnSync(plan.command, [...plan.args, ...plan.resumeArgs], { cwd: projectRoot, stdio: 'inherit' });
+    let res = spawnSync(plan.command, [...plan.args, ...plan.resumeArgs], { cwd: projectRoot, stdio: 'inherit', env });
     if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
       log(`vdx ai: \`${plan.command}\` not found on PATH`);
       return 127;
     }
     const failedAtOnce = res.status !== null && res.status !== 0 && Date.now() - startedAt < NOTHING_TO_RESUME_MS;
     if (plan.resumeArgs.length > 0 && failedAtOnce) {
-      log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${commandLine(plan.command, plan.args)}`);
-      res = spawnSync(plan.command, plan.args, { cwd: projectRoot, stdio: 'inherit' });
+      log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${agentLine(plan, plan.args)}`);
+      res = spawnSync(plan.command, plan.args, { cwd: projectRoot, stdio: 'inherit', env });
     }
     return res.status ?? 1;
   }
@@ -1436,11 +1516,19 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
         );
       }
     }
+    if (plan.focused && !runningFocused) {
+      log(`✗ ${current.pane.session}: ${plan.command} is running, not focused`);
+      log(
+        `  to focus it: vdx ai --restart --focused ${shellQuote(projectRoot)}` +
+          (plan.resumeArgs.length ? ' (stops the running agent, then resumes its conversation)' : ' (stops the running agent)'),
+      );
+      return EXIT_DRIFT;
+    }
     const missing = missingArgs(current.proc.args, plan.args);
     if (missing.length > 0) {
       log(`✗ ${current.pane.session}: ${plan.command} is running without ${missing.join(' ')}`);
       log(
-        `  to apply the profile: vdx ai --restart${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
+        `  to apply the profile: vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
           (plan.resumeArgs.length
             ? ` (stops the running agent, then resumes its conversation)`
             : opts.fresh
@@ -1449,19 +1537,19 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       );
       return EXIT_DRIFT;
     }
-    log(`✓ ${current.pane.session}: already running with the profile — ${current.proc.args}`);
+    log(`✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`);
     return finish(true, current.pane.session, current.pane.paneId, opts, deps);
   }
 
   if (current) {
-    const line = commandLine(plan.command, [...plan.args, ...plan.resumeArgs]);
+    const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
     log(`↻ ${current.pane.session} ${current.pane.paneId}: restarting — ${line}`);
     tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell));
     return finish(settleResumed(plan, current.pane.paneId, deps), current.pane.session, current.pane.paneId, opts, deps);
   }
 
   if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);
-  const line = commandLine(plan.command, [...plan.args, ...plan.resumeArgs]);
+  const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell);
   const reuse = tmux.hasSession(plan.sessionName);
   const paneId = reuse

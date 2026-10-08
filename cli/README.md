@@ -51,7 +51,7 @@ vdx doctor --check [project-path]   # one line per hook declared but not running
 vdx doctor --fix                    # write the profile's personal hooks (git.hooks) into ~/.gitconfig
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai[@host] [project-path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
+vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there
 vdx ai --check [project-path]   # this session against the profile — what the plugin's SessionStart hook tells the agent
 
 # What a command does and takes; nothing runs (ai: also where launch flags live)

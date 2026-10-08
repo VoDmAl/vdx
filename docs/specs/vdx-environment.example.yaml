@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.1.0"
+  version: "1.2.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -23,14 +23,18 @@ agent:
   args: [--dangerously-skip-permissions]
   resume_args: [--continue]
   when:
-    # echelon wakes a project's agent with a Claude Code channel event while
-    # the project's mail window is open. A session started without the flag
-    # drops the event silently.
+    # echelon sends its consumers' agents Claude Code channel events: mail
+    # while the project's mail window is open (mail.watch), and to every
+    # consumer "the project's slice is complete". A session started without
+    # the flag drops them silently. Every echelon consumer has
+    # signals/sources.yaml; echelon serves no project without one. The rule
+    # wakes the agent, so a focused session (vdx ai --focused) leaves it out.
     - id: echelon-channel
-      description: "Project declares mail.watch: echelon wakes the agent over the plugin:echelon@echelon channel"
+      description: "echelon consumer (signals/sources.yaml): echelon wakes the agent over the plugin:echelon@echelon channel"
       if:
-        config_value: {path: signals/sources.yaml, jsonpath: mail.watch}
+        has_file: {path: signals/sources.yaml}
       args: [--dangerously-load-development-channels, plugin:echelon@echelon]
+      wakes: true
       confirm:
         # Shown on every start with this flag, --continue included; the
         # cursor rests on "1. I am using this for local development".

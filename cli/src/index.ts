@@ -76,6 +76,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   project_path  the project (default: cwd); its git toplevel is used
   @host         the same command on <host> over ssh: its vdx, profile and tmux
   --new         a new conversation instead of continuing the last one
+  --focused     a session nothing wakes: the agent, its hooks and MCP servers get
+                VDX_FOCUSED=1 — for the plugins that wake sessions to leave it
+                alone — and the profile's rules marked \`wakes: true\` (a channel
+                flag) are left out. A running agent keeps its mode; --restart
+                applies this one
   --conversation <id>
                 continue this Claude Code conversation
   --restart     restart the running agent in its pane — applies a changed profile
@@ -97,7 +102,8 @@ machine's. A new conversation (--new, or none to continue) while an agent of
 the project runs on another machine starts only after a yes.
 
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
-3 the running agent lacks profile flags (rerun with --restart); 4 the start
+3 the running agent lacks profile flags, or is not focused under --focused
+(rerun with --restart); 4 the start
 was not confirmed.
 Profile format: https://github.com/VoDmAl/vdx/blob/main/docs/specs/environment-format.md
 `;
@@ -156,10 +162,10 @@ Exit 2 when something is missing.
     positionals: 1,
   },
   ai: {
-    usage: 'vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]',
+    usage: 'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused] [--restart] [--detach] [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'restart', 'resume', 'detach', 'dry-run', 'check'],
+    bools: ['new', 'focused', 'restart', 'resume', 'detach', 'dry-run', 'check'],
     values: ['conversation'],
     positionals: 1,
   },
@@ -500,6 +506,7 @@ function cmdAi(opts: ParsedArgs): void {
     conversation,
     detach: opts.flags.detach === true,
     dryRun: opts.flags['dry-run'] === true,
+    focused: opts.flags.focused === true,
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.

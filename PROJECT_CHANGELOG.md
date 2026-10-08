@@ -4,6 +4,15 @@
 
 ## 2026-10-08
 
+### `vdx ai --focused` — сессия, которую никто не будит
+
+Агент получает `VDX_FOCUSED=1` (по ней молчат echelon и intercom), правила
+профиля с `wakes: true` — флаг канала echelon — пропускаются; режим идущего
+агента vdx читает из его окружения, `--restart` ставит режим вызова. Флаг
+канала echelon теперь у каждого потребителя (`has_file signals/sources.yaml`),
+сет v1.2.0 ([spec](docs/specs/environment-format.md),
+[DL #31–#32](docs/tasks/vdx-ai/workitem.md)).
+
 ### Сет v1.1.0: страж echelon — личный хук профиля
 
 `git.hooks` в `vdx-environment.yaml` получил `echelon-guard` (pre-commit, без

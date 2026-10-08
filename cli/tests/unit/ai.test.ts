@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   type AiDeps,
   type Environment,
@@ -25,6 +25,7 @@ import {
   parsePanes,
   parsePs,
   planLaunch,
+  processFocused,
   processTree,
   projectIdentity,
   remoteAiArgs,
@@ -56,6 +57,7 @@ agent:
       confirm:
         - screen: "Loading development channels"
           keys: [Enter]
+      wakes: true
 session:
   multiplexer: tmux
   name: "{project}@{host}"
@@ -82,6 +84,23 @@ describe('resolveEnvironmentPath', () => {
   });
 });
 
+describe('processFocused', () => {
+  it('reads VDX_FOCUSED=1 from the environment of a running process', async () => {
+    const run = (value: string) =>
+      spawn(process.execPath, ['-e', 'setTimeout(() => {}, 5000)'], { env: { ...process.env, VDX_FOCUSED: value } });
+    const focused = run('1');
+    const plain = run('');
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      expect(processFocused(focused.pid!)).toBe(true);
+      expect(processFocused(plain.pid!)).toBe(false);
+    } finally {
+      focused.kill();
+      plain.kill();
+    }
+  });
+});
+
 describe('parseEnvironment', () => {
   it('accepts the owner-shaped profile', () => {
     const env = parseEnvironment(OWNER_LIKE, 'p.yaml');
@@ -102,6 +121,7 @@ describe('parseEnvironment', () => {
     ['session: {multiplexer: screen}', 'session.multiplexer'],
     ['session: {machines: m3}', 'session.machines'],
     ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
+    ['agent: {command: claude, when: [{id: a, if: true, wakes: "true"}]}', 'agent.when[0].wakes'],
     ['- just a list', 'top level'],
   ])('rejects %s naming %s', (yaml, key) => {
     expect(() => parseEnvironment(yaml, 'p.yaml')).toThrow(key);
@@ -136,6 +156,18 @@ describe('planLaunch', () => {
     expect(p.sessionName).toBe('proj@lft');
     expect(p.resumeArgs).toEqual(['--continue']);
     expect(p.machines).toEqual(['M3']); // this machine is not asked about itself
+  });
+
+  it('a focused session leaves out the rules that wake it — flag and prompt — and names them', () => {
+    fs.mkdirSync(path.join(root, 'signals'));
+    fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: UTC\n');
+    const p = planLaunch({ environment: env, profilePath: 'p.yaml', agent: env.agent!, projectRoot: root, project: 'proj', host: 'lft', focused: true });
+    expect(p.focused).toBe(true);
+    expect(p.args).toEqual(['--dangerously-skip-permissions']);
+    expect(p.matched).toEqual([]);
+    expect(p.skipped).toEqual(['echelon-channel']);
+    expect(p.confirm).toEqual([]);
+    expect(plan().focused).toBe(false);
   });
 
   it('leaves the flag out when sources.yaml has mail but no watch (the space-hq case)', () => {
@@ -381,6 +413,23 @@ describe('runAi without tmux', () => {
     it('--new starts a new conversation', () => {
       expect(runAi({ ...opts, path: root, fresh: true }, direct())).toBe(EXIT_OK);
       expect(runs()).toEqual(['--base']);
+    });
+
+    it('--focused: VDX_FOCUSED=1 for the agent, and the rules that wake it left out', () => {
+      const d = direct();
+      const agent = path.join(home, 'fake-agent');
+      fs.writeFileSync(agent, '#!/bin/sh\necho "${VDX_FOCUSED:-plain} $*" >> "$(dirname "$0")/runs"\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(root, 'marker'), '');
+      fs.writeFileSync(
+        path.join(home, 'env.yaml'),
+        `agent: {command: ${agent}, args: [--base], when: [{id: chan, if: {has_file: {path: marker}}, args: [--chan], wakes: true}]}\n` +
+          'session: {multiplexer: none}\n',
+      );
+      d.env['VDX_FOCUSED'] = '1'; // a shell inside a focused session: its mode is not passed on
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(d.env['VDX_FOCUSED']).toBeUndefined();
+      expect(runAi({ ...opts, path: root, focused: true }, d)).toBe(EXIT_OK);
+      expect(runs()).toEqual(['plain --base --chan', '1 --base']);
     });
   });
 });
@@ -798,7 +847,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   let profile: string;
   let logs: string[];
 
-  const writeProfile = (args: string[]) =>
+  const writeProfile = (args: string[], wakes = false) =>
     fs.writeFileSync(
       profile,
       [
@@ -809,6 +858,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         '  when:',
         '    - id: chan',
         '      if: {config_value: {path: signals/sources.yaml, jsonpath: mail.watch}}',
+        ...(wakes ? ['      wakes: true'] : []),
         '      args: [--chan, plugin:x@y]',
         '      confirm:',
         '        - screen: "FAKE PROMPT"',
@@ -830,6 +880,9 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     out: (t) => logs.push(t),
     onPath,
     processes: listProcesses,
+    // The fake agent is a /bin/sh script, and macOS hides the environment of its own binaries
+    // from `ps -E`: the agent marks its mode itself. processFocused has its own test.
+    agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
     sleep: sleepSync,
     confirmTimeoutMs: 10_000,
   });
@@ -849,6 +902,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       path.join(base, 'fake-agent'),
       [
         '#!/bin/sh',
+        '[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/focused-$$"',
         'echo "FAKE PROMPT: press enter"',
         'read answer',
         "printf '\\033[2J\\033[H'",
@@ -1034,6 +1088,34 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(logs.join('\n')).not.toContain('nothing to resume');
     expect(agentArgs()).toEqual([expect.stringMatching(/fake-agent --base --extra --chan plugin:x@y$/)]);
   });
+
+  it('--focused: a running agent keeps its mode until --restart says otherwise', () => {
+    writeProfile(['--base'], true);
+    tmux.tryRun(['kill-server']);
+    const agent = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent')[0]!.proc;
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(agent().args).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
+    expect(deps().agentFocused!(agent().pid)).toBe(false);
+
+    // Asked for focus, it finds a plain agent: names it and the fix, touches nothing.
+    expect(runAi({ ...opts, path: root, focused: true }, deps())).toBe(EXIT_DRIFT);
+    expect(logs.join('\n')).toContain('is running, not focused');
+    expect(logs.join('\n')).toContain(`to focus it: vdx ai --restart --focused ${shellQuote(root)}`);
+
+    // The fake agent prompts as with the channel flag; focused, nobody answers it — it waits, alive.
+    expect(runAi({ ...opts, path: root, focused: true, restart: true }, deps())).toBe(EXIT_OK);
+    expect(agent().args).toMatch(/fake-agent --base --resume-me$/);
+    expect(deps().agentFocused!(agent().pid)).toBe(true);
+
+    // A plain start takes the focused agent as it is: the left-out flag is not drift.
+    logs = [];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('already running with the profile, focused');
+
+    expect(runAi({ ...opts, path: root, restart: true }, deps())).toBe(EXIT_OK);
+    expect(agent().args).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
+    expect(deps().agentFocused!(agent().pid)).toBe(false);
+  }, 30_000);
 });
 
 describe('vdx ai@host', () => {
@@ -1111,6 +1193,10 @@ describe('vdx ai@host', () => {
 
     it('tells the vdx there which machine the person sits at', () => {
       expect(run('0.14.0').from).toBe('lft');
+    });
+
+    it('passes --focused on', () => {
+      expect(run('0.14.0', { ...opts, focused: true }).args).toEqual(['ai', path.join(dir, 'home', 'AI Projects', 'vdx'), '--focused']);
     });
   });
 });
@@ -1332,6 +1418,14 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     const file = path.join(home, `${ID.a}.jsonl`);
     fs.writeFileSync(file, [hookLine(text.trimEnd()), userLine('hi')].join('\n') + '\n');
     expect(readConversation(file, new Date())?.machine).toBe('m3');
+  });
+
+  it('a focused session: says so, and the rule that wakes it is not missing', () => {
+    expect(runAiCheck(root, deps(chain('--dangerously-skip-permissions --continue'), { VDX_FOCUSED: '1' }), 40)).toBe(EXIT_OK);
+    const text = out.join('');
+    expect(text).toContain('· this session is focused (`vdx ai --focused`)');
+    expect(text).toContain("the profile's echelon-channel is left out");
+    expect(text).toContain("✓ this session carries the profile's flags");
   });
 
   it('names the missing flag and the restart in tmux — for the user to run', () => {
