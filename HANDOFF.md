@@ -5,9 +5,10 @@
 
 ---
 
-## ▶︎ Активная работа (2026-10-07)
+## ▶︎ Активная работа (2026-10-08)
 
-**Кристалл `vdx-ai`** — [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md).
+**Кристалл `vdx-ai`** (с 2026-10-08 `dormant` — только ждёт ответов nas-info и
+живой проверки владельца) — [docs/tasks/vdx-ai/workitem.md](docs/tasks/vdx-ai/workitem.md).
 Где мы — его раздел «Текущая модель» (строки «Состояние на …»), что дальше —
 открытые `- [ ]` в Next actions. Команда **`vdx ai`** ([D14](docs/decisions.md))
 — агент, флаги и tmux из личного профиля `vdx-environment.yaml`; разговор
@@ -39,6 +40,9 @@ Claude Code продолжается на машине, где он идёт (DL
 git ≥ 2.54. Сет v1.1.0
 (2026-10-08) добавил `echelon-guard` в `git.hooks`: echelon готов
 (`echelon-guard-ready`). Ждём nas-info `git-2-54-everywhere` до 2026-10-14.
+CI vdx зовёт `mise run check` / `mise run test` (Sidetrack #19, 2026-10-08).
+Догфудинг vdx до высшего уровня своей рубрики (сейчас L1) — Sidetrack #20,
+отложен владельцем.
 
 > ⚠️ Всё, что ниже этой черты, описывает состояние на 2026-05-24 (шаги A–Z.2.c,
 > версия 0.8.1) и не обновлялось для релизов v0.10.0 / v0.11.0. Историю шагов

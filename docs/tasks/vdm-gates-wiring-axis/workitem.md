@@ -5,7 +5,7 @@ description: "Ось vdx, проверяющая что pre-commit гейт vdm 
 status: in-progress
 session-type: prd-prep
 created: 2026-09-01
-last-updated: 2026-10-07
+last-updated: 2026-10-08
 ---
 
 # Гейт vdm: правило в environment-документе персонального сета, не ось
@@ -1180,7 +1180,26 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
 юнит-тесты (смоук — `test:smoke`), и CI зовёт `mise run check` /
 `mise run test`.
 
-**Status:** open
+**Status:** resolved 2026-10-08 — развилка закрыта по предложенной ветке
+(владелец: «Окей»). `test` словаря — юнит-тесты (`npm --prefix cli test`),
+смоук — `test:smoke`. CI ставит mise (`jdx/mise-action@v4`; v5 вышел
+2026-09-28, рано) и зовёт `mise run check` / `mise run test`; matrix 20/22 —
+через `MISE_NODE_VERSION`, `mise.toml` держит 20. Локальный аудит vdx: `ci`
+L2 → L4. Обе задачи проходят через mise (389 тестов). Зелёный прогон на
+GitHub — после push.
+
+### #20. vdx по своей рубрике — L1; CLAUDE.md требует высшего уровня
+
+**Возникло в:** аудите vdx 2026-10-08, после Sidetrack #19.
+**Описание:** `vdx audit .` на сете v1.3.0: общий уровень L1. Критичные оси:
+`lifecycle-interface` L2, `tests` L3, `static-analysis` L2, `ci` L4 (после
+#19), `branch-protection` — «неизвестно». Прочие: `reproducibility`,
+`code-style`, `dependency-hygiene`, `git-hygiene`, `observability` — L1,
+`mock-infra` L2, `docs` L3, `release-artifact` L4. Требование догфудинга
+(CLAUDE.md) не выполнено.
+**Status:** deferred — владелец 2026-10-08: «давай пока отложим большое».
+Когда вернёмся — свой кристалл: сперва разобрать, что держит каждую ось,
+потом выбрать, что берём.
 
 ## Next actions
 
@@ -1333,7 +1352,10 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
       машинах — старые строки стража в репо можно убирать (его правило)
 - [x] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
       стража (выше) — сет v1.1.0, 2026-10-08
-- [ ] Sidetrack #19: CI vdx зовёт словарь
+- [x] Sidetrack #19: CI vdx зовёт словарь — 2026-10-08, `mise run check` /
+      `mise run test` в `ci.yml`; зелёный прогон на GitHub — после push
+- [ ] Sidetrack #20: догфудинг vdx до высшего уровня своей рубрики —
+      отложено владельцем 2026-10-08; вернуться отдельным кристаллом
 
 **Ответ отправителю (`cc-vdm-plugins`, по intercom):**
 

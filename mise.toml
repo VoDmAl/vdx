@@ -11,7 +11,11 @@ description = "Install CLI dependencies"
 run = "npm --prefix cli install"
 
 [tasks.test]
-description = "Run smoke audit on the three calibration projects"
+description = "Run the CLI unit tests"
+run = "npm --prefix cli test"
+
+[tasks."test:smoke"]
+description = "Run smoke audit on the three calibration projects (local paths; not in CI)"
 run = "bash cli/smoke.sh"
 
 [tasks.check]

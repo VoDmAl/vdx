@@ -2,10 +2,10 @@
 title: "vdx ai — запуск агента в проекте по личному профилю"
 slug: vdx-ai
 description: "Запускает нужного агента в нужном репо с нужными флагами, в tmux если он есть"
-status: in-progress
+status: dormant
 session-type: prd-work
 created: 2026-09-28
-last-updated: 2026-10-07
+last-updated: 2026-10-08
 ---
 
 # vdx ai — запуск агента в проекте по личному профилю

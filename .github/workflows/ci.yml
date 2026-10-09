@@ -13,19 +13,17 @@ jobs:
       fail-fast: false
       matrix:
         node-version: [20, 22]
+    # The vocabulary's tasks, through its runner — what a person and an agent
+    # run here. mise.toml pins node 20; the matrix widens it.
+    env:
+      MISE_NODE_VERSION: ${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-          cache-dependency-path: cli/package-lock.json
+      - uses: jdx/mise-action@v4
       - name: Install cli dependencies
         working-directory: cli
         run: npm ci
-      - name: Typecheck
-        working-directory: cli
-        run: npm run typecheck
-      - name: Unit tests
-        working-directory: cli
-        run: npm test
+      - name: Check
+        run: mise run check
+      - name: Test
+        run: mise run test
