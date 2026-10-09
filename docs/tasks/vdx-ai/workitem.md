@@ -108,6 +108,10 @@ last-updated: 2026-10-07
   `v0.7.0` на GitHub, `@vodmal/vdx-cli@0.21.0` в npm, плагин 0.8.1 в `main`.
   На станциях пока 0.20.1 — ключ `machines` она пропускает. Конфликтные копии
   транскриптов разобраны (Sidetrack #17).
+- **Состояние на 2026-10-08:** `@vodmal/vdx-cli@0.24.0` в npm (`9d3892b`, тег
+  `v0.24.0`) и на обеих станциях; сет `v1.3.0` на GitHub (`f119105`). В
+  0.22.1–0.24.0: место человека в `vdx ai@<host>`, `--focused`, строка о
+  папках, вопрос при дрейфе (DL #30–#34).
 
 ## Decision Log
 
@@ -1627,9 +1631,9 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       тег `v1.2.0` на GitHub
 - [x] Sidetrack #20: `vdx publish` откатывает поднятую версию и по сигналу;
       текст про OTP — под вход npm через браузер — 2026-10-08, в 0.24.0
-- [ ] Выпуск DL #33–#34 и Sidetrack #20: коммит vdx → `vdx publish minor`
-      (0.24.0) → коммит сета, тег `v1.3.0`, push → 0.24.0 на lft и m3 →
-      ответ nas-info на `vdx-ai-folders-warning`, pickup
+- [x] Выпуск DL #33–#34 и Sidetrack #20 — 2026-10-08: 0.24.0 в npm
+      (`9d3892b`), сет `v1.3.0` (`f119105`), 0.24.0 на lft и m3 (`npm i -g`);
+      ответ nas-info `vdx-ai-folders-warning-outcome` ушёл, письмо в архиве
 - [x] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
       0.22.1 2026-10-08 (DL #30, `bf974dd`); живьём с lft на m3 — 2026-10-08
       (Sidetrack #19, Status)

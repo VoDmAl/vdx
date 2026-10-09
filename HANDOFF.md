@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-08, @vodmal/vdx-cli@0.23.0)
+# vdx — Handoff (2026-10-08, @vodmal/vdx-cli@0.24.0)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -14,8 +14,8 @@
 Claude Code продолжается на машине, где он идёт (DL #27); машины проекта —
 `session.machines` профиля (DL #29).
 
-- `@vodmal/vdx-cli@0.23.0` в npm и на обеих станциях; сет
-  `vdx-rubric-vodmal@v1.2.0`; плагин vdx 0.9.1. Порядок выпуска — «Выпуск CLI» и
+- `@vodmal/vdx-cli@0.24.0` в npm и на обеих станциях; сет
+  `vdx-rubric-vodmal@v1.3.0`; плагин vdx 0.9.1. Порядок выпуска — «Выпуск CLI» и
   «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
 - На 2026-10-07 с нашей стороны сделано всё; ждём: ответы nas-info на письма
   `ssh-self-alias` и `ssh-peers-agent` (ssh станции на себя и без агента ключей,
@@ -25,16 +25,16 @@ Claude Code продолжается на машине, где он идёт (DL
 - 0.23.0 (2026-10-08): `vdx ai --focused` (DL #32); сет v1.2.0 — флаг канала
   echelon каждому потребителю и `wakes: true` (DL #31–#32). echelon ответ
   получил.
-- В выпуске 2026-10-08: 0.24.0 — строка о папках, которые не видит сессия
-  (DL #33), вопрос вместо отказа при дрейфе в терминале (DL #34), откат
-  прерванного `vdx publish` (Sidetrack #20); сет v1.3.0 —
-  `session.folders_fix`. Порядок — Next actions кристалла vdx-ai.
+- 0.24.0 (2026-10-08): строка о папках, которые не видит сессия (DL #33),
+  вопрос вместо отказа при дрейфе в терминале (DL #34), откат прерванного
+  `vdx publish` (Sidetrack #20); сет v1.3.0 — `session.folders_fix`. nas-info
+  ответ получил.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08
 (DL #22): `@vodmal/vdx-cli@0.22.0` (schema 0.3, распознаватель хуков,
 `vdx doctor --check/--fix`), сет `vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0. На
-станциях 0.23.0 (2026-10-08); на lft гейт vdm и страж echelon — в
+станциях 0.24.0 (2026-10-08); на lft гейт vdm и страж echelon — в
 `~/.gitconfig` (`vdx doctor --fix`, `global` в `git hook list`), на m3 — после
 git ≥ 2.54. Сет v1.1.0
 (2026-10-08) добавил `echelon-guard` в `git.hooks`: echelon готов
