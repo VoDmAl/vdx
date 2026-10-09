@@ -1292,7 +1292,13 @@ vdx-ai); после исправления `c53a39a` — зелёный: Node 20
 - [x] Sidetrack #16: `git-hooks` видит хуки в `.git/hooks/`; «включено» доходит
       без ручного `vdx doctor` (DL #22)
 - [x] Sidetrack #17: правило husky учитывает Yarn 2+ (limeflow узнал —
-      письмо `husky-hooks-yarn4`, 2026-10-07)
+      письмо `husky-hooks-yarn4`, 2026-10-07). Ответ 09.10
+      (`husky-hooks-yarn4-outcome`): SPACEFINAM-717, !750 — husky из
+      `postinstall`, pre-commit — lint-staged (Prettier + ESLint по изменённым
+      файлам); `core.hooksPath` встаёт на `yarn install`, сборка образов без
+      `.git` не падает. Пайплайн зелёный, одобрен, не влит: мерж — владелец
+      после отпуска, ⏰ 2026-10-19, в списке space-hq от limeflow
+      (`spacefinam-717-merge-after-vacation`). До мержа limeflow — L1
 - [x] Sidetrack #18: место личных хуков решено (Q23, DL #19); echelon и
       nas-info в курсе — письма 2026-10-07 (DL #21)
 - [x] Тема 3 — предикаты, чьё имя обещает больше тела: решена 2026-10-07
