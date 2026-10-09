@@ -1326,10 +1326,21 @@ export const GUARDED_FOLDERS = ['Downloads', 'Desktop', 'Documents'];
  */
 export function unreadableFolders(tmux: Tmux | null, home: string): string[] {
   const dirs = GUARDED_FOLDERS.map((f) => path.join(home, f));
-  // `ls`, not `[ -d ]`: a denied folder still passes -d.
-  const script = dirs.map((d) => `{ [ ! -d ${shellQuote(d)} ] || ls ${shellQuote(d)} >/dev/null 2>&1 || echo ${shellQuote(d)}; }`).join('; ');
-  const out = tmux?.tryRun(['run-shell', script]);
-  if (out !== undefined && out !== null) return out.split('\n').filter(Boolean);
+  if (tmux) {
+    // `ls`, not `[ -d ]`: a denied folder still passes -d. The answer comes back in a
+    // file: tmux before 3.5 prints run-shell's output into a pane, not to the caller.
+    const file = path.join(os.tmpdir(), `vdx-folders-${process.pid}-${Date.now()}`);
+    const checks = dirs.map((d) => `{ [ ! -d ${shellQuote(d)} ] || ls ${shellQuote(d)} >/dev/null 2>&1 || echo ${shellQuote(d)}; }`);
+    try {
+      if (tmux.tryRun(['run-shell', `{ ${checks.join('; ')}; } > ${shellQuote(file)}`]) !== null) {
+        return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+      }
+    } catch {
+      // no answer from the server: this process's own check
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  }
   return dirs.filter((d) => {
     try {
       fs.readdirSync(d);

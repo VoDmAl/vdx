@@ -4,6 +4,12 @@
 
 ## 2026-10-08
 
+### Проверка папок не зависит от версии tmux
+
+Сервер tmux пишет ответ проверки в файл: tmux до 3.5 печатал вывод `run-shell`
+в панель, и vdx видел «всё читается» — так покраснел CI на Ubuntu
+([Sidetrack #21](docs/tasks/vdx-ai/workitem.md)).
+
 ### CI vdx зовёт задачи словаря
 
 `.github/workflows/ci.yml` ставит mise и зовёт `mise run check` и `mise run
