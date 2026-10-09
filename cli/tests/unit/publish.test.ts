@@ -336,9 +336,15 @@ describe('the release goes out whole: lock, push, registry', () => {
   let work: string;
   let logs: string[];
   const git = (args: string[], cwd = work) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  // The commits here must not run the machine's hooks: since Git 2.54 hooks also come
+  // from ~/.gitconfig (`hook.<name>.command`), and core.hooksPath does not turn those off.
+  const saved = { global: process.env['GIT_CONFIG_GLOBAL'], nosystem: process.env['GIT_CONFIG_NOSYSTEM'] };
 
   beforeEach(() => {
     dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-publish-')));
+    fs.writeFileSync(path.join(dir, 'gitconfig'), '');
+    process.env['GIT_CONFIG_GLOBAL'] = path.join(dir, 'gitconfig');
+    process.env['GIT_CONFIG_NOSYSTEM'] = '1';
     work = path.join(dir, 'work');
     execFileSync('git', ['init', '-q', '--bare', '-b', 'main', path.join(dir, 'remote.git')]);
     execFileSync('git', ['clone', '-q', path.join(dir, 'remote.git'), work], { stdio: 'ignore' });
@@ -347,7 +353,6 @@ describe('the release goes out whole: lock, push, registry', () => {
       ['user.email', 't@example.org'],
       ['commit.gpgsign', 'false'],
       ['tag.gpgsign', 'false'],
-      ['core.hooksPath', '/dev/null'],
     ]) git(['config', k!, v!]);
     git(['checkout', '-q', '-b', 'main']);
     fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ name: 'demo', version: '1.0.0' }, null, 2) + '\n');
@@ -360,7 +365,13 @@ describe('the release goes out whole: lock, push, registry', () => {
     git(['push', '-q', '-u', 'origin', 'main']);
     logs = [];
   });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.nosystem]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 
   const deps = (over: Partial<PublishDeps> = {}): PublishDeps & { npmRuns: string[][] } => {
     const npmRuns: string[][] = [];

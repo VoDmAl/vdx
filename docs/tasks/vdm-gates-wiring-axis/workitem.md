@@ -1203,6 +1203,27 @@ vdx-ai); после исправления `c53a39a` — зелёный: Node 20
 Когда вернёмся — свой кристалл: сперва разобрать, что держит каждую ось,
 потом выбрать, что берём.
 
+### #21. Личные хуки машины идут и на коммитах тестов во временных репо
+
+**Возникло в:** письме ai-dev-plugins `global-hooks-in-test-fixtures`,
+2026-10-09.
+**Описание:** Хуки из `~/.gitconfig` (`hook.<имя>.command`, Git 2.54) идут на
+каждом `git commit` машины, и во временных репо тестов тоже. `core.hooksPath`
+их не выключает. У ai-dev-plugins `hook.vdm-crystal` отказал в коммите их
+`gates.test`: копия гейта в vdm-git считала `- [ ]` в fenced-блоке открытым
+пунктом. Исправлено в vdm-git 2.19.1 (`ed02a04`), на машины придёт с
+обновлением маркетплейса; до того такой отказ возможен в любом репо, где
+закрытый кристалл показывает чекбокс в блоке кода. У vdx во временных репо
+коммитит один набор, `publish.test.ts`. В нём было `core.hooksPath=/dev/null`,
+а `git hook list pre-commit` в таком репо на lft показывал `vdm-crystal` и
+`echelon-guard`. `author.test.ts`, `doctor.test.ts`, `personal-hooks.test.ts`
+уже шли с подменённым `GIT_CONFIG_GLOBAL`.
+**Status:** closed — 2026-10-09: `publish.test.ts` зовёт git с пустым
+`GIT_CONFIG_GLOBAL` и `GIT_CONFIG_NOSYSTEM=1`, как `author.test.ts`; в таком
+репо хуков pre-commit нет, набор — 32/32. `core.checkStat` и
+`core.trustctime` (их уносит та же изоляция) этим тестам не нужны: чистоту
+дерева они смотрят по `git status`.
+
 ## Next actions
 
 Порядок: B закрывает боль, A — самостоятельная общая работа, C снят (DL #8).
@@ -1296,9 +1317,10 @@ vdx-ai); после исправления `c53a39a` — зелёный: Node 20
       (`husky-hooks-yarn4-outcome`): SPACEFINAM-717, !750 — husky из
       `postinstall`, pre-commit — lint-staged (Prettier + ESLint по изменённым
       файлам); `core.hooksPath` встаёт на `yarn install`, сборка образов без
-      `.git` не падает. Пайплайн зелёный, одобрен, не влит: мерж — владелец
-      после отпуска, ⏰ 2026-10-19, в списке space-hq от limeflow
-      (`spacefinam-717-merge-after-vacation`). До мержа limeflow — L1
+      `.git` не падает. Пайплайн зелёный, одобрен, не влит. Мерж решает
+      группа, без срока (поправка limeflow `husky-hooks-yarn4-merge-by-group`,
+      09.10; прежний срок владельца 19.10 снят) — смотреть по состоянию !750,
+      не по дате. До мержа limeflow — L1
 - [x] Sidetrack #18: место личных хуков решено (Q23, DL #19); echelon и
       nas-info в курсе — письма 2026-10-07 (DL #21)
 - [x] Тема 3 — предикаты, чьё имя обещает больше тела: решена 2026-10-07
