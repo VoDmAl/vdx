@@ -83,7 +83,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 applies this one
   --conversation <id>
                 continue this Claude Code conversation
-  --restart     restart the running agent in its pane — applies a changed profile
+  --restart     restart the running agent in its pane — applies a changed profile.
+                Without it, an agent running without the profile's flags is
+                a question in a terminal: Enter attaches to it as is, r
+                restarts it, q leaves it
   --detach      start without attaching; print the command that attaches
   --dry-run     print the plan and the project's running agents; start nothing
   --check       for the agent's own session: how the agent here is launched, and
@@ -102,8 +105,8 @@ machine's. A new conversation (--new, or none to continue) while an agent of
 the project runs on another machine starts only after a yes.
 
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
-3 the running agent lacks profile flags, or is not focused under --focused
-(rerun with --restart); 4 the start
+3 the running agent lacks profile flags, or is not focused under --focused,
+and was left as is — no terminal, or q (rerun with --restart); 4 the start
 was not confirmed.
 Profile format: https://github.com/VoDmAl/vdx/blob/main/docs/specs/environment-format.md
 `;

@@ -79,7 +79,8 @@ vdx publish minor   # npm login if expired → bump package.json + lock → npm 
 
 # 4. Start the agent here, continuing its last conversation (--new: a new one;
 #    another machine's conversation is continued on that machine);
-#    re-run to attach, --restart to apply a changed profile
+#    re-run to attach; an agent without the profile's flags is a question:
+#    Enter attaches as is, r restarts it; --restart applies a changed profile
 vdx ai
 
 # 5. The same on another machine (an ssh host with vdx), attaching from here

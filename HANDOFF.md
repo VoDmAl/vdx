@@ -26,7 +26,8 @@ Claude Code продолжается на машине, где он идёт (DL
   echelon каждому потребителю и `wakes: true` (DL #31–#32). echelon ответ
   получил.
 - В выпуске 2026-10-08: 0.24.0 — строка о папках, которые не видит сессия
-  (DL #33), откат прерванного `vdx publish` (Sidetrack #20); сет v1.3.0 —
+  (DL #33), вопрос вместо отказа при дрейфе в терминале (DL #34), откат
+  прерванного `vdx publish` (Sidetrack #20); сет v1.3.0 —
   `session.folders_fix`. Порядок — Next actions кристалла vdx-ai.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)

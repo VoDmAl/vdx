@@ -1568,29 +1568,39 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
         );
       }
     }
-    if (plan.focused && !runningFocused) {
-      log(`✗ ${current.pane.session}: ${plan.command} is running, not focused`);
-      log(
-        `  to focus it: vdx ai --restart --focused ${shellQuote(projectRoot)}` +
-          (plan.resumeArgs.length ? ' (stops the running agent, then resumes its conversation)' : ' (stops the running agent)'),
-      );
+    const unfocused = plan.focused && !runningFocused;
+    const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
+    if (!unfocused && missing.length === 0) {
+      log(`✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps);
+    }
+    // Drift. In a terminal the person picks: the agent as it runs, or a restart
+    // with the profile; without one nothing is touched, and the fix is named.
+    const drift = `${current.pane.session}: ${plan.command} is running${unfocused ? ', not focused' : ` without ${missing.join(' ')}`}`;
+    const fix = `vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}`;
+    const effect = plan.resumeArgs.length
+      ? 'stops the running agent, then resumes its conversation'
+      : opts.fresh
+        ? 'stops the running agent and starts a new conversation'
+        : 'stops the running agent; the conversation is not resumed — the profile has no resume_args';
+    if (!deps.interactive) {
+      log(`✗ ${drift}`);
+      log(`  ${unfocused ? 'to focus it' : 'to apply the profile'}: ${fix} (${effect})`);
       return EXIT_DRIFT;
     }
-    const missing = missingArgs(current.proc.args, plan.args);
-    if (missing.length > 0) {
-      log(`✗ ${current.pane.session}: ${plan.command} is running without ${missing.join(' ')}`);
-      log(
-        `  to apply the profile: vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
-          (plan.resumeArgs.length
-            ? ` (stops the running agent, then resumes its conversation)`
-            : opts.fresh
-              ? ' (stops the running agent and starts a new conversation)'
-              : ' (stops the running agent; the conversation is not resumed — the profile has no resume_args)'),
-      );
+    log(`⚠ ${drift}`);
+    log(`  Enter  ${opts.detach ? 'leave it running' : 'attach to it'} as is${unfocused ? '' : ' — the flags wait for a restart'}`);
+    log(`  r      restart it ${unfocused ? 'focused' : 'with the profile'}: ${effect}`);
+    log(`  q      leave it; later: ${fix}`);
+    const answer = deps.ask(`${opts.detach ? 'Leave it as is' : 'Attach as is'}? [Enter/r/q]: `);
+    if (answer === '') {
+      log(`→ ${current.pane.session}: as is — ${current.proc.args}`);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps);
+    }
+    if (answer?.toLowerCase() !== 'r') {
+      log('nothing done');
       return EXIT_DRIFT;
     }
-    log(`✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`);
-    return finish(true, current.pane.session, current.pane.paneId, opts, deps);
   }
 
   if (current) {

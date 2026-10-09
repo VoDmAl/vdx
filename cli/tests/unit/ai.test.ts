@@ -1022,12 +1022,42 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agentArgs()).toEqual(before);
   });
 
+  it('in a terminal, asks on drift: Enter takes the agent as it runs, q leaves it', () => {
+    writeProfile(['--base', '--extra']);
+    const before = agentArgs();
+    const asked: string[] = [];
+    const ask = (answer: string) => (prompt: string) => (asked.push(prompt), answer);
+
+    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: ask('') })).toBe(EXIT_OK);
+    const out = logs.join('\n');
+    expect(out).toMatch(/⚠ proj@testhost: \S*fake-agent is running without --extra\n/);
+    expect(out).toContain(`q      leave it; later: vdx ai --restart ${shellQuote(root)}`);
+    expect(out).toContain('→ proj@testhost: as is');
+    expect(out).toContain('attach: ');
+    expect(asked).toEqual(['Leave it as is? [Enter/r/q]: ']);
+    expect(agentArgs()).toEqual(before);
+
+    logs = [];
+    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: ask('q') })).toBe(EXIT_DRIFT);
+    expect(logs.join('\n')).toContain('nothing done');
+    expect(agentArgs()).toEqual(before);
+  });
+
   it('--restart replaces the agent in the same pane, resumes, and answers the prompt again', () => {
     writeProfile(['--base', '--extra']);
     const paneBefore = tmux.panes().map((p) => p.paneId);
     expect(runAi({ ...opts, path: root, restart: true }, deps())).toBe(EXIT_OK);
     expect(tmux.panes().map((p) => p.paneId)).toEqual(paneBefore);
     expect(agentArgs()[0]).toMatch(/fake-agent --base --extra --chan plugin:x@y --resume-me$/);
+    expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
+  });
+
+  it('in a terminal, r at the drift question restarts the agent with the profile', () => {
+    writeProfile(['--base', '--extra', '--more']);
+    const paneBefore = tmux.panes().map((p) => p.paneId);
+    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: () => 'r' })).toBe(EXIT_OK);
+    expect(tmux.panes().map((p) => p.paneId)).toEqual(paneBefore);
+    expect(agentArgs()[0]).toMatch(/fake-agent --base --extra --more --chan plugin:x@y --resume-me$/);
     expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
   });
 

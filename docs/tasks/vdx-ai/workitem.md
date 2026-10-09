@@ -928,6 +928,28 @@ CLI 0.23.0 (minor), плагин 0.9.1 (скилл), `wakes: true` — в сет
 все три — строки нет, `--dry-run` 1,6 с. Сет v1.3.0 — `folders_fix` со строкой
 nas-info. CLI 0.24.0 (minor) вместе с Sidetrack #20.
 
+### #34 / 2026-10-08 / Дрейф в терминале — вопрос, а не отказ
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Владелец 08.10, после `✗ space-hq@lft: claude is running
+without --dangerously-load-development-channels plugin:echelon@echelon`: «Я бы
+ожидал конечно увидеть не ошибку, а предложение проигнорировать и подключиться
+к той сессии».
+**Context:** Агент space-hq на lft запущен в 08:41; в 17:20 space-hq закоммитил
+`mail.watch` (`b82ad82`), и профиль потребовал флаг канала. `vdx ai` отказал с
+кодом 3 — человеку, который хотел просто открыть сессию.
+**Why:** Флаг доходит до агента только с перезапуском, а перезапуск обрывает
+работу — выбор за человеком, и в терминале его можно спросить. Enter — как
+есть: не трогает агента и не теряет работу. Без терминала (агент, скрипт)
+спросить некого — прежний отчёт и код 3.
+**Implication:** `runAi` (`cli/src/ai.ts`): при дрейфе и `deps.interactive` —
+`⚠` и вопрос `Attach as is? [Enter/r/q]` (с `--detach` — `Leave it as is?`):
+Enter → `finish` как с совпавшим агентом, `r` → тот же перезапуск, что
+`--restart`, иное → `nothing done`, код 3. Так же — обычный агент под
+`--focused`. Тесты на изолированном tmux: Enter и `q` агента не трогают, `r`
+перезапускает в той же панели. В 0.24.0 вместе с DL #33.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -1605,7 +1627,7 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       тег `v1.2.0` на GitHub
 - [x] Sidetrack #20: `vdx publish` откатывает поднятую версию и по сигналу;
       текст про OTP — под вход npm через браузер — 2026-10-08, в 0.24.0
-- [ ] Выпуск DL #33 и Sidetrack #20: коммит vdx → `vdx publish minor`
+- [ ] Выпуск DL #33–#34 и Sidetrack #20: коммит vdx → `vdx publish minor`
       (0.24.0) → коммит сета, тег `v1.3.0`, push → 0.24.0 на lft и m3 →
       ответ nas-info на `vdx-ai-folders-warning`, pickup
 - [x] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
