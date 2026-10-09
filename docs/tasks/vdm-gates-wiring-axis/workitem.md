@@ -1185,8 +1185,10 @@ typecheck, `test` — `bash cli/smoke.sh` (аудит трёх калибров�
 смоук — `test:smoke`. CI ставит mise (`jdx/mise-action@v4`; v5 вышел
 2026-09-28, рано) и зовёт `mise run check` / `mise run test`; matrix 20/22 —
 через `MISE_NODE_VERSION`, `mise.toml` держит 20. Локальный аудит vdx: `ci`
-L2 → L4. Обе задачи проходят через mise (389 тестов). Зелёный прогон на
-GitHub — после push.
+L2 → L4. Обе задачи проходят через mise (389 тестов). На GitHub первый
+прогон (`3988498`) красный — тест папок на tmux 3.4 (Sidetrack #21 кристалла
+vdx-ai); после исправления `c53a39a` — зелёный: Node 20 и 22, шаги
+`mise run check` и `mise run test` (run 37881395115).
 
 ### #20. vdx по своей рубрике — L1; CLAUDE.md требует высшего уровня
 
@@ -1353,7 +1355,7 @@ GitHub — после push.
 - [x] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
       стража (выше) — сет v1.1.0, 2026-10-08
 - [x] Sidetrack #19: CI vdx зовёт словарь — 2026-10-08, `mise run check` /
-      `mise run test` в `ci.yml`; зелёный прогон на GitHub — после push
+      `mise run test` в `ci.yml`; зелёный на GitHub с `c53a39a`
 - [ ] Sidetrack #20: догфудинг vdx до высшего уровня своей рубрики —
       отложено владельцем 2026-10-08; вернуться отдельным кристаллом
 
