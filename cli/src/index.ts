@@ -134,7 +134,8 @@ mise.toml is overwritten only with --force.
   pre-flight checks — at a terminal an expired npm login is renewed (\`npm login\`)
   and the checks run again;
   the version bump in package.json and package-lock.json;
-  npm publish (npm asks for an OTP);
+  npm publish (npm asks for an OTP or a confirmation in the browser; Ctrl-C
+  there puts the version back);
   git commit and tag, then \`git push --follow-tags\` to the branch's upstream;
   a wait until the registry shows the new version (up to 3 min).
 --dry-run runs the pre-flight and prints the plan; --force goes on past a failed

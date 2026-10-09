@@ -466,6 +466,25 @@ describe('the release goes out whole: lock, push, registry', () => {
     expect(git(['log', '--format=%s'])).toBe('init\n');
   });
 
+  it('an interrupted npm publish (Ctrl-C at its prompt) puts both files back too', () => {
+    let holding = 0;
+    const before = process.listenerCount('SIGINT');
+    const d = deps({
+      run: (cmd, args, cwd) => {
+        if (cmd === 'npm') {
+          holding = process.listenerCount('SIGINT');
+          throw Object.assign(new Error('killed'), { signal: 'SIGINT', status: null });
+        }
+        execFileSync(cmd, args, { cwd, stdio: 'ignore' });
+      },
+    });
+    expect(() => executePublish(releasePlan(), d)).toThrow('npm publish interrupted');
+    expect(holding).toBe(before + 1); // vdx outlives the Ctrl-C that npm gets
+    expect(process.listenerCount('SIGINT')).toBe(before);
+    expect(git(['status', '--porcelain'])).toBe('');
+    expect(logs.join('\n')).toContain('✗ npm publish interrupted (SIGINT); reverted package.json');
+  });
+
   it('counts the seconds on one line while it waits — a silent wait looked hung', () => {
     const lines: string[] = [];
     expect(waitForRegistry('demo', '1.1.0', deps({ progress: (t) => lines.push(t) }))).toBe(true);

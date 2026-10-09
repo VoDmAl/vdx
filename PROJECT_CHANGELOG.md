@@ -4,6 +4,15 @@
 
 ## 2026-10-08
 
+### `vdx ai` говорит, когда сессия не видит «Загрузки»; прерванный `vdx publish` откатывает версию
+
+На macOS перед запуском и подключением vdx спрашивает сервер tmux
+(`run-shell`), читает ли он `~/Downloads`, `~/Desktop`, `~/Documents`, и при
+отказе пишет одну строку с починкой из `session.folders_fix` (сет v1.3.0 —
+команда nas-info). `vdx publish` переживает Ctrl-C на запросе npm и возвращает
+поднятую версию ([spec](docs/specs/environment-format.md),
+[DL #33, Sidetrack #20](docs/tasks/vdx-ai/workitem.md)).
+
 ### `vdx ai --focused` — сессия, которую никто не будит
 
 Агент получает `VDX_FOCUSED=1` (по ней молчат echelon и intercom), правила

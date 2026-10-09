@@ -84,6 +84,8 @@ export interface SessionProfile {
   project_names?: NameSource[];
   /** The machines a project's agent may run on, as ssh destinations; vdx asks the others what runs there. */
   machines?: string[];
+  /** What to do when a session cannot read ~/Downloads, ~/Desktop or ~/Documents (macOS): shown after the warning. */
+  folders_fix?: string;
 }
 
 /**
@@ -221,6 +223,9 @@ export function parseEnvironment(text: string, source: string): Environment {
       session.machines.forEach((m, i) => {
         if (!isMachineLabel(m)) fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
       });
+    }
+    if (session.folders_fix !== undefined && (typeof session.folders_fix !== 'string' || session.folders_fix.trim() === '')) {
+      fail('session.folders_fix', 'must be a non-empty string');
     }
   }
 
@@ -708,6 +713,8 @@ export interface AiDeps {
   processes: () => ProcInfo[];
   /** Was this agent process started focused; default: its environment (`processFocused`). */
   agentFocused?: (pid: number) => boolean;
+  /** Default `process.platform`: the folder check is for macOS. */
+  platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
@@ -1308,6 +1315,46 @@ export function processFocused(pid: number): boolean {
   }
 }
 
+/** macOS guards these folders on their own; a tmux server can hold a denial for every session under it. */
+export const GUARDED_FOLDERS = ['Downloads', 'Desktop', 'Documents'];
+
+/**
+ * The guarded folders an agent started here could not read. Through the tmux server
+ * (`run-shell`): its sessions have the server's rights, not vdx's. Without a server, or
+ * without tmux, this process's own — the agent gets the rights of this terminal. A folder
+ * that does not exist is skipped.
+ */
+export function unreadableFolders(tmux: Tmux | null, home: string): string[] {
+  const dirs = GUARDED_FOLDERS.map((f) => path.join(home, f));
+  // `ls`, not `[ -d ]`: a denied folder still passes -d.
+  const script = dirs.map((d) => `{ [ ! -d ${shellQuote(d)} ] || ls ${shellQuote(d)} >/dev/null 2>&1 || echo ${shellQuote(d)}; }`).join('; ');
+  const out = tmux?.tryRun(['run-shell', script]);
+  if (out !== undefined && out !== null) return out.split('\n').filter(Boolean);
+  return dirs.filter((d) => {
+    try {
+      fs.readdirSync(d);
+      return false;
+    } catch (e: any) {
+      return e?.code === 'EPERM' || e?.code === 'EACCES';
+    }
+  });
+}
+
+/** One warning and its fix — the profile's `session.folders_fix`, else what works anywhere. */
+export function foldersWarning(denied: string[], viaTmux: boolean, fix: string | undefined, home: string): string[] {
+  const names = denied.map((d) => (d.startsWith(home + path.sep) ? `~${d.slice(home.length)}` : d)).join(', ');
+  return [
+    `⚠ this session cannot read ${names} — macOS holds the denial ${viaTmux ? 'in the tmux server' : 'for this terminal'}; ` +
+      `files there are out of the agent's reach`,
+    `  fix: ${
+      fix ??
+      (viaTmux
+        ? 'restart the tmux server (it closes every session)'
+        : 'allow this terminal app in System Settings → Privacy & Security → Files and Folders')
+    }`,
+  ];
+}
+
 /** The agent's command line; a focused one carries VDX_FOCUSED=1 in front, for the shell in its tmux pane. */
 function agentLine(plan: LaunchPlan, args: string[]): string {
   return `${plan.focused ? `${FOCUSED_ENV_VAR}=1 ` : ''}${commandLine(plan.command, args)}`;
@@ -1436,13 +1483,18 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
 
   const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
+  // Said before a start or an attach, never in the way: the agent runs, without those files.
+  const denied = (deps.platform ?? process.platform) === 'darwin' ? unreadableFolders(multiplexer === 'tmux' ? tmux : null, deps.home) : [];
+  const folders = denied.length ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home) : [];
   if (opts.dryRun) {
     deps.out(renderPlan(plan, multiplexer, running, focusedOf));
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
+    for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
     return EXIT_OK;
   }
   for (const l of choice?.lines ?? []) log(l);
+  for (const l of folders) log(l);
   if (choice?.abort) return EXIT_LAUNCH_FAILED;
   if (choice?.elsewhere && !current) {
     const answer = deps.interactive ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `) : null;

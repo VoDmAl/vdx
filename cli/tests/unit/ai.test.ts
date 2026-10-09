@@ -16,6 +16,7 @@ import {
   fallbackAgent,
   findAgentPanes,
   findOwnAgent,
+  foldersWarning,
   hostLabel,
   isAgentProcess,
   listProcesses,
@@ -38,6 +39,7 @@ import {
   shellQuote,
   sleepSync,
   tmuxShellCommand,
+  unreadableFolders,
 } from '../../src/ai.ts';
 import { type LiveSession, readConversation } from '../../src/conversations.ts';
 import { ID, hookLine, promptLine, startedOn, userLine, writeConversation, writeHistory } from './transcripts.ts';
@@ -84,6 +86,43 @@ describe('resolveEnvironmentPath', () => {
   });
 });
 
+describe.skipIf(process.getuid?.() === 0)('guarded folders (macOS)', () => {
+  let home: string;
+  beforeEach(() => {
+    home = tmpDir('vdx-folders-');
+    fs.mkdirSync(path.join(home, 'Downloads'), { mode: 0o000 });
+    fs.mkdirSync(path.join(home, 'Desktop'));
+  });
+  afterEach(() => {
+    fs.chmodSync(path.join(home, 'Downloads'), 0o755);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('names a folder it cannot read; a missing one (Documents) is skipped', () => {
+    expect(unreadableFolders(null, home)).toEqual([path.join(home, 'Downloads')]);
+  });
+
+  it.skipIf(!new Tmux().available())('asks the tmux server — its sessions have its rights — and falls back without one', () => {
+    const tmux = new Tmux(`vdx-test-folders-${process.pid}`);
+    try {
+      expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // no server yet: this process
+      tmux.run(['new-session', '-d', '-s', 'f', 'sleep 30']);
+      expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // the server's own ls
+    } finally {
+      tmux.tryRun(['kill-server']);
+    }
+  });
+
+  it('one warning line and the fix: the profile\'s, else what works anywhere', () => {
+    const d = [path.join(home, 'Downloads'), path.join(home, 'Desktop')];
+    expect(foldersWarning(d, true, undefined, home)).toEqual([
+      "⚠ this session cannot read ~/Downloads, ~/Desktop — macOS holds the denial in the tmux server; files there are out of the agent's reach",
+      '  fix: restart the tmux server (it closes every session)',
+    ]);
+    expect(foldersWarning(d, true, 'run the fixer', home)[1]).toBe('  fix: run the fixer');
+  });
+});
+
 describe('processFocused', () => {
   it('reads VDX_FOCUSED=1 from the environment of a running process', async () => {
     const run = (value: string) =>
@@ -122,6 +161,7 @@ describe('parseEnvironment', () => {
     ['session: {machines: m3}', 'session.machines'],
     ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
     ['agent: {command: claude, when: [{id: a, if: true, wakes: "true"}]}', 'agent.when[0].wakes'],
+    ['session: {folders_fix: ""}', 'session.folders_fix'],
     ['- just a list', 'top level'],
   ])('rejects %s naming %s', (yaml, key) => {
     expect(() => parseEnvironment(yaml, 'p.yaml')).toThrow(key);
@@ -413,6 +453,32 @@ describe('runAi without tmux', () => {
     it('--new starts a new conversation', () => {
       expect(runAi({ ...opts, path: root, fresh: true }, direct())).toBe(EXIT_OK);
       expect(runs()).toEqual(['--base']);
+    });
+
+    it('macOS: a guarded folder the session cannot read is named before the start, and the agent starts anyway', () => {
+      const d = direct();
+      const downloads = path.join(home, 'Downloads');
+      fs.mkdirSync(downloads, { mode: 0o000 });
+      try {
+        expect(runAi({ ...opts, path: root }, { ...d, platform: 'darwin' })).toBe(EXIT_OK);
+        expect(logs).toContain(
+          "⚠ this session cannot read ~/Downloads — macOS holds the denial for this terminal; files there are out of the agent's reach",
+        );
+        expect(runs()).toEqual(['--base --resume-me']);
+        logs = [];
+        const profile = path.join(home, 'env.yaml');
+        fs.writeFileSync(
+          profile,
+          fs.readFileSync(profile, 'utf8').replace('session: {multiplexer: none}', 'session: {multiplexer: none, folders_fix: "run the fixer"}'),
+        );
+        expect(runAi({ ...opts, path: root }, { ...d, platform: 'darwin' })).toBe(EXIT_OK);
+        expect(logs).toContain('  fix: run the fixer');
+        logs = [];
+        expect(runAi({ ...opts, path: root }, { ...d, platform: 'linux' })).toBe(EXIT_OK);
+        expect(logs.join('\n')).not.toContain('cannot read');
+      } finally {
+        fs.chmodSync(downloads, 0o755);
+      }
     });
 
     it('--focused: VDX_FOCUSED=1 for the agent, and the rules that wake it left out', () => {

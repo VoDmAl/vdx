@@ -24,8 +24,10 @@ Claude Code продолжается на машине, где он идёт (DL
   проверено живьём с lft на m3 (Sidetrack #19 закрыт).
 - 0.23.0 (2026-10-08): `vdx ai --focused` (DL #32); сет v1.2.0 — флаг канала
   echelon каждому потребителю и `wakes: true` (DL #31–#32). echelon ответ
-  получил. Открыто: Sidetrack #20 (прерванный `vdx publish`), письмо nas-info
-  `vdx-ai-folders-warning` (папки, которые не видит сессия в tmux).
+  получил.
+- В выпуске 2026-10-08: 0.24.0 — строка о папках, которые не видит сессия
+  (DL #33), откат прерванного `vdx publish` (Sidetrack #20); сет v1.3.0 —
+  `session.folders_fix`. Порядок — Next actions кристалла vdx-ai.
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08

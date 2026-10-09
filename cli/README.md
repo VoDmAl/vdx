@@ -75,7 +75,7 @@ vdx init --stack node
 vdx test            # → mise run test (which calls `vitest run` or whatever was detected)
 
 # 3. Ship a new minor release of a Node lib
-vdx publish minor   # npm login if expired → bump package.json + lock → npm publish (OTP) → commit + tag → push → wait for the registry
+vdx publish minor   # npm login if expired → bump package.json + lock → npm publish (OTP or browser) → commit + tag → push → wait for the registry
 
 # 4. Start the agent here, continuing its last conversation (--new: a new one;
 #    another machine's conversation is continued on that machine);

@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.2.0"
+  version: "1.3.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -53,6 +53,11 @@ session:
   # what runs there: a running conversation is continued on its machine, and a
   # new one while an agent of the project runs elsewhere starts after a yes.
   machines: [lft, m3]
+  # When a session cannot read ~/Downloads, ~/Desktop or ~/Documents, vdx ai
+  # says so before the start and shows this. On these machines nas-info keeps
+  # the tmux server: its run heals the server while no session runs, and
+  # offers a restart (which closes every session) otherwise.
+  folders_fix: "~/nas-info/gather-and-send-info.sh in a plain terminal, not under tmux"
 
 git:
   # A repo without its own author makes git refuse to commit (user.useConfigOnly);

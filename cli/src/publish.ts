@@ -481,7 +481,7 @@ export function waitForRegistry(name: string, version: string, deps: PublishDeps
  *      or there is none. The pre-flight refused a branch behind its upstream.
  *   5. Wait until the registry shows the version.
  *
- * On npm publish failure → restore the original files.
+ * On npm publish failure or interruption (Ctrl-C at its prompt) → restore the original files.
  * Git failures after a successful npm publish leave the user in a
  * partially-released state; they fix it manually (commit/tag/push what's
  * needed) — we don't try to unpublish.
@@ -511,14 +511,22 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
     `✓ bumped ${bumped.map((f) => path.relative(plan.projectRoot, f)).join(' and ')}: ${plan.currentVersion} → ${plan.newVersion}`,
   );
 
-  // 2. npm publish (interactive — OTP prompt may appear)
-  deps.log('→ running `npm publish` (OTP prompt may appear)...');
+  // 2. npm publish (interactive — npm asks for an OTP or a confirmation in the browser).
+  // Ctrl-C at that prompt reaches npm and vdx alike: vdx holds out while npm runs, so the
+  // interrupted npm comes back as an error and the bump is put back — not left for the next run.
+  deps.log('→ running `npm publish` (npm may ask for an OTP or a confirmation in the browser)...');
+  const holdOut = () => {};
+  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  for (const s of signals) process.on(s, holdOut);
   try {
     deps.run('npm', ['publish'], path.dirname(plan.packageJsonPath));
   } catch (e: any) {
     for (const [file, text] of originals) fs.writeFileSync(file, text, 'utf8');
-    deps.log(`✗ npm publish failed (exit ${e?.status ?? '?'}); reverted ${bumped.map((f) => path.basename(f)).join(' and ')}`);
-    throw new Error('npm publish failed');
+    const what = e?.signal ? `interrupted (${e.signal})` : `failed (exit ${e?.status ?? '?'})`;
+    deps.log(`✗ npm publish ${what}; reverted ${bumped.map((f) => path.basename(f)).join(' and ')}`);
+    throw new Error(`npm publish ${e?.signal ? 'interrupted' : 'failed'}`);
+  } finally {
+    for (const s of signals) process.off(s, holdOut);
   }
   deps.log(`✓ published ${plan.packageName}@${plan.newVersion}`);
 

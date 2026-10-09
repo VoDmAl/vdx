@@ -90,7 +90,8 @@ Canonical owner-baseline живёт в отдельном репо:
 
 - `vdx publish <patch|minor|major>` запускает владелец в своём терминале — одной
   командой (с 0.20): истёкший вход в npm — `npm login` по ходу, версия в
-  `package.json` и `cli/package-lock.json` одним коммитом, npm спрашивает OTP,
+  `package.json` и `cli/package-lock.json` одним коммитом, npm спрашивает OTP или
+  подтверждение в браузере (Ctrl-C там возвращает версию назад, с 0.24),
   тег, `git push --follow-tags`, ожидание версии в registry (до 3 мин).
   `--no-push` оставляет коммит и тег локальными.
 - Pre-flight требует чистое дерево: незакоммиченное до выпуска — закоммитить
