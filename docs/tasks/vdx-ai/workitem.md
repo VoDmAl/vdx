@@ -1635,12 +1635,18 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
 - [ ] Ответ nas-info на `ssh-peers-agent` (2026-10-07): BatchMode-ssh между
       станциями из ssh-сессии, без агента ключей — сейчас отказ в обе стороны
       (Sidetrack #18)
-- [ ] Ответ nas-info на `ssh-self-alias` (2026-10-07): `ssh <своя метка>` на
+- [x] Ответ nas-info на `ssh-self-alias` (2026-10-07): `ssh <своя метка>` на
       каждой станции — псевдоним себя, свой ключ в `authorized_keys`, свой host
       key в `known_hosts`. Повод: строка `… && ssh m3 '…'`, запущенная на m3, —
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
-      запуск здесь)
+      запуск здесь) — 2026-10-09, `ssh-self-alias-outcome` (nas-info `dcf7b74`,
+      `fd2c21a`): `Host m3 imac-m3` / `Host lft work-imac` → `localhost`, свой
+      ключ с `from="127.0.0.1,::1"`, host key в `~/.ssh/known_hosts.nas-info`;
+      `work` на lft остаётся за корпоративным DNS. Проверено мной с lft:
+      `ssh -o BatchMode=yes lft|m3 'hostname -s'` и то же из ssh-сессии m3 —
+      все четыре отвечают. В ssh-сессии m3 теперь есть `SSH_AUTH_SOCK`
+      (launchd, без `ForwardAgent`) — что это, скажет ответ на `ssh-peers-agent`
 - [x] Выпуск DL #31–#32: коммит vdx → `vdx publish minor` (0.23.0, плагин
       0.9.1 в `main`) → коммит сета, тег `v1.2.0`, push → ответы echelon на
       `echelon-channel-all-consumers` и `vdx-focused-flag` → pickup обоих.
