@@ -35,11 +35,11 @@ Claude Code продолжается на машине, где он идёт (DL
 — треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08
 (DL #22): `@vodmal/vdx-cli@0.22.0` (schema 0.3, распознаватель хуков,
 `vdx doctor --check/--fix`), сет `vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0. На
-станциях 0.24.0 (2026-10-08); на lft гейт vdm и страж echelon — в
-`~/.gitconfig` (`vdx doctor --fix`, `global` в `git hook list`), на m3 — после
-git ≥ 2.54. Сет v1.1.0
-(2026-10-08) добавил `echelon-guard` в `git.hooks`: echelon готов
-(`echelon-guard-ready`). Ждём nas-info `git-2-54-everywhere` до 2026-10-14.
+станциях 0.24.0 (2026-10-08); гейт vdm и страж echelon — в `~/.gitconfig`
+обеих станций (`vdx doctor --fix`: lft 08.10, m3 09.10 после git 2.56 от
+nas-info; `global` в `git hook list`). Сет v1.1.0 (2026-10-08) добавил
+`echelon-guard` в `git.hooks`; echelon знает, что старые строки стража можно
+убирать (`echelon-guard-ready-outcome`, 09.10).
 CI vdx зовёт `mise run check` / `mise run test` (Sidetrack #19, 2026-10-08).
 Догфудинг vdx до высшего уровня своей рубрики (сейчас L1) — Sidetrack #20,
 отложен владельцем.

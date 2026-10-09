@@ -5,7 +5,7 @@ description: "Ось vdx, проверяющая что pre-commit гейт vdm 
 status: in-progress
 session-type: prd-prep
 created: 2026-09-01
-last-updated: 2026-10-08
+last-updated: 2026-10-09
 ---
 
 # Гейт vdm: правило в environment-документе персонального сета, не ось
@@ -1225,12 +1225,18 @@ vdx-ai); после исправления `c53a39a` — зелёный: Node 20
       ключи `hook.<имя>.*` в `~/.gitconfig` и git ≥ 2.54 (DL #22; O40 —
       «два shape»), 2026-10-07
 - [x] O41 `--fix`: `hook.<имя>.*` в глобальный конфиг git (DL #19), 2026-10-07
-- [ ] Догфудинг: личные хуки в конфиге git lft и m3 — покрывают и `vdx`
+- [x] Догфудинг: личные хуки в конфиге git lft и m3 — покрывают и `vdx`:
+      lft 2026-10-08, m3 2026-10-09 (`global vdm-crystal`, `global
+      echelon-guard` в `git hook list pre-commit --show-scope` в vdx)
 - [x] Письмо nas-info: git ≥ 2.54 у всех, кто коммитит на m3 и lft —
       отправлено 2026-10-07, `git-2-54-everywhere` (DL #21)
 - [x] Письмо echelon: страж в конфиг git, вопросы о границе, `check` и
       исключениях — отправлено 2026-10-07, `guard-in-git-config` (DL #21)
-- [ ] Ответ nas-info: git ≥ 2.54 везде на обеих станциях ⏰ 2026-10-14
+- [x] Ответ nas-info: git ≥ 2.54 везде на обеих станциях — 2026-10-09,
+      `git-2-54-everywhere-outcome`: m3 2.56.0, lft 2.54.0; первым в PATH —
+      `~/.local/share/nas-info/git-first/git` (ssh, `bash -l`, launchd), бейдж
+      `f:git`. Окно: от входа до первого цикла gather (до 15 мин) у приложений
+      launchd — Apple git; ключи `hook.*` `f:git` не трогает
 - [x] Ответ echelon по вопросам 1–3 — 2026-10-08, `guard-in-git-config-outcome`:
       ключ в `~/.gitconfig` годится; роль страж определяет сам (корень echelon,
       репо из `consumers.yaml`, прочие — код 0); `--allow` — в
@@ -1349,9 +1355,12 @@ vdx-ai); после исправления `c53a39a` — зелёный: Node 20
       (pre-commit); git 2.54.0: `git hook list pre-commit --show-scope` —
       `global vdm-crystal`, `global echelon-guard`; `GIT_TRACE=1 git hook run
       pre-commit` в vdx запускает оба, код 0; `vdx doctor` — personal hooks ok
-- [ ] m3: `vdx doctor --fix` после git ≥ 2.54 там (ответ nas-info ⏰
-      2026-10-14); затем письмо echelon: `global echelon-guard` на обеих
-      машинах — старые строки стража в репо можно убирать (его правило)
+- [x] m3: `vdx doctor --fix` после git ≥ 2.54 — 2026-10-09: в `~/.gitconfig`
+      m3 (свой, не общий с lft) `hook.vdm-crystal` и `hook.echelon-guard`;
+      `git hook run pre-commit` в vdx — код 0, `vdx doctor` — ok на обеих.
+      Письмо echelon `echelon-guard-ready-outcome`: `global echelon-guard` на
+      обеих машинах, старые строки — по его правилу; окно входа nas-info
+      названо
 - [x] Страж echelon в `git.hooks` профиля — после письма echelon о готовности
       стража (выше) — сет v1.1.0, 2026-10-08
 - [x] Sidetrack #19: CI vdx зовёт словарь — 2026-10-08, `mise run check` /
