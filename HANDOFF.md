@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-08, @vodmal/vdx-cli@0.22.1)
+# vdx — Handoff (2026-10-08, @vodmal/vdx-cli@0.23.0)
 
 Документ-onboarding для продолжения работы в новой чистой сессии. Читать
 **первым** перед всем остальным.
@@ -14,23 +14,24 @@
 Claude Code продолжается на машине, где он идёт (DL #27); машины проекта —
 `session.machines` профиля (DL #29).
 
-- `@vodmal/vdx-cli@0.22.1` в npm и на обеих станциях; сет
-  `vdx-rubric-vodmal@v1.1.0`; плагин vdx 0.9.0. Порядок выпуска — «Выпуск CLI» и
+- `@vodmal/vdx-cli@0.23.0` в npm и на обеих станциях; сет
+  `vdx-rubric-vodmal@v1.2.0`; плагин vdx 0.9.1. Порядок выпуска — «Выпуск CLI» и
   «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
 - На 2026-10-07 с нашей стороны сделано всё; ждём: ответы nas-info на письма
   `ssh-self-alias` и `ssh-peers-agent` (ssh станции на себя и без агента ключей,
   Sidetrack #18) и живую проверку владельца в локальном терминале lft.
 - 0.22.1 (2026-10-08, DL #30): `vdx ai@<host>` говорит с места человека —
   проверено живьём с lft на m3 (Sidetrack #19 закрыт).
-- В выпуске 2026-10-08: 0.23.0 — `vdx ai --focused` (DL #32), плагин 0.9.1,
-  сет v1.2.0 — флаг канала echelon каждому потребителю и `wakes: true`
-  (DL #31–#32). Порядок и ответы echelon — Next actions кристалла.
+- 0.23.0 (2026-10-08): `vdx ai --focused` (DL #32); сет v1.2.0 — флаг канала
+  echelon каждому потребителю и `wakes: true` (DL #31–#32). echelon ответ
+  получил. Открыто: Sidetrack #20 (прерванный `vdx publish`), письмо nas-info
+  `vdx-ai-folders-warning` (папки, которые не видит сессия в tmux).
 
 **В работе с 2026-10-01:** [docs/tasks/vdm-gates-wiring-axis/workitem.md](docs/tasks/vdm-gates-wiring-axis/workitem.md)
 — треки A (ложно-зелёные оценки) и B (личные хуки) выпущены 2026-10-08
 (DL #22): `@vodmal/vdx-cli@0.22.0` (schema 0.3, распознаватель хуков,
 `vdx doctor --check/--fix`), сет `vdx-rubric-vodmal@v1.0.0`, плагин 0.9.0. На
-станциях 0.22.1 (2026-10-08); на lft гейт vdm и страж echelon — в
+станциях 0.23.0 (2026-10-08); на lft гейт vdm и страж echelon — в
 `~/.gitconfig` (`vdx doctor --fix`, `global` в `git hook list`), на m3 — после
 git ≥ 2.54. Сет v1.1.0
 (2026-10-08) добавил `echelon-guard` в `git.hooks`: echelon готов

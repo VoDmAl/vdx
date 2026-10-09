@@ -1241,6 +1241,22 @@ there: vdx ai@<m>» и переход к разговору другой маш�
 busy) — attach: vdx ai '/Users/vdm/AI Projects/vdx'». Вопрос «on m3 anyway?»
 `--dry-run` не задаёт — он проверен тестом
 
+### #20. Прерванный `vdx publish` оставляет поднятую версию; следующий поднимает её ещё раз
+
+**Возникло в:** выпуск 0.23.0, 2026-10-08.
+**Описание:** Первый `vdx publish minor` поднял `cli/package.json` и lock до
+0.23.0 и прервался на `npm publish`: в npm-логе 23:32 — `PUT 401`, затем опрос
+`…/-/v1/done?authId=…` (202) — npm ждал подтверждения входа в браузере, и
+лог на этом обрывается. Откат файлов при ошибке (`publish.ts`, восстановление
+исходников) не сработал — процесс прервали, а не ошибка. Второй запуск
+предложил 0.23.0 → 0.24.0 и упал на чистом дереве (2 файла). Файлы вернул к
+HEAD (`git checkout`, в diff — только номер версии); третий запуск — коммит
+`d8a55e6 release: v0.23.0` и тег. Две вещи: (1) откат и по сигналу (SIGINT/SIGTERM), не только по
+ошибке npm; (2) подтверждение npm теперь через браузер — справка и CLAUDE.md
+говорят «npm спрашивает OTP».
+
+**Status:** open
+
 ## Next actions
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
@@ -1550,9 +1566,15 @@ busy) — attach: vdx ai '/Users/vdm/AI Projects/vdx'». Вопрос «on m3 an
       `Could not resolve hostname m3`; вход на себя сейчас не работает ни по
       имени ZeroTier, ни через `localhost`. vdx этого не требует (своя метка —
       запуск здесь)
-- [ ] Выпуск DL #31–#32: коммит vdx → `vdx publish minor` (0.23.0, плагин
+- [x] Выпуск DL #31–#32: коммит vdx → `vdx publish minor` (0.23.0, плагин
       0.9.1 в `main`) → коммит сета, тег `v1.2.0`, push → ответы echelon на
-      `echelon-channel-all-consumers` и `vdx-focused-flag` → pickup обоих
+      `echelon-channel-all-consumers` и `vdx-focused-flag` → pickup обоих.
+      2026-10-08: `78af590`, `d8a55e6 release: v0.23.0`, npm `latest` 0.23.0
+      (с третьего запуска — Sidetrack #20); 0.23.0 на lft и m3 (npm той копии,
+      что стоит); ответы `…-outcome` ушли, письма в архиве; сет — `9538259`,
+      тег `v1.2.0` на GitHub
+- [ ] Sidetrack #20: `vdx publish` откатывает поднятую версию и по сигналу;
+      текст про OTP — под вход npm через браузер
 - [x] Sidetrack #19: `vdx ai@<host>` пишет с места человека — код и выпуск
       0.22.1 2026-10-08 (DL #30, `bf974dd`); живьём с lft на m3 — 2026-10-08
       (Sidetrack #19, Status)
