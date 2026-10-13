@@ -62,7 +62,10 @@ describe('vdx ai --help and unknown options', () => {
   it('refuses an unknown option before the plan, even with --dry-run', () => {
     // After a bare flag, parseArgs takes `-x` for that flag's value.
     for (const bad of ['--hlep', '-x', '--version']) {
-      for (const args of [[bad, '--dry-run'], ['--dry-run', bad]]) {
+      for (const args of [
+        [bad, '--dry-run'],
+        ['--dry-run', bad],
+      ]) {
         const r = vdxEnv(env(), 'ai', CLI_ROOT, ...args);
         expect(r.status, args.join(' ')).toBe(2);
         expect(r.stderr).toContain(`unknown option ${bad}`);
@@ -80,7 +83,11 @@ describe('vdx ai --help and unknown options', () => {
   });
 
   it('--check takes only the path — no other flag, no @host', () => {
-    for (const [cmd, ...args] of [['ai', '--check', '--dry-run'], ['ai', '--restart', '--check'], ['ai@zz-elsewhere', '--check']]) {
+    for (const [cmd, ...args] of [
+      ['ai', '--check', '--dry-run'],
+      ['ai', '--restart', '--check'],
+      ['ai@zz-elsewhere', '--check'],
+    ]) {
       const r = vdxEnv(env(), cmd!, ...args);
       expect(r.status, [cmd, ...args].join(' ')).toBe(2);
       expect(r.stderr).toContain('--check takes only the project path');
@@ -93,7 +100,6 @@ describe('vdx ai --help and unknown options', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('vdx ai — ');
   });
-
 });
 
 describe('every command: --help, unknown options, stray arguments', () => {

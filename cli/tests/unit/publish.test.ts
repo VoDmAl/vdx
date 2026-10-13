@@ -81,7 +81,8 @@ function fakeNpm(answers: Record<string, string | Error>): NpmRunner & { calls: 
   const run = (args: string[]) => {
     calls.push(args);
     const a = answers[args.join(' ')];
-    if (a === undefined) throw Object.assign(new Error('unexpected npm call'), { stderr: `unexpected: ${args.join(' ')}` });
+    if (a === undefined)
+      throw Object.assign(new Error('unexpected npm call'), { stderr: `unexpected: ${args.join(' ')}` });
     if (a instanceof Error) throw a;
     return a;
   };
@@ -128,12 +129,7 @@ describe('planPublish: pre-flight', () => {
         },
       ],
     });
-    const plan = planPublish(
-      { projectRoot, bump: 'patch', dryRun: true, force: false },
-      audit,
-      ctx,
-      fixtureNpm(),
-    );
+    const plan = planPublish({ projectRoot, bump: 'patch', dryRun: true, force: false }, audit, ctx, fixtureNpm());
     const libCheck = plan.preflight.find((c) => c.name === 'lib-intent (applies_when)');
     expect(libCheck?.ok).toBe(false);
     expect(libCheck?.message).toMatch(/excluded/);
@@ -155,12 +151,7 @@ describe('planPublish: pre-flight', () => {
         },
       ],
     });
-    const plan = planPublish(
-      { projectRoot, bump: 'patch', dryRun: true, force: false },
-      audit,
-      ctx,
-      fixtureNpm(),
-    );
+    const plan = planPublish({ projectRoot, bump: 'patch', dryRun: true, force: false }, audit, ctx, fixtureNpm());
     const raCheck = plan.preflight.find((c) => c.name === 'release-artifact >= L3');
     expect(raCheck?.ok).toBe(false);
     expect(raCheck?.message).toMatch(/L1.*need >= L3/);
@@ -190,8 +181,14 @@ describe('checkNpmAuth', () => {
   });
 
   it('offers npm login as the fix for an expired session, with the registry the package goes to', () => {
-    expect(checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code E401\n') })).fix).toEqual({ cmd: 'npm', args: ['login'] });
-    const scoped = checkNpmAuth('https://npm.example/', fakeNpm({ 'whoami --registry https://npm.example/': npmError('code ENEEDAUTH') }));
+    expect(checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code E401\n') })).fix).toEqual({
+      cmd: 'npm',
+      args: ['login'],
+    });
+    const scoped = checkNpmAuth(
+      'https://npm.example/',
+      fakeNpm({ 'whoami --registry https://npm.example/': npmError('code ENEEDAUTH') }),
+    );
     expect(scoped.fix).toEqual({ cmd: 'npm', args: ['login', '--registry', 'https://npm.example/'] });
     expect(checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code ECONNREFUSED\n') })).fix).toBeUndefined();
   });
@@ -199,7 +196,9 @@ describe('checkNpmAuth', () => {
   it('fails on an expired session (E401) and names npm login — the 0.13.0 case', () => {
     const c = checkNpmAuth(
       null,
-      fakeNpm({ whoami: npmError('npm error code E401\nnpm error 401 Unauthorized - GET https://registry.npmjs.org/-/whoami\n') }),
+      fakeNpm({
+        whoami: npmError('npm error code E401\nnpm error 401 Unauthorized - GET https://registry.npmjs.org/-/whoami\n'),
+      }),
     );
     expect(c.ok).toBe(false);
     expect(c.message).toMatch(/not logged in to npm .*Run: npm login$/);
@@ -240,7 +239,9 @@ describe('publishRegistry', () => {
 
   it('is the default registry for an unscoped package or a scope without its own', () => {
     expect(publishRegistry({ name: 'demo' }, fakeNpm({}))).toBeNull();
-    expect(publishRegistry({ name: '@vodmal/vdx-cli' }, fakeNpm({ 'config get @vodmal:registry': 'undefined\n' }))).toBeNull();
+    expect(
+      publishRegistry({ name: '@vodmal/vdx-cli' }, fakeNpm({ 'config get @vodmal:registry': 'undefined\n' })),
+    ).toBeNull();
   });
 });
 
@@ -335,7 +336,8 @@ describe('the release goes out whole: lock, push, registry', () => {
   let dir: string;
   let work: string;
   let logs: string[];
-  const git = (args: string[], cwd = work) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const git = (args: string[], cwd = work) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   // The commits here must not run the machine's hooks: since Git 2.54 hooks also come
   // from ~/.gitconfig (`hook.<name>.command`), and core.hooksPath does not turn those off.
   const saved = { global: process.env['GIT_CONFIG_GLOBAL'], nosystem: process.env['GIT_CONFIG_NOSYSTEM'] };
@@ -353,12 +355,20 @@ describe('the release goes out whole: lock, push, registry', () => {
       ['user.email', 't@example.org'],
       ['commit.gpgsign', 'false'],
       ['tag.gpgsign', 'false'],
-    ]) git(['config', k!, v!]);
+    ])
+      git(['config', k!, v!]);
     git(['checkout', '-q', '-b', 'main']);
-    fs.writeFileSync(path.join(work, 'package.json'), JSON.stringify({ name: 'demo', version: '1.0.0' }, null, 2) + '\n');
+    fs.writeFileSync(
+      path.join(work, 'package.json'),
+      JSON.stringify({ name: 'demo', version: '1.0.0' }, null, 2) + '\n',
+    );
     fs.writeFileSync(
       path.join(work, 'package-lock.json'),
-      JSON.stringify({ name: 'demo', version: '1.0.0', lockfileVersion: 3, packages: { '': { name: 'demo', version: '1.0.0' } } }, null, 2) + '\n',
+      JSON.stringify(
+        { name: 'demo', version: '1.0.0', lockfileVersion: 3, packages: { '': { name: 'demo', version: '1.0.0' } } },
+        null,
+        2,
+      ) + '\n',
     );
     git(['add', '.']);
     git(['commit', '-q', '-m', 'init']);
@@ -366,7 +376,10 @@ describe('the release goes out whole: lock, push, registry', () => {
     logs = [];
   });
   afterEach(() => {
-    for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.nosystem]] as const) {
+    for (const [k, v] of [
+      ['GIT_CONFIG_GLOBAL', saved.global],
+      ['GIT_CONFIG_NOSYSTEM', saved.nosystem],
+    ] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
@@ -433,10 +446,22 @@ describe('the release goes out whole: lock, push, registry', () => {
     };
     const projectRoot = path.join(FIXTURES, 'node-with-vitest');
     const ctx: Ctx = { projectRoot, stack: 'node', cache: new Map() };
-    const p = planPublish({ projectRoot, bump: 'patch', dryRun: true, force: false }, mockAudit(), ctx, fixtureNpm(), behind);
+    const p = planPublish(
+      { projectRoot, bump: 'patch', dryRun: true, force: false },
+      mockAudit(),
+      ctx,
+      fixtureNpm(),
+      behind,
+    );
     expect(p.preflight.find((c) => c.name === 'push-target')).toMatchObject({ ok: false });
     expect(p.preflight.find((c) => c.name === 'push-target')?.message).toContain('origin/main has 3 commit(s)');
-    const off = planPublish({ projectRoot, bump: 'patch', dryRun: true, force: false, push: false }, mockAudit(), ctx, fixtureNpm(), behind);
+    const off = planPublish(
+      { projectRoot, bump: 'patch', dryRun: true, force: false, push: false },
+      mockAudit(),
+      ctx,
+      fixtureNpm(),
+      behind,
+    );
     expect(off.preflight.find((c) => c.name === 'push-target')).toBeUndefined();
   });
 
@@ -506,12 +531,17 @@ describe('the release goes out whole: lock, push, registry', () => {
   });
 
   it('a version the registry has not shown in time is reported, not failed — npm took it', () => {
-    const d = deps({ npm: () => { throw new Error('E404'); }, registryWaitMs: 0 });
+    const d = deps({
+      npm: () => {
+        throw new Error('E404');
+      },
+      registryWaitMs: 0,
+    });
     expect(waitForRegistry('demo', '1.1.0', d)).toBe(false);
     expect(logs.join('\n')).toContain('not visible on the registry after 0 min — npm accepted it');
   });
 
-  it('writes the lock back in npm\'s own format', () => {
+  it("writes the lock back in npm's own format", () => {
     const text = fs.readFileSync(path.join(work, 'package-lock.json'), 'utf8');
     expect(bumpLockText(text, '1.0.0')).toBe(text);
   });

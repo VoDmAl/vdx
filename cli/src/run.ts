@@ -13,10 +13,7 @@ export type VerbResolveResult =
       detail?: string;
     };
 
-export function resolveLifecycleVerb(
-  projectRoot: string,
-  verb: string,
-): VerbResolveResult {
+export function resolveLifecycleVerb(projectRoot: string, verb: string): VerbResolveResult {
   const miseTomlPath = path.join(projectRoot, 'mise.toml');
   if (!fs.existsSync(miseTomlPath)) {
     return { ok: false, reason: 'no-mise-toml' };
@@ -42,8 +39,7 @@ export function renderResolveError(
   switch (res.reason) {
     case 'no-mise-toml':
       return (
-        `vdx: no mise.toml in ${projectRoot}\n` +
-        `hint: run \`vdx init\` to generate one, or define it manually.\n`
+        `vdx: no mise.toml in ${projectRoot}\n` + `hint: run \`vdx init\` to generate one, or define it manually.\n`
       );
     case 'parse-error':
       return `vdx: failed to parse mise.toml: ${res.detail ?? 'unknown error'}\n`;

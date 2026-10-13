@@ -33,8 +33,11 @@ relates-to:
 
 ## Текущая модель
 
-**Состояние на 2026-10-13** (`vdx audit .`, vdx 0.24.0, сет v1.3.0): общий
-**L1**.
+**Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
+Сейчас (CLI из `cli/` с правкой мета-репо, сет v1.4.0, override, Prettier и
+`fix`) — тоже **L1**: на L2 вспомогательных 4 из 6 (`reproducibility`,
+`code-style`, `docs`, `release-artifact`), нужно 5. Колонка «Сейчас» в
+таблице — это состояние.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -47,26 +50,22 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 Неизвестное считается невыполненным, так что общий L3 и выше сегодня не
 получит никто.
 
-**Мета-репо меряется наполовину.** Ось с `applies_to` оценивается в `cli/`
-(`primary_subpackage`), ось без него — в корне (`audit.ts:109`). Отсюда две
-слепые зоны:
-- `reproducibility` (корень) ищет `engines.node` в `package.json` корня. Его
-  нет, а в `cli/package.json` — `>=20.11`. Ось стоит на L1, хотя `mise.toml` с
-  `node = "20"` (L3) есть.
-- `dependency-hygiene` (в `cli/`) ищет `.github/workflows/*.yml` и
-  `.github/dependabot.yml` внутри `cli/`. GitHub читает их только в корне.
+**Мета-репо.** Ось с `applies_to` оценивается в `cli/` (`primary_subpackage`),
+ось без него — в корне. До DL #5 половины не видели файлов друг друга
+(`engines.node` из `cli/package.json`, `.github/` из корня). С правкой — видят,
+задачи словаря остаются своими. В npm это придёт с vdx 0.25.
 
 **Что держит каждую ось** (DL #2):
 
 | Ось | Класс | Сейчас | Следующий шаг держит | Путь до L4 |
 |---|:-:|:-:|---|---|
-| `lifecycle-interface` | C | L2 | L3: нет `fix` (сет v1.4.0); на 0.24 ещё и `up`, `down` | `fix` в `mise.toml`; `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 сразу — `test:smoke` подходит под `test:.*` |
+| `lifecycle-interface` | C | L4 | — | `fix` — Prettier (DL #7); `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 — `test:smoke` подходит под `test:.*` |
 | `tests` | C | L3 | L4: нет `test:e2e` / `test:mutation` | `test:e2e`: собранный CLI на фикстурах |
-| `static-analysis` | C | L2 | флаги 2.3 из 4.8 (0.48): `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` | ESLint flat + `recommended-type-checked` → 4.3/4.8 = 0.90 ≥ 0.85 |
+| `static-analysis` | C | L2 | флаги 2.3 из 4.8 (0.48): `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` | ESLint flat + `recommendedTypeChecked` → 4.3/4.8 = 0.90 ≥ 0.85; 332 находки в `src/` (DL #7); предикат ищет `recommended-type-checked` через дефис (Sidetrack #5) |
 | `ci` | C | L4 | — | — |
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
-| `reproducibility` | s | L1 | L2: мета-репо (выше) | починить оценщик; L4 — `mise run up` в `README.md` |
-| `code-style` | s | L1 | L2: нет `.prettierrc` / `eslint.config.js` | Prettier + `eslint.config.js` (именно `.js`); L3 — задача `lint`/`fix` в `cli/package.json` |
+| `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
+| `code-style` | s | L3 | L4: нет `eslint.config.js` | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7); L4 — `eslint.config.js` (именно `.js`) |
 | `dependency-hygiene` | s | L1 | L2: нет `npm audit` / `check:code:security` | задача аудита; L3 — dependabot (нужна правка оценщика); L4 — `knip` |
 | `git-hygiene` | s | L1 | L2: репо не ставит своих хуков | `up` ставит `core.hooksPath .githooks`; `pre-push` зовёт `mise run check` и `mise run test` |
 | `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
@@ -217,6 +216,29 @@ excluded), так и вышло. vdx берёт lib-intent из `cli/package.jso
 vdx `up`/`down` до выпуска по-прежнему требуются.
 **Supersedes:** #4
 
+### #7 / 2026-10-13 / `fix` — с Prettier; ESLint — отдельным шагом, без выключенных правил
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** в `cli/` 2026-10-13: Prettier 3.9 (`singleQuote`, ширина 120)
+меняет 35 из 41 файла `src/` и `tests/unit/`, около 600 строк. ESLint 10 +
+typescript-eslint 8 (`recommendedTypeChecked`, `projectService`) на `src/` —
+332 ошибки: `no-unsafe-member-access` 168, `no-unsafe-assignment` 80,
+`no-explicit-any` 40, прочие 44. Тесты линтером не мерил (вне `tsconfig`).
+**Context:** в Next actions `fix` шёл отдельным пунктом до ESLint и Prettier.
+Без них `fix` нечего делать, задача была бы пустышкой.
+**Why:** Prettier — механика: правит форматирование и не меняет код. Он дал
+`fix` настоящую работу, а `check` — проверку формата. Находки ESLint почти все
+от 40 мест, где разобранный JSON, YAML или TOML — `any` (`readJson`,
+`readToml`, `readYaml` в `facts.ts`, `gha.ts`, `mcp-server.ts`, `catch (e:
+any)`). Чинить — `unknown` и сужение. Выключить семейство `no-unsafe-*` —
+муляж «type-checked», против «Назначения». Ширина 120 — меньше всего правок,
+код и писался около неё.
+**Implication:** Prettier, `check` и `fix` — один коммит: конфиг и
+переформатирование вместе. ESLint — следующий шаг, с `.git-blame-ignore-revs`
+на коммит переформатирования. `lifecycle-interface` — L4, `code-style` — L3.
+Флаг `eslint_type_checked` не увидит flat-конфиг (Sidetrack #5).
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -265,6 +287,21 @@ compose up`. README vdx описывает команду `vdx up` как час
 
 **Status:** open
 
+### #5. `eslint_type_checked` ищет `recommended-type-checked` через дефис
+
+**Возникло в:** DL #7
+**Описание:** паттерн флага — `recommended-type-checked`. Так конфиг назывался в
+`.eslintrc` (`plugin:@typescript-eslint/recommended-type-checked`). Во flat-конфиге
+это `tseslint.configs.recommendedTypeChecked` (или `strictTypeChecked`), и
+предикат его не видит. Проверено 2026-10-13 на временной папке (`strict`,
+`noUncheckedIndexedAccess`, `eslint.config.js`): `recommendedTypeChecked` —
+L2, `recommended-type-checked` — L3. Флаг `eslint_flat` при этом требует
+именно flat-конфиг: вместе они засчитываются, только если имя оставить в
+комментарии. Правка — patch сета: `recommended-?type-?checked|recommendedTypeChecked|strict-?type-?checked|strictTypeChecked`
+(без учёта регистра). Вместе с Sidetrack #1 — один patch.
+
+**Status:** open
+
 ## Next actions
 
 **Развилки — к владельцу:**
@@ -284,12 +321,17 @@ compose up`. README vdx описывает команду `vdx up` как час
       lib-intent; якорь lib-intent; калибровочные проекты не сдвинулись;
       зеркало, сет CLI, `DEFAULT_BASELINE` (DL #6)
 - [x] `.vdx-overrides.yml`: `observability`, `mock-infra` — с причиной
-- [ ] `mise.toml`: `fix`; `[vdx].verbs`
+- [x] `mise.toml`: `fix` (Prettier, DL #7); `[vdx].verbs`
+- [x] Prettier: `cli/.prettierrc`, `.prettierignore` (сет, фикстуры, проза —
+      не трогает); `check` и `fix` в `cli/package.json`; разовое
+      переформатирование
 - [ ] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
       `core.hooksPath` ставит шаг установки — проверить, что распознаватель
       `git_hooks_arranged` это видит
-- [ ] ESLint flat (`recommended-type-checked`) + Prettier; `lint` и `fix` в
-      `cli/package.json`; `check` зовёт lint
+- [ ] ESLint flat (`recommendedTypeChecked`): `any` разборщиков → `unknown`
+      с сужением (332 находки в `src/`, тесты — отдельно, DL #7); `lint` в
+      `check`, `eslint --fix` в `fix`; `.git-blame-ignore-revs` — коммит
+      переформатирования; patch сета по Sidetrack #5 и #1 — до или вместе
 - [ ] `test:e2e` — собранный CLI на фикстурах во временных папках
 - [ ] Аудит зависимостей (`check:code:security`), dependabot, `knip`
 - [ ] `docs/architecture.md`; `README.md` — `mise run up`
@@ -301,6 +343,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 - [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
 - [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
 - [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
+- [ ] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета
 
 ## References
 

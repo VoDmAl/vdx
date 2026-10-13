@@ -1,13 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  Ctx,
-  readJson,
-  listAllTasks,
-  autoDetectStack,
-  findSubPackages,
-  type SubPackage,
-} from './facts.ts';
+import { Ctx, readJson, listAllTasks, autoDetectStack, findSubPackages, type SubPackage } from './facts.ts';
 
 export const STANDARD_VERBS = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 export type Verb = (typeof STANDARD_VERBS)[number];
@@ -17,16 +10,7 @@ export const DEFAULT_BASELINE = 'github.com/VoDmAl/vdx-rubric-vodmal@v1.4.0';
 const VERB_ALIASES: Record<Verb, string[]> = {
   up: ['docker:up', 'docker-up', 'docker:up:detached', 'start', 'dev', 'serve'],
   down: ['docker:down', 'docker-down', 'stop'],
-  build: [
-    'docker:build',
-    'build:prod',
-    'build-prod',
-    'build:dev',
-    'build-dev',
-    'build:assets',
-    'compile',
-    'dist',
-  ],
+  build: ['docker:build', 'build:prod', 'build-prod', 'build:dev', 'build-dev', 'build:assets', 'compile', 'dist'],
   test: [
     'phpunit',
     'pest',
@@ -143,12 +127,7 @@ function renderRunCommand(task: string, stack: string, projectRoot: string): str
   return task;
 }
 
-function renderRunCommandInSubpackage(
-  task: string,
-  subStack: string,
-  subAbs: string,
-  subRel: string,
-): string {
+function renderRunCommandInSubpackage(task: string, subStack: string, subAbs: string, subRel: string): string {
   return `cd ${subRel} && ${renderRunCommand(task, subStack, subAbs)}`;
 }
 
@@ -290,11 +269,7 @@ export function renderMiseToml(
   out.push('');
 
   if (stack === 'unknown' || stack === 'monorepo') {
-    out.push(
-      '# TODO(vdx): stack auto-detection вернул "' +
-        stack +
-        '". Замени на php/node/go/python/meta',
-    );
+    out.push('# TODO(vdx): stack auto-detection вернул "' + stack + '". Замени на php/node/go/python/meta');
     out.push('#   и заполни [tasks.*] блоки руками, либо перегенери: vdx init --stack <id>.');
     out.push('');
   }
@@ -336,10 +311,7 @@ export function renderMiseToml(
   return out.join('\n');
 }
 
-export function planInit(
-  projectRoot: string,
-  opts: { baseline?: string; stack?: string } = {},
-): InitPlan {
+export function planInit(projectRoot: string, opts: { baseline?: string; stack?: string } = {}): InitPlan {
   const detectedStack = autoDetectStack(projectRoot);
   const stackOverridden = opts.stack !== undefined && opts.stack !== detectedStack;
   const stack = opts.stack ?? detectedStack;
@@ -436,9 +408,7 @@ export function planInit(
 
 export function writeInit(plan: InitPlan, opts: { force: boolean }): void {
   if (fs.existsSync(plan.miseTomlPath) && !opts.force) {
-    throw new Error(
-      `mise.toml уже существует: ${plan.miseTomlPath}. Используй --force для перезаписи.`,
-    );
+    throw new Error(`mise.toml уже существует: ${plan.miseTomlPath}. Используй --force для перезаписи.`);
   }
   fs.writeFileSync(plan.miseTomlPath, plan.miseTomlContent, 'utf8');
 }
@@ -451,7 +421,9 @@ export function renderPlanSummary(plan: InitPlan, opts: { verbose?: boolean } = 
 
   if (!verbose) {
     const lines: string[] = [];
-    lines.push(`vdx init: stack=${plan.stack}${plan.stackOverridden ? ' (via --stack)' : ''}, ${mapped}/${total} verbs mapped`);
+    lines.push(
+      `vdx init: stack=${plan.stack}${plan.stackOverridden ? ' (via --stack)' : ''}, ${mapped}/${total} verbs mapped`,
+    );
     if (plan.primarySubpackage) lines.push(`  primary subpackage: ${plan.primarySubpackage}`);
     if (unmatched.length > 0) {
       lines.push(`  not mapped: ${unmatched.join(', ')} (add [tasks.X] in mise.toml manually)`);
@@ -462,12 +434,8 @@ export function renderPlanSummary(plan: InitPlan, opts: { verbose?: boolean } = 
   const lines: string[] = [];
   lines.push(`# vdx init plan`);
   lines.push('');
-  lines.push(
-    `- **Project**: ${plan.projectRoot}`,
-  );
-  lines.push(
-    `- **Stack**: ${plan.stack}${plan.stackOverridden ? ' (via --stack)' : ''}`,
-  );
+  lines.push(`- **Project**: ${plan.projectRoot}`);
+  lines.push(`- **Stack**: ${plan.stack}${plan.stackOverridden ? ' (via --stack)' : ''}`);
   if (plan.primarySubpackage) {
     lines.push(`- **Primary subpackage**: ${plan.primarySubpackage}`);
   }
@@ -492,9 +460,7 @@ export function renderPlanSummary(plan: InitPlan, opts: { verbose?: boolean } = 
   lines.push('|------|-------------|--------|-----------------|');
   for (const m of plan.mappings) {
     if (m.runCommand) {
-      lines.push(
-        `| \`${m.verb}\` | \`${m.nativeTask}\` | ${m.reason} | \`${m.runCommand}\` |`,
-      );
+      lines.push(`| \`${m.verb}\` | \`${m.nativeTask}\` | ${m.reason} | \`${m.runCommand}\` |`);
     } else {
       lines.push(`| \`${m.verb}\` | _(not found)_ | not-found | _(skipped)_ |`);
     }
@@ -506,9 +472,7 @@ export function renderPlanSummary(plan: InitPlan, opts: { verbose?: boolean } = 
     lines.push('');
     for (const m of withAlts) {
       const alts = m.alternatives.map((a) => `\`${a}\``).join(', ');
-      lines.push(
-        `- \`${m.verb}\` chose \`${m.nativeTask}\` (${m.reason}); also matched: ${alts}`,
-      );
+      lines.push(`- \`${m.verb}\` chose \`${m.nativeTask}\` (${m.reason}); also matched: ${alts}`);
     }
     lines.push('');
   }

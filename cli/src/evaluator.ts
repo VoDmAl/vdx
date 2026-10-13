@@ -108,7 +108,7 @@ export function predicateNames(p: Predicate): string[] {
     const obj = q as Record<string, any>;
     if ('all_of' in obj) return (obj.all_of as Predicate[]).forEach(walk);
     if ('any_of' in obj) return (obj.any_of as Predicate[]).forEach(walk);
-    if ('at_least_n_of' in obj) return (obj.at_least_n_of?.predicates as Predicate[] ?? []).forEach(walk);
+    if ('at_least_n_of' in obj) return ((obj.at_least_n_of?.predicates as Predicate[]) ?? []).forEach(walk);
     if ('not' in obj) return walk(obj.not);
     if ('fn' in obj) {
       out.push(String(obj.fn));

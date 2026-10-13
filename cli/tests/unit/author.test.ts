@@ -15,7 +15,10 @@ beforeAll(() => {
   process.env['GIT_CONFIG_NOSYSTEM'] = '1';
 });
 afterAll(() => {
-  for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.nosystem]] as const) {
+  for (const [k, v] of [
+    ['GIT_CONFIG_GLOBAL', saved.global],
+    ['GIT_CONFIG_NOSYSTEM', saved.nosystem],
+  ] as const) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
@@ -30,7 +33,13 @@ function makeRepo(dir: string, o: { email?: string; name?: string; remote?: stri
   for (const [i, email] of (o.commitsBy ?? []).entries()) {
     execFileSync('git', ['-C', dir, 'commit', '-q', '--allow-empty', '-m', `c${i}`], {
       stdio: 'ignore',
-      env: { ...process.env, GIT_AUTHOR_NAME: 'X', GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: 'X', GIT_COMMITTER_EMAIL: email },
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'X',
+        GIT_AUTHOR_EMAIL: email,
+        GIT_COMMITTER_NAME: 'X',
+        GIT_COMMITTER_EMAIL: email,
+      },
     });
   }
   if (o.email) git('config', '--local', 'user.email', o.email);
@@ -54,16 +63,30 @@ describe('proposing an author', () => {
   let pool: string;
   beforeEach(() => {
     pool = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-pool-')));
-    makeRepo(path.join(pool, 'svc-a'), { email: 'me@work.example', name: 'Me', remote: 'git@gitlab.work:team/svc-a.git' });
-    makeRepo(path.join(pool, 'svc-b'), { email: 'me@work.example', name: 'Me', remote: 'git@gitlab.work:team/svc-b.git' });
-    makeRepo(path.join(pool, 'site'), { email: 'me@home.example', name: 'Me Home', remote: 'git@github.com:me/site.git' });
+    makeRepo(path.join(pool, 'svc-a'), {
+      email: 'me@work.example',
+      name: 'Me',
+      remote: 'git@gitlab.work:team/svc-a.git',
+    });
+    makeRepo(path.join(pool, 'svc-b'), {
+      email: 'me@work.example',
+      name: 'Me',
+      remote: 'git@gitlab.work:team/svc-b.git',
+    });
+    makeRepo(path.join(pool, 'site'), {
+      email: 'me@home.example',
+      name: 'Me Home',
+      remote: 'git@github.com:me/site.git',
+    });
     makeRepo(path.join(pool, 'lime-dash'), { email: 'me@lime.example', name: 'Me' });
     fs.mkdirSync(path.join(pool, 'not-a-repo'));
   });
   afterEach(() => fs.rmSync(pool, { recursive: true, force: true }));
 
   it('finds the repos one level down, once each, and skips plain directories', () => {
-    const found = scanPool([pool, pool]).map((p) => path.basename(p.dir)).sort();
+    const found = scanPool([pool, pool])
+      .map((p) => path.basename(p.dir))
+      .sort();
     expect(found).toEqual(['lime-dash', 'site', 'svc-a', 'svc-b']);
   });
 

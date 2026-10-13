@@ -72,7 +72,10 @@ export function bumpSemver(current: string, kind: BumpKind): string {
 
 export function compareSemver(a: string, b: string): number {
   const norm = (s: string) =>
-    s.replace(/^v/, '').split(/[.\-+]/).map((p) => parseInt(p, 10) || 0);
+    s
+      .replace(/^v/, '')
+      .split(/[.\-+]/)
+      .map((p) => parseInt(p, 10) || 0);
   const pa = norm(a);
   const pb = norm(b);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -249,9 +252,7 @@ export function planPublish(
   // Resolve effective stack: prefer subpackage stack if primary_subpackage is set
   // (meta-projects publishing a nested lib, e.g. vdx itself with primary_subpackage=cli).
   const subpkg = audit.primary_subpackage;
-  const effectiveStack = subpkg
-    ? stackForDir(path.join(opts.projectRoot, subpkg))
-    : ctx.stack;
+  const effectiveStack = subpkg ? stackForDir(path.join(opts.projectRoot, subpkg)) : ctx.stack;
 
   if (effectiveStack !== 'node') {
     throw new Error(
@@ -543,7 +544,9 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
     try {
       deps.run('git', ['push', '--follow-tags'], plan.projectRoot);
     } catch {
-      deps.log(`✗ git push failed — ${plan.packageName}@${plan.newVersion} is published and tagged here; push it: git push --follow-tags`);
+      deps.log(
+        `✗ git push failed — ${plan.packageName}@${plan.newVersion} is published and tagged here; push it: git push --follow-tags`,
+      );
       throw new Error('git push failed');
     }
     deps.log(`✓ pushed to ${push.upstream} with tag v${plan.newVersion}`);
@@ -599,7 +602,9 @@ export function renderPublishPlan(plan: PublishPlan): string {
     lines.push('## Pipeline (would execute on `vdx publish`)');
     lines.push('');
     if (fixable) {
-      const fixes = plan.preflight.filter((c) => !c.ok && c.fix).map((c) => `\`${c.fix!.cmd} ${c.fix!.args.join(' ')}\``);
+      const fixes = plan.preflight
+        .filter((c) => !c.ok && c.fix)
+        .map((c) => `\`${c.fix!.cmd} ${c.fix!.args.join(' ')}\``);
       lines.push(`0. ${fixes.join(', ')} — at a terminal, then the pre-flight again`);
     }
     lines.push(`1. Set \`version\` in ${files} → \`${plan.newVersion}\``);

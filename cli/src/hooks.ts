@@ -36,11 +36,29 @@ export interface HookFramework {
 }
 
 export const GIT_HOOK_EVENTS = new Set([
-  'applypatch-msg', 'pre-applypatch', 'post-applypatch', 'pre-commit', 'pre-merge-commit',
-  'prepare-commit-msg', 'commit-msg', 'post-commit', 'pre-rebase', 'post-checkout', 'post-merge',
-  'pre-push', 'pre-auto-gc', 'post-rewrite', 'reference-transaction', 'push-to-checkout',
-  'post-index-change', 'sendemail-validate', 'fsmonitor-watchman', 'p4-changelist',
-  'p4-prepare-changelist', 'p4-post-changelist', 'p4-pre-submit',
+  'applypatch-msg',
+  'pre-applypatch',
+  'post-applypatch',
+  'pre-commit',
+  'pre-merge-commit',
+  'prepare-commit-msg',
+  'commit-msg',
+  'post-commit',
+  'pre-rebase',
+  'post-checkout',
+  'post-merge',
+  'pre-push',
+  'pre-auto-gc',
+  'post-rewrite',
+  'reference-transaction',
+  'push-to-checkout',
+  'post-index-change',
+  'sendemail-validate',
+  'fsmonitor-watchman',
+  'p4-changelist',
+  'p4-prepare-changelist',
+  'p4-post-changelist',
+  'p4-pre-submit',
 ]);
 
 /** Install steps a clone runs anyway: npm-family lifecycle scripts, composer's, the vdx `up` task. */
@@ -173,7 +191,10 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
       id: 'husky',
       declaredIn: '.husky/',
       hooks: husky,
-      installedBy: findStep(steps.filter((s) => s.where.startsWith('package.json') || s.where === 'mise task up'), /(^|[\s;&|(])husky(\s+install)?(?=$|[\s;&|)])/m),
+      installedBy: findStep(
+        steps.filter((s) => s.where.startsWith('package.json') || s.where === 'mise task up'),
+        /(^|[\s;&|(])husky(\s+install)?(?=$|[\s;&|)])/m,
+      ),
       manualInstall: 'npx husky',
       hooksPath: '.husky/_',
       copies: false,
@@ -247,7 +268,10 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
         id: 'cghooks',
         declaredIn: 'composer.json extra.hooks',
         hooks,
-        installedBy: findStep(steps.filter((s) => s.where.startsWith('composer') || s.where === 'mise task up'), /\bcghooks\s+(add|update)\b/),
+        installedBy: findStep(
+          steps.filter((s) => s.where.startsWith('composer') || s.where === 'mise task up'),
+          /\bcghooks\s+(add|update)\b/,
+        ),
         manualInstall: 'vendor/bin/cghooks update',
         hooksPath: null,
         copies: true,
@@ -353,7 +377,13 @@ export function cloneHookStates(root: string, ctx: Ctx, frameworks: HookFramewor
     }
     if (fw.id === 'lefthook') {
       const foreign = events.filter((e) => !/lefthook/.test(readFile(path.join(dir, e))));
-      if (foreign.length > 0) return { framework: fw, enabled: false, problem: `${foreign.join(', ')} in ${path.relative(root, dir)} is not lefthook's`, remedy };
+      if (foreign.length > 0)
+        return {
+          framework: fw,
+          enabled: false,
+          problem: `${foreign.join(', ')} in ${path.relative(root, dir)} is not lefthook's`,
+          remedy,
+        };
     }
     if (fw.copies) {
       const stale = events.filter((e) => {
@@ -361,7 +391,12 @@ export function cloneHookStates(root: string, ctx: Ctx, frameworks: HookFramewor
         return fw.hooks.get(e)!.some((cmd) => !body.includes(cmd.trim()));
       });
       if (stale.length > 0) {
-        return { framework: fw, enabled: false, problem: `installed ${stale.join(', ')} older than ${fw.declaredIn}`, remedy };
+        return {
+          framework: fw,
+          enabled: false,
+          problem: `installed ${stale.join(', ')} older than ${fw.declaredIn}`,
+          remedy,
+        };
       }
     }
     return { framework: fw, enabled: true };
@@ -386,8 +421,7 @@ function readFile(file: string): string {
  * anywhere in a script says nothing about whether the hook still does its job,
  * while an unset variable inside the guard means the guarded block never runs.
  */
-const GATING_VAR_RE =
-  /\[\s+-[nxfse]\s+"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}"|\[\s+-[nxfse]\s+"\$([A-Z][A-Z0-9_]*)"/g;
+const GATING_VAR_RE = /\[\s+-[nxfse]\s+"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}"|\[\s+-[nxfse]\s+"\$([A-Z][A-Z0-9_]*)"/g;
 
 export function unsetGatingVars(commands: string[], env: NodeJS.ProcessEnv = process.env): string[] {
   const out = new Set<string>();
@@ -406,7 +440,8 @@ export function unsetGatingVars(commands: string[], env: NodeJS.ProcessEnv = pro
  * Only what is run: a path in an argument or an `echo` says nothing about
  * whether the hook works here.
  */
-const MACHINE_PROGRAM_RE = /^(?:"((?:\$HOME|\$\{HOME\}|~|\/Users|\/home|\/Volumes)\/[^"]+)"|((?:\$HOME|\$\{HOME\}|~|\/Users|\/home|\/Volumes)\/[^\s"';|&)]+))/;
+const MACHINE_PROGRAM_RE =
+  /^(?:"((?:\$HOME|\$\{HOME\}|~|\/Users|\/home|\/Volumes)\/[^"]+)"|((?:\$HOME|\$\{HOME\}|~|\/Users|\/home|\/Volumes)\/[^\s"';|&)]+))/;
 
 export function missingMachinePaths(commands: string[], home: string = os.homedir()): string[] {
   const out = new Set<string>();

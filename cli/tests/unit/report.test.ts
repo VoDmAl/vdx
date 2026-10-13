@@ -62,8 +62,7 @@ describe('reportJson', () => {
 });
 
 describe('reportAnsi', () => {
-  const stripAnsi = (s: string): string =>
-    s.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '');
 
   it('contains ANSI escape sequences when chalk colors are forced', () => {
     const prev = process.env.FORCE_COLOR;

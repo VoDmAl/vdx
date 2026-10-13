@@ -95,12 +95,14 @@ export function checkRepoHooks(root: string | null): CheckResult | null {
         remedy: `chmod +x ${hooksPath}/*`,
       };
     }
-    return bodyProblems(id, label, [...hooks.values()]) ?? {
-      id,
-      label,
-      status: 'ok',
-      message: `${hooks.size} hook(s) active via ${hooksPath}`,
-    };
+    return (
+      bodyProblems(id, label, [...hooks.values()]) ?? {
+        id,
+        label,
+        status: 'ok',
+        message: `${hooks.size} hook(s) active via ${hooksPath}`,
+      }
+    );
   }
 
   const states = cloneHookStates(root, ctx, frameworks);
@@ -110,7 +112,9 @@ export function checkRepoHooks(root: string | null): CheckResult | null {
       id,
       label,
       status: 'warning',
-      message: off.map((s) => `${s.framework.id} (${s.framework.declaredIn}): ${s.problem} — those hooks never run`).join('; '),
+      message: off
+        .map((s) => `${s.framework.id} (${s.framework.declaredIn}): ${s.problem} — those hooks never run`)
+        .join('; '),
       ...(off[0]!.remedy ? { remedy: off[0]!.remedy } : {}),
     };
   }
@@ -149,7 +153,8 @@ function bodyProblems(id: string, label: string, bodies: string[]): CheckResult 
       label,
       status: 'warning',
       message: `hooks call ${missing.join(', ')} — not on this machine, the commit fails or the gate is skipped`,
-      remedy: 'install what the hook calls here, or move the hook out of the repository (a personal hook in git config)',
+      remedy:
+        'install what the hook calls here, or move the hook out of the repository (a personal hook in git config)',
     };
   }
   return null;

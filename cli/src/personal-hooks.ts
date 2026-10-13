@@ -92,17 +92,25 @@ function stateOf(h: PersonalHook, root: string | null, deps: PersonalHookDeps): 
   let drift: string | null = null;
   if (have.length === 0 && command === null) drift = 'not in ~/.gitconfig';
   else if (command !== h.command) drift = `its command in ~/.gitconfig differs from the profile`;
-  else if (events(h).some((e) => !have.includes(e))) drift = `not bound to ${events(h).filter((e) => !have.includes(e)).join(', ')}`;
+  else if (events(h).some((e) => !have.includes(e)))
+    drift = `not bound to ${events(h)
+      .filter((e) => !have.includes(e))
+      .join(', ')}`;
 
   let local: string | null = null;
   if (root !== null) {
-    if (deps.git(['-C', root, 'config', '--local', '--get', `${key}.enabled`]) === 'false') local = 'off in this repository';
-    else if (deps.git(['-C', root, 'config', '--local', '--get', `${key}.command`]) !== null) local = 'own command in this repository';
+    if (deps.git(['-C', root, 'config', '--local', '--get', `${key}.enabled`]) === 'false')
+      local = 'off in this repository';
+    else if (deps.git(['-C', root, 'config', '--local', '--get', `${key}.command`]) !== null)
+      local = 'own command in this repository';
   }
   return { hook: h, drift, local };
 }
 
-export function checkPersonalHooks(projectRoot: string | null, deps: PersonalHookDeps = defaultPersonalHookDeps()): CheckResult | null {
+export function checkPersonalHooks(
+  projectRoot: string | null,
+  deps: PersonalHookDeps = defaultPersonalHookDeps(),
+): CheckResult | null {
   const hooks = applicableHooks(deps);
   if (!hooks) return null;
   const id = 'personal-hooks';
@@ -132,7 +140,10 @@ export function checkPersonalHooks(projectRoot: string | null, deps: PersonalHoo
     };
   }
 
-  const missing = missingMachinePaths(hooks.map((h) => h.command), deps.home);
+  const missing = missingMachinePaths(
+    hooks.map((h) => h.command),
+    deps.home,
+  );
   if (missing.length > 0) {
     return {
       id,

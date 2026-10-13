@@ -19,11 +19,15 @@ description = "Run smoke audit on the three calibration projects (local paths; n
 run = "bash cli/smoke.sh"
 
 [tasks.check]
-description = "Typecheck the CLI sources"
-run = "npm --prefix cli run typecheck"
+description = "Typecheck the CLI sources and check their formatting"
+run = "npm --prefix cli run check"
+
+[tasks.fix]
+description = "Format the CLI sources"
+run = "npm --prefix cli run fix"
 
 [vdx]
 schema_version = "0.2"
 baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.4.0"
 stack = "meta"
-verbs = ["build", "test", "check"]
+verbs = ["build", "test", "check", "fix"]

@@ -39,7 +39,11 @@ export function runnerCalls(command: string): string[] {
     const toks = tokenize(raw.trim());
     let i = 0;
     // `FOO=1 npm test`, `exec npm test`, `npx --no -- vdx test`
-    while (i < toks.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i]!) || ['exec', 'time', 'command'].includes(toks[i]!))) i++;
+    while (
+      i < toks.length &&
+      (/^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i]!) || ['exec', 'time', 'command'].includes(toks[i]!))
+    )
+      i++;
     const head = toks[i];
     if (!head) continue;
     const runner = head.split('/').pop()!;
@@ -116,7 +120,8 @@ export function taskChildren(ctx: Ctx, name: string): string[] {
   const mise = readToml(ctx, 'mise.toml');
   const task = mise?.tasks?.[name];
   if (task && typeof task === 'object') {
-    if (Array.isArray(task.depends)) out.push(...task.depends.filter((d: unknown): d is string => typeof d === 'string'));
+    if (Array.isArray(task.depends))
+      out.push(...task.depends.filter((d: unknown): d is string => typeof d === 'string'));
     const runs = Array.isArray(task.run) ? task.run : [task.run];
     for (const r of runs) if (typeof r === 'string') out.push(...runnerCalls(r));
   }

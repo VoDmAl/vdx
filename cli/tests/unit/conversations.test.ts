@@ -105,7 +105,9 @@ describe('listConversations and the newest of each machine', () => {
     writeConversation(config, root, ID.b, [startedOn('LFT'), userLine('b')], 5);
     writeConversation(config, root, ID.c, [startedOn('m3'), userLine('c')], 10);
     writeConversation(config, root, ID.d, [userLine('d')], 1);
-    const latest = latestPerMachine(listConversations({ env: {}, home, projectRoot: root }), (c) => machineOf(c, 'lft'));
+    const latest = latestPerMachine(listConversations({ env: {}, home, projectRoot: root }), (c) =>
+      machineOf(c, 'lft'),
+    );
     expect(latest.map((c) => c.id)).toEqual([ID.d, ID.b, ID.c]);
     // ID.d: from before vdx named the machine, never typed in here.
     expect(latest.map((c) => machineOf(c, 'lft'))).toEqual([null, 'LFT', 'm3']);
@@ -141,8 +143,11 @@ describe('liveConversationId', () => {
   });
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
-  it("reads the conversation a running process is in from its session file — /clear moves it", () => {
-    fs.writeFileSync(path.join(home, '.claude', 'sessions', '4242.json'), JSON.stringify({ pid: 4242, sessionId: ID.c }));
+  it('reads the conversation a running process is in from its session file — /clear moves it', () => {
+    fs.writeFileSync(
+      path.join(home, '.claude', 'sessions', '4242.json'),
+      JSON.stringify({ pid: 4242, sessionId: ID.c }),
+    );
     expect(liveConversationId({}, home, 4242)).toBe(ID.c);
     expect(liveConversationId({}, home, 4243)).toBeNull();
   });
@@ -168,18 +173,30 @@ describe('sessions running right now', () => {
       fs.writeFileSync(path.join(sessions(), `${pid}.json`), JSON.stringify({ pid, sessionId: id, ...extra }, null, 2));
     file(process.pid, ID.a, { tmux: 'proj@lft:@3.%3', status: 'waiting', cwd: '/Users/vdm/AI Projects/proj' });
     file(999_999_9, ID.b); // its process is gone: Claude leaves the file after a crash or a reboot
-    fs.writeFileSync(path.join(sessions(), `${process.pid}.sync-conflict-20260514-163124-INHMB34.json`), '{"pid":1,"sessionId":"' + ID.c + '"}');
+    fs.writeFileSync(
+      path.join(sessions(), `${process.pid}.sync-conflict-20260514-163124-INHMB34.json`),
+      '{"pid":1,"sessionId":"' + ID.c + '"}',
+    );
   });
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
   it('this machine: the session files of processes alive, not a dead pid or a conflict copy', () => {
     expect(liveSessionsHere({}, home)).toEqual([
-      { pid: process.pid, conversation: ID.a, tmux: 'proj@lft:@3.%3', status: 'waiting', cwd: '/Users/vdm/AI Projects/proj' },
+      {
+        pid: process.pid,
+        conversation: ID.a,
+        tmux: 'proj@lft:@3.%3',
+        status: 'waiting',
+        cwd: '/Users/vdm/AI Projects/proj',
+      },
     ]);
   });
 
   it('another machine: the script prints its home, then the same, one per line, under sh', () => {
-    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], { encoding: 'utf8', env: { HOME: home, PATH: '/usr/bin:/bin' } });
+    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], {
+      encoding: 'utf8',
+      env: { HOME: home, PATH: '/usr/bin:/bin' },
+    });
     expect(res.status).toBe(0);
     expect(res.stdout.trim().split('\n')).toHaveLength(2);
     expect(parseMachineReport(res.stdout)).toEqual({ home, sessions: liveSessionsHere({}, home) });
@@ -187,7 +204,10 @@ describe('sessions running right now', () => {
 
   it('…and only its home, exit 0, where Claude Code never ran', () => {
     const none = path.join(home, 'none');
-    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], { encoding: 'utf8', env: { HOME: none, PATH: '/usr/bin:/bin' } });
+    const res = spawnSync('/bin/sh', ['-c', LIVE_SESSIONS_SCRIPT], {
+      encoding: 'utf8',
+      env: { HOME: none, PATH: '/usr/bin:/bin' },
+    });
     expect(res.status).toBe(0);
     expect(parseMachineReport(res.stdout)).toEqual({ home: none, sessions: [] });
   });

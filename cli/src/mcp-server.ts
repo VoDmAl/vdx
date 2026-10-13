@@ -94,8 +94,7 @@ function buildCapabilities() {
   const verbsList = (vdxBlock?.verbs as string[] | undefined) ?? STANDARD_VERBS.slice();
   const verbs = verbsList.map((name) => {
     const t = tasks[name];
-    const nativeCommand =
-      t && typeof t === 'object' && typeof t.run === 'string' ? t.run : null;
+    const nativeCommand = t && typeof t === 'object' && typeof t.run === 'string' ? t.run : null;
     return {
       name,
       has_manifest: Boolean(t),
@@ -236,9 +235,7 @@ server.registerTool(
       'Записывает обнаруженные команды в [tasks.X] секцию mise.toml + обновляет [vdx.success_path]. Используется после успешной верификации команд агентом.',
     inputSchema: {
       verbs: z.array(z.object({ name: z.string(), command: z.string() })),
-      shared_infra: z
-        .object({ provider: z.string(), precheck: z.boolean() })
-        .optional(),
+      shared_infra: z.object({ provider: z.string(), precheck: z.boolean() }).optional(),
       notes: z.string().optional(),
     },
   },

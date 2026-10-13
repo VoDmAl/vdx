@@ -95,15 +95,9 @@ function evalAxisFlags(axis: Axis, ctx: Ctx): LevelName {
   return achieved;
 }
 
-export function projectLevel(
-  results: AxisResult[],
-  rubric: Rubric,
-  suppressed: Set<string>,
-): LevelName {
+export function projectLevel(results: AxisResult[], rubric: Rubric, suppressed: Set<string>): LevelName {
   const supportingThreshold = rubric.scoring.supporting_threshold ?? 0.8;
-  const visible = results.filter(
-    (r) => !suppressed.has(r.axis_id) && r.drift_kind !== 'excluded',
-  );
+  const visible = results.filter((r) => !suppressed.has(r.axis_id) && r.drift_kind !== 'excluded');
   const critical = visible.filter((r) => r.class === 'critical');
   const supporting = visible.filter((r) => r.class === 'supporting');
 

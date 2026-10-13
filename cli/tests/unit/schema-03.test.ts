@@ -58,15 +58,21 @@ describe('rubric schema', () => {
     expect(compareSchema('0.10', '0.3')).toBe(1);
   });
   it('refuses a set newer than it reads, instead of misreading it', () => {
-    expect(() => parseRubric(rubricText('0.4', '{ always_true: {} }'), 'x.yaml')).toThrow(/schema 0\.4.*up to 0\.3.*update vdx/);
+    expect(() => parseRubric(rubricText('0.4', '{ always_true: {} }'), 'x.yaml')).toThrow(
+      /schema 0\.4.*up to 0\.3.*update vdx/,
+    );
   });
   it('a 0.3 set that names a removed predicate does not load', () => {
     for (const name of ['gh_workflow_blocks_pr', 'git_hook_installed', 'command_succeeds']) {
-      expect(() => parseRubric(rubricText('0.3', `{ ${name}: {} }`), 'x.yaml')).toThrow(new RegExp(`${name} \\(removed in schema 0\\.3\\)`));
+      expect(() => parseRubric(rubricText('0.3', `{ ${name}: {} }`), 'x.yaml')).toThrow(
+        new RegExp(`${name} \\(removed in schema 0\\.3\\)`),
+      );
     }
   });
   it('a 0.3 set that names an unknown predicate does not load', () => {
-    expect(() => parseRubric(rubricText('0.3', '{ any_of: [{ no_such_thing: {} }] }'), 'x.yaml')).toThrow(/a\.L1: no_such_thing \(unknown predicate\)/);
+    expect(() => parseRubric(rubricText('0.3', '{ any_of: [{ no_such_thing: {} }] }'), 'x.yaml')).toThrow(
+      /a\.L1: no_such_thing \(unknown predicate\)/,
+    );
   });
   it('a 0.2 set keeps loading with the removed predicates, as before', () => {
     expect(parseRubric(rubricText('0.2', '{ gh_workflow_blocks_pr: {} }'), 'x.yaml').axes).toHaveLength(1);
@@ -78,7 +84,12 @@ function axis(levels: Axis['levels']): Axis {
 }
 
 describe('not_required levels and unknown', () => {
-  const bp = axis({ L1: { not_required: true }, L2: { not_required: true }, L3: { requires: U }, L4: { not_required: true } });
+  const bp = axis({
+    L1: { not_required: true },
+    L2: { not_required: true },
+    L3: { requires: U },
+    L4: { not_required: true },
+  });
 
   it('counts levels that ask nothing as met, and stops at the unknown one, naming it', () => {
     const e = evalAxisDetailed(bp, ctx());
@@ -87,7 +98,10 @@ describe('not_required levels and unknown', () => {
     expect(e.unknown?.level).toBe('L3');
   });
   it('when L3 is met, L4 asks nothing more', () => {
-    const e = evalAxisDetailed(axis({ L1: { not_required: true }, L2: { not_required: true }, L3: { requires: T }, L4: { not_required: true } }), ctx());
+    const e = evalAxisDetailed(
+      axis({ L1: { not_required: true }, L2: { not_required: true }, L3: { requires: T }, L4: { not_required: true } }),
+      ctx(),
+    );
     expect(e.achieved).toBe('L4');
     expect(shownLevel(e)).toBe('L3');
   });
@@ -98,8 +112,13 @@ describe('not_required levels and unknown', () => {
   });
   it('a critical axis that asks nothing below L3 does not hold the overall level below L3', () => {
     const rubric = { scoring: { supporting_threshold: 0.8 } } as Rubric;
-    const r = (axis_id: string, achieved: AxisResult['achieved']): AxisResult =>
-      ({ axis_id, class: 'critical', achieved, target: 'L4', drift_kind: 'gap' });
+    const r = (axis_id: string, achieved: AxisResult['achieved']): AxisResult => ({
+      axis_id,
+      class: 'critical',
+      achieved,
+      target: 'L4',
+      drift_kind: 'gap',
+    });
     expect(projectLevel([r('tests', 'L2'), r('bp', 'L2')], rubric, new Set())).toBe('L2');
     expect(projectLevel([r('tests', 'L4'), r('bp', 'L2')], rubric, new Set())).toBe('L2');
   });
@@ -109,9 +128,31 @@ describe('not_required levels and unknown', () => {
       stack: 'node',
       achieved_level: 'L1',
       per_axis: [
-        { axis_id: 'branch-protection', class: 'critical', achieved: 'L2', target: 'L4', drift_kind: 'gap', not_required: ['L1', 'L2'], unknown: { level: 'L3', reason: 'only the hosting knows' } },
-        { axis_id: 'ci', class: 'critical', achieved: 'L1', target: 'L4', drift_kind: 'gap', unknown: { level: 'L2', reason: 'not GitLab CI' } },
-        { axis_id: 'git-hygiene', class: 'supporting', achieved: 'L2', target: 'L4', drift_kind: 'gap', note: 'husky: off here → npm install' },
+        {
+          axis_id: 'branch-protection',
+          class: 'critical',
+          achieved: 'L2',
+          target: 'L4',
+          drift_kind: 'gap',
+          not_required: ['L1', 'L2'],
+          unknown: { level: 'L3', reason: 'only the hosting knows' },
+        },
+        {
+          axis_id: 'ci',
+          class: 'critical',
+          achieved: 'L1',
+          target: 'L4',
+          drift_kind: 'gap',
+          unknown: { level: 'L2', reason: 'not GitLab CI' },
+        },
+        {
+          axis_id: 'git-hygiene',
+          class: 'supporting',
+          achieved: 'L2',
+          target: 'L4',
+          drift_kind: 'gap',
+          note: 'husky: off here → npm install',
+        },
       ],
       overrides: [],
       expired_overrides: [],

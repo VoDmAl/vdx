@@ -120,7 +120,10 @@ export function readWorkflows(ctx: Ctx): GhaWorkflow[] {
   const out: GhaWorkflow[] = [];
   let files: string[] = [];
   try {
-    files = fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort();
+    files = fs
+      .readdirSync(dir)
+      .filter((f) => /\.ya?ml$/.test(f))
+      .sort();
   } catch {
     files = [];
   }

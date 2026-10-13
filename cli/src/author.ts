@@ -61,8 +61,24 @@ export function remoteParts(url: string): { host: string; group: string; path: s
 
 /** Words that say nothing about whose repo it is. */
 const GENERIC = new Set([
-  'git', 'com', 'org', 'name', 'www', 'ssh', 'http', 'https', 'the', 'app', 'mcp',
-  'github', 'gitlab', 'dev', 'net', 'vorobyev', 'vodmal', 'dmitry',
+  'git',
+  'com',
+  'org',
+  'name',
+  'www',
+  'ssh',
+  'http',
+  'https',
+  'the',
+  'app',
+  'mcp',
+  'github',
+  'gitlab',
+  'dev',
+  'net',
+  'vorobyev',
+  'vodmal',
+  'dmitry',
 ]);
 
 export function nameTokens(dir: string, remotePath: string): Set<string> {
@@ -77,7 +93,11 @@ export function nameTokens(dir: string, remotePath: string): Set<string> {
 function describe(dir: string): PoolRepo {
   const cfg = git(dir, ['config', '--local', '--get-regexp', '^(user\\.(name|email)|remote\\.origin\\.url)$']) ?? '';
   const val = (key: string) =>
-    cfg.split('\n').find((l) => l.toLowerCase().startsWith(`${key} `))?.slice(key.length + 1).trim() ?? '';
+    cfg
+      .split('\n')
+      .find((l) => l.toLowerCase().startsWith(`${key} `))
+      ?.slice(key.length + 1)
+      .trim() ?? '';
   const email = val('user.email');
   const remote = remoteParts(val('remote.origin.url'));
   return {
@@ -177,11 +197,10 @@ export function rankAuthors(dir: string, pool: PoolRepo[]): AuthorCandidate[] {
   }
 
   const fallbackName = [...names.values()].flatMap((m) => [...m.entries()]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
-  return ranked
-    .map(([email, s]) => {
-      const byName = [...(names.get(email)?.entries() ?? [])].sort((a, b) => b[1] - a[1]);
-      return { email, name: byName[0]?.[0] ?? fallbackName, score: s, why: why.get(email) ?? [] };
-    });
+  return ranked.map(([email, s]) => {
+    const byName = [...(names.get(email)?.entries() ?? [])].sort((a, b) => b[1] - a[1]);
+    return { email, name: byName[0]?.[0] ?? fallbackName, score: s, why: why.get(email) ?? [] };
+  });
 }
 
 export function writeAuthor(dir: string, author: Author): boolean {

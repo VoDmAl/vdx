@@ -221,10 +221,14 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (session.machines !== undefined) {
       if (!isStringList(session.machines)) fail('session.machines', 'must be a list of machine names');
       session.machines.forEach((m, i) => {
-        if (!isMachineLabel(m)) fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
+        if (!isMachineLabel(m))
+          fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
       });
     }
-    if (session.folders_fix !== undefined && (typeof session.folders_fix !== 'string' || session.folders_fix.trim() === '')) {
+    if (
+      session.folders_fix !== undefined &&
+      (typeof session.folders_fix !== 'string' || session.folders_fix.trim() === '')
+    ) {
       fail('session.folders_fix', 'must be a non-empty string');
     }
   }
@@ -250,7 +254,8 @@ export function parseEnvironment(text: string, source: string): Environment {
         if (events.length === 0 || !events.every((e) => typeof e === 'string' && GIT_HOOK_EVENTS.has(e))) {
           fail(`${at}.event`, 'must be a git hook event (pre-commit, pre-push, …) or a list of them');
         }
-        if (typeof h.command !== 'string' || h.command.trim() === '') fail(`${at}.command`, 'must be a non-empty string');
+        if (typeof h.command !== 'string' || h.command.trim() === '')
+          fail(`${at}.command`, 'must be a non-empty string');
         if (h.when_exists !== undefined && (typeof h.when_exists !== 'string' || h.when_exists === '')) {
           fail(`${at}.when_exists`, 'must be a path');
         }
@@ -519,7 +524,11 @@ export function projectIdentity(projectRoot: string): string {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    const slug = url.replace(/\/+$/, '').replace(/\.git$/, '').split(/[/:]/).pop();
+    const slug = url
+      .replace(/\/+$/, '')
+      .replace(/\.git$/, '')
+      .split(/[/:]/)
+      .pop();
     if (slug) return slug.toLowerCase();
   } catch {
     /* no git or no origin */
@@ -552,7 +561,10 @@ export function resolveProjectName(input: {
       src.file.replace(/^~(?=$|\/)/, input.home).replace(/\{repo\}/g, input.repo),
     );
     // Readers take paths relative to a project root; from "/" an absolute path stays itself.
-    const value = resolveConfigPath(readStructured({ projectRoot: '/', stack: '', cache: new Map() }, file), src.jsonpath);
+    const value = resolveConfigPath(
+      readStructured({ projectRoot: '/', stack: '', cache: new Map() }, file),
+      src.jsonpath,
+    );
     if (typeof value === 'string' && value.trim()) {
       const shown = file.startsWith(input.home + path.sep) ? `~${file.slice(input.home.length)}` : file;
       return { name: value.trim(), source: `${shown} ${src.jsonpath}` };
@@ -675,9 +687,7 @@ export class Tmux {
   }
 
   attach(session: string, insideTmux: boolean): number {
-    const args = insideTmux
-      ? ['switch-client', '-t', `=${session}`]
-      : ['attach-session', '-t', `=${session}`];
+    const args = insideTmux ? ['switch-client', '-t', `=${session}`] : ['attach-session', '-t', `=${session}`];
     return spawnSync('tmux', this.argv(args), { stdio: 'inherit' }).status ?? 1;
   }
 
@@ -804,7 +814,8 @@ export function renderPlan(
     `  resume:   ${plan.resumeArgs.length ? plan.resumeArgs.join(' ') : '—'}`,
     `  matched:  ${plan.matched.length ? plan.matched.join(', ') : '—'}`,
   ];
-  if (plan.focused) lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
+  if (plan.focused)
+    lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
     multiplexer === 'tmux'
@@ -828,7 +839,10 @@ export function renderPlan(
 
 function lastLines(screen: string | null, n: number): string {
   const lines = (screen ?? '').split('\n').filter((l) => l.trim() !== '');
-  return lines.slice(-n).map((l) => `    | ${l}`).join('\n');
+  return lines
+    .slice(-n)
+    .map((l) => `    | ${l}`)
+    .join('\n');
 }
 
 function findAgentInPane(plan: LaunchPlan, paneId: string, deps: AiDeps): ProcInfo | null {
@@ -981,7 +995,12 @@ export function remoteAiArgs(input: {
 }
 
 /** Where neighbour repos live: the profile's `git.author_pool`, else the project's parent directory. */
-export function authorPoolDirs(environment: Environment, projectRoot: string, home: string, profileDir: string): string[] {
+export function authorPoolDirs(
+  environment: Environment,
+  projectRoot: string,
+  home: string,
+  profileDir: string,
+): string[] {
   const listed = environment.git?.author_pool;
   if (!listed?.length) return [path.dirname(projectRoot)];
   return listed.map((d) => path.resolve(profileDir, d.replace(/^~(?=$|\/)/, home)));
@@ -1025,7 +1044,13 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
       return;
     }
     const pick: Author | undefined =
-      a === '' ? top[0] : /^\d+$/.test(a) ? top[Number(a) - 1] : a.includes('@') ? { name: top[0]!.name, email: a } : undefined;
+      a === ''
+        ? top[0]
+        : /^\d+$/.test(a)
+          ? top[Number(a) - 1]
+          : a.includes('@')
+            ? { name: top[0]!.name, email: a }
+            : undefined;
     if (pick) {
       if (writeAuthor(projectRoot, pick)) deps.log(`✓ ${pick.name} <${pick.email}> → .git/config`);
       else deps.log(`✗ could not write .git/config — ${command(pick)}`);
@@ -1040,7 +1065,9 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: s
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
   const args = remoteAiArgs({ host, from, projectPath, home: deps.home, version: deps.version ?? '', opts, tty });
-  deps.log(`→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`);
+  deps.log(
+    `→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`,
+  );
   const res = (deps.ssh ?? runSsh)(args, false);
   if (res === null) {
     deps.log('vdx ai: `ssh` not found on PATH');
@@ -1113,7 +1140,10 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const host = plan.host;
   const same = sameMachine;
-  const all = plan.resumeArgs.length === 0 ? [] : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+  const all =
+    plan.resumeArgs.length === 0
+      ? []
+      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
   const root = shellQuote(plan.projectRoot);
   // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
   const atSeat = same(plan.seat, host);
@@ -1124,7 +1154,9 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   for (const m of [...plan.machines, ...all.map((c) => c.machine)]) {
     if (m && !same(m, host) && ![...reach.keys()].some((k) => same(k, m))) reach.set(m, askMachine(m, deps));
   }
-  const silent = [...reach].filter(([, r]) => r === null).map(([m]) => `note: ${m} does not answer over ssh — what runs there is not known`);
+  const silent = [...reach]
+    .filter(([, r]) => r === null)
+    .map(([m]) => `note: ${m} does not answer over ssh — what runs there is not known`);
   const elsewhere = [...reach].flatMap(([m, r]) =>
     (r?.sessions ?? []).filter((l) => runsInProject(l, r!.home, plan.projectRoot, deps.home)).map((l) => ({ m, l })),
   );
@@ -1139,7 +1171,9 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     !l.tmux ? '' : same(m, plan.seat) ? ` — attach: vdx ai ${rootOn(m)}` : ` — there: vdx ai@${m} ${root}`;
   const fresh = (lines: string[]): ConversationChoice => {
     if (elsewhere.length === 0) return { args: [], lines };
-    const agents = elsewhere.map(({ m, l }) => `an agent of this project is ${describeLive(on(m), l)}${reachAgent(m, l)}`);
+    const agents = elsewhere.map(
+      ({ m, l }) => `an agent of this project is ${describeLive(on(m), l)}${reachAgent(m, l)}`,
+    );
     return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
   };
   if (plan.resumeArgs.length === 0) return fresh(silent);
@@ -1167,15 +1201,26 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
     if (here) {
       return {
         args: [],
-        askHere: { id: c.id, why: `It runs ${on(host)} right now (${here.session.tmux ?? `pid ${here.session.pid}`}); two sessions would write to it` },
+        askHere: {
+          id: c.id,
+          why: `It runs ${on(host)} right now (${here.session.tmux ?? `pid ${here.session.pid}`}); two sessions would write to it`,
+        },
         lines: [`chosen: ${show(c)}`],
       };
     }
     if (isOurs(c)) return { args: resumeId(c.id), lines: [`continuing ${show(c)}`] };
-    if (m) return { args: [], remote: { host: m, id: c.id, reachable: reach.get(m) != null }, lines: [`continuing on ${m}: ${show(c)}`] };
+    if (m)
+      return {
+        args: [],
+        remote: { host: m, id: c.id, reachable: reach.get(m) != null },
+        lines: [`continuing on ${m}: ${show(c)}`],
+      };
     return {
       args: [],
-      askHere: { id: c.id, why: `Its machine is unknown (never typed in ${on(host)}); if it runs there, both machines will write to it` },
+      askHere: {
+        id: c.id,
+        why: `Its machine is unknown (never typed in ${on(host)}); if it runs there, both machines will write to it`,
+      },
       lines: [`chosen: ${show(c)}`],
     };
   };
@@ -1188,7 +1233,12 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   if (canAsk && deps.interactive) {
     deps.log('conversations of this project:');
     found.forEach((c, i) => {
-      const marks = [i === 0 && 'newest', c === firstIdle && (atSeat ? 'this machine' : `idle on ${host}`), !machine(c) && 'machine unknown', ...running(c)];
+      const marks = [
+        i === 0 && 'newest',
+        c === firstIdle && (atSeat ? 'this machine' : `idle on ${host}`),
+        !machine(c) && 'machine unknown',
+        ...running(c),
+      ];
       const m = marks.filter(Boolean);
       deps.log(`  ${i + 1}) ${show(c)}${m.length ? `   ← ${m.join(', ')}` : ''}`);
     });
@@ -1215,7 +1265,8 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
         `${c.updated > (firstIdle?.updated ?? new Date(0)) ? 'a newer' : 'another'} conversation ${c.id.slice(0, 8)}` +
         (now.length ? `, ${now.join(', ')}` : '');
       if (runsHere(c)) return `note: ${which} — not taken: it would have two sessions`;
-      if (m && same(m, plan.seat)) return `note: ${m} has ${which} — continue it where you are: vdx ai ${rootOn(m)} --conversation ${c.id}`;
+      if (m && same(m, plan.seat))
+        return `note: ${m} has ${which} — continue it where you are: vdx ai ${rootOn(m)} --conversation ${c.id}`;
       return m
         ? `note: ${m} has ${which} — continue it there: vdx ai@${m} ${root} --conversation ${c.id}`
         : `note: ${which} is of an unknown machine (never typed in ${on(host)}) — on its machine: vdx ai@<machine> ${root} --conversation ${c.id}`;
@@ -1330,7 +1381,9 @@ export function unreadableFolders(tmux: Tmux | null, home: string): string[] {
     // `ls`, not `[ -d ]`: a denied folder still passes -d. The answer comes back in a
     // file: tmux before 3.5 prints run-shell's output into a pane, not to the caller.
     const file = path.join(os.tmpdir(), `vdx-folders-${process.pid}-${Date.now()}`);
-    const checks = dirs.map((d) => `{ [ ! -d ${shellQuote(d)} ] || ls ${shellQuote(d)} >/dev/null 2>&1 || echo ${shellQuote(d)}; }`);
+    const checks = dirs.map(
+      (d) => `{ [ ! -d ${shellQuote(d)} ] || ls ${shellQuote(d)} >/dev/null 2>&1 || echo ${shellQuote(d)}; }`,
+    );
     try {
       if (tmux.tryRun(['run-shell', `{ ${checks.join('; ')}; } > ${shellQuote(file)}`]) !== null) {
         return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
@@ -1466,9 +1519,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
 
   const running =
-    multiplexer === 'tmux'
-      ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command)
-      : [];
+    multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command) : [];
   const current = running[0];
   // A running agent keeps its mode: plain `vdx ai` takes a focused one as it is,
   // and the rules it leaves out are not missing from it.
@@ -1495,8 +1546,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
 
   const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
   // Said before a start or an attach, never in the way: the agent runs, without those files.
-  const denied = (deps.platform ?? process.platform) === 'darwin' ? unreadableFolders(multiplexer === 'tmux' ? tmux : null, deps.home) : [];
-  const folders = denied.length ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home) : [];
+  const denied =
+    (deps.platform ?? process.platform) === 'darwin'
+      ? unreadableFolders(multiplexer === 'tmux' ? tmux : null, deps.home)
+      : [];
+  const folders = denied.length
+    ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home)
+    : [];
   if (opts.dryRun) {
     deps.out(renderPlan(plan, multiplexer, running, focusedOf));
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
@@ -1508,7 +1564,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   for (const l of folders) log(l);
   if (choice?.abort) return EXIT_LAUNCH_FAILED;
   if (choice?.elsewhere && !current) {
-    const answer = deps.interactive ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `) : null;
+    const answer = deps.interactive
+      ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `)
+      : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
       log('nothing started');
       return EXIT_LAUNCH_FAILED;
@@ -1569,7 +1627,8 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
 
   if (current && !opts.restart) {
-    if (opts.fresh) log(`note: ${current.pane.session} already runs ${plan.command} — --new replaces it only with --restart`);
+    if (opts.fresh)
+      log(`note: ${current.pane.session} already runs ${plan.command} — --new replaces it only with --restart`);
     if (opts.conversation) {
       const live = liveConversationId(deps.env, deps.home, current.proc.pid);
       if (live !== opts.conversation) {
@@ -1582,7 +1641,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const unfocused = plan.focused && !runningFocused;
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
     if (!unfocused && missing.length === 0) {
-      log(`✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`);
+      log(
+        `✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`,
+      );
       return finish(true, current.pane.session, current.pane.paneId, opts, deps);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
@@ -1600,7 +1661,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       return EXIT_DRIFT;
     }
     log(`⚠ ${drift}`);
-    log(`  Enter  ${opts.detach ? 'leave it running' : 'attach to it'} as is${unfocused ? '' : ' — the flags wait for a restart'}`);
+    log(
+      `  Enter  ${opts.detach ? 'leave it running' : 'attach to it'} as is${unfocused ? '' : ' — the flags wait for a restart'}`,
+    );
     log(`  r      restart it ${unfocused ? 'focused' : 'with the profile'}: ${effect}`);
     log(`  q      leave it; later: ${fix}`);
     const answer = deps.ask(`${opts.detach ? 'Leave it as is' : 'Attach as is'}? [Enter/r/q]: `);
@@ -1618,7 +1681,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
     log(`↻ ${current.pane.session} ${current.pane.paneId}: restarting — ${line}`);
     tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell));
-    return finish(settleResumed(plan, current.pane.paneId, deps), current.pane.session, current.pane.paneId, opts, deps);
+    return finish(
+      settleResumed(plan, current.pane.paneId, deps),
+      current.pane.session,
+      current.pane.paneId,
+      opts,
+      deps,
+    );
   }
 
   if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);

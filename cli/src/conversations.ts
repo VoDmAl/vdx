@@ -179,14 +179,16 @@ export function machineOf(c: Conversation, host: string): string | null {
 }
 
 /** The newest conversation of each machine (unknown counts as one), newest first. */
-export function latestPerMachine(conversations: Conversation[], machine: (c: Conversation) => string | null): Conversation[] {
+export function latestPerMachine(
+  conversations: Conversation[],
+  machine: (c: Conversation) => string | null,
+): Conversation[] {
   const out: Conversation[] = [];
   for (const c of [...conversations].sort((a, b) => b.updated.getTime() - a.updated.getTime())) {
     if (!out.some((o) => sameMachine(machine(o), machine(c)))) out.push(c);
   }
   return out;
 }
-
 
 /**
  * The conversation a running Claude Code process is in, from its session file
@@ -226,7 +228,8 @@ export function parseLiveSessions(text: string): LiveSession[] {
     } catch {
       continue;
     }
-    if (!Number.isInteger(data?.pid) || typeof data?.sessionId !== 'string' || !isConversationId(data.sessionId)) continue;
+    if (!Number.isInteger(data?.pid) || typeof data?.sessionId !== 'string' || !isConversationId(data.sessionId))
+      continue;
     out.push({
       pid: data.pid,
       conversation: data.sessionId,
@@ -282,7 +285,11 @@ export const LIVE_SESSIONS_SCRIPT =
   'kill -0 "$p" 2>/dev/null && tr -d "\\n" < "$f" && echo; done; exit 0';
 
 /** Claude Code processes alive on this machine. */
-export function liveSessionsHere(env: NodeJS.ProcessEnv, home: string, alive: (pid: number) => boolean = pidAlive): LiveSession[] {
+export function liveSessionsHere(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  alive: (pid: number) => boolean = pidAlive,
+): LiveSession[] {
   const dir = path.join(claudeConfigDir(env, home), 'sessions');
   let names: string[];
   try {

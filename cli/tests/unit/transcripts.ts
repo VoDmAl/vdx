@@ -6,12 +6,18 @@ import { machineLine, projectDirName } from '../../src/conversations.ts';
 export const hookLine = (text: string) =>
   JSON.stringify({
     type: 'attachment',
-    attachment: { type: 'hook_additional_context', content: [text], hookName: 'SessionStart', hookEvent: 'SessionStart' },
+    attachment: {
+      type: 'hook_additional_context',
+      content: [text],
+      hookName: 'SessionStart',
+      hookEvent: 'SessionStart',
+    },
   });
 export const userLine = (text: string) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
 export const promptLine = (text: string) => JSON.stringify({ type: 'last-prompt', lastPrompt: text });
 export const titleLine = (text: string) => JSON.stringify({ type: 'ai-title', aiTitle: text });
-export const startedOn = (machine: string) => hookLine(`${machineLine(machine)}; the agent in this project is started with \`vdx ai\``);
+export const startedOn = (machine: string) =>
+  hookLine(`${machineLine(machine)}; the agent in this project is started with \`vdx ai\``);
 
 export const ID = {
   a: 'aaaaaaaa-1111-4111-8111-111111111111',
@@ -21,7 +27,13 @@ export const ID = {
 };
 
 /** Write a conversation into `<config>/projects/<dir>/`, its mtime `minutesAgo` back. */
-export function writeConversation(config: string, root: string, id: string, lines: string[], minutesAgo: number): string {
+export function writeConversation(
+  config: string,
+  root: string,
+  id: string,
+  lines: string[],
+  minutesAgo: number,
+): string {
   const dir = path.join(config, 'projects', projectDirName(root));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${id}.jsonl`);
@@ -34,6 +46,8 @@ export function writeConversation(config: string, root: string, id: string, line
 /** Prompts typed on this machine, as Claude Code records them in `<config>/history.jsonl`. */
 export function writeHistory(config: string, project: string, ids: string[]): void {
   fs.mkdirSync(config, { recursive: true });
-  const lines = ids.map((id) => JSON.stringify({ display: 'hi', pastedContents: {}, timestamp: 1, project, sessionId: id }));
+  const lines = ids.map((id) =>
+    JSON.stringify({ display: 'hi', pastedContents: {}, timestamp: 1, project, sessionId: id }),
+  );
   fs.appendFileSync(path.join(config, 'history.jsonl'), lines.join('\n') + '\n');
 }

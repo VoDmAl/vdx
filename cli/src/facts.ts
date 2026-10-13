@@ -253,8 +253,19 @@ export function stackForDir(dir: string): string | null {
 }
 
 const SUBPACKAGE_SCAN_IGNORE = new Set([
-  'node_modules', 'vendor', 'dist', 'build', 'out', 'target',
-  '.git', '.next', '__pycache__', '.venv', 'venv', '.cache', 'coverage',
+  'node_modules',
+  'vendor',
+  'dist',
+  'build',
+  'out',
+  'target',
+  '.git',
+  '.next',
+  '__pycache__',
+  '.venv',
+  'venv',
+  '.cache',
+  'coverage',
 ]);
 
 export interface SubPackage {

@@ -2,11 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  LIFECYCLE_VERBS,
-  resolveLifecycleVerb,
-  renderResolveError,
-} from '../../src/run.ts';
+import { LIFECYCLE_VERBS, resolveLifecycleVerb, renderResolveError } from '../../src/run.ts';
 
 describe('LIFECYCLE_VERBS', () => {
   it('exposes the canonical six verbs', () => {
@@ -48,10 +44,7 @@ describe('resolveLifecycleVerb', () => {
   });
 
   it('returns no-task when requested verb is not in [tasks]', () => {
-    fs.writeFileSync(
-      path.join(tmp, 'mise.toml'),
-      '[tasks.build]\nrun = "echo build"\n',
-    );
+    fs.writeFileSync(path.join(tmp, 'mise.toml'), '[tasks.build]\nrun = "echo build"\n');
     const res = resolveLifecycleVerb(tmp, 'test');
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toBe('no-task');
@@ -89,21 +82,13 @@ describe('resolveLifecycleVerb', () => {
 
 describe('renderResolveError', () => {
   it('formats no-mise-toml with init hint', () => {
-    const msg = renderResolveError(
-      { ok: false, reason: 'no-mise-toml' },
-      '/proj',
-      'test',
-    );
+    const msg = renderResolveError({ ok: false, reason: 'no-mise-toml' }, '/proj', 'test');
     expect(msg).toMatch(/no mise\.toml in \/proj/);
     expect(msg).toMatch(/vdx init/);
   });
 
   it('formats no-task with --force hint', () => {
-    const msg = renderResolveError(
-      { ok: false, reason: 'no-task' },
-      '/proj',
-      'build',
-    );
+    const msg = renderResolveError({ ok: false, reason: 'no-task' }, '/proj', 'build');
     expect(msg).toMatch(/\[tasks\.build\]/);
     expect(msg).toMatch(/--force/);
   });

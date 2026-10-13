@@ -34,7 +34,10 @@ const pkg = (o: object) => JSON.stringify(o);
 
 describe('does the repository install its hooks itself (git_hooks_arranged, L2)', () => {
   it('husky in prepare — yes, with npm', () => {
-    const r = repo({ 'package.json': pkg({ scripts: { prepare: 'husky', test: 'x' } }), '.husky/pre-commit': 'npm test\n' });
+    const r = repo({
+      'package.json': pkg({ scripts: { prepare: 'husky', test: 'x' } }),
+      '.husky/pre-commit': 'npm test\n',
+    });
     const [fw] = detectHookFrameworks(ctxOf(r));
     expect(fw?.id).toBe('husky');
     expect(fw?.installedBy).toBe('package.json prepare');
@@ -51,7 +54,10 @@ describe('does the repository install its hooks itself (git_hooks_arranged, L2)'
     }
   });
   it('husky in postinstall under Yarn 2+ — yes', () => {
-    const r = repo({ 'package.json': pkg({ packageManager: 'yarn@4.9.2', scripts: { postinstall: 'husky' } }), '.husky/pre-commit': 'yarn lint\n' });
+    const r = repo({
+      'package.json': pkg({ packageManager: 'yarn@4.9.2', scripts: { postinstall: 'husky' } }),
+      '.husky/pre-commit': 'yarn lint\n',
+    });
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(r))).toBe(true);
   });
   it('the husky package alone — no: husky 9 has no postinstall', () => {
@@ -59,16 +65,26 @@ describe('does the repository install its hooks itself (git_hooks_arranged, L2)'
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(r))).toBe(false);
   });
   it('lefthook and simple-git-hooks packages install themselves', () => {
-    const lh = repo({ 'package.json': pkg({ devDependencies: { lefthook: '^2' } }), 'lefthook.yml': 'pre-commit:\n  commands:\n    t:\n      run: npm test\n' });
+    const lh = repo({
+      'package.json': pkg({ devDependencies: { lefthook: '^2' } }),
+      'lefthook.yml': 'pre-commit:\n  commands:\n    t:\n      run: npm test\n',
+    });
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(lh))).toBe(true);
-    const sgh = repo({ 'package.json': pkg({ devDependencies: { 'simple-git-hooks': '^2' }, 'simple-git-hooks': { 'pre-commit': 'npm test' } }) });
+    const sgh = repo({
+      'package.json': pkg({
+        devDependencies: { 'simple-git-hooks': '^2' },
+        'simple-git-hooks': { 'pre-commit': 'npm test' },
+      }),
+    });
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(sgh))).toBe(true);
   });
   it('cghooks add in post-install-cmd, through an @ reference too (telegram)', () => {
     const r = repo({
       'composer.json': pkg({
         scripts: { 'post-install-cmd': ['@cghooks add --ignore-lock'], cghooks: './vendor/bin/cghooks' },
-        extra: { hooks: { 'pre-commit': ['composer check:before:commit'], config: { 'stop-on-failure': ['pre-commit'] } } },
+        extra: {
+          hooks: { 'pre-commit': ['composer check:before:commit'], config: { 'stop-on-failure': ['pre-commit'] } },
+        },
       }),
     });
     const [fw] = detectHookFrameworks(ctxOf(r));
@@ -79,11 +95,16 @@ describe('does the repository install its hooks itself (git_hooks_arranged, L2)'
   it('.githooks — only when an install step sets core.hooksPath (cc-vdm-plugins: no)', () => {
     const bare = repo({ '.githooks/pre-commit': 'scripts/check.sh\n' });
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(bare))).toBe(false);
-    const up = repo({ '.githooks/pre-commit': 'x\n', 'mise.toml': '[tasks.up]\nrun = "git config core.hooksPath .githooks"\n' });
+    const up = repo({
+      '.githooks/pre-commit': 'x\n',
+      'mise.toml': '[tasks.up]\nrun = "git config core.hooksPath .githooks"\n',
+    });
     expect(REGISTRY.git_hooks_arranged!({}, ctxOf(up))).toBe(true);
   });
   it('no hooks declared — not arranged (L1 stays L1)', () => {
-    expect(REGISTRY.git_hooks_arranged!({}, ctxOf(repo({ 'package.json': pkg({ scripts: { prepare: 'husky' } }) })))).toBe(false);
+    expect(
+      REGISTRY.git_hooks_arranged!({}, ctxOf(repo({ 'package.json': pkg({ scripts: { prepare: 'husky' } }) }))),
+    ).toBe(false);
   });
 });
 
@@ -110,18 +131,27 @@ jobs:
       - run: composer test
 `;
   it('L3: a hook calls a vocabulary task through the runner', () => {
-    expect(REGISTRY.git_hook_runs_task!({ tasks: ['test', 'check'] }, ctxOf(repo({ 'composer.json': pkg(composer) })))).toBe(true);
+    expect(
+      REGISTRY.git_hook_runs_task!({ tasks: ['test', 'check'] }, ctxOf(repo({ 'composer.json': pkg(composer) }))),
+    ).toBe(true);
   });
   it('L3: lint is not a vocabulary word', () => {
-    const r = repo({ 'package.json': pkg({ scripts: { lint: 'eslint .', postinstall: 'husky' } }), '.husky/pre-commit': 'yarn lint\n' });
+    const r = repo({
+      'package.json': pkg({ scripts: { lint: 'eslint .', postinstall: 'husky' } }),
+      '.husky/pre-commit': 'yarn lint\n',
+    });
     expect(REGISTRY.git_hook_runs_task!({ tasks: ['test', 'check'] }, ctxOf(r))).toBe(false);
   });
   it('L4: pre-push covers every vocabulary task CI calls, after expansion (telegram)', () => {
-    expect(REGISTRY.git_hook_covers_ci!({}, ctxOf(repo({ 'composer.json': pkg(composer), '.github/workflows/ci.yml': ci })))).toBe(true);
+    expect(
+      REGISTRY.git_hook_covers_ci!({}, ctxOf(repo({ 'composer.json': pkg(composer), '.github/workflows/ci.yml': ci }))),
+    ).toBe(true);
   });
   it('L4: a CI check the pre-push skips — no', () => {
     const narrow = { ...composer, extra: { hooks: { 'pre-push': ['composer test'] } } };
-    expect(REGISTRY.git_hook_covers_ci!({}, ctxOf(repo({ 'composer.json': pkg(narrow), '.github/workflows/ci.yml': ci })))).toBe(false);
+    expect(
+      REGISTRY.git_hook_covers_ci!({}, ctxOf(repo({ 'composer.json': pkg(narrow), '.github/workflows/ci.yml': ci }))),
+    ).toBe(false);
   });
   it('L4: no CI to compare with — no', () => {
     expect(REGISTRY.git_hook_covers_ci!({}, ctxOf(repo({ 'composer.json': pkg(composer) })))).toBe(false);
@@ -130,10 +160,16 @@ jobs:
 
 describe('is it on in this clone (cloneHookStates, checkRepoHooks)', () => {
   it('husky: core.hooksPath unset → off, remedy is the install step', () => {
-    const r = repo({ 'package.json': pkg({ scripts: { prepare: 'husky' } }), 'package-lock.json': '{}', '.husky/pre-commit': 'npm test\n' });
+    const r = repo({
+      'package.json': pkg({ scripts: { prepare: 'husky' } }),
+      'package-lock.json': '{}',
+      '.husky/pre-commit': 'npm test\n',
+    });
     const row = checkRepoHooks(r);
     expect(row?.status).toBe('warning');
-    expect(row?.message).toMatch(/husky \(\.husky\/\): core\.hooksPath is unset, husky needs \.husky\/_ — those hooks never run/);
+    expect(row?.message).toMatch(
+      /husky \(\.husky\/\): core\.hooksPath is unset, husky needs \.husky\/_ — those hooks never run/,
+    );
     expect(row?.remedy).toBe('npm install');
   });
   it('husky: hooksPath at .husky/_ with the wrappers → on', () => {
@@ -143,16 +179,29 @@ describe('is it on in this clone (cloneHookStates, checkRepoHooks)', () => {
     expect(checkRepoHooks(r)?.status).toBe('ok');
   });
   it('husky never switched on by the repo itself: remedy is the manual command', () => {
-    const r = repo({ 'package.json': pkg({ packageManager: 'yarn@4.9.2', scripts: { prepare: 'husky' } }), '.husky/pre-commit': 'yarn lint\n' });
+    const r = repo({
+      'package.json': pkg({ packageManager: 'yarn@4.9.2', scripts: { prepare: 'husky' } }),
+      '.husky/pre-commit': 'yarn lint\n',
+    });
     expect(checkRepoHooks(r)?.remedy).toBe('npx husky');
   });
   it('cghooks: hooks in .git/hooks with every declared command → on', () => {
-    const r = repo({ 'composer.json': pkg({ scripts: { 'post-install-cmd': 'cghooks add' }, extra: { hooks: { 'pre-commit': ['composer test'] } } }) });
+    const r = repo({
+      'composer.json': pkg({
+        scripts: { 'post-install-cmd': 'cghooks add' },
+        extra: { hooks: { 'pre-commit': ['composer test'] } },
+      }),
+    });
     writeExec(r, '.git/hooks/pre-commit', '#!/bin/sh\n\ncomposer test\n');
     expect(checkRepoHooks(r)?.status).toBe('ok');
   });
   it('cghooks: the installed copy is older than extra.hooks → stale, composer install', () => {
-    const r = repo({ 'composer.json': pkg({ scripts: { 'post-install-cmd': 'cghooks add' }, extra: { hooks: { 'pre-commit': ['composer test', 'composer check'] } } }) });
+    const r = repo({
+      'composer.json': pkg({
+        scripts: { 'post-install-cmd': 'cghooks add' },
+        extra: { hooks: { 'pre-commit': ['composer test', 'composer check'] } },
+      }),
+    });
     writeExec(r, '.git/hooks/pre-commit', '#!/bin/sh\n\ncomposer test\n');
     const row = checkRepoHooks(r);
     expect(row?.status).toBe('warning');
@@ -160,20 +209,30 @@ describe('is it on in this clone (cloneHookStates, checkRepoHooks)', () => {
     expect(row?.remedy).toBe('composer install');
   });
   it('cghooks hooks in .git/hooks while core.hooksPath points elsewhere → off: git never reads them', () => {
-    const r = repo({ 'composer.json': pkg({ scripts: { 'post-install-cmd': 'cghooks add' }, extra: { hooks: { 'pre-commit': ['composer test'] } } }) });
+    const r = repo({
+      'composer.json': pkg({
+        scripts: { 'post-install-cmd': 'cghooks add' },
+        extra: { hooks: { 'pre-commit': ['composer test'] } },
+      }),
+    });
     writeExec(r, '.git/hooks/pre-commit', '#!/bin/sh\ncomposer test\n');
     fs.mkdirSync(path.join(r, '.other'));
     git(r, 'config', 'core.hooksPath', '.other');
     const [state] = cloneHookStates(r, ctxOf(r), detectHookFrameworks(ctxOf(r)));
     expect(state?.enabled).toBe(false);
   });
-  it('lefthook: a pre-commit that is not lefthook\'s → off', () => {
-    const r = repo({ 'package.json': pkg({ devDependencies: { lefthook: '^2' } }), 'lefthook.yml': 'pre-commit:\n  commands:\n    t:\n      run: npm test\n' });
+  it("lefthook: a pre-commit that is not lefthook's → off", () => {
+    const r = repo({
+      'package.json': pkg({ devDependencies: { lefthook: '^2' } }),
+      'lefthook.yml': 'pre-commit:\n  commands:\n    t:\n      run: npm test\n',
+    });
     writeExec(r, '.git/hooks/pre-commit', '#!/bin/sh\necho other\n');
     expect(checkRepoHooks(r)?.message).toMatch(/not lefthook's/);
   });
   it('a hook calling a program missing on this machine is flagged; one only mentioning a path is not', () => {
-    expect(missingMachinePaths(['"$HOME/no-such-dir-vdx/check.sh" && composer test'])).toEqual(['$HOME/no-such-dir-vdx/check.sh']);
+    expect(missingMachinePaths(['"$HOME/no-such-dir-vdx/check.sh" && composer test'])).toEqual([
+      '$HOME/no-such-dir-vdx/check.sh',
+    ]);
     expect(missingMachinePaths(['echo "see $HOME/no-such-dir-vdx/x"'])).toEqual([]);
     expect(missingMachinePaths(['"$HOME" && true'])).toEqual([]);
   });

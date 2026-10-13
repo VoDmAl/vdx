@@ -3,12 +3,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { checkClaudeCodePlugin, checkGitAuthor, runDoctor, resolveDoctorCtx, looksLikeProject } from '../../src/doctor.ts';
 import {
-  reportDoctorMarkdown,
-  reportDoctorJson,
-  reportDoctorAnsi,
-} from '../../src/report.ts';
+  checkClaudeCodePlugin,
+  checkGitAuthor,
+  runDoctor,
+  resolveDoctorCtx,
+  looksLikeProject,
+} from '../../src/doctor.ts';
+import { reportDoctorMarkdown, reportDoctorJson, reportDoctorAnsi } from '../../src/report.ts';
 
 // The machine's own profile would make the author check scan the owner's repos.
 const savedProfile = process.env['VDX_ENVIRONMENT'];
@@ -109,7 +111,11 @@ describe('runDoctor with explicit ctx', () => {
   }, 30_000);
 
   it('names the commit author of a repo, or the likely one with a command', () => {
-    const saved = { g: process.env['GIT_CONFIG_GLOBAL'], s: process.env['GIT_CONFIG_NOSYSTEM'], e: process.env['VDX_ENVIRONMENT'] };
+    const saved = {
+      g: process.env['GIT_CONFIG_GLOBAL'],
+      s: process.env['GIT_CONFIG_NOSYSTEM'],
+      e: process.env['VDX_ENVIRONMENT'],
+    };
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-doctor-author-')));
     fs.writeFileSync(path.join(dir, 'gitconfig'), '');
     process.env['GIT_CONFIG_GLOBAL'] = path.join(dir, 'gitconfig');
@@ -132,7 +138,11 @@ describe('runDoctor with explicit ctx', () => {
       expect(row(none)!.message).toContain('likely me@work.example');
       expect(row(none)!.remedy).toContain('config --local user.email me@work.example');
     } finally {
-      for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.g], ['GIT_CONFIG_NOSYSTEM', saved.s], ['VDX_ENVIRONMENT', saved.e]] as const) {
+      for (const [k, v] of [
+        ['GIT_CONFIG_GLOBAL', saved.g],
+        ['GIT_CONFIG_NOSYSTEM', saved.s],
+        ['VDX_ENVIRONMENT', saved.e],
+      ] as const) {
         if (v === undefined) delete process.env[k];
         else process.env[k] = v;
       }
@@ -163,14 +173,7 @@ describe('looksLikeProject', () => {
   });
 
   it('returns true for composer.json / pyproject.toml / Makefile / mise.toml / Cargo.toml / go.mod', () => {
-    for (const marker of [
-      'composer.json',
-      'pyproject.toml',
-      'Makefile',
-      'mise.toml',
-      'Cargo.toml',
-      'go.mod',
-    ]) {
+    for (const marker of ['composer.json', 'pyproject.toml', 'Makefile', 'mise.toml', 'Cargo.toml', 'go.mod']) {
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-doctor-marker-'));
       fs.writeFileSync(path.join(sub, marker), '');
       expect(looksLikeProject(sub), `marker: ${marker}`).toBe(true);
@@ -209,11 +212,9 @@ describe('reportDoctor formatters', () => {
 
 describe('checkGitHooks (via runDoctor)', () => {
   let tmp: string;
-  const row = (root: string) =>
-    runDoctor({ projectRoot: root }).checks.find((c) => c.id === 'git-hooks');
+  const row = (root: string) => runDoctor({ projectRoot: root }).checks.find((c) => c.id === 'git-hooks');
 
-  const git = (root: string, ...args: string[]) =>
-    execFileSync('git', ['-C', root, ...args], { stdio: 'ignore' });
+  const git = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { stdio: 'ignore' });
 
   beforeEach(() => {
     tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-hooks-')));
@@ -328,7 +329,10 @@ describe('claude-plugin: the vdx plugin as Claude Code records it', () => {
   });
 
   it('warns when not installed — a vdm plugin is not vdx, and names the marketplace', () => {
-    write('plugins/installed_plugins.json', { version: 2, plugins: { 'vdx-tools@other': [record], 'vdm@vodmal': [record] } });
+    write('plugins/installed_plugins.json', {
+      version: 2,
+      plugins: { 'vdx-tools@other': [record], 'vdm@vodmal': [record] },
+    });
     // An old registration of a vdx marketplace in settings.json is not an install.
     write('settings.json', { extraKnownMarketplaces: { vdx: { source: { source: 'github', repo: 'VoDmAl/vdx' } } } });
     const r = checkClaudeCodePlugin(dir);

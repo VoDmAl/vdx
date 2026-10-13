@@ -4,6 +4,13 @@
 
 ## 2026-10-13
 
+### Prettier в CLI: `check` проверяет формат, `fix` правит
+
+`cli/.prettierrc` (одинарные кавычки, ширина 120), разовое переформатирование
+`src/` и `tests/`. `mise run check` теперь падает на неотформатированном коде,
+`mise run fix` его чинит. ESLint — следующим шагом
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #7).
+
 ### Сет v1.4.0: библиотеку не просят подниматься
 
 `lifecycle-interface` L3 требует `up` и `down` только от приложения. Проекту,

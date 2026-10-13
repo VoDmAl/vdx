@@ -56,7 +56,10 @@ describe('pushesMain — the trigger the signal needs', () => {
 
 describe('ci L2 — gha_tests_on_push', () => {
   it('tests on a push to main count', () => {
-    const c = project({ 'package.json': PKG, '.github/workflows/ci.yml': wf('{ push: { branches: [main] } }', run('npm test')) });
+    const c = project({
+      'package.json': PKG,
+      '.github/workflows/ci.yml': wf('{ push: { branches: [main] } }', run('npm test')),
+    });
     expect(REGISTRY.gha_tests_on_push!({}, c)).toBe(true);
   });
   it('a PR-only workflow does not: in a repo that pushes to main it never runs', () => {
@@ -90,15 +93,24 @@ describe('ci L2 — gha_tests_on_push', () => {
 
 describe('ci L3 — gha_runs_tasks: CI calls the project vocabulary', () => {
   it('check and test through the project runner', () => {
-    const c = project({ 'package.json': PKG, '.github/workflows/ci.yml': wf('push', run('npm run check') + run('npm test')) });
+    const c = project({
+      'package.json': PKG,
+      '.github/workflows/ci.yml': wf('push', run('npm run check') + run('npm test')),
+    });
     expect(REGISTRY.gha_runs_tasks!({ tasks: ['check', 'test'] }, c)).toBe(true);
   });
   it('a namespaced form counts: check:lint', () => {
-    const c = project({ 'package.json': PKG, '.github/workflows/ci.yml': wf('push', run('npm run check:lint') + run('npm test')) });
+    const c = project({
+      'package.json': PKG,
+      '.github/workflows/ci.yml': wf('push', run('npm run check:lint') + run('npm test')),
+    });
     expect(REGISTRY.gha_runs_tasks!({ tasks: ['check', 'test'] }, c)).toBe(true);
   });
   it('the tool called directly is not the project task: tsc instead of check', () => {
-    const c = project({ 'package.json': PKG, '.github/workflows/ci.yml': wf('push', run('npx tsc --noEmit') + run('npm test')) });
+    const c = project({
+      'package.json': PKG,
+      '.github/workflows/ci.yml': wf('push', run('npx tsc --noEmit') + run('npm test')),
+    });
     expect(REGISTRY.gha_runs_tasks!({ tasks: ['check', 'test'] }, c)).toBe(false);
   });
 });
@@ -129,11 +141,17 @@ jobs:
       - uses: getsentry/action-release@v3
 `;
   it('everything that ships waits for a checking job via needs (telegram)', () => {
-    const c = project({ 'composer.json': JSON.stringify({ scripts: { test: 'phpunit' } }), '.github/workflows/deploy.yml': pipeline('\n    needs: [testing]') });
+    const c = project({
+      'composer.json': JSON.stringify({ scripts: { test: 'phpunit' } }),
+      '.github/workflows/deploy.yml': pipeline('\n    needs: [testing]'),
+    });
     expect(REGISTRY.gha_ship_needs_checks!({}, c)).toBe(true);
   });
   it('a deploy that does not wait is not a pipeline', () => {
-    const c = project({ 'composer.json': JSON.stringify({ scripts: { test: 'phpunit' } }), '.github/workflows/deploy.yml': pipeline('') });
+    const c = project({
+      'composer.json': JSON.stringify({ scripts: { test: 'phpunit' } }),
+      '.github/workflows/deploy.yml': pipeline(''),
+    });
     expect(REGISTRY.gha_ship_needs_checks!({}, c)).toBe(false);
   });
 });
@@ -177,7 +195,14 @@ describe('task expansion — composer @refs and npm run', () => {
     });
   it('expands transitively', () => {
     const got = expandTasks(c(), ['check:before:push']);
-    for (const t of ['check:before:push', 'check:config', 'check:config:composer', 'check:before:commit', 'test', 'check:code:lint']) {
+    for (const t of [
+      'check:before:push',
+      'check:config',
+      'check:config:composer',
+      'check:before:commit',
+      'test',
+      'check:code:lint',
+    ]) {
       expect(got.has(t), t).toBe(true);
     }
   });

@@ -3,7 +3,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { checkPersonalHooks, fixPersonalHooks, parseGitVersion, type PersonalHookDeps } from '../../src/personal-hooks.ts';
+import {
+  checkPersonalHooks,
+  fixPersonalHooks,
+  parseGitVersion,
+  type PersonalHookDeps,
+} from '../../src/personal-hooks.ts';
 import { runDoctorCheck } from '../../src/doctor.ts';
 import { parseEnvironment } from '../../src/ai.ts';
 
@@ -11,13 +16,22 @@ let home: string;
 let gate: string;
 
 function deps(over: Partial<PersonalHookDeps> = {}): PersonalHookDeps {
-  const env = { ...process.env, VDX_ENVIRONMENT: path.join(home, 'profile.yaml'), GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig') };
+  const env = {
+    ...process.env,
+    VDX_ENVIRONMENT: path.join(home, 'profile.yaml'),
+    GIT_CONFIG_GLOBAL: path.join(home, '.gitconfig'),
+  };
   return {
     env,
     home,
     git: (args, cwd) => {
       try {
-        return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env, ...(cwd ? { cwd } : {}) }).trimEnd();
+        return execFileSync('git', args, {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env,
+          ...(cwd ? { cwd } : {}),
+        }).trimEnd();
       } catch {
         return null;
       }
@@ -46,10 +60,19 @@ afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
 describe('profile git.hooks', () => {
   it('validates name, event and command', () => {
-    expect(() => parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-comit, command: y }\n', 'p')).toThrow(/git\.hooks\[0\]\.event/);
-    expect(() => parseEnvironment('git:\n  hooks:\n    - { name: "a b", event: pre-commit, command: y }\n', 'p')).toThrow(/git\.hooks\[0\]\.name/);
-    expect(() => parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-commit, command: "" }\n', 'p')).toThrow(/git\.hooks\[0\]\.command/);
-    expect(parseEnvironment('git:\n  hooks:\n    - { name: x, event: [pre-commit, pre-push], command: y }\n', 'p').git?.hooks?.[0]?.name).toBe('x');
+    expect(() => parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-comit, command: y }\n', 'p')).toThrow(
+      /git\.hooks\[0\]\.event/,
+    );
+    expect(() =>
+      parseEnvironment('git:\n  hooks:\n    - { name: "a b", event: pre-commit, command: y }\n', 'p'),
+    ).toThrow(/git\.hooks\[0\]\.name/);
+    expect(() => parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-commit, command: "" }\n', 'p')).toThrow(
+      /git\.hooks\[0\]\.command/,
+    );
+    expect(
+      parseEnvironment('git:\n  hooks:\n    - { name: x, event: [pre-commit, pre-push], command: y }\n', 'p').git
+        ?.hooks?.[0]?.name,
+    ).toBe('x');
   });
 });
 

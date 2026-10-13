@@ -32,10 +32,7 @@ export interface AuditResult {
  * нет в subpackage, ищется в корне (`fallbackRoot`): `.github/` и `.gitignore`
  * у репо одни.
  */
-function resolveSubpackageCtx(
-  ctx: Ctx,
-  manifest: VdxManifest | null,
-): { ctx: Ctx; relPath: string | null } {
+function resolveSubpackageCtx(ctx: Ctx, manifest: VdxManifest | null): { ctx: Ctx; relPath: string | null } {
   let relPath: string | null = null;
   let subpackageStack: string | null = null;
 
@@ -46,9 +43,7 @@ function resolveSubpackageCtx(
       relPath = p;
       subpackageStack = stackForDir(abs);
     } else {
-      process.stderr.write(
-        `warning: primary_subpackage "${p}" does not exist — falling back to root\n`,
-      );
+      process.stderr.write(`warning: primary_subpackage "${p}" does not exist — falling back to root\n`);
     }
   } else {
     const subs = findSubPackages(ctx.projectRoot);

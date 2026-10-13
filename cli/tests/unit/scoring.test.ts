@@ -128,10 +128,7 @@ describe('projectLevel — weighted two-class', () => {
   });
 
   it('excluded axes ignored', () => {
-    const res = [
-      r('ci', 'critical', 'L2'),
-      { ...r('tests', 'critical', 'L0'), drift_kind: 'excluded' as const },
-    ];
+    const res = [r('ci', 'critical', 'L2'), { ...r('tests', 'critical', 'L0'), drift_kind: 'excluded' as const }];
     expect(projectLevel(res, rubric, new Set())).toBe('L2');
   });
 

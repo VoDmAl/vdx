@@ -116,9 +116,7 @@ export function reportDoctorMarkdown(r: DoctorReport): string {
   const lines: string[] = [];
   lines.push('# vdx doctor report');
   lines.push('');
-  lines.push(
-    `**OK**: ${r.ok}  **Warning**: ${r.warning}  **Missing**: ${r.missing}`,
-  );
+  lines.push(`**OK**: ${r.ok}  **Warning**: ${r.warning}  **Missing**: ${r.missing}`);
   lines.push('');
   lines.push('| Check | Status | Detail | Remedy |');
   lines.push('|-------|:------:|--------|--------|');

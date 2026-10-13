@@ -53,40 +53,29 @@ describe('has_task_matching', () => {
 
 describe('package_present', () => {
   it('npm devDependency', () => {
-    expect(
-      REGISTRY.package_present!({ name: 'vitest', ecosystem: 'npm' }, mkCtx('node-with-vitest')),
-    ).toBe(true);
+    expect(REGISTRY.package_present!({ name: 'vitest', ecosystem: 'npm' }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('npm dependency', () => {
-    expect(
-      REGISTRY.package_present!({ name: 'lodash', ecosystem: 'npm' }, mkCtx('node-with-vitest')),
-    ).toBe(true);
+    expect(REGISTRY.package_present!({ name: 'lodash', ecosystem: 'npm' }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('ecosystem any falls through to all', () => {
-    expect(
-      REGISTRY.package_present!({ name: 'vitest', ecosystem: 'any' }, mkCtx('node-with-vitest')),
-    ).toBe(true);
+    expect(REGISTRY.package_present!({ name: 'vitest', ecosystem: 'any' }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('composer dependency', () => {
     expect(
-      REGISTRY.package_present!(
-        { name: 'phpstan/phpstan', ecosystem: 'composer' },
-        mkCtx('php-with-phpstan', 'php'),
-      ),
+      REGISTRY.package_present!({ name: 'phpstan/phpstan', ecosystem: 'composer' }, mkCtx('php-with-phpstan', 'php')),
     ).toBe(true);
   });
   it('missing package', () => {
-    expect(
-      REGISTRY.package_present!({ name: 'nonexistent', ecosystem: 'npm' }, mkCtx('node-with-vitest')),
-    ).toBe(false);
+    expect(REGISTRY.package_present!({ name: 'nonexistent', ecosystem: 'npm' }, mkCtx('node-with-vitest'))).toBe(false);
   });
 });
 
 describe('file_contains', () => {
   it('matches pattern in file', () => {
-    expect(
-      REGISTRY.file_contains!({ path: 'package.json', pattern: '"vitest"' }, mkCtx('node-with-vitest')),
-    ).toBe(true);
+    expect(REGISTRY.file_contains!({ path: 'package.json', pattern: '"vitest"' }, mkCtx('node-with-vitest'))).toBe(
+      true,
+    );
   });
   it('returns false when pattern absent', () => {
     expect(
@@ -94,9 +83,7 @@ describe('file_contains', () => {
     ).toBe(false);
   });
   it('returns false for missing file', () => {
-    expect(
-      REGISTRY.file_contains!({ path: 'missing.json', pattern: 'x' }, mkCtx('node-with-vitest')),
-    ).toBe(false);
+    expect(REGISTRY.file_contains!({ path: 'missing.json', pattern: 'x' }, mkCtx('node-with-vitest'))).toBe(false);
   });
   it('accepts paths[] form', () => {
     expect(
@@ -110,17 +97,15 @@ describe('file_contains', () => {
 
 describe('tsc_flag', () => {
   it('strict: true matches when set', () => {
-    expect(
-      REGISTRY.tsc_flag!({ name: 'strict', equals: true }, mkCtx('node-with-vitest')),
-    ).toBe(true);
+    expect(REGISTRY.tsc_flag!({ name: 'strict', equals: true }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('default equals: true', () => {
     expect(REGISTRY.tsc_flag!({ name: 'strict' }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('false when flag absent', () => {
-    expect(
-      REGISTRY.tsc_flag!({ name: 'noUncheckedIndexedAccess', equals: true }, mkCtx('node-with-vitest')),
-    ).toBe(false);
+    expect(REGISTRY.tsc_flag!({ name: 'noUncheckedIndexedAccess', equals: true }, mkCtx('node-with-vitest'))).toBe(
+      false,
+    );
   });
   it('false when tsconfig missing', () => {
     expect(REGISTRY.tsc_flag!({ name: 'strict' }, mkCtx('empty'))).toBe(false);
@@ -129,14 +114,10 @@ describe('tsc_flag', () => {
 
 describe('phpstan_level_at_least', () => {
   it('reads max level', () => {
-    expect(
-      REGISTRY.phpstan_level_at_least!({ n: 9 }, mkCtx('php-with-phpstan', 'php')),
-    ).toBe(true);
+    expect(REGISTRY.phpstan_level_at_least!({ n: 9 }, mkCtx('php-with-phpstan', 'php'))).toBe(true);
   });
   it('level threshold gate', () => {
-    expect(
-      REGISTRY.phpstan_level_at_least!({ n: 10 }, mkCtx('php-with-phpstan', 'php')),
-    ).toBe(false);
+    expect(REGISTRY.phpstan_level_at_least!({ n: 10 }, mkCtx('php-with-phpstan', 'php'))).toBe(false);
   });
   it('returns false when phpstan config missing', () => {
     expect(REGISTRY.phpstan_level_at_least!({ n: 1 }, mkCtx('empty'))).toBe(false);
@@ -151,12 +132,7 @@ describe('always_true / command_succeeds / config_value', () => {
     expect(REGISTRY.command_succeeds!({}, mkCtx('empty'))).toBe(false);
   });
   it('config_value: present on existing path', () => {
-    expect(
-      REGISTRY.config_value!(
-        { path: 'package.json', jsonpath: 'name' },
-        mkCtx('node-with-vitest'),
-      ),
-    ).toBe(true);
+    expect(REGISTRY.config_value!({ path: 'package.json', jsonpath: 'name' }, mkCtx('node-with-vitest'))).toBe(true);
   });
   it('config_value: equals match', () => {
     expect(
@@ -167,11 +143,8 @@ describe('always_true / command_succeeds / config_value', () => {
     ).toBe(true);
   });
   it('config_value: missing path returns false', () => {
-    expect(
-      REGISTRY.config_value!(
-        { path: 'package.json', jsonpath: 'no.such.key' },
-        mkCtx('node-with-vitest'),
-      ),
-    ).toBe(false);
+    expect(REGISTRY.config_value!({ path: 'package.json', jsonpath: 'no.such.key' }, mkCtx('node-with-vitest'))).toBe(
+      false,
+    );
   });
 });

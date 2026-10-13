@@ -4,12 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { loadRubric } from './rubric.ts';
 import { loadManifest, loadOverrides } from './manifest.ts';
 import { autoDetectStack, type Ctx } from './facts.ts';
-import {
-  LIFECYCLE_VERBS,
-  type LifecycleVerb,
-  resolveLifecycleVerb,
-  renderResolveError,
-} from './run.ts';
+import { LIFECYCLE_VERBS, type LifecycleVerb, resolveLifecycleVerb, renderResolveError } from './run.ts';
 import { audit } from './audit.ts';
 import {
   reportMarkdown,
@@ -19,7 +14,14 @@ import {
   reportDoctorJson,
   reportDoctorAnsi,
 } from './report.ts';
-import { runDoctor, runDoctorCheck, runDoctorFix, resolveDoctorCtx, looksLikeProject, readCliVersion } from './doctor.ts';
+import {
+  runDoctor,
+  runDoctorCheck,
+  runDoctorFix,
+  resolveDoctorCtx,
+  looksLikeProject,
+  readCliVersion,
+} from './doctor.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -251,7 +253,9 @@ function checkArgs(name: string, opts: ParsedArgs): ParsedArgs {
     process.exit(2);
   };
   const unknown = [
-    ...Object.keys(flags).filter((f) => !bools.includes(f) && !values.includes(f)).map((f) => `--${f}`),
+    ...Object.keys(flags)
+      .filter((f) => !bools.includes(f) && !values.includes(f))
+      .map((f) => `--${f}`),
     ...positionals.filter((p) => p.startsWith('-')),
   ];
   if (unknown.length > 0) fail(`unknown option ${unknown.join(', ')}`);
@@ -281,8 +285,7 @@ function cmdAudit(opts: ParsedArgs): void {
   const rubricPath = (opts.flags.rubric as string) || DEFAULT_RUBRIC;
   const rubric = loadRubric(rubricPath);
 
-  const stack =
-    (opts.flags.stack as string) || manifest?.stack || autoDetectStack(projectRoot);
+  const stack = (opts.flags.stack as string) || manifest?.stack || autoDetectStack(projectRoot);
 
   const ctx: Ctx = {
     projectRoot,
@@ -293,8 +296,7 @@ function cmdAudit(opts: ParsedArgs): void {
   const baselineRef = manifest?.baseline ?? `file://${rubricPath}`;
   const result = audit(rubric, ctx, overrides, baselineRef, manifest);
 
-  const formatFlag =
-    typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
+  const formatFlag = typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
   const wantJson = opts.flags.json === true || formatFlag === 'json';
   const wantMarkdown = formatFlag === 'markdown' || formatFlag === 'md';
   const wantAnsi = formatFlag === 'ansi';
@@ -347,9 +349,7 @@ function cmdInit(opts: ParsedArgs): void {
 function cmdPublish(opts: ParsedArgs): void {
   const bumpArg = opts.positionals[0];
   if (!bumpArg || !['patch', 'minor', 'major'].includes(bumpArg)) {
-    process.stderr.write(
-      'Usage: vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]\n',
-    );
+    process.stderr.write('Usage: vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]\n');
     process.exit(1);
   }
   const bump = bumpArg as BumpKind;
@@ -431,8 +431,7 @@ function cmdRun(verb: LifecycleVerb): void {
   } catch (e: any) {
     if (e?.code === 'ENOENT') {
       process.stderr.write(
-        `vdx: \`mise\` binary not found on PATH\n` +
-          `hint: install mise — https://mise.jdx.dev/getting-started.html\n`,
+        `vdx: \`mise\` binary not found on PATH\n` + `hint: install mise — https://mise.jdx.dev/getting-started.html\n`,
       );
       process.exit(127);
     }
@@ -454,7 +453,9 @@ function cmdDoctor(opts: ParsedArgs): void {
   if (opts.flags.fix === true) {
     try {
       const done = runDoctorFix();
-      process.stderr.write(done.length > 0 ? done.map((d) => `✓ ${d}`).join('\n') + '\n' : 'nothing to fix in ~/.gitconfig\n');
+      process.stderr.write(
+        done.length > 0 ? done.map((d) => `✓ ${d}`).join('\n') + '\n' : 'nothing to fix in ~/.gitconfig\n',
+      );
     } catch (e: any) {
       process.stderr.write(`vdx doctor --fix: ${e?.message ?? String(e)}\n`);
       process.exit(2);
@@ -462,8 +463,7 @@ function cmdDoctor(opts: ParsedArgs): void {
   }
   const report = runDoctor(ctx);
 
-  const formatFlag =
-    typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
+  const formatFlag = typeof opts.flags.format === 'string' ? opts.flags.format : undefined;
   const wantJson = opts.flags.json === true || formatFlag === 'json';
   const wantMarkdown = formatFlag === 'markdown' || formatFlag === 'md';
   const wantAnsi = formatFlag === 'ansi';

@@ -1,0 +1,8 @@
+coverage/
+# Byte-for-byte copy of the canonical set (vdx-rubric-vodmal).
+rubric/
+# Other projects' files as they are found; tests read them as such.
+tests/fixtures/
+package-lock.json
+# Prose is wrapped by hand.
+*.md

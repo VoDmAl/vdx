@@ -102,18 +102,21 @@ describe.skipIf(process.getuid?.() === 0)('guarded folders (macOS)', () => {
     expect(unreadableFolders(null, home)).toEqual([path.join(home, 'Downloads')]);
   });
 
-  it.skipIf(!new Tmux().available())('asks the tmux server — its sessions have its rights — and falls back without one', () => {
-    const tmux = new Tmux(`vdx-test-folders-${process.pid}`);
-    try {
-      expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // no server yet: this process
-      tmux.run(['new-session', '-d', '-s', 'f', 'sleep 30']);
-      expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // the server's own ls
-    } finally {
-      tmux.tryRun(['kill-server']);
-    }
-  });
+  it.skipIf(!new Tmux().available())(
+    'asks the tmux server — its sessions have its rights — and falls back without one',
+    () => {
+      const tmux = new Tmux(`vdx-test-folders-${process.pid}`);
+      try {
+        expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // no server yet: this process
+        tmux.run(['new-session', '-d', '-s', 'f', 'sleep 30']);
+        expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // the server's own ls
+      } finally {
+        tmux.tryRun(['kill-server']);
+      }
+    },
+  );
 
-  it('one warning line and the fix: the profile\'s, else what works anywhere', () => {
+  it("one warning line and the fix: the profile's, else what works anywhere", () => {
     const d = [path.join(home, 'Downloads'), path.join(home, 'Desktop')];
     expect(foldersWarning(d, true, undefined, home)).toEqual([
       "⚠ this session cannot read ~/Downloads, ~/Desktop — macOS holds the denial in the tmux server; files there are out of the agent's reach",
@@ -156,7 +159,10 @@ describe('parseEnvironment', () => {
     ['agent: {args: [x]}', 'agent.command'],
     ['agent: {command: claude, args: flag}', 'agent.args'],
     ['agent: {command: claude, when: [{id: a}]}', 'agent.when[0].if'],
-    ['agent: {command: claude, when: [{id: a, if: true, confirm: [{screen: x, keys: []}]}]}', 'agent.when[0].confirm[0].keys'],
+    [
+      'agent: {command: claude, when: [{id: a, if: true, confirm: [{screen: x, keys: []}]}]}',
+      'agent.when[0].confirm[0].keys',
+    ],
     ['session: {multiplexer: screen}', 'session.multiplexer'],
     ['session: {machines: m3}', 'session.machines'],
     ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
@@ -172,7 +178,14 @@ describe('planLaunch', () => {
   let root: string;
   const env = parseEnvironment(OWNER_LIKE, 'p.yaml');
   const plan = () =>
-    planLaunch({ environment: env, profilePath: 'p.yaml', agent: env.agent!, projectRoot: root, project: 'proj', host: 'lft' });
+    planLaunch({
+      environment: env,
+      profilePath: 'p.yaml',
+      agent: env.agent!,
+      projectRoot: root,
+      project: 'proj',
+      host: 'lft',
+    });
 
   beforeEach(() => {
     root = tmpDir('vdx-ai-plan-');
@@ -181,10 +194,7 @@ describe('planLaunch', () => {
 
   it('adds the channel flag and its prompt when the project declares mail.watch', () => {
     fs.mkdirSync(path.join(root, 'signals'));
-    fs.writeFileSync(
-      path.join(root, 'signals', 'sources.yaml'),
-      'mail:\n  watch:\n    zone: America/New_York\n',
-    );
+    fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: America/New_York\n');
     const p = plan();
     expect(p.args).toEqual([
       '--dangerously-skip-permissions',
@@ -201,7 +211,15 @@ describe('planLaunch', () => {
   it('a focused session leaves out the rules that wake it — flag and prompt — and names them', () => {
     fs.mkdirSync(path.join(root, 'signals'));
     fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: UTC\n');
-    const p = planLaunch({ environment: env, profilePath: 'p.yaml', agent: env.agent!, projectRoot: root, project: 'proj', host: 'lft', focused: true });
+    const p = planLaunch({
+      environment: env,
+      profilePath: 'p.yaml',
+      agent: env.agent!,
+      projectRoot: root,
+      project: 'proj',
+      host: 'lft',
+      focused: true,
+    });
     expect(p.focused).toBe(true);
     expect(p.args).toEqual(['--dangerously-skip-permissions']);
     expect(p.matched).toEqual([]);
@@ -221,7 +239,14 @@ describe('planLaunch', () => {
 
   it('defaults to no multiplexer and the bare project name without a session section', () => {
     const bare: Environment = { agent: { command: 'codex' } };
-    const p = planLaunch({ environment: bare, profilePath: null, agent: bare.agent!, projectRoot: root, project: 'proj', host: 'lft' });
+    const p = planLaunch({
+      environment: bare,
+      profilePath: null,
+      agent: bare.agent!,
+      projectRoot: root,
+      project: 'proj',
+      host: 'lft',
+    });
     expect(p.multiplexer).toBe('none');
     expect(p.sessionName).toBe('proj');
     expect(p.args).toEqual([]);
@@ -231,9 +256,7 @@ describe('planLaunch', () => {
 
 describe('renderSessionName', () => {
   it('fills placeholders and replaces what tmux would replace', () => {
-    expect(renderSessionName('{project}@{host}', { project: 'www.t23b.org', host: 'lft' })).toBe(
-      'www_t23b_org@lft',
-    );
+    expect(renderSessionName('{project}@{host}', { project: 'www.t23b.org', host: 'lft' })).toBe('www_t23b_org@lft');
   });
 
   it('refuses an unknown placeholder', () => {
@@ -250,8 +273,7 @@ describe('fallbackAgent', () => {
 });
 
 describe('shell quoting', () => {
-  const echoArgs = (line: string) =>
-    execFileSync('/bin/sh', ['-c', `printf '%s\\n' ${line}`], { encoding: 'utf8' });
+  const echoArgs = (line: string) => execFileSync('/bin/sh', ['-c', `printf '%s\\n' ${line}`], { encoding: 'utf8' });
 
   it('round-trips awkward arguments through sh', () => {
     const args = ['plain', 'with space', "it's", '$HOME', '', 'a"b', 'plugin:echelon@echelon'];
@@ -469,7 +491,9 @@ describe('runAi without tmux', () => {
         const profile = path.join(home, 'env.yaml');
         fs.writeFileSync(
           profile,
-          fs.readFileSync(profile, 'utf8').replace('session: {multiplexer: none}', 'session: {multiplexer: none, folders_fix: "run the fixer"}'),
+          fs
+            .readFileSync(profile, 'utf8')
+            .replace('session: {multiplexer: none}', 'session: {multiplexer: none, folders_fix: "run the fixer"}'),
         );
         expect(runAi({ ...opts, path: root }, { ...d, platform: 'darwin' })).toBe(EXIT_OK);
         expect(logs).toContain('  fix: run the fixer');
@@ -484,7 +508,9 @@ describe('runAi without tmux', () => {
     it('--focused: VDX_FOCUSED=1 for the agent, and the rules that wake it left out', () => {
       const d = direct();
       const agent = path.join(home, 'fake-agent');
-      fs.writeFileSync(agent, '#!/bin/sh\necho "${VDX_FOCUSED:-plain} $*" >> "$(dirname "$0")/runs"\n', { mode: 0o755 });
+      fs.writeFileSync(agent, '#!/bin/sh\necho "${VDX_FOCUSED:-plain} $*" >> "$(dirname "$0")/runs"\n', {
+        mode: 0o755,
+      });
       fs.writeFileSync(path.join(root, 'marker'), '');
       fs.writeFileSync(
         path.join(home, 'env.yaml'),
@@ -525,7 +551,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     liveHere = [];
     // A `claude` that records its args and exits: what `vdx ai` ran it with.
     fs.mkdirSync(path.join(home, 'bin'));
-    fs.writeFileSync(path.join(home, 'bin', 'claude'), '#!/bin/sh\necho "$*" >> "$(dirname "$0")/../runs"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(home, 'bin', 'claude'), '#!/bin/sh\necho "$*" >> "$(dirname "$0")/../runs"\n', {
+      mode: 0o755,
+    });
     fs.writeFileSync(
       path.join(home, 'env.yaml'),
       `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue]}\nsession: {multiplexer: none}\n`,
@@ -652,7 +680,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(sshCalls).toHaveLength(1); // asked once; nothing run there
     // said under the list, before the person picks — not only after Enter
-    expect(text()).toMatch(/n\) a new conversation\n  note: m3 does not answer over ssh — what runs there is not known\n/);
+    expect(text()).toMatch(
+      /n\) a new conversation\n  note: m3 does not answer over ssh — what runs there is not known\n/,
+    );
     expect(text()).toContain('m3 does not answer over ssh');
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
   });
@@ -675,10 +705,12 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(answers).toHaveLength(1);
     expect(text()).toContain(`resume:   --resume ${ID.a}`);
     expect(text()).toContain('conversation: continuing lft');
-    expect(text()).toContain(`note: m3 has a newer conversation bbbbbbbb — continue it there: vdx ai@m3 ${root} --conversation ${ID.b}`);
+    expect(text()).toContain(
+      `note: m3 has a newer conversation bbbbbbbb — continue it there: vdx ai@m3 ${root} --conversation ${ID.b}`,
+    );
   });
 
-  it('with only another machine\'s conversation and no terminal, a new one here — never theirs', () => {
+  it("with only another machine's conversation and no terminal, a new one here — never theirs", () => {
     conv(ID.b, 'm3', 5);
     expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
     expect(text()).toContain('resume:   —');
@@ -758,7 +790,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
     expect(text()).toContain('resume:   —');
     expect(text()).toContain('no idle conversation of this machine — starting a new one');
-    expect(text()).toContain('note: a newer conversation aaaaaaaa, running here now (pid 4242, busy) — not taken: it would have two sessions');
+    expect(text()).toContain(
+      'note: a newer conversation aaaaaaaa, running here now (pid 4242, busy) — not taken: it would have two sessions',
+    );
     expect(text()).toContain('note: m3 does not answer over ssh — what runs there is not known');
   });
 
@@ -772,7 +806,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(text()).toContain('no idle conversation on lft — starting a new one');
     expect(text()).toContain('note: a newer conversation aaaaaaaa, running on lft now (pid 4242, busy) — not taken');
     // No `vdx ai@m3` for a person sitting at m3: that is ssh to itself.
-    expect(text()).toContain(`note: m3 has a newer conversation cccccccc — continue it where you are: vdx ai ${root} --conversation ${ID.c}`);
+    expect(text()).toContain(
+      `note: m3 has a newer conversation cccccccc — continue it where you are: vdx ai ${root} --conversation ${ID.c}`,
+    );
     expect(text()).not.toMatch(/\bhere\b/);
     expect(d.env['VDX_AI_FROM']).toBeUndefined(); // the agent started on lft does not inherit it
   });
@@ -786,12 +822,22 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     d.env['VDX_AI_FROM'] = 'm3';
     expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_LAUNCH_FAILED);
     expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running on lft now \(pid 4242, busy\)/);
-    expect(questions[1]).toBe(`Continue aaaaaaaa on lft? It runs on lft right now (pid 4242); two sessions would write to it. [y/N]: `);
-    expect(text()).toContain(`nothing started. On lft: vdx ai@lft ${root} --conversation ${ID.a} · a new conversation: vdx ai@lft --new ${root}`);
+    expect(questions[1]).toBe(
+      `Continue aaaaaaaa on lft? It runs on lft right now (pid 4242); two sessions would write to it. [y/N]: `,
+    );
+    expect(text()).toContain(
+      `nothing started. On lft: vdx ai@lft ${root} --conversation ${ID.a} · a new conversation: vdx ai@lft --new ${root}`,
+    );
   });
 
   describe('the profile names the machines (session.machines)', () => {
-    const agentOnM3 = (cwd: string, id: string = ID.c) => ({ pid: 10984, sessionId: id, tmux: 'proj@m3:@25.%25', status: 'idle', cwd });
+    const agentOnM3 = (cwd: string, id: string = ID.c) => ({
+      pid: 10984,
+      sessionId: id,
+      tmux: 'proj@m3:@25.%25',
+      status: 'idle',
+      cwd,
+    });
     const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[4]);
     beforeEach(() => {
       fs.writeFileSync(
@@ -819,7 +865,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       remoteLive = [agentOnM3(path.join(remoteHome, 'AI Projects', 'proj'))];
       answers = [''];
       expect(runAi({ ...opts, path: proj, fresh: true }, deps())).toBe(EXIT_LAUNCH_FAILED);
-      expect(text()).toContain(`an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 '${proj}'`);
+      expect(text()).toContain(
+        `an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 '${proj}'`,
+      );
       expect(text()).toContain('nothing started');
       expect(runs()).toEqual([]);
       answers = ['y'];
@@ -871,10 +919,12 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       remoteLive = [agentOnM3(root)];
       expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
       expect(text()).toContain('no idle conversation of this machine — starting a new one');
-      expect(text()).toContain(`conversation: an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 ${root}`);
+      expect(text()).toContain(
+        `conversation: an agent of this project is running on m3 now (proj@m3, idle) — there: vdx ai@m3 ${root}`,
+      );
     });
 
-    it("an agent of another project there is not in the way; a machine that does not answer is named", () => {
+    it('an agent of another project there is not in the way; a machine that does not answer is named', () => {
       remoteLive = [agentOnM3('/Users/elsewhere/AI Projects/other')];
       expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
       remoteLive = null;
@@ -886,13 +936,18 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   });
 
   it('--conversation is refused for an agent that is not Claude Code', () => {
-    fs.writeFileSync(path.join(home, 'env.yaml'), 'agent: {command: codex, resume_args: [resume]}\nsession: {multiplexer: none}\n');
+    fs.writeFileSync(
+      path.join(home, 'env.yaml'),
+      'agent: {command: codex, resume_args: [resume]}\nsession: {multiplexer: none}\n',
+    );
     expect(runAi({ ...opts, path: root, conversation: ID.c }, deps())).toBe(EXIT_USAGE);
     expect(text()).toContain('--conversation names a Claude Code conversation');
   });
 
   it('another agent keeps the profile resume_args — vdx reads no conversations for it', () => {
-    fs.writeFileSync(path.join(home, 'bin', 'codex'), fs.readFileSync(path.join(home, 'bin', 'claude')), { mode: 0o755 });
+    fs.writeFileSync(path.join(home, 'bin', 'codex'), fs.readFileSync(path.join(home, 'bin', 'claude')), {
+      mode: 0o755,
+    });
     fs.writeFileSync(
       path.join(home, 'env.yaml'),
       `agent: {command: ${path.join(home, 'bin', 'codex')}, args: [--base], resume_args: [resume, --last]}\nsession: {multiplexer: none}\n`,
@@ -953,8 +1008,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     confirmTimeoutMs: 10_000,
   });
   const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
-  const agentArgs = () =>
-    findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').map((f) => f.proc.args);
+  const agentArgs = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').map((f) => f.proc.args);
 
   beforeAll(() => {
     base = tmpDir('vdx-ai-tmux-');
@@ -1038,7 +1092,9 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agentArgs()).toEqual(before);
 
     logs = [];
-    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: ask('q') })).toBe(EXIT_DRIFT);
+    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: ask('q') })).toBe(
+      EXIT_DRIFT,
+    );
     expect(logs.join('\n')).toContain('nothing done');
     expect(agentArgs()).toEqual(before);
   });
@@ -1055,7 +1111,9 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   it('in a terminal, r at the drift question restarts the agent with the profile', () => {
     writeProfile(['--base', '--extra', '--more']);
     const paneBefore = tmux.panes().map((p) => p.paneId);
-    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: () => 'r' })).toBe(EXIT_OK);
+    expect(runAi({ ...opts, path: root, detach: true }, { ...deps(), interactive: true, ask: () => 'r' })).toBe(
+      EXIT_OK,
+    );
     expect(tmux.panes().map((p) => p.paneId)).toEqual(paneBefore);
     expect(agentArgs()[0]).toMatch(/fake-agent --base --extra --more --chan plugin:x@y --resume-me$/);
     expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
@@ -1078,7 +1136,12 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('finds the running agent outside tmux without a UTF-8 locale (ssh host vdx ai)', () => {
     writeProfile(['--base', '--extra']);
-    const saved = { TMUX: process.env['TMUX'], LANG: process.env['LANG'], LC_ALL: process.env['LC_ALL'], LC_CTYPE: process.env['LC_CTYPE'] };
+    const saved = {
+      TMUX: process.env['TMUX'],
+      LANG: process.env['LANG'],
+      LC_ALL: process.env['LC_ALL'],
+      LC_CTYPE: process.env['LC_CTYPE'],
+    };
     delete process.env['TMUX'];
     delete process.env['LC_ALL'];
     delete process.env['LC_CTYPE'];
@@ -1256,7 +1319,11 @@ describe('vdx ai@host', () => {
       })[2]!;
       const res = spawnSync('/bin/sh', ['-c', script], {
         encoding: 'utf8',
-        env: { PATH: `${path.join(dir, 'bin')}:/usr/bin:/bin`, HOME: path.join(dir, 'home'), STUB_VERSION: stubVersion },
+        env: {
+          PATH: `${path.join(dir, 'bin')}:/usr/bin:/bin`,
+          HOME: path.join(dir, 'home'),
+          STUB_VERSION: stubVersion,
+        },
       });
       const out = res.stdout.split('\n').filter(Boolean);
       return {
@@ -1292,7 +1359,11 @@ describe('vdx ai@host', () => {
     });
 
     it('passes --focused on', () => {
-      expect(run('0.14.0', { ...opts, focused: true }).args).toEqual(['ai', path.join(dir, 'home', 'AI Projects', 'vdx'), '--focused']);
+      expect(run('0.14.0', { ...opts, focused: true }).args).toEqual([
+        'ai',
+        path.join(dir, 'home', 'AI Projects', 'vdx'),
+        '--focused',
+      ]);
     });
   });
 });
@@ -1307,7 +1378,10 @@ describe('project name: mise.toml, then profile sources, then the repository nam
     home = path.join(dir, 'home');
     fs.mkdirSync(project);
     fs.mkdirSync(path.join(home, 'reg'), { recursive: true });
-    fs.writeFileSync(path.join(home, 'reg', 'telegram.vorobyev.name.json'), JSON.stringify({ names: ['vodmalbot', 'bot'] }));
+    fs.writeFileSync(
+      path.join(home, 'reg', 'telegram.vorobyev.name.json'),
+      JSON.stringify({ names: ['vodmalbot', 'bot'] }),
+    );
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -1395,7 +1469,10 @@ describe('vdx ai proposes an author where the repo has none', () => {
     logs = [];
   });
   afterEach(() => {
-    for (const [k, v] of [['GIT_CONFIG_GLOBAL', saved.global], ['GIT_CONFIG_NOSYSTEM', saved.nosystem]] as const) {
+    for (const [k, v] of [
+      ['GIT_CONFIG_GLOBAL', saved.global],
+      ['GIT_CONFIG_NOSYSTEM', saved.nosystem],
+    ] as const) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
@@ -1431,7 +1508,9 @@ describe('vdx ai proposes an author where the repo has none', () => {
 
   it('--dry-run names the proposals and asks nothing', () => {
     ensureAuthor(target, [dir], deps([]), true);
-    expect(logs.join('')).toContain('author:   none — git refuses to commit here; would propose me@work.example, me@home.example');
+    expect(logs.join('')).toContain(
+      'author:   none — git refuses to commit here; would propose me@work.example, me@home.example',
+    );
   });
 
   it('says nothing to change where the repo has an author', () => {
@@ -1517,7 +1596,9 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
   });
 
   it('a focused session: says so, and the rule that wakes it is not missing', () => {
-    expect(runAiCheck(root, deps(chain('--dangerously-skip-permissions --continue'), { VDX_FOCUSED: '1' }), 40)).toBe(EXIT_OK);
+    expect(runAiCheck(root, deps(chain('--dangerously-skip-permissions --continue'), { VDX_FOCUSED: '1' }), 40)).toBe(
+      EXIT_OK,
+    );
     const text = out.join('');
     expect(text).toContain('· this session is focused (`vdx ai --focused`)');
     expect(text).toContain("the profile's echelon-channel is left out");

@@ -6,7 +6,12 @@ import { execFileSync } from 'node:child_process';
 import { effectiveAuthor, isGitRepo, rankAuthors, scanPool } from './author.ts';
 import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
 import { checkRepoHooks } from './clone-checks.ts';
-import { checkPersonalHooks, defaultPersonalHookDeps, fixPersonalHooks, type PersonalHookDeps } from './personal-hooks.ts';
+import {
+  checkPersonalHooks,
+  defaultPersonalHookDeps,
+  fixPersonalHooks,
+  type PersonalHookDeps,
+} from './personal-hooks.ts';
 
 export type CheckStatus = 'ok' | 'warning' | 'missing';
 
@@ -39,11 +44,7 @@ export interface DoctorReport {
 
 export function readCliVersion(): string {
   try {
-    const pkgPath = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'package.json',
-    );
+    const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
     const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
     return raw.version ?? 'unknown';
   } catch {
@@ -315,8 +316,7 @@ function checkVdx(): CheckResult {
     status: 'ok',
     level,
     message: `${tag} — works inside this project only (${found})`,
-    remedy:
-      'npm i -g @vodmal/vdx-cli  OR  add `alias vdx="npx -y -p @vodmal/vdx-cli vdx"` to your shell rc',
+    remedy: 'npm i -g @vodmal/vdx-cli  OR  add `alias vdx="npx -y -p @vodmal/vdx-cli vdx"` to your shell rc',
   };
 }
 
@@ -458,9 +458,7 @@ export function runDoctorCheck(
   );
   return rows
     .map(
-      (c) =>
-        `vdx doctor: ${c.label} — ${c.message}.` +
-        (c.remedy ? ` Fix, on the user's word: \`${c.remedy}\`.` : ''),
+      (c) => `vdx doctor: ${c.label} — ${c.message}.` + (c.remedy ? ` Fix, on the user's word: \`${c.remedy}\`.` : ''),
     )
     .join('\n');
 }

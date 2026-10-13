@@ -132,9 +132,7 @@ export const REGISTRY: Record<string, PredicateFn> = {
 
   phpstan_level_at_least: (args, ctx) => {
     const text =
-      readText(ctx, 'phpstan.neon') ||
-      readText(ctx, 'phpstan.dist.neon') ||
-      readText(ctx, 'phpstan.neon.dist');
+      readText(ctx, 'phpstan.neon') || readText(ctx, 'phpstan.dist.neon') || readText(ctx, 'phpstan.neon.dist');
     if (!text) return false;
     const m = text.match(/^\s*level:\s*(\d+|max)/m);
     if (!m || !m[1]) return false;
@@ -236,8 +234,7 @@ export const REGISTRY: Record<string, PredicateFn> = {
     }),
 
   /** L4 (library): the testing job runs across a matrix. */
-  gha_test_matrix: (args, ctx) =>
-    ciVerdict(ctx, () => [...checkingJobs(ctx, testPattern(args))].some((j) => j.matrix)),
+  gha_test_matrix: (args, ctx) => ciVerdict(ctx, () => [...checkingJobs(ctx, testPattern(args))].some((j) => j.matrix)),
 
   /** L4 (service): whatever CI ships on a push to main waits, via `needs:`, for a checking job. */
   gha_ship_needs_checks: (args, ctx) =>
