@@ -60,7 +60,7 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 
 | Ось | Класс | Сейчас | Следующий шаг держит | Путь до L4 |
 |---|:-:|:-:|---|---|
-| `lifecycle-interface` | C | L2 | L3: нет `up`, `down`, `fix` | `fix` в `mise.toml`; `up`/`down` с сета v1.4.0 библиотеке не нужны (DL #4); L4 сразу — `test:smoke` подходит под `test:.*` |
+| `lifecycle-interface` | C | L2 | L3: нет `fix` (сет v1.4.0); на 0.24 ещё и `up`, `down` | `fix` в `mise.toml`; `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 сразу — `test:smoke` подходит под `test:.*` |
 | `tests` | C | L3 | L4: нет `test:e2e` / `test:mutation` | `test:e2e`: собранный CLI на фикстурах |
 | `static-analysis` | C | L2 | флаги 2.3 из 4.8 (0.48): `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` | ESLint flat + `recommended-type-checked` → 4.3/4.8 = 0.90 ≥ 0.85 |
 | `ci` | C | L4 | — | — |
@@ -76,7 +76,7 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 
 **Цель (DL #3):** общий L2, каждая ось, кроме `branch-protection`, — L4.
 `observability` и `mock-infra` — override, `up`/`down` библиотеке рубрика
-перестаёт требовать (сет v1.4.0, DL #4). Расширение хостинга — потом,
+не требует с сета v1.4.0 (DL #6). Расширение хостинга — потом,
 отдельным решением.
 
 **Прогноз.** Всё, что выше, кроме расширения хостинга, плюс
@@ -167,6 +167,7 @@ D12: `publish` — глагол только библиотек. Не прове
 одно на сет (YAML-якорь), не копия. Ось корневая: для мета-репо нужна правка
 оценщика (манифест подпакета), иначе vdx останется «не библиотекой». Если
 владелец против (ii) — поменять до тега v1.4.0.
+**Superseded-by:** #6
 
 ### #5 / 2026-10-13 / Половины мета-репо дочитывают файлы друг у друга, задачи — нет
 
@@ -190,6 +191,31 @@ src/index.ts audit <path> --format=json`, 2026-10-13):
 `cli/package.json` — на этом держится lib-intent для `lifecycle-interface`
 (DL #4). `reproducibility` L4 у vdx засчитана по ошибке предиката
 (Sidetrack #3). Поведение аудита меняется → minor CLI (0.25).
+
+### #6 / 2026-10-13 / Сет v1.4.0: lib-intent проверен на калибровке и на vdx
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** `vdx-rubric-vodmal/vdx-rubric.yaml` после правки, разобранный
+js-yaml: `release-artifact.applies_when` и ветка lib-intent в L3 равны
+`applies_when` тега v1.3.0 (`deepStrictEqual`), прочее в сете не изменилось.
+Аудит `--rubric` на новом сете (2026-10-13): `telegram.vorobyev.name`,
+`www.t23b.org`, `trading-tools-bookmap` и vdx — все оси как на v1.3.0. Копия
+`mise.toml` и `cli/package.json` vdx с задачей `fix`: `lifecycle-interface` L2
+на v1.3.0, L4 на v1.4.0. Четыре теста в `cli/tests/unit/audit.test.ts`
+(«bundled set: lifecycle-interface L3…») на сете v1.3.0 два падают, на v1.4.0
+все зелёные.
+**Context:** DL #4 вывел lib-intent из сета и не проверил калибровку.
+**Why:** Правка только ослабляет L3 для библиотек, поэтому приложения сдвинуться
+не могли. Все три калибровочных проекта — приложения (`release-artifact`
+excluded), так и вышло. vdx берёт lib-intent из `cli/package.json` (`bin`)
+через правку мета-репо (DL #5).
+**Implication:** решение DL #4 в силе, теперь на наблюдении. Тег v1.4.0 —
+`8df57f7` в `vdx-rubric-vodmal`, на GitHub с 2026-10-13. Якорь `&lib_intent`
+стоит в `lifecycle-interface` L3: YAML требует якорь до ссылки, а ось — первая
+в сете. Мета-репо получит это с vdx 0.25. vdx 0.24 читает только корень, и у
+vdx `up`/`down` до выпуска по-прежнему требуются.
+**Supersedes:** #4
 
 ## Sidetracks
 
@@ -242,9 +268,9 @@ compose up`. README vdx описывает команду `vdx up` как час
       предикаты: задачи словаря остаются своими (`vdx fix` в корне — это
       `mise.toml` корня). Тесты; запись в O31 — 2026-10-13, DL #5; выйдет
       с выпуском (последний пункт)
-- [ ] Сет v1.4.0: `lifecycle-interface` L3 — `up`/`down` только не у
-      lib-intent (DL #4); якорь lib-intent; калибровочные проекты до и после;
-      зеркало `docs/specs/vdx-rubric.example.yaml`; `DEFAULT_BASELINE`
+- [x] Сет v1.4.0: `lifecycle-interface` L3 — `up`/`down` только не у
+      lib-intent; якорь lib-intent; калибровочные проекты не сдвинулись;
+      зеркало, сет CLI, `DEFAULT_BASELINE` (DL #6)
 - [ ] `.vdx-overrides.yml`: `observability`, `mock-infra` — с причиной
 - [ ] `mise.toml`: `fix`; `[vdx].verbs`
 - [ ] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
@@ -267,6 +293,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 
 - Аудит 2026-10-13 — в «Текущей модели» и DL #2. Вывод `vdx audit .`
   воспроизводится командой и тегом сета v1.3.0, поэтому не сохранён.
-- Рубрика — `github.com/VoDmAl/vdx-rubric-vodmal@v1.3.0`, `vdx-rubric.yaml`.
+- Рубрика — `github.com/VoDmAl/vdx-rubric-vodmal`, `vdx-rubric.yaml`: разбор
+  осей — на теге v1.3.0, глаголы по классу — с v1.4.0.
 - DL #12 кристалла `vdm-gates-wiring-axis` — почему `branch-protection` L3
   «неизвестно» у всех.

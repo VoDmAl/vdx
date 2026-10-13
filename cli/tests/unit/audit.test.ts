@@ -4,8 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { audit } from '../../src/audit.ts';
+import { BUNDLED_RUBRIC_PATH } from '../../src/defaults.ts';
 import type { Ctx } from '../../src/facts.ts';
-import type { Predicate, Rubric } from '../../src/rubric.ts';
+import { loadRubric, type Predicate, type Rubric } from '../../src/rubric.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(here, '..', 'fixtures');
@@ -181,5 +182,50 @@ describe('audit: a meta repo reads files across its halves', () => {
     const l = levels({ primary_subpackage: 'cli' });
     expect(l.dependabot).toBe('L1');
     expect(l['audit-in-ci']).toBe('L1');
+  });
+});
+
+describe('bundled set: lifecycle-interface L3 asks up/down only of an application', () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  function write(rel: string, text: string) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  }
+
+  function project(verbs: string[], pkgPath: string, pkg: object) {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-verbs-'));
+    write('mise.toml', verbs.map((v) => `[tasks.${v}]\nrun = "true"\n`).join('\n'));
+    write(pkgPath, JSON.stringify(pkg));
+  }
+
+  function lifecycle(stack: string, manifest: { primary_subpackage: string } | null = null) {
+    const full = loadRubric(BUNDLED_RUBRIC_PATH);
+    const rubric = { ...full, axes: full.axes.filter((a) => a.id === 'lifecycle-interface') };
+    const res = audit(rubric, { projectRoot: dir, stack, cache: new Map() }, [], 'test@v0.0.0', manifest);
+    return res.per_axis[0]!.achieved;
+  }
+
+  const FOUR = ['build', 'test', 'check', 'fix'];
+
+  it('a library without up and down reaches L3', () => {
+    project(FOUR, 'package.json', { name: 'lib', bin: { lib: 'bin/lib.js' } });
+    expect(lifecycle('node')).toBe('L3');
+  });
+
+  it('an application without up and down stays at L2', () => {
+    project(FOUR, 'package.json', { name: 'app', private: true, main: 'index.js' });
+    expect(lifecycle('node')).toBe('L2');
+  });
+
+  it('an application with up and down reaches L3', () => {
+    project([...FOUR, 'up', 'down'], 'package.json', { name: 'app', private: true });
+    expect(lifecycle('node')).toBe('L3');
+  });
+
+  it('a meta repo is a library by the manifest of its subpackage', () => {
+    project(FOUR, 'cli/package.json', { name: 'lib', bin: { lib: 'bin/lib.js' } });
+    expect(lifecycle('meta', { primary_subpackage: 'cli' })).toBe('L3');
   });
 });

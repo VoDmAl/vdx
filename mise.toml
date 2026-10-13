@@ -24,6 +24,6 @@ run = "npm --prefix cli run typecheck"
 
 [vdx]
 schema_version = "0.2"
-baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.3.0"
+baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.4.0"
 stack = "meta"
 verbs = ["build", "test", "check"]

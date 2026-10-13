@@ -9,9 +9,10 @@
 ## Где мы (2026-10-13)
 
 - **CLI** `@vodmal/vdx-cli@0.24.0` — в npm и на обеих станциях (lft, m3).
-- **Сет** `vdx-rubric-vodmal@v1.3.0` (schema 0.3): рубрика и личный профиль
+- **Сет** `vdx-rubric-vodmal@v1.4.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` — `@v1.3.0`.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.4.0`; в npm (0.24.0) — ещё
+  v1.3.0.
 - **Плагин** vdx 0.9.1 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
   `mise run test`; зелёный на `65f5543`.
@@ -74,7 +75,7 @@
 ### Следующий выпуск CLI
 
 Без срочности, minor (0.25): аудит мета-репо читает обе половины
-(`vdx-dogfooding` DL #5). Ещё ждёт: Sidetrack #21 vdx-ai (проверка папок
+(`vdx-dogfooding` DL #5), внутри — сет v1.4.0 (DL #6). Ещё ждёт: Sidetrack #21 vdx-ai (проверка папок
 через файл — на tmux < 3.5 прежняя проверка читала все папки как доступные;
 на станциях tmux ≥ 3.5, 0.24.0 у них верен). Порядок выпуска — «Выпуск CLI»
 и «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
