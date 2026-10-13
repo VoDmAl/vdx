@@ -38,9 +38,9 @@ relates-to:
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
-Видимые — без `suppress`. У vdx три оси подавлены (`secrets-config`,
-`shared-infra`, `shared-infra-drift`), видимых вспомогательных — восемь: на
-любом уровне нужно 7 из 8.
+Видимые — без `suppress`. У vdx пять осей подавлены (`secrets-config`,
+`shared-infra`, `shared-infra-drift`; с 2026-10-13 — `observability`,
+`mock-infra`), видимых вспомогательных — шесть: на любом уровне нужно 5 из 6.
 
 **Потолок — L2, для любого проекта.** `branch-protection` L3 —
 «неизвестно», пока у vdx нет расширения хостинга (DL #12 кристалла гейтов).
@@ -69,9 +69,9 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 | `code-style` | s | L1 | L2: нет `.prettierrc` / `eslint.config.js` | Prettier + `eslint.config.js` (именно `.js`); L3 — задача `lint`/`fix` в `cli/package.json` |
 | `dependency-hygiene` | s | L1 | L2: нет `npm audit` / `check:code:security` | задача аудита; L3 — dependabot (нужна правка оценщика); L4 — `knip` |
 | `git-hygiene` | s | L1 | L2: репо не ставит своих хуков | `up` ставит `core.hooksPath .githooks`; `pre-push` зовёт `mise run check` и `mise run test` |
-| `observability` | s | L1 | L2: логгер (`winston`/`pino`) | ось про сервис: L3 — Sentry, L4 — Sentry-release в CI |
+| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
 | `docs` | s | L3 | L4: нет `docs/adr/`, `docs/architecture.md`, `docs/onboarding.md` | `docs/architecture.md` — карта модулей CLI |
-| `mock-infra` | s | L2 | L3: mock-сервер | ось про сервис: mock-сервер в compose, CI-проверка «нет моков в проде» |
+| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4 |
 | `release-artifact` | s | L4 | — | — |
 
 **Цель (DL #3):** общий L2, каждая ось, кроме `branch-protection`, — L4.
@@ -253,6 +253,18 @@ compose up`. README vdx описывает команду `vdx up` как час
 
 **Status:** open
 
+### #4. `has_file` на macOS не различает регистр
+
+**Возникло в:** override `mock-infra`, 2026-10-13
+**Описание:** `mock-infra` L2 у vdx засчитан по `has_file: tests/Fixtures`, а
+в `cli/` лежит `tests/fixtures`. APFS по умолчанию не различает регистр,
+`fs.existsSync('tests/Fixtures')` — `true`. На Linux (CI vdx — Ubuntu) тот же
+проект получит L1: уровень оси зависит от машины, где идёт аудит. Для vdx
+теперь неважно (ось подавлена). Правка — сравнивать имя с записью
+`readdir` по каждому сегменту пути; patch CLI.
+
+**Status:** open
+
 ## Next actions
 
 **Развилки — к владельцу:**
@@ -271,7 +283,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 - [x] Сет v1.4.0: `lifecycle-interface` L3 — `up`/`down` только не у
       lib-intent; якорь lib-intent; калибровочные проекты не сдвинулись;
       зеркало, сет CLI, `DEFAULT_BASELINE` (DL #6)
-- [ ] `.vdx-overrides.yml`: `observability`, `mock-infra` — с причиной
+- [x] `.vdx-overrides.yml`: `observability`, `mock-infra` — с причиной
 - [ ] `mise.toml`: `fix`; `[vdx].verbs`
 - [ ] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
       `core.hooksPath` ставит шаг установки — проверить, что распознаватель
@@ -288,6 +300,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 - [ ] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета
 - [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
 - [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
+- [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
 
 ## References
 
