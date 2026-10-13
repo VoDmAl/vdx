@@ -168,6 +168,29 @@ D12: `publish` — глагол только библиотек. Не прове
 оценщика (манифест подпакета), иначе vdx останется «не библиотекой». Если
 владелец против (ii) — поменять до тега v1.4.0.
 
+### #5 / 2026-10-13 / Половины мета-репо дочитывают файлы друг у друга, задачи — нет
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** код — `locate()` и `ownCtx()` в `cli/src/facts.ts`,
+`rootAxisCtx()` в `cli/src/audit.ts`. Три теста в
+`cli/tests/unit/audit.test.ts` («a meta repo reads files across its halves»).
+Весь набор — 392 зелёных. Уровни до и после правки (`node --import tsx
+src/index.ts audit <path> --format=json`, 2026-10-13):
+`telegram.vorobyev.name` L2, `www.t23b.org` L1, `trading-tools-bookmap` L1 —
+ни одна ось не сдвинулась. У vdx `reproducibility` — L1 → L4, общий L1.
+**Context:** слепые зоны мета-репо из DL #2.
+**Why:** Подставляется только файл, которого нет у себя: свой всегда главнее.
+Корень берёт файлы подпакета, только если у него нет своего манифеста стека.
+Иначе корень обычного проекта стал бы засчитывать файлы любой вложенной
+папки. Подпакет берёт файлы корня всегда: `.github/` и `.gitignore` у репо
+одни. Задачи словаря не подставляются: `vdx test` в корне запускает
+`mise.toml` корня, а скрипт `test` из `cli/package.json` — нет.
+**Implication:** `config_value` на `package.json` в корне vdx теперь видит
+`cli/package.json` — на этом держится lib-intent для `lifecycle-interface`
+(DL #4). `reproducibility` L4 у vdx засчитана по ошибке предиката
+(Sidetrack #3). Поведение аудита меняется → minor CLI (0.25).
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -192,6 +215,18 @@ D12: `publish` — глагол только библиотек. Не прове
 
 **Status:** open
 
+### #3. `reproducibility` L4 засчитывает `vdx up` в README продукта
+
+**Возникло в:** DL #5, после правки мета-репо
+**Описание:** L4 — `README.md` содержит `one-command|vdx up|mise run up|docker
+compose up`. README vdx описывает команду `vdx up` как часть продукта, а не
+как способ поднять сам vdx. Предикат засчитал L4. Своего `up` у vdx не будет
+(DL #4); подъём клона — `mise run build`. Ложное «да» бьёт только по проекту,
+чей README говорит о vdx. Варианты: принять как есть, написать в README vdx
+настоящую строку подъёма или уточнить предикат (patch сета).
+
+**Status:** open
+
 ## Next actions
 
 **Развилки — к владельцу:**
@@ -202,10 +237,11 @@ D12: `publish` — глагол только библиотек. Не прове
 
 **Работа:**
 
-- [ ] Оценщик: ось подпакета дочитывает репо-файлы из корня (`.github/`), ось
+- [x] Оценщик: ось подпакета дочитывает репо-файлы из корня (`.github/`), ось
       корня — манифест стека из `primary_subpackage`. Только файловые
       предикаты: задачи словаря остаются своими (`vdx fix` в корне — это
-      `mise.toml` корня). Тесты; запись в O31
+      `mise.toml` корня). Тесты; запись в O31 — 2026-10-13, DL #5; выйдет
+      с выпуском (последний пункт)
 - [ ] Сет v1.4.0: `lifecycle-interface` L3 — `up`/`down` только не у
       lib-intent (DL #4); якорь lib-intent; калибровочные проекты до и после;
       зеркало `docs/specs/vdx-rubric.example.yaml`; `DEFAULT_BASELINE`
@@ -225,6 +261,7 @@ D12: `publish` — глагол только библиотек. Не прове
 
 - [ ] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета
 - [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
+- [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
 
 ## References
 

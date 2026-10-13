@@ -76,6 +76,12 @@ acknowledged_drift = []              # axis_ids, дрейф осознанно �
   shared-infra*) всегда работают от корня. Если поле не задано — evaluator
   пробует auto-resolve через `findSubPackages()`: использует subpackage,
   если ровно один совпадает с `stack`. См. O31 в `../decisions.md`.
+  Файловые предикаты (`has_file`, `file_contains`, `config_value`,
+  `package_present`, `tsc_flag`) ищут недостающий файл во второй половине
+  (с vdx 0.25): subpackage — в корне (`.github/`, `.gitignore` у репо одни),
+  корень без своего манифеста стека — в subpackage (`engines` в
+  `cli/package.json`). Задачи (`has_task`) — только свои: `vdx test` в корне
+  запускает задачи корня.
 - `verbs` — список стандартных глаголов, которые проект **обязуется** выставить.
   Если задача `up` определена в `[tasks]`, она должна быть в `verbs`. vdx-audit
   падает при расхождении.

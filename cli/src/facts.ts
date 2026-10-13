@@ -7,16 +7,41 @@ export interface Ctx {
   projectRoot: string;
   stack: string;
   cache: Map<string, unknown>;
+  /**
+   * Meta repo: the other half, where a file missing here is looked for — the repo root
+   * for an axis evaluated in the primary subpackage (`.github/` lives there), the
+   * subpackage for an axis evaluated in a root without a stack manifest of its own.
+   */
+  fallbackRoot?: string;
+}
+
+/** Absolute path of `rel`: here, else in `fallbackRoot` when it is there. */
+function locate(ctx: Ctx, rel: string): string {
+  const here = path.join(ctx.projectRoot, rel);
+  if (ctx.fallbackRoot === undefined || fs.existsSync(here)) return here;
+  const there = path.join(ctx.fallbackRoot, rel);
+  return fs.existsSync(there) ? there : here;
+}
+
+/** The same directory without the fallback: a project's tasks are the ones its own runner sees. */
+function ownCtx(ctx: Ctx): Ctx {
+  if (ctx.fallbackRoot === undefined) return ctx;
+  let own = ctx.cache.get('ctx:own') as Ctx | undefined;
+  if (!own) {
+    own = { projectRoot: ctx.projectRoot, stack: ctx.stack, cache: new Map() };
+    ctx.cache.set('ctx:own', own);
+  }
+  return own;
 }
 
 export function fileExists(ctx: Ctx, rel: string): boolean {
-  return fs.existsSync(path.join(ctx.projectRoot, rel));
+  return fs.existsSync(locate(ctx, rel));
 }
 
 export function readText(ctx: Ctx, rel: string): string | null {
   const key = `file:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key) as string | null;
-  const abs = path.join(ctx.projectRoot, rel);
+  const abs = locate(ctx, rel);
   try {
     const t = fs.readFileSync(abs, 'utf8');
     ctx.cache.set(key, t);
@@ -107,34 +132,38 @@ export function resolveConfigPath(root: unknown, jsonpath: string): unknown {
   return cur;
 }
 
-/** Aggregated task names from mise.toml, composer scripts, npm scripts, Makefile. */
+/**
+ * Aggregated task names from mise.toml, composer scripts, npm scripts, Makefile.
+ * Without the fallback: `vdx test` here runs this directory's tasks, not the other half's.
+ */
 export function listAllTasks(ctx: Ctx): Set<string> {
   const key = 'tasks:all';
   if (ctx.cache.has(key)) return ctx.cache.get(key) as Set<string>;
   const tasks = new Set<string>();
+  const own = ownCtx(ctx);
 
-  const miseT = readToml(ctx, 'mise.toml');
+  const miseT = readToml(own, 'mise.toml');
   if (miseT?.tasks && typeof miseT.tasks === 'object') {
     for (const k of Object.keys(miseT.tasks as object)) tasks.add(k);
   }
 
-  const composer = readJson(ctx, 'composer.json');
+  const composer = readJson(own, 'composer.json');
   if (composer?.scripts && typeof composer.scripts === 'object') {
     for (const k of Object.keys(composer.scripts)) tasks.add(k);
   }
 
-  const pkg = readJson(ctx, 'package.json');
+  const pkg = readJson(own, 'package.json');
   if (pkg?.scripts && typeof pkg.scripts === 'object') {
     for (const k of Object.keys(pkg.scripts)) tasks.add(k);
   }
 
   // monorepo-ish fallback: server/package.json (см. bookmap)
-  const serverPkg = readJson(ctx, 'server/package.json');
+  const serverPkg = readJson(own, 'server/package.json');
   if (serverPkg?.scripts && typeof serverPkg.scripts === 'object') {
     for (const k of Object.keys(serverPkg.scripts)) tasks.add(`server:${k}`);
   }
 
-  const make = readText(ctx, 'Makefile');
+  const make = readText(own, 'Makefile');
   if (make) {
     const lines = make.split('\n');
     for (const line of lines) {
@@ -176,7 +205,7 @@ export function expandPaths(paths: string[], ctx: Ctx): string[] {
       if (m && m[1] && m[2]) {
         const dir = m[1];
         const ext = m[2];
-        const abs = path.join(ctx.projectRoot, dir);
+        const abs = locate(ctx, dir);
         try {
           const files = fs.readdirSync(abs);
           for (const f of files) {

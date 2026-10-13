@@ -28,7 +28,9 @@ export interface AuditResult {
  *   3. fallback на root ctx.
  *
  * Возвращает `{ ctx, relPath }` где relPath — относительный путь либо null
- * (если subpackage не разрезолвился — будем использовать root).
+ * (если subpackage не разрезолвился — будем использовать root). Файл, которого
+ * нет в subpackage, ищется в корне (`fallbackRoot`): `.github/` и `.gitignore`
+ * у репо одни.
  */
 function resolveSubpackageCtx(
   ctx: Ctx,
@@ -68,9 +70,21 @@ function resolveSubpackageCtx(
       projectRoot: path.join(ctx.projectRoot, relPath),
       stack: subpackageStack ?? ctx.stack,
       cache: new Map(),
+      fallbackRoot: ctx.projectRoot,
     },
     relPath,
   };
+}
+
+/**
+ * Ctx осей без `applies_to`. Корень мета-репо (без своего манифеста стека)
+ * дочитывает недостающие файлы из subpackage: `engines` в `cli/package.json`
+ * — тоже про воспроизводимость всего репо. У корня со своим манифестом
+ * подстановки нет.
+ */
+function rootAxisCtx(ctx: Ctx, subpackage: Ctx, relPath: string | null): Ctx {
+  if (!relPath || stackForDir(ctx.projectRoot) !== null) return ctx;
+  return { ...ctx, cache: new Map(), fallbackRoot: subpackage.projectRoot };
 }
 
 export function audit(
@@ -92,6 +106,7 @@ export function audit(
   }
 
   const { ctx: subpackageCtx, relPath: subpackagePath } = resolveSubpackageCtx(ctx, manifest);
+  const rootCtx = rootAxisCtx(ctx, subpackageCtx, subpackagePath);
 
   const perAxis: AuditResult['per_axis'] = [];
   for (const axis of rubric.axes) {
@@ -106,7 +121,7 @@ export function audit(
       });
       continue;
     }
-    const evalCtx = axis.applies_to ? subpackageCtx : ctx;
+    const evalCtx = axis.applies_to ? subpackageCtx : rootCtx;
     if (axis.applies_to && !axis.applies_to.includes(evalCtx.stack)) {
       perAxis.push({
         axis_id: axis.id,
