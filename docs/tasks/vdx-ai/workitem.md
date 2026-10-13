@@ -5,7 +5,7 @@ description: "Запускает нужного агента в нужном р�
 status: dormant
 session-type: prd-work
 created: 2026-09-28
-last-updated: 2026-10-08
+last-updated: 2026-10-13
 ---
 
 # vdx ai — запуск агента в проекте по личному профилю
@@ -112,6 +112,10 @@ last-updated: 2026-10-08
   `v0.24.0`) и на обеих станциях; сет `v1.3.0` на GitHub (`f119105`). В
   0.22.1–0.24.0: место человека в `vdx ai@<host>`, `--focused`, строка о
   папках, вопрос при дрейфе (DL #30–#34).
+- **Состояние на 2026-10-13:** ssh между станциями работает и из ssh-сессии
+  (nas-info: `ssh-self-alias` 09.10, `ssh-peers-agent` 13.10) — Sidetrack #18
+  закрыт. Ждёт только выпуска Sidetrack #21 и наблюдения за
+  `.git/index.sync-conflict-*`.
 
 ## Decision Log
 
@@ -1254,7 +1258,17 @@ m3` → `Permission denied (publickey…)`. Список о неответивш
 (`silent` печатался только в строках без терминала) — ошибка vdx с DL #27.
 Воспроизведено в pty без `SSH_AUTH_SOCK`: тот же список.
 
-**Status:** open — vdx: строка `note: m3 does not answer over ssh` под
+**Status:** closed 2026-10-13 — инфраструктура nas-info (`ssh-peers-agent-outcome`,
+коммиты `dcf7b74`, `fd2c21a`, `17448de`): `~/.zshenv` в ssh-сессии берёт сокет
+агента launchd; ключ m3 без пароля, ключ lft грузит LaunchAgent
+`ssh-agent-keys` из связки ключей при входе; `ForwardAgent` не включён.
+Проверено мной 13.10 с lft: `ssh -o BatchMode=yes <метка> 'hostname -s'` в
+сессии на m3, пришедшей с lft, и на lft, пришедшей с m3, — все четыре
+отвечают; на lft без `SSH_AUTH_SOCK` — тоже. Предел: lft перезагрузилась и
+никто не вошёл — агента нет, `ssh m3` из ssh-сессии на lft получает отказ
+(m3 → lft работает); на этот случай остаётся строка vdx `note: m3 does not
+answer over ssh`.
+Прежний статус: open — vdx: строка `note: m3 does not answer over ssh` под
 списком и при выборе без вопроса — выпущено в 0.21.1, проверено живьём.
 Инфраструктура — письмо nas-info (`ssh-peers-agent`, продолжение
 `ssh-self-alias`); закрыть по их ответу
@@ -1458,7 +1472,11 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       ai-dev-plugins с `--reply-to ai-dev-plugins/hooks-no-optional-locks`.
       Предел их защиты: `git diff` без ревизии и `git describe --dirty` пишут
       индекс и с `GIT_OPTIONAL_LOCKS=0`; `git-guard-prepare` (не хук) зовёт
-      `git diff --name-only`. 2026-10-07: в `.git` vdx и рубрики копий нет
+      `git diff --name-only`. 2026-10-07: в `.git` vdx и рубрики копий нет.
+      2026-10-08: копия не индекса, а reflog —
+      `.git/logs/refs/remotes/origin/main.sync-conflict-20261008-225455-N223K43`;
+      с оригиналом совпадала, кроме последней записи (push на одной станции,
+      fetch на другой); удалена. 2026-10-09: копий в `.git` vdx нет
 - [x] Живой `vdx ai@<host>` после выпуска, когда на обеих машинах ≥ 0.14.0 —
       2026-09-30 на 0.15.0 `--dry-run` в обе стороны без предупреждения о
       версии; m3 → lft нашёл бегущую сессию `vdx@lft %2`. Живьём: владелец на
@@ -1635,9 +1653,11 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       списком `note: m3 does not answer over ssh — what runs there is not
       known`; с агентом — `4789f1f8` «running on m3 now (t23b-program@m3,
       idle)». Ctrl-D — ничего не запущено
-- [ ] Ответ nas-info на `ssh-peers-agent` (2026-10-07): BatchMode-ssh между
+- [x] Ответ nas-info на `ssh-peers-agent` (2026-10-07): BatchMode-ssh между
       станциями из ssh-сессии, без агента ключей — сейчас отказ в обе стороны
-      (Sidetrack #18)
+      (Sidetrack #18) — 2026-10-13, `ssh-peers-agent-outcome`: агент launchd в
+      ssh-сессии, ключ lft из связки ключей; проверено мной в обе стороны
+      (Sidetrack #18 закрыт)
 - [x] Ответ nas-info на `ssh-self-alias` (2026-10-07): `ssh <своя метка>` на
       каждой станции — псевдоним себя, свой ключ в `authorized_keys`, свой host
       key в `known_hosts`. Повод: строка `… && ssh m3 '…'`, запущенная на m3, —
@@ -1649,7 +1669,7 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       `work` на lft остаётся за корпоративным DNS. Проверено мной с lft:
       `ssh -o BatchMode=yes lft|m3 'hostname -s'` и то же из ssh-сессии m3 —
       все четыре отвечают. В ssh-сессии m3 теперь есть `SSH_AUTH_SOCK`
-      (launchd, без `ForwardAgent`) — что это, скажет ответ на `ssh-peers-agent`
+      (launchd, без `ForwardAgent`) — это `~/.zshenv` из `ssh-peers-agent`
 - [x] Выпуск DL #31–#32: коммит vdx → `vdx publish minor` (0.23.0, плагин
       0.9.1 в `main`) → коммит сета, тег `v1.2.0`, push → ответы echelon на
       `echelon-channel-all-consumers` и `vdx-focused-flag` → pickup обоих.

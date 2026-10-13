@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-09, @vodmal/vdx-cli@0.24.0)
+# vdx — Handoff (2026-10-13, @vodmal/vdx-cli@0.24.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -6,7 +6,7 @@
 
 ---
 
-## Где мы (2026-10-09)
+## Где мы (2026-10-13)
 
 - **CLI** `@vodmal/vdx-cli@0.24.0` — в npm и на обеих станциях (lft, m3).
 - **Сет** `vdx-rubric-vodmal@v1.3.0` (schema 0.3): рубрика и личный профиль
@@ -45,7 +45,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | in-progress | только Sidetrack #20 (догфудинг до высшего уровня) — отложен; вернуться отдельным кристаллом |
-| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | ответ nas-info `ssh-peers-agent`; наблюдение за `.git/index.sync-conflict-*`; Sidetrack #21 — выйдет со следующим выпуском |
+| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; Sidetrack #21 — выйдет со следующим выпуском |
 
 **vdm-gates-wiring-axis** — гейт vdm и страж echelon как личные хуки профиля
 (`git.hooks`), не ось рубрики. Выпущено 2026-10-08 (0.22.0, сет v1.0.0–v1.1.0):
@@ -60,9 +60,6 @@ schema 0.3, распознаватель хуков, `vdx doctor --check/--fix`.
 
 ### Ждём извне
 
-- **nas-info** — `ssh-peers-agent`: ssh станция → станция из ssh-сессии без
-  агента ключей (Sidetrack #18 vdx-ai). `ssh-self-alias` закрыт 2026-10-09:
-  `ssh <своя метка>` работает на самой станции.
 - **echelon** — снимает старые строки стража в репо по своему правилу; ответа
   vdx не нужно (`echelon-guard-ready-outcome`).
 - **limeflow** — !750 (SPACEFINAM-717, husky из `postinstall`) вливает группа,
@@ -83,7 +80,8 @@ tmux < 3.5 прежняя проверка читала все папки как
 vdx/
 ├── CLAUDE.md, HANDOFF.md, README.md, PROJECT_CHANGELOG.md
 ├── mise.toml            ← словарь vdx: build, check, test, test:smoke (stack=meta)
-├── Makefile             ← алиасы make → mise run, для тех, кто не знает mise
+├── Makefile             ← те же задачи через npm, без mise; `make build` — typecheck,
+│                          а `mise run build` — npm install
 ├── .vdx-overrides.yml   ← secrets-config, shared-infra, shared-infra-drift — не про vdx
 ├── .github/workflows/ci.yml
 ├── marketplace/         ← inline-маркетплейс для чужих (README); у владельца плагин
@@ -117,7 +115,10 @@ vdx/
 
 **Станции:** lft (`work-imac`) и m3 (`imac-m3`). vdx, git, tmux на них ставит
 nas-info; новый релиз из npm доезжает с ближайшим topgrade. Сейчас: git 2.54
-на lft и 2.56 на m3, tmux 3.6a и 3.7c.
+на lft и 2.56 на m3, tmux 3.6a и 3.7c. `ssh m3` и `ssh lft` в BatchMode
+работают с любой станции, и из ssh-сессии тоже (nas-info, 09–13.10). Кроме
+одного случая: lft перезагрузилась и никто не вошёл — агента ключей нет, и
+`ssh m3` из ssh-сессии на lft получит отказ.
 
 ---
 
