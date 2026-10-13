@@ -18,8 +18,7 @@
 - **vdx по своей рубрике — L1** (аудит 2026-10-08). Критичные оси:
   `lifecycle-interface` L2, `tests` L3, `static-analysis` L2, `ci` L4,
   `branch-protection` — неизвестно. Требование догфудинга из CLAUDE.md не
-  выполнено; подъём отложен владельцем (Sidetrack #20 в
-  `vdm-gates-wiring-axis`).
+  выполнено; подъём — кристалл `vdx-dogfooding` (с 2026-10-13).
 
 ### Что умеет CLI
 
@@ -44,13 +43,20 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | in-progress | только Sidetrack #20 (догфудинг до высшего уровня) — отложен; вернуться отдельным кристаллом |
+| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель — общий L2, оси до L4; правка оценщика для мета-репо, сет v1.4.0, ESLint/Prettier, `test:e2e`, хуки репо |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; Sidetrack #21 — выйдет со следующим выпуском |
+| [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
-**vdm-gates-wiring-axis** — гейт vdm и страж echelon как личные хуки профиля
-(`git.hooks`), не ось рубрики. Выпущено 2026-10-08 (0.22.0, сет v1.0.0–v1.1.0):
-schema 0.3, распознаватель хуков, `vdx doctor --check/--fix`. Оба хука — в
-`~/.gitconfig` обеих станций (lft 08.10, m3 09.10 после git 2.56 от nas-info).
+**vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). Общий выше L2 сегодня
+не получит никто: `branch-protection` L3 — «неизвестно», пока нет расширения
+хостинга. Поэтому цель — L2 и каждая ось, кроме этой, на L4.
+`observability` и `mock-infra` — override (vdx не сервис). `up`/`down`
+рубрика перестанет требовать от библиотек (сет v1.4.0).
+
+**vdm-gates-wiring-axis** (закрыт) — гейт vdm и страж echelon как личные хуки
+профиля (`git.hooks`), не ось рубрики. 0.22.0, сет v1.0.0–v1.1.0: schema 0.3,
+распознаватель хуков, `vdx doctor --check/--fix`. Оба хука — в `~/.gitconfig`
+обеих станций.
 
 **vdx-ai** — команда `vdx ai` ([D14](docs/decisions.md)): разговор Claude Code
 продолжается на машине, где он идёт (DL #27); машины проекта —
@@ -69,7 +75,8 @@ schema 0.3, распознаватель хуков, `vdx doctor --check/--fix`.
 
 Без срочности. Ждёт: Sidetrack #21 vdx-ai (проверка папок через файл — на
 tmux < 3.5 прежняя проверка читала все папки как доступные; на станциях tmux
-≥ 3.5, 0.24.0 у них верен). Порядок выпуска — «Выпуск CLI» и «Выпуск
+≥ 3.5, 0.24.0 у них верен). Отдельный выпуск никому не нужен — можно вместе с
+правкой оценщика из `vdx-dogfooding`. Порядок выпуска — «Выпуск CLI» и «Выпуск
 плагина» в [CLAUDE.md](CLAUDE.md).
 
 ---
