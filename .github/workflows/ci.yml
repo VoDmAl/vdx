@@ -12,9 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22]
+        node-version: [22, 24]
     # The vocabulary's tasks, through its runner — what a person and an agent
-    # run here. mise.toml pins node 20; the matrix widens it.
+    # run here. mise.toml pins node 22; the matrix widens it.
     env:
       MISE_NODE_VERSION: ${{ matrix.node-version }}
     steps:
@@ -27,3 +27,5 @@ jobs:
         run: mise run check
       - name: Test
         run: mise run test
+      - name: Packed package
+        run: mise run test:e2e

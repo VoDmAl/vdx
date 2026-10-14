@@ -57,7 +57,8 @@ drift-algorithm). Следующая фаза — реализация: bootstra
 - `docs/specs/` — спека ядра: rubric-format, manifest-format, overrides-format,
   mcp-api, drift-algorithm. Здесь же `vdx-rubric.example.yaml` — **зеркало**
   canonical-рубрики для документации.
-- `cli/` — TypeScript evaluator + `vdx init` (Шаги C–E).
+- `cli/` — TypeScript evaluator + `vdx init` (Шаги C–E). Карта модулей и путь
+  вызова — `docs/architecture.md`.
 
 ## Внешний репо: `vdx-rubric-vodmal`
 
@@ -95,8 +96,8 @@ Canonical owner-baseline живёт в отдельном репо:
   тег, `git push --follow-tags`, ожидание версии в registry (до 3 мин).
   `--no-push` оставляет коммит и тег локальными.
 - Pre-flight требует чистое дерево: незакоммиченное до выпуска — закоммитить
-  заранее. Push выпуска проходит `pre-push` репо (`mise run check` и
-  `mise run test`, около 1,5 мин); упал — пакет в npm и тег уже есть,
+  заранее. Push выпуска проходит `pre-push` репо (`check`, `test` и
+  `test:e2e`, около 1 мин 40 с); упал — пакет в npm и тег уже есть,
   `git push --follow-tags` после починки. Ветка позади upstream — отказ до
   bump (push после публикации не прошёл бы).
 - На рабочие станции (m3, lft) vdx ставит nas-info; версия не закреплена

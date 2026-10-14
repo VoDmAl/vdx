@@ -244,6 +244,7 @@ full per-step log and [HANDOFF.md](HANDOFF.md) for live state). Highlights:
 |----------|------|--------|
 | Onboarding for a new session | [HANDOFF.md](HANDOFF.md) | current |
 | Research journal (Decided / Open / Observed) | [docs/decisions.md](docs/decisions.md) | current |
+| Map of the CLI modules and how a call flows | [docs/architecture.md](docs/architecture.md) | current |
 | Landscape of comparable tools (does / doesn't) | [docs/landscape.md](docs/landscape.md) | current |
 | Maturity rubric v0.2 (calibrated) | [docs/maturity-rubric.md](docs/maturity-rubric.md) | current |
 | Build-vs-adopt decision | [docs/decision.md](docs/decision.md) | current |

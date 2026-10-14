@@ -16,13 +16,11 @@
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26).
   Старый `[vdx]` читается; у vdx, echelon и mediko манифест пока там.
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
-- **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
-  `mise run test`; зелёный на `65f5543`.
+- **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
+  `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
 - **vdx по своей рубрике — L2** (аудит 2026-10-14, CLI 0.26.0, сет v1.4.2) —
-  потолок, пока `branch-protection` L3 «неизвестно». Критичные оси:
-  `lifecycle-interface` L4, `tests` L3, `static-analysis` L4, `ci` L4;
-  вспомогательные на L4, кроме `docs` L3 (`dependency-hygiene` L4 — в `cli/`,
-  не выпущено). Поднять `tests` и `docs` до L4 — кристалл `vdx-dogfooding`.
+  потолок, пока `branch-protection` L3 «неизвестно». Все остальные оси — L4
+  (цель кристалла `vdx-dogfooding`).
 
 ### Что умеет CLI
 
@@ -47,7 +45,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель — общий L2, оси до L4; осталось: хуки репо, аудит зависимостей, `test:e2e`, `docs/architecture.md` |
+| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель достигнута 2026-10-14 (общий L2, оси, кроме `branch-protection`, — L4); осталось: выпуск 0.27, перенос манифестов в `[_.vdx]`, побеги |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
@@ -77,7 +75,9 @@
 
 ### Следующий выпуск CLI
 
-Срочного нет. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
+Minor (0.27): пол Node 22 — `engines`, `vdx doctor` (`vdx-dogfooding` DL #13).
+Пользователю на Node 20 сейчас установка ставит tsx 4.23.15, и vdx падает на
+старте; с 0.27 npm хотя бы предупредит. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
 DL #10) и сеты v1.4.1 и v1.4.2; плагин 0.9.3 — скилл `vdx-discover` о
 `[_.vdx]`. Когда 0.26 будет на m3 и lft — перенести манифест vdx в `[_.vdx]`
 и написать агентам echelon и mediko. Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
@@ -94,7 +94,7 @@ vdx/
 ├── Makefile             ← те же задачи через npm, без mise; `make build` — typecheck,
 │                          а `mise run build` — npm install
 ├── .vdx-overrides.yml   ← secrets-config, shared-infra, shared-infra-drift — не про vdx
-├── .githooks/pre-push   ← `mise run check` и `mise run test` перед push; включает
+├── .githooks/pre-push   ← `check`, `test`, `test:e2e` перед push; включает
 │                          `prepare` в `cli/package.json` (`mise run build`)
 ├── .github/workflows/ci.yml   ← check и test на push в main и на PR
 ├── .github/workflows/audit.yml ← check:code:security по понедельникам
@@ -110,9 +110,11 @@ vdx/
 │   │                      hooks.ts + personal-hooks.ts + doctor.ts, publish.ts,
 │   │                      init.ts, run.ts, vocabulary.ts, mcp-server.ts, …
 │   ├── tests/unit/      ← vitest
+│   ├── tests/e2e/       ← пакет из `npm pack` во временном префиксе (`test:e2e`)
 │   └── smoke.sh         ← аудит трёх калибровочных проектов (локальные пути)
 └── docs/
     ├── decisions.md     ← ⭐ D1–D14, открытые вопросы, наблюдения
+    ├── architecture.md  ← карта модулей cli/ и путь вызова
     ├── specs/           ← rubric-format, manifest-format, overrides-format,
     │                      environment-format, mcp-api, drift-algorithm + зеркала
     │                      vdx-rubric.example.yaml, vdx-environment.example.yaml
@@ -172,10 +174,6 @@ Decision Log её кристалла.
    `doctor`, `personal-hooks`, `publish`).
 4. **tmux < 3.5 печатает вывод `run-shell` в панель, а не вызывающему.** На
    раннере CI (ubuntu) tmux 3.4: ответ сервера tmux брать из файла.
-5. **Push идёт через `pre-push` репо — около 1,5 мин** (`check` и `test`), и
-   push выпуска в `vdx publish` тоже. Хук сбрасывает переменные, которые git
-   отдаёт хуку (`git rev-parse --local-env-vars`): иначе временные репо тестов
-   смотрели бы в `.git` vdx (githooks(5)).
 5. **Тесты tmux в `ai.test.ts` зависят от порядка.** `vitest -t <фильтр>` их
    роняет — гонять файл целиком. Под нагрузкой машины полный прогон
    иногда упирается в таймауты (doctor, `--version`) — перезапустить, прежде
@@ -193,6 +191,10 @@ Decision Log её кристалла.
    `npm run vdx -- <команда>`.
 10. **Комбайн.** «Давай напишем свой X» — скорее всего, ошибка: сначала
     искать готовое.
+11. **Push идёт через `pre-push` репо — около 1 мин 40 с** (`check`, `test`,
+    `test:e2e`), и push выпуска в `vdx publish` тоже. Хук сбрасывает
+    переменные, которые git отдаёт хуку (`git rev-parse --local-env-vars`):
+    иначе временные репо тестов смотрели бы в `.git` vdx (githooks(5)).
 
 ---
 
@@ -205,6 +207,7 @@ mise run check          # typecheck (с тестами), Prettier, ESLint, knip 
 mise run check:code:security  # npm audit зависимостей пакета; сеть; CI — раз в неделю
 mise run fix            # eslint --fix и Prettier в cli/; после правок кода — до коммита
 mise run test           # unit-тесты cli/
+mise run test:e2e       # пакет, каким его отдаёт npm: pack, установка, оба бинарника
 mise run test:smoke     # аудит трёх калибровочных проектов (не в CI)
 vdx audit .             # vdx по своей рубрике
 vdx doctor              # окружение и личные хуки этой станции

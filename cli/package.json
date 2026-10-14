@@ -48,6 +48,7 @@
     "fix": "eslint --fix . && prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
@@ -78,6 +79,6 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22"
   }
 }

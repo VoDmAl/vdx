@@ -4,7 +4,7 @@
 # Используем bare-глаголы как фасад к командам внутри cli/.
 
 [tools]
-node = "20"
+node = "22"
 
 [tasks.build]
 description = "Install CLI dependencies"
@@ -13,6 +13,10 @@ run = "npm --prefix cli install"
 [tasks.test]
 description = "Run the CLI unit tests"
 run = "npm --prefix cli test"
+
+[tasks."test:e2e"]
+description = "The package as npm ships it: packed, installed into a temporary prefix, both binaries run"
+run = "npm --prefix cli run test:e2e"
 
 [tasks."test:smoke"]
 description = "Run smoke audit on the three calibration projects (local paths; not in CI)"

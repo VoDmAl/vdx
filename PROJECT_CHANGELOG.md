@@ -4,6 +4,17 @@
 
 ## 2026-10-14
 
+### `test:e2e` — пакет, каким его отдаёт npm; пол Node 22
+
+`npm pack`, установка во временный префикс, оба бинарника: `vdx --version`,
+`audit`, `init`, `vdx-mcp` по stdio. Тест сразу нашёл поломку: свежая установка
+на Node 20 тянет tsx 4.23.15 и падает на старте. Владелец выбрал поднять пол до
+Node 22 (Node 20 вне поддержки): `engines`, `mise.toml`, матрица CI 22 и 24,
+`vdx doctor`. `test:e2e` идёт в CI и в хуке `pre-push`; карта модулей —
+[docs/architecture.md](docs/architecture.md). `tests` и `docs` — L4: vdx по своей
+рубрике — L2, все оси, кроме `branch-protection`, — L4
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #13).
+
 ### Зависимости: уязвимости закрыты, аудит, dependabot, knip
 
 `npm audit` нашёл 11 известных уязвимостей в зависимостях пакета и 3 в

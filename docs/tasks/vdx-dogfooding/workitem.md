@@ -34,11 +34,11 @@ relates-to:
 ## Текущая модель
 
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
-Сейчас (2026-10-14, выпущенный CLI 0.26.0, сет v1.4.2, override, хук
-`pre-push` — DL #11) — **L2**, цель по общему уровню: на L2 вспомогательных
-5 из 6. До L4 не хватает `tests` (L3) и `docs` (L3); `dependency-hygiene`
-L4 — в `cli/` (DL #12), на выпущенном CLI то же: оценщик не менялся. Колонка
-«Сейчас» в таблице — это состояние.
+Сейчас (2026-10-14, выпущенный CLI 0.26.0, сет v1.4.2) — **L2**, и все оси,
+кроме `branch-protection`, — L4: **цель DL #3 достигнута**. Держится на
+override двух сервисных осей, хуке `pre-push` (DL #11), аудите зависимостей
+(DL #12), `test:e2e` и `docs/architecture.md` (DL #13). Колонка «Сейчас» в
+таблице — это состояние.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -66,7 +66,7 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | Ось | Класс | Сейчас | Следующий шаг держит | Путь до L4 |
 |---|:-:|:-:|---|---|
 | `lifecycle-interface` | C | L4 | — | `fix` — Prettier (DL #7); `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 — `test:smoke` подходит под `test:.*` |
-| `tests` | C | L3 | L4: нет `test:e2e` / `test:mutation` | `test:e2e`: собранный CLI на фикстурах |
+| `tests` | C | L4 | — | `test:e2e`: пакет из `npm pack` во временном префиксе, в CI и в `pre-push` (DL #13) |
 | `static-analysis` | C | L4 | — | ESLint с `recommendedTypeChecked` (DL #8), сет v1.4.1 (DL #9): 4.3/4.8 = 0.90 ≥ 0.85 |
 | `ci` | C | L4 | — | — |
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
@@ -75,7 +75,7 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `dependency-hygiene` | s | L4 | — | `check:code:security` (`npm audit`) в CI по понедельникам; `.github/dependabot.yml`, корень читается с DL #5; `knip` в `check` (DL #12) |
 | `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
 | `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
-| `docs` | s | L3 | L4: нет `docs/adr/`, `docs/architecture.md`, `docs/onboarding.md` | `docs/architecture.md` — карта модулей CLI |
+| `docs` | s | L4 | — | `docs/architecture.md` — карта модулей CLI и путь вызова |
 | `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4 |
 | `release-artifact` | s | L4 | — | — |
 
@@ -376,6 +376,36 @@ actions); CI проверяет их. Security updates Dependabot — настр
 GitHub, не файл; не включал. `git-hygiene` L4 не задет: аудит не на push.
 **Cross:** см. Sidetrack #7
 
+### #13 / 2026-10-14 / `test:e2e` — упакованный пакет; пол Node 22
+
+**Source:** both
+**Basis:** observed
+**Basis-detail:** тест ставит `npm pack` во временный префикс (pack — 1 с,
+установка из кеша — 5 с) и запускает `vdx --version`, `audit` (сет — из
+установленного пакета), `init --dry-run`, `vdx-mcp` по stdio. Без `rubric` в
+`files` тест падает (проверено подменой). Под mise (Node 20) упали все четыре:
+`ERR_MODULE_NOT_FOUND` в `tsx/dist/esm/api/index.cjs`. Пакет vdx 0.26.0 с каждой
+tsx от 4.22.3 до 4.23.14 на Node 20 запускается, с 4.23.15 (2026-09-20) —
+нет; на Node 22 — со всеми. В lock-файле клона была 4.22.3, поэтому CI и
+unit-тесты молчали. Станции: m3 — Node 26, lft — Node 25, обе на vdx 0.24.0 и
+tsx 4.23.15 — не задеты. Владелец 2026-10-14: «Поднять пол до Node 22
+(Recommended)». Что Node 20 вне поддержки с 2026-04-30 — по графику выпусков
+Node.js, как я его знаю; сейчас не сверял. После правки: check, 404 теста,
+e2e на Node 22 и 24 — зелёные; аудит: `tests` L4, `git-hygiene` L4 (без
+`test:e2e` в хуке — L3: CI его зовёт). `docs/architecture.md` — `docs` L4.
+**Context:** `tests` L4 — `test:e2e`, `test:mutation` или Playwright. Варианты
+для Node 20: зажать tsx до 4.23.14 или поднять пол.
+**Why:** Unit-тесты гоняют клон, а пользователь получает пакет: e2e ловит
+`files`, зависимость не в той секции и свежие версии зависимостей — ровно
+то, что и случилось. Пол Node 22 вместо зажатого tsx: Node 20 вне поддержки,
+а зажатая версия устаревает без сигнала.
+**Implication:** `engines` `>=22`, `mise.toml` — node 22, матрица CI — 22 и 24,
+`vdx doctor` предупреждает ниже 22; tsx в lock-файле — 4.23.15. `test:e2e` — в
+CI и в `pre-push` (push — около 1 мин 40 с). Пользователю на Node 20 до выпуска
+0.27 установка даёт падающий vdx без предупреждения. `prepare` при
+`npm update` включил хук в этом клоне (`core.hooksPath .githooks`). Гоча
+HANDOFF о push — #11, не #5, как сказано в DL #11: номер 5 был занят.
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -500,9 +530,11 @@ fsevents@2.3.3». CLI и тесты работают и так: бинарник
 - [x] Patch сета v1.4.1 по Sidetrack #5 и #1 (DL #9): `eslint_type_checked` видит
       flat-конфиг, `code-style` — `eslint.config.mjs`/`.ts`; калибровка до и
       после; сет CLI и зеркало
-- [ ] `test:e2e` — собранный CLI на фикстурах во временных папках
+- [x] `test:e2e` — пакет из `npm pack` во временном префиксе; нашёл поломку
+      на Node 20, пол — Node 22 (DL #13)
 - [x] Аудит зависимостей (`check:code:security`), dependabot, `knip` — DL #12
-- [ ] `docs/architecture.md`; `README.md` — `mise run up`
+- [x] `docs/architecture.md` — `docs` L4. `README.md` — `mise run up` не нужен:
+      `reproducibility` уже L4 (Sidetrack #3)
 - [x] Выпуск CLI с правкой оценщика и сетом v1.4.0 — 0.25.0 в npm
       2026-10-13 (`0d1f41f`)
 - [x] Манифест в `[_.vdx]` (DL #10): чтение обоих мест, `vdx init` и
@@ -512,7 +544,9 @@ fsevents@2.3.3». CLI и тесты работают и так: бинарник
       2026-10-14 (`9ae7224`); плагин 0.9.3 — скилл `vdx-discover` о `[_.vdx]`
 - [ ] После 0.26 на m3 и lft: `mise.toml` vdx — в `[_.vdx]`; письма агентам
       echelon и mediko — их манифест в `[vdx]`
-- [ ] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности)
+- [x] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности):
+      0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
+- [ ] Выпуск 0.27 (minor): пол Node 22 (DL #13)
 
 **Побеги:**
 

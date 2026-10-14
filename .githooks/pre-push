@@ -11,4 +11,4 @@ if ! command -v mise >/dev/null 2>&1; then
   exit 1
 fi
 
-mise run check && mise run test
+mise run check && mise run test && mise run test:e2e

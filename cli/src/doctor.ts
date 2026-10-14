@@ -99,24 +99,24 @@ function checkNode(): CheckResult {
       label: 'Node.js',
       status: 'missing',
       message: 'node binary not on PATH',
-      remedy: 'https://nodejs.org/en/download (LTS ≥ 20 recommended)',
+      remedy: 'https://nodejs.org/en/download (vdx needs 22 or newer)',
     };
   }
   const major = parseSemverMajor(v);
   if (major === null) {
     return { id: 'node', label: 'Node.js', status: 'warning', message: `unparseable version: ${v}` };
   }
-  if (major < 20) {
+  if (major < 22) {
     return {
       id: 'node',
       label: 'Node.js',
       status: 'warning',
       level: 1,
-      message: `${v} — below recommended (≥ 20 LTS)`,
-      remedy: 'mise use -g node@20 (or upgrade via nvm/brew)',
+      message: `${v} — vdx needs 22 or newer (engines in its package.json)`,
+      remedy: 'mise use -g node@24 (or upgrade via nvm/brew)',
     };
   }
-  return { id: 'node', label: 'Node.js', status: 'ok', level: major >= 22 ? 4 : 3, message: v };
+  return { id: 'node', label: 'Node.js', status: 'ok', level: major >= 24 ? 4 : 3, message: v };
 }
 
 function checkGit(): CheckResult {
