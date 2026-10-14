@@ -49,12 +49,12 @@ import { at, errorMessage, isStringList, str } from './narrow.ts';
  */
 
 /** A prompt a conditional flag is known to cause, and the tmux keys that answer it. */
-export interface ConfirmRule {
+interface ConfirmRule {
   screen: string;
   keys: string[];
 }
 
-export interface WhenRule {
+interface WhenRule {
   id: string;
   description?: string;
   if: Predicate;
@@ -71,7 +71,7 @@ export interface AgentProfile {
   when?: WhenRule[];
 }
 
-export type Multiplexer = 'tmux' | 'none';
+type Multiplexer = 'tmux' | 'none';
 
 /** A place a project's short name may come from: a structured file and a dot path into it. */
 export interface NameSource {
@@ -80,7 +80,7 @@ export interface NameSource {
   jsonpath: string;
 }
 
-export interface SessionProfile {
+interface SessionProfile {
   multiplexer?: Multiplexer;
   name?: string;
   /** Tried after `[_.vdx] name` (or the older `[vdx]`) in the project's mise.toml; the first non-empty string wins. */
@@ -107,7 +107,7 @@ export interface PersonalHook {
   description?: string;
 }
 
-export interface GitProfile {
+interface GitProfile {
   /** Directories whose repos are the neighbours an author is proposed from; default — the project's parent. */
   author_pool?: string[];
   hooks?: PersonalHook[];
@@ -121,19 +121,19 @@ export interface Environment {
   git?: GitProfile;
 }
 
-export const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
-export const HOST_ENV_VAR = 'VDX_HOST';
+const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
+const HOST_ENV_VAR = 'VDX_HOST';
 /** Set by `vdx ai@<host>` for the vdx it starts there: the machine the person sits at. */
-export const SEAT_ENV_VAR = 'VDX_AI_FROM';
+const SEAT_ENV_VAR = 'VDX_AI_FROM';
 /**
  * `1` in the environment of an agent started with `vdx ai --focused`, and so of
  * its hooks and MCP servers: nothing wakes this session or reads its inbox for it.
  */
-export const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
-export const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
+const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
+const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
 /** Tried in order when no profile names an agent. Started plain, with no flags. */
-export const FALLBACK_AGENTS = ['claude', 'codex'] as const;
-export const DEFAULT_SESSION_NAME = '{project}';
+const FALLBACK_AGENTS = ['claude', 'codex'] as const;
+const DEFAULT_SESSION_NAME = '{project}';
 
 export function resolveEnvironmentPath(
   env: NodeJS.ProcessEnv = process.env,
@@ -401,7 +401,7 @@ export interface ProcInfo {
   args: string;
 }
 
-export const PANE_FORMAT = '#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_path}';
+const PANE_FORMAT = '#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_path}';
 
 export function parsePanes(out: string): PaneInfo[] {
   const panes: PaneInfo[] = [];
@@ -462,7 +462,7 @@ function realpathOr(p: string): string {
   }
 }
 
-export function isInside(child: string, parent: string): boolean {
+function isInside(child: string, parent: string): boolean {
   return child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
 }
 
@@ -497,7 +497,7 @@ export function missingArgs(procArgs: string, required: string[]): string[] {
   return required.filter((a) => (/\s/.test(a) ? !procArgs.includes(a) : !tokens.has(a)));
 }
 
-export function resolveProjectRoot(p: string): string | null {
+function resolveProjectRoot(p: string): string | null {
   const abs = path.resolve(p);
   try {
     if (!fs.statSync(abs).isDirectory()) return null;
@@ -580,12 +580,12 @@ export function hostLabel(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /** The machine the person sits at: the one whose `vdx ai@<host>` started this vdx, else this one. */
-export function seatLabel(env: NodeJS.ProcessEnv = process.env): string {
+function seatLabel(env: NodeJS.ProcessEnv = process.env): string {
   return env[SEAT_ENV_VAR]?.trim() || hostLabel(env);
 }
 
 /** Machine labels compare without case: `M3` in the profile is `m3` in a transcript. */
-export function sameMachine(a: string | null, b: string | null): boolean {
+function sameMachine(a: string | null, b: string | null): boolean {
   return (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
 }
 
@@ -737,7 +737,7 @@ export interface AiDeps {
   liveHere?: () => LiveSession[];
 }
 
-export function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
+function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
   const res = spawnSync('ssh', args, { stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'inherit', encoding: 'utf8' });
   if (at(res.error, 'code') === 'ENOENT') return null;
   return { status: res.status ?? 1, stdout: res.stdout ?? '' };
@@ -748,7 +748,7 @@ export function sleepSync(ms: number): void {
 }
 
 /** Read one line from the terminal, synchronously: the prompt runs before tmux takes it. */
-export function askLine(prompt: string): string | null {
+function askLine(prompt: string): string | null {
   process.stderr.write(prompt);
   const buf = Buffer.alloc(256);
   let text = '';
@@ -798,9 +798,9 @@ export const EXIT_LAUNCH_FAILED = 4;
  * a start with the resume args had nothing to resume (`claude --continue` exits
  * 1 at once); the window covers answering the channel prompt that comes first.
  */
-export const NOTHING_TO_RESUME_MS = 30_000;
+const NOTHING_TO_RESUME_MS = 30_000;
 
-export function renderPlan(
+function renderPlan(
   plan: LaunchPlan,
   multiplexer: Multiplexer,
   running: AgentPane[],
@@ -1083,7 +1083,7 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: s
  * The Claude Code sessions alive on `host` right now; null when it does not
  * answer over ssh (BatchMode: a password prompt counts as no answer).
  */
-export function askMachine(host: string, deps: AiDeps): MachineReport | null {
+function askMachine(host: string, deps: AiDeps): MachineReport | null {
   const res = (deps.ssh ?? runSsh)(
     ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, `sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`],
     true,
@@ -1092,7 +1092,7 @@ export function askMachine(host: string, deps: AiDeps): MachineReport | null {
 }
 
 /** What a start continues: resume args here, or a conversation on another machine. */
-export interface ConversationChoice {
+interface ConversationChoice {
   args: string[];
   /** Continue it on that machine (`vdx ai@<host>`); `reachable` — it answered over ssh just now. */
   remote?: { host: string; id: string; reachable: boolean };
@@ -1106,7 +1106,7 @@ export interface ConversationChoice {
   lines: string[];
 }
 
-export function isClaude(command: string): boolean {
+function isClaude(command: string): boolean {
   return path.basename(command) === 'claude';
 }
 
@@ -1136,7 +1136,7 @@ const resumeId = (id: string) => ['--resume', id];
  * takes the newest overall; without a terminal it is this machine's newest
  * idle one, never another's.
  */
-export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
+function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
   if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const host = plan.host;
   const same = sameMachine;
@@ -1412,7 +1412,7 @@ export function processFocused(pid: number): boolean {
 }
 
 /** macOS guards these folders on their own; a tmux server can hold a denial for every session under it. */
-export const GUARDED_FOLDERS = ['Downloads', 'Desktop', 'Documents'];
+const GUARDED_FOLDERS = ['Downloads', 'Desktop', 'Documents'];
 
 /**
  * The guarded folders an agent started here could not read. Through the tmux server

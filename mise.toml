@@ -19,8 +19,12 @@ description = "Run smoke audit on the three calibration projects (local paths; n
 run = "bash cli/smoke.sh"
 
 [tasks.check]
-description = "Typecheck the CLI sources and check their formatting"
+description = "Typecheck, Prettier, ESLint and knip over the CLI"
 run = "npm --prefix cli run check"
+
+[tasks."check:code:security"]
+description = "Known advisories in the CLI's runtime dependencies (npm audit; needs the network)"
+run = "npm --prefix cli run check:code:security"
 
 [tasks.fix]
 description = "Format the CLI sources"

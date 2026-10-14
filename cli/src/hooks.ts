@@ -18,7 +18,7 @@ import YAML from 'js-yaml';
 import { fileExists, isPackagePresent, readJson, readText, readToml, type Ctx } from './facts.ts';
 import { at, dict, isDict, list } from './narrow.ts';
 
-export type FrameworkId = 'husky' | 'lefthook' | 'simple-git-hooks' | 'cghooks' | 'githooks';
+type FrameworkId = 'husky' | 'lefthook' | 'simple-git-hooks' | 'cghooks' | 'githooks';
 
 export interface HookFramework {
   id: FrameworkId;
@@ -69,7 +69,7 @@ interface InstallStep {
 }
 
 /** Yarn 2+ does not run a project's `prepare` (husky docs, How To → Yarn). */
-export function yarnBerry(ctx: Ctx): boolean {
+function yarnBerry(ctx: Ctx): boolean {
   const pm = at(readJson(ctx, 'package.json'), 'packageManager');
   if (typeof pm === 'string') {
     const m = pm.match(/^yarn@(\d+)/);
@@ -297,7 +297,7 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
 }
 
 /** What a clone runs to switch hooks on: the install step of the project's package manager. */
-export function installCommand(fw: HookFramework, ctx: Ctx): string {
+function installCommand(fw: HookFramework, ctx: Ctx): string {
   if (fw.installedBy === null) return fw.manualInstall;
   if (fw.installedBy.startsWith('composer')) return 'composer install';
   if (fw.installedBy === 'mise task up') return 'vdx up';

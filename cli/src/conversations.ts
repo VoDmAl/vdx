@@ -29,7 +29,7 @@ import { at, dict, str } from './narrow.ts';
  */
 
 /** The opening of `vdx ai --check`'s text; the label is an ssh destination from the other machines. */
-export const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
+const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
 const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
 /** A label read from a synced file goes to ssh: it must not be able to read as an option. */
 const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -112,7 +112,7 @@ export function readConversation(file: string, updated: Date): Conversation | nu
 }
 
 /** Which of `ids` had a prompt typed in them on this machine. */
-export function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Set<string> {
+function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Set<string> {
   const found = new Set<string>();
   let text: string;
   try {
@@ -235,7 +235,7 @@ export interface LiveSession {
 }
 
 /** Session files, one JSON object per line — a file read here, or the output of LIVE_SESSIONS_SCRIPT. */
-export function parseLiveSessions(text: string): LiveSession[] {
+function parseLiveSessions(text: string): LiveSession[] {
   const out: LiveSession[] = [];
   for (const line of text.split('\n')) {
     if (!line.trim().startsWith('{')) continue;

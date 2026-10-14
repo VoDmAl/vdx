@@ -89,7 +89,7 @@ export function readToml(ctx: Ctx, rel: string): unknown {
   }
 }
 
-export function readYaml(ctx: Ctx, rel: string): unknown {
+function readYaml(ctx: Ctx, rel: string): unknown {
   const key = `yaml:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   const text = readText(ctx, rel);

@@ -83,7 +83,7 @@ function truthy(v: unknown): boolean {
   return v === true || v === 'true';
 }
 
-export function parseWorkflow(file: string, text: string): GhaWorkflow | null {
+function parseWorkflow(file: string, text: string): GhaWorkflow | null {
   let data: unknown;
   try {
     data = YAML.load(text);
@@ -162,7 +162,7 @@ export function ciSystems(ctx: Ctx): string[] {
 /** `|| true` and its relatives: the step reports success whatever the command did. */
 const MASK_RE = /\|\|\s*(true|:|exit\s+0)\b/;
 
-export function stepMasked(step: GhaStep, job: GhaJob): boolean {
+function stepMasked(step: GhaStep, job: GhaJob): boolean {
   if (job.continueOnError || step.continueOnError) return true;
   return step.run !== undefined && MASK_RE.test(step.run);
 }

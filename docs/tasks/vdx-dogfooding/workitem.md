@@ -36,8 +36,9 @@ relates-to:
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
 Сейчас (2026-10-14, выпущенный CLI 0.26.0, сет v1.4.2, override, хук
 `pre-push` — DL #11) — **L2**, цель по общему уровню: на L2 вспомогательных
-5 из 6. До L4 не хватает `tests` (L3), `dependency-hygiene` (L1) и `docs`
-(L3). Колонка «Сейчас» в таблице — это состояние.
+5 из 6. До L4 не хватает `tests` (L3) и `docs` (L3); `dependency-hygiene`
+L4 — в `cli/` (DL #12), на выпущенном CLI то же: оценщик не менялся. Колонка
+«Сейчас» в таблице — это состояние.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -71,7 +72,7 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
 | `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
 | `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
-| `dependency-hygiene` | s | L1 | L2: нет `npm audit` / `check:code:security` | задача аудита; L3 — dependabot (нужна правка оценщика); L4 — `knip` |
+| `dependency-hygiene` | s | L4 | — | `check:code:security` (`npm audit`) в CI по понедельникам; `.github/dependabot.yml`, корень читается с DL #5; `knip` в `check` (DL #12) |
 | `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
 | `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
 | `docs` | s | L3 | L4: нет `docs/adr/`, `docs/architecture.md`, `docs/onboarding.md` | `docs/architecture.md` — карта модулей CLI |
@@ -346,6 +347,35 @@ git (`unset $(git rev-parse --local-env-vars)`): тесты создают св�
 станции (`hook.<имя>` в `~/.gitconfig`, Git 2.54) идут рядом: `core.hooksPath`
 их не выключает. CLAUDE.md «Выпуск CLI», HANDOFF — гоча #5.
 
+### #12 / 2026-10-14 / Зависимости: аудит по расписанию, dependabot раз в месяц, knip в `check`
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** `npm audit` в `cli/` 2026-10-14: 18 уязвимостей (1 critical,
+10 high), из них 11 в зависимостях пакета — в основном HTTP-стек MCP SDK
+(`hono`, `proxy-addr`, `fast-uri`), который vdx не запускает (MCP по stdio), и
+DoS разбора в `js-yaml` и `smol-toml`, которые читают чужие файлы. Все — в
+пределах диапазонов: `npm audit fix` и vitest 4.1.11 → 0. knip 6.41: 36
+экспортов и 15 типов не нужны вне модуля, лишних зависимостей и файлов нет;
+`--fix` снял только слово `export`, две функции оказались мёртвыми (`mapVerb`,
+`userGitConfigPath`). `npm audit` по одному lock-файлу, без `node_modules`, —
+работает. Аудит dev CLI: `dependency-hygiene` L4, общий L2. Тесты 404 зелёные.
+Не проверено: workflow `audit.yml` и dependabot на GitHub — до push.
+**Context:** L2 — задача аудита, L3 — dependabot или renovate, L4 — knip или
+depcheck. Где гонять аудит: в `check` (на каждый push и в CI), отдельным шагом
+CI на push или по расписанию.
+**Why:** Уязвимость появляется без изменения в репо. В `check` или в CI на push
+она отказывала бы в push по чужой новости, а `check` ещё и требовал бы сети.
+Поэтому `check:code:security` — отдельная задача: в CI по понедельникам
+(`audit.yml`, упавший прогон — письмо от GitHub) и по требованию у агента.
+`--omit=dev`: в пакет едут только зависимости пакета. Dependabot — раз в месяц
+и одним PR на экосистему, чтобы не завалить владельца PR. knip — в `check`: он
+быстрый (~1,3 с) и без сети.
+**Implication:** раз в месяц — до двух PR от dependabot (npm в `cli/` и
+actions); CI проверяет их. Security updates Dependabot — настройка репо на
+GitHub, не файл; не включал. `git-hygiene` L4 не задет: аудит не на push.
+**Cross:** см. Sidetrack #7
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -426,6 +456,18 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 **Status:** resolved — 2026-10-14: в коде и сете v1.4.2 (DL #10); перенос
 проектов — Next actions
 
+### #7. npm 11 не запускает install-скрипты без разрешения
+
+**Возникло в:** DL #12
+**Описание:** npm 11.21 на lft при `npm install` в `cli/`: «2 packages have
+install scripts not yet covered by allowScripts: esbuild@0.28.2 (postinstall),
+fsevents@2.3.3». CLI и тесты работают и так: бинарник esbuild приходит
+пакетом под платформу. На чистом клоне с npm 11 то же; CI — на npm из Node 20 и
+22, не задет. Разрешить (`npm install-scripts approve`) или отказать — решение
+по `allowScripts`, когда что-то сломается или npm сделает это обязательным.
+
+**Status:** open
+
 ## Next actions
 
 **Развилки — к владельцу:**
@@ -459,7 +501,7 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
       flat-конфиг, `code-style` — `eslint.config.mjs`/`.ts`; калибровка до и
       после; сет CLI и зеркало
 - [ ] `test:e2e` — собранный CLI на фикстурах во временных папках
-- [ ] Аудит зависимостей (`check:code:security`), dependabot, `knip`
+- [x] Аудит зависимостей (`check:code:security`), dependabot, `knip` — DL #12
 - [ ] `docs/architecture.md`; `README.md` — `mise run up`
 - [x] Выпуск CLI с правкой оценщика и сетом v1.4.0 — 0.25.0 в npm
       2026-10-13 (`0d1f41f`)
@@ -480,6 +522,7 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 - [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
 - [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
 - [x] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml` (DL #10)
+- [ ] см. Sidetrack #7 — npm 11 и install-скрипты esbuild, fsevents
 
 ## References
 

@@ -81,7 +81,7 @@ const GENERIC = new Set([
   'dmitry',
 ]);
 
-export function nameTokens(dir: string, remotePath: string): Set<string> {
+function nameTokens(dir: string, remotePath: string): Set<string> {
   return new Set(
     `${path.basename(dir)} ${remotePath}`
       .toLowerCase()

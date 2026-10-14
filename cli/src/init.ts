@@ -78,9 +78,9 @@ const VERB_SUFFIX_GROUPS: Record<Verb, string[]> = {
   fix: [':fix', '-fix', ':format'],
 };
 
-export type MatchReason = 'exact' | 'alias' | 'prefix-group' | 'suffix-group' | 'not-found';
+type MatchReason = 'exact' | 'alias' | 'prefix-group' | 'suffix-group' | 'not-found';
 
-export interface VerbMapping {
+interface VerbMapping {
   verb: Verb;
   nativeTask: string | null;
   runCommand: string | null;
@@ -219,11 +219,6 @@ export function selectVerbTask(verb: Verb, tasks: Set<string>): VerbMatch {
   return { task: null, reason: 'not-found', alternatives: [] };
 }
 
-/** Kept for back-compat with potential external callers; prefer `selectVerbTask`. */
-export function mapVerb(verb: Verb, tasks: Set<string>): string | null {
-  return selectVerbTask(verb, tasks).task;
-}
-
 function collectTools(ctx: Ctx): Record<string, string> {
   const tools: Record<string, string> = {};
   const php = at(readJson(ctx, 'composer.json'), 'require', 'php');
@@ -253,7 +248,7 @@ function quoteToml(s: string): string {
   return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
-export function renderMiseToml(
+function renderMiseToml(
   tools: Record<string, string>,
   mappings: VerbMapping[],
   stack: string,

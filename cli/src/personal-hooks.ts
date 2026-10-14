@@ -9,14 +9,13 @@
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './doctor.ts';
 import { loadEnvironment, resolveEnvironmentPath, type PersonalHook } from './ai.ts';
 import { missingMachinePaths } from './hooks.ts';
 
 /** Git reads hooks from config since 2.54; older git skips the keys without a word. */
-export const CONFIG_HOOKS_SINCE: [number, number] = [2, 54];
+const CONFIG_HOOKS_SINCE: [number, number] = [2, 54];
 
 export interface PersonalHookDeps {
   env: NodeJS.ProcessEnv;
@@ -62,7 +61,7 @@ function events(h: PersonalHook): string[] {
 }
 
 /** The hooks of the profile that apply on this machine; null — no profile, or none declared. */
-export function applicableHooks(deps: PersonalHookDeps): PersonalHook[] | null {
+function applicableHooks(deps: PersonalHookDeps): PersonalHook[] | null {
   const file = resolveEnvironmentPath(deps.env, deps.home);
   if (!file) return null;
   let hooks: PersonalHook[];
@@ -184,9 +183,4 @@ export function fixPersonalHooks(deps: PersonalHookDeps = defaultPersonalHookDep
     done.push(`${key}: ${events(h).join(', ')} → ${h.command}`);
   }
   return done;
-}
-
-/** For messages: where the user config lives. */
-export function userGitConfigPath(deps: PersonalHookDeps): string {
-  return deps.env['GIT_CONFIG_GLOBAL'] ?? path.join(deps.home, '.gitconfig');
 }

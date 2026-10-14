@@ -4,6 +4,15 @@
 
 ## 2026-10-14
 
+### Зависимости: уязвимости закрыты, аудит, dependabot, knip
+
+`npm audit` нашёл 11 известных уязвимостей в зависимостях пакета и 3 в
+инструментах разработки; все закрыты обновлением в пределах диапазонов
+(lock-файл, vitest 4.1.11). Задача `check:code:security` (`npm audit`) идёт в
+CI раз в неделю, dependabot раз в месяц присылает PR с обновлениями, knip в
+`check` следит за лишними экспортами и зависимостями — 51 экспорт убран.
+`dependency-hygiene` — L4 ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #12).
+
 ### Хук `pre-push` в репо: перед push — то, что проверяет CI
 
 `.githooks/pre-push` зовёт `mise run check` и `mise run test`, `core.hooksPath`

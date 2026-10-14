@@ -4,20 +4,20 @@ import { COMBINATORS, predicateNames } from './evaluator.ts';
 import { REGISTRY, REMOVED_IN_0_3 } from './predicates.ts';
 
 export type LevelName = 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
-export type AxisClass = 'critical' | 'supporting';
-export type Storage = 'level' | 'flags';
+type AxisClass = 'critical' | 'supporting';
+type Storage = 'level' | 'flags';
 
 // Predicate структура динамическая — оставляем any для дешёвого парсинга
 // со сахаром. Валидация — отдельная история v0.2.
 export type Predicate = unknown;
 
-export interface Flag {
+interface Flag {
   id: string;
   weight: number;
   predicate: Predicate;
 }
 
-export interface StackImpl {
+interface StackImpl {
   flags?: Flag[];
   level_thresholds?: Partial<Record<LevelName, number>>;
 }

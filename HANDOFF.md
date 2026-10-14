@@ -21,8 +21,8 @@
 - **vdx по своей рубрике — L2** (аудит 2026-10-14, CLI 0.26.0, сет v1.4.2) —
   потолок, пока `branch-protection` L3 «неизвестно». Критичные оси:
   `lifecycle-interface` L4, `tests` L3, `static-analysis` L4, `ci` L4;
-  вспомогательные на L4, кроме `dependency-hygiene` L1 и `docs` L3. Поднять
-  `tests`, `dependency-hygiene` и `docs` до L4 — кристалл `vdx-dogfooding`.
+  вспомогательные на L4, кроме `docs` L3 (`dependency-hygiene` L4 — в `cli/`,
+  не выпущено). Поднять `tests` и `docs` до L4 — кристалл `vdx-dogfooding`.
 
 ### Что умеет CLI
 
@@ -96,7 +96,9 @@ vdx/
 ├── .vdx-overrides.yml   ← secrets-config, shared-infra, shared-infra-drift — не про vdx
 ├── .githooks/pre-push   ← `mise run check` и `mise run test` перед push; включает
 │                          `prepare` в `cli/package.json` (`mise run build`)
-├── .github/workflows/ci.yml
+├── .github/workflows/ci.yml   ← check и test на push в main и на PR
+├── .github/workflows/audit.yml ← check:code:security по понедельникам
+├── .github/dependabot.yml     ← обновления npm (cli/) и actions — раз в месяц, по PR на экосистему
 ├── marketplace/         ← inline-маркетплейс для чужих (README); у владельца плагин
 │                          едет через VoDmAl/ai-dev-plugins
 ├── plugin/              ← плагин Claude Code: SessionStart → vdx ai --check и
@@ -199,7 +201,8 @@ Decision Log её кристалла.
 ```bash
 cd "/Users/vdm/AI Projects/vdx"
 mise run build          # npm install в cli/; prepare включает .githooks/
-mise run check          # typecheck (с тестами), Prettier, ESLint в cli/ — его зовёт CI
+mise run check          # typecheck (с тестами), Prettier, ESLint, knip в cli/ — его зовёт CI
+mise run check:code:security  # npm audit зависимостей пакета; сеть; CI — раз в неделю
 mise run fix            # eslint --fix и Prettier в cli/; после правок кода — до коммита
 mise run test           # unit-тесты cli/
 mise run test:smoke     # аудит трёх калибровочных проектов (не в CI)

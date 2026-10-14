@@ -7,7 +7,7 @@
 import { listAllTasks, readJson, readToml, type Ctx } from './facts.ts';
 import { at, dict, list } from './narrow.ts';
 
-export const LIFECYCLE_VOCABULARY = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
+const LIFECYCLE_VOCABULARY = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 
 /** npm-family options that take a value; their value is not the script name. */
 const VALUE_OPTIONS = new Set(['--prefix', '-C', '--dir', '-w', '--workspace', '--filter', '--cwd']);
@@ -98,7 +98,7 @@ export function isVocabularyTask(name: string, words: readonly string[] = ['test
 }
 
 /** Tasks a task's definition calls: composer `@refs`, `npm run X` inside a script, mise `depends`/`run`. */
-export function taskChildren(ctx: Ctx, name: string): string[] {
+function taskChildren(ctx: Ctx, name: string): string[] {
   const out: string[] = [];
   const entry = at(readJson(ctx, 'composer.json'), 'scripts', name);
   if (entry !== undefined) {

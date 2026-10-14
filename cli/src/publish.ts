@@ -383,7 +383,7 @@ export function preflightFixable(plan: PublishPlan): boolean {
 }
 
 /** Runs a command on this terminal (stdio inherited); throws on a non-zero exit. */
-export type CommandRunner = (cmd: string, args: string[], cwd: string) => void;
+type CommandRunner = (cmd: string, args: string[], cwd: string) => void;
 
 export interface PublishDeps {
   run: CommandRunner;

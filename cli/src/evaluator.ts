@@ -3,7 +3,7 @@ import type { Ctx } from './facts.ts';
 import { REGISTRY, isUnknown, type Args, type Unknown, type Verdict } from './predicates.ts';
 import { at, isDict, list } from './narrow.ts';
 
-export { isUnknown, type Unknown, type Verdict };
+export { isUnknown, type Verdict };
 
 /**
  * Sugar shorthand: `{ has_task: "up" }` → `{ fn: "has_task", args: { task: "up" } }`
