@@ -61,7 +61,7 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 |---|:-:|:-:|---|---|
 | `lifecycle-interface` | C | L4 | — | `fix` — Prettier (DL #7); `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 — `test:smoke` подходит под `test:.*` |
 | `tests` | C | L3 | L4: нет `test:e2e` / `test:mutation` | `test:e2e`: собранный CLI на фикстурах |
-| `static-analysis` | C | L3 | флаги 3.3 из 4.8 (0.69): `eslint_type_checked` не видит `recommendedTypeChecked` (Sidetrack #5) | ESLint с `recommendedTypeChecked` стоит (DL #8); patch сета → 4.3/4.8 = 0.90 ≥ 0.85 |
+| `static-analysis` | C | L4 | — | ESLint с `recommendedTypeChecked` (DL #8), сет v1.4.1 (DL #9): 4.3/4.8 = 0.90 ≥ 0.85 |
 | `ci` | C | L4 | — | — |
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
 | `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
@@ -264,6 +264,30 @@ any)`). Чинить — `unknown` и сужение. Выключить сем�
 переформатирования `8f024f3`. `static-analysis` встанет на L4 с patch сета
 (Sidetrack #5).
 
+### #9 / 2026-10-13 / Сет v1.4.1: имена конфигов — из кода самих инструментов
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** имена — из `cli/node_modules`: ESLint 10
+(`lib/config/config-loader.js`) — `eslint.config.{js,mjs,cjs,ts,mts,cts}`;
+Prettier 3.9 (`index.mjs`) — 18 файлов и ключ `prettier` в `package.json`
+(ключ в `package.yaml` в сет не вошёл: проекта с ним я не видел). `biome.jsonc` — по
+документации Biome, локально не проверено. Аудит `--rubric` 2026-10-13:
+калибровочные проекты — как на v1.4.0; у vdx `static-analysis` L3 → L4.
+Временный проект (`.prettierrc.json`, `eslint.config.mjs` с
+`strictTypeChecked`, задача `lint`): `code-style` L1 на v1.4.0, L4 на v1.4.1;
+с ключом `prettier` в `package.json` вместо файла — тоже L4. Разобранный YAML
+вне трёх правок совпадает с v1.4.0.
+**Context:** Sidetracks #1 и #5 — patch сета.
+**Why:** Список имён, который ведёт сам инструмент, честнее моего: предикат
+засчитывает то, что инструмент прочтёт. Prettier — та же ошибка в той же оси
+(`code-style` видел только `.prettierrc`), поэтому вошёл в тот же patch.
+Паттерн `(recommended|strict)-?[Tt]ype-?[Cc]hecked` берёт и `.eslintrc`-имя, и
+flat-имена, и `strict` — он строже `recommended`.
+**Implication:** тег v1.4.1 (`1921196`) на GitHub; сет CLI, зеркала,
+`DEFAULT_BASELINE` и baseline vdx — на v1.4.1. В npm придёт со следующим
+выпуском CLI (patch). `static-analysis` vdx — L4.
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -275,7 +299,7 @@ any)`). Чинить — `unknown` и сужение. Выключить сем�
 неважно (`"type": "module"`, `.js` подходит), но для набора правил это
 расхождение — patch сета.
 
-**Status:** open
+**Status:** resolved — 2026-10-13, сет v1.4.1 (DL #9)
 
 ### #2. «Сервисные» оси без условия применимости
 
@@ -325,6 +349,22 @@ L2, `recommended-type-checked` — L3. Флаг `eslint_flat` при этом т
 комментарии. Правка — patch сета: `recommended-?type-?checked|recommendedTypeChecked|strict-?type-?checked|strictTypeChecked`
 (без учёта регистра). Вместе с Sidetrack #1 — один patch.
 
+**Status:** resolved — 2026-10-13, сет v1.4.1 (DL #9)
+
+### #6. mise предупреждает о `[vdx]` в `mise.toml`
+
+**Возникло в:** `mise run check` 2026-10-13, после DL #9
+**Описание:** mise 2026.10.3 при каждом `mise run` печатает `mise WARN unknown
+field in ~/AI Projects/vdx/mise.toml: vdx`. D4 держит манифест vdx в таблице
+`[vdx]` внутри `mise.toml` и рассчитывает, что mise её пропускает молча.
+Документация mise (configuration, 2026-10-13): «mise never reads the `[_]`
+table, so you can keep your own data in a config file without mise rejecting
+the key» — разрешённое место для чужих данных одно, `[_]`. С какой версии
+mise ругается, не выяснено. `[vdx]` на этой машине — в трёх проектах:
+echelon, mediko, vdx. Правка — формат манифеста (D4, `manifest-format.md`):
+`[_.vdx]`, чтение обоих мест, `vdx init` и `vdx_record_success_path` пишут
+новое — minor CLI. Развилка — к владельцу.
+
 **Status:** open
 
 ## Next actions
@@ -356,7 +396,7 @@ L2, `recommended-type-checked` — L3. Флаг `eslint_flat` при этом т
 - [x] ESLint flat (`recommendedTypeChecked`): `any` разборщиков → `unknown`
       с сужением, тесты под `tsc`; `lint` в `check`, `eslint --fix` в `fix`;
       `.git-blame-ignore-revs` (DL #8)
-- [ ] Patch сета v1.4.1 по Sidetrack #5 и #1: `eslint_type_checked` видит
+- [x] Patch сета v1.4.1 по Sidetrack #5 и #1 (DL #9): `eslint_type_checked` видит
       flat-конфиг, `code-style` — `eslint.config.mjs`/`.ts`; калибровка до и
       после; сет CLI и зеркало
 - [ ] `test:e2e` — собранный CLI на фикстурах во временных папках
@@ -368,11 +408,12 @@ L2, `recommended-type-checked` — L3. Флаг `eslint_flat` при этом т
 
 **Побеги:**
 
-- [ ] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета
+- [x] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета (v1.4.1)
 - [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
 - [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
 - [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
-- [ ] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета
+- [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
+- [ ] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml`, развилка владельцу
 
 ## References
 

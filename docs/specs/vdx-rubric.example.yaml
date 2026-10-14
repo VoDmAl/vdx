@@ -11,7 +11,7 @@ schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "1.4.0"
+  version: "1.4.1"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -193,17 +193,24 @@ axes:
             predicate: { tsc_flag: { name: noImplicitOverride, equals: true } }
           - id: eslint_flat
             weight: 1.0
-            predicate:
+            # Имена flat-конфига — те, что ищет ESLint 10 (lib/config/config-loader.js).
+            # Одно определение на сет: code-style ссылается сюда (v1.4.1).
+            predicate: &eslint_flat_config
               any_of:
                 - has_file: eslint.config.js
                 - has_file: eslint.config.mjs
+                - has_file: eslint.config.cjs
                 - has_file: eslint.config.ts
+                - has_file: eslint.config.mts
+                - has_file: eslint.config.cts
           - id: eslint_type_checked
             weight: 1.0
             predicate:
               file_contains:
-                paths: [eslint.config.js, eslint.config.mjs, eslint.config.ts]
-                pattern: "recommended-type-checked"
+                paths: [eslint.config.js, eslint.config.mjs, eslint.config.cjs, eslint.config.ts, eslint.config.mts, eslint.config.cts]
+                # typescript-eslint во flat-конфиге — recommendedTypeChecked / strictTypeChecked,
+                # в .eslintrc было recommended-type-checked (v1.4.1).
+                pattern: "(recommended|strict)-?[Tt]ype-?[Cc]hecked"
         level_thresholds: { L4: 0.85, L3: 0.65, L2: 0.35, L1: 0.10 }
 
   - id: ci
@@ -316,9 +323,31 @@ axes:
             - has_file: ecs.php
             - has_file: .php-cs-fixer.php
             - has_file: phpcs.xml.dist
-            - has_file: .prettierrc
-            - has_file: biome.json
-            - has_file: eslint.config.js
+            # Форматтер: имена конфига — те, что ищет Prettier 3.9, и Biome (v1.4.1).
+            - &formatter_config
+              any_of:
+                - has_file: .prettierrc
+                - has_file: .prettierrc.json
+                - has_file: .prettierrc.yaml
+                - has_file: .prettierrc.yml
+                - has_file: .prettierrc.json5
+                - has_file: .prettierrc.toml
+                - has_file: .prettierrc.js
+                - has_file: .prettierrc.mjs
+                - has_file: .prettierrc.cjs
+                - has_file: .prettierrc.ts
+                - has_file: .prettierrc.mts
+                - has_file: .prettierrc.cts
+                - has_file: prettier.config.js
+                - has_file: prettier.config.mjs
+                - has_file: prettier.config.cjs
+                - has_file: prettier.config.ts
+                - has_file: prettier.config.mts
+                - has_file: prettier.config.cts
+                - config_value: { path: package.json, jsonpath: "prettier", op: present }
+                - has_file: biome.json
+                - has_file: biome.jsonc
+            - *eslint_flat_config
       L3:
         requires:
           any_of:
@@ -333,8 +362,8 @@ axes:
                 - has_file: ecs.php
                 - has_file: phpcs.xml.dist
             - all_of:
-                - any_of: [{ has_file: .prettierrc }, { has_file: biome.json }]
-                - has_file: eslint.config.js
+                - *formatter_config
+                - *eslint_flat_config
 
   - id: dependency-hygiene
     class: supporting

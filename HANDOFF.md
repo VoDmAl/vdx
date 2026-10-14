@@ -10,9 +10,9 @@
 
 - **CLI** `@vodmal/vdx-cli@0.25.0` — в npm с 2026-10-13 (`0d1f41f`, выпуск с
   m3); на станции едет с ближайшим topgrade.
-- **Сет** `vdx-rubric-vodmal@v1.4.0` (schema 0.3): рубрика и личный профиль
+- **Сет** `vdx-rubric-vodmal@v1.4.1` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.4.0`.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.4.1`; в npm (0.25.0) — v1.4.0.
 - **Плагин** vdx 0.9.2 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
   `mise run test`; зелёный на `65f5543`.
@@ -45,7 +45,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель — общий L2, оси до L4; правка оценщика для мета-репо, сет v1.4.0, ESLint/Prettier, `test:e2e`, хуки репо |
+| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель — общий L2, оси до L4; осталось: хуки репо, аудит зависимостей, `test:e2e`, `docs/architecture.md` |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
@@ -53,7 +53,7 @@
 не получит никто: `branch-protection` L3 — «неизвестно», пока нет расширения
 хостинга. Поэтому цель — L2 и каждая ось, кроме этой, на L4.
 `observability` и `mock-infra` — override (vdx не сервис). `up`/`down`
-рубрика перестанет требовать от библиотек (сет v1.4.0).
+рубрика не требует от библиотек (сет v1.4.0).
 
 **vdm-gates-wiring-axis** (закрыт) — гейт vdm и страж echelon как личные хуки
 профиля (`git.hooks`), не ось рубрики. 0.22.0, сет v1.0.0–v1.1.0: schema 0.3,
@@ -75,7 +75,8 @@
 
 ### Следующий выпуск CLI
 
-Ничего не ждёт. 0.25.0 (2026-10-13) увёз аудит мета-репо целиком
+Без срочности, patch (0.25.1): сет v1.4.1 внутри — имена конфигов ESLint и
+Prettier (`vdx-dogfooding` DL #9). 0.25.0 (2026-10-13) увёз аудит мета-репо целиком
 (`vdx-dogfooding` DL #5), сет v1.4.0 (DL #6), `vdx ai --new` и `--focused`
 рядом с идущим агентом (`vdx-ai` DL #35) и проверку папок через файл
 (Sidetrack #21 vdx-ai). Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в

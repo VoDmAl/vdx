@@ -4,6 +4,13 @@
 
 ## 2026-10-13
 
+### Сет v1.4.1: имена конфигов — как их ищут ESLint и Prettier
+
+`static-analysis` видит `recommendedTypeChecked` flat-конфига, `code-style` —
+все имена flat-конфига ESLint и конфига Prettier. Сет CLI, зеркала и
+`DEFAULT_BASELINE` — на v1.4.1; калибровочные проекты не сдвинулись, у vdx
+`static-analysis` — L4 ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #9).
+
 ### ESLint в CLI: разобранные файлы — `unknown`, пока не проверены
 
 `cli/eslint.config.js` (`recommendedTypeChecked`), ноль находок. JSON, YAML и
