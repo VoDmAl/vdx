@@ -205,6 +205,18 @@ export function liveConversationId(env: NodeJS.ProcessEnv, home: string, pid: nu
   }
 }
 
+/** When a running Claude Code process started (ms), from the same session file; null — not known. */
+export function liveStartedAt(env: NodeJS.ProcessEnv, home: string, pid: number): number | null {
+  try {
+    const file = path.join(claudeConfigDir(env, home), 'sessions', `${pid}.json`);
+    const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const at = typeof data === 'object' && data !== null ? (data as { startedAt?: unknown }).startedAt : undefined;
+    return typeof at === 'number' ? at : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A Claude Code process running right now, and the conversation it is in. */
 export interface LiveSession {
   pid: number;

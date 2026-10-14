@@ -77,8 +77,9 @@ vdx test            # → mise run test (which calls `vitest run` or whatever wa
 # 3. Ship a new minor release of a Node lib
 vdx publish minor   # npm login if expired → bump package.json + lock → npm publish (OTP or browser) → commit + tag → push → wait for the registry
 
-# 4. Start the agent here, continuing its last conversation (--new: a new one;
-#    another machine's conversation is continued on that machine);
+# 4. Start the agent here, continuing its last conversation (--new: a new one,
+#    next to a running agent; another machine's conversation is continued on
+#    that machine);
 #    re-run to attach; an agent without the profile's flags is a question:
 #    Enter attaches as is, r restarts it; --restart applies a changed profile
 vdx ai

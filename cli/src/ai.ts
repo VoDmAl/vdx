@@ -12,6 +12,7 @@ import type { Predicate } from './rubric.ts';
 import {
   type Conversation,
   describeConversation,
+  describeAge,
   describeLive,
   isMachineLabel,
   LIVE_SESSIONS_SCRIPT,
@@ -20,6 +21,7 @@ import {
   listConversations,
   liveConversationId,
   liveSessionsHere,
+  liveStartedAt,
   machineLine,
   type MachineReport,
   machineOf,
@@ -1279,6 +1281,51 @@ export function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boole
   return fresh([`no idle conversation ${atSeat ? 'of this machine' : `on ${host}`} — starting a new one`, ...notes]);
 }
 
+/**
+ * Several agents of the project run here and the start is about one of them: a person
+ * picks — Enter takes the newest; without a terminal, or under --dry-run, it is the newest.
+ * null — the person left it.
+ */
+function pickAgent(
+  running: AgentPane[],
+  focusedOf: (pid: number) => boolean,
+  deps: AiDeps,
+  canAsk: boolean,
+): AgentPane | null {
+  if (running.length === 1) return running[0]!;
+  const startedAt = (a: AgentPane) => liveStartedAt(deps.env, deps.home, a.proc.pid);
+  const sorted = [...running].sort((a, b) => (startedAt(b) ?? 0) - (startedAt(a) ?? 0));
+  const show = (a: AgentPane) => {
+    const id = liveConversationId(deps.env, deps.home, a.proc.pid);
+    const at = startedAt(a);
+    const marks = [
+      id && `conversation ${id.slice(0, 8)}`,
+      focusedOf(a.proc.pid) && 'focused',
+      at !== null && `started ${describeAge(new Date(at))}`,
+    ].filter(Boolean);
+    return `${a.pane.session} ${a.pane.paneId}${marks.length ? ` — ${marks.join(', ')}` : ''}`;
+  };
+  // Start times come from Claude Code's session files; without them, tmux's order.
+  const newest = startedAt(sorted[0]!) !== null ? 'the newest' : 'the first';
+  if (!canAsk || !deps.interactive) {
+    deps.log(`note: ${sorted.length} agents of this project run here — taking ${newest}, ${show(sorted[0]!)}`);
+    return sorted[0]!;
+  }
+  deps.log('agents of this project running here:');
+  sorted.forEach((a, i) =>
+    deps.log(`  ${i + 1}) ${show(a)}${i === 0 && newest === 'the newest' ? '   ← newest' : ''}`),
+  );
+  for (let tries = 0; tries < 2; tries++) {
+    const answer = deps.ask('Which one? [1]: ');
+    if (answer === null) return null;
+    const a = answer.trim();
+    const agent = a === '' ? sorted[0] : /^\d+$/.test(a) ? sorted[Number(a) - 1] : undefined;
+    if (agent) return agent;
+    deps.log(`  1–${sorted.length}`);
+  }
+  return null;
+}
+
 interface Prepared {
   projectRoot: string;
   environment: Environment;
@@ -1509,8 +1556,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     log(`vdx ai: --conversation names a Claude Code conversation; the agent here is ${plan.command}`);
     return EXIT_USAGE;
   }
-  // A start continues the last conversation unless asked for a new one.
-  if (opts.fresh) plan = { ...plan, resumeArgs: [] };
+  // A start continues the last conversation unless asked for a new one; a focused session is a new one.
+  const wantsNew = (opts.fresh || opts.focused === true) && !opts.conversation;
+  if (wantsNew) plan = { ...plan, resumeArgs: [] };
 
   let multiplexer = plan.multiplexer;
   if (multiplexer === 'tmux' && !tmux.available()) {
@@ -1520,10 +1568,26 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
 
   const running =
     multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command) : [];
-  const current = running[0];
+  const focusedOf = deps.agentFocused ?? processFocused;
+  const conversationOf = (a: AgentPane) => liveConversationId(deps.env, deps.home, a.proc.pid);
+  // Which running agent the start is about. A new conversation, or one no agent here is in, starts
+  // next to them; --restart replaces one. An agent whose conversation vdx cannot read may be in the
+  // one asked for: no second agent in it blindly.
+  const inConversation = opts.conversation ? running.find((a) => conversationOf(a) === opts.conversation) : undefined;
+  const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
+  const alongside =
+    running.length > 0 && !opts.restart && !inConversation && !unreadable && (wantsNew || !!opts.conversation);
+  let current = inConversation ?? unreadable;
+  if (!current && !alongside && running.length > 0) {
+    const picked = pickAgent(running, focusedOf, deps, !opts.dryRun);
+    if (picked === null) {
+      log('nothing done');
+      return EXIT_LAUNCH_FAILED;
+    }
+    current = picked;
+  }
   // A running agent keeps its mode: plain `vdx ai` takes a focused one as it is,
   // and the rules it leaves out are not missing from it.
-  const focusedOf = deps.agentFocused ?? processFocused;
   const runningFocused = current ? focusedOf(current.proc.pid) : false;
   if (current && !opts.restart && runningFocused && !plan.focused) {
     plan = { ...prepared.replan(true), resumeArgs: plan.resumeArgs };
@@ -1533,8 +1597,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   let choice: ConversationChoice | null = null;
   if (!current || opts.restart) {
     if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
-    // A restart into a new conversation replaces the agent here: no second agent, nothing to ask.
-    else if (current && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
+    // A restart into a new conversation replaces the agent here, and a new one next to an agent here
+    // is what was asked for: the other machines are not asked.
+    else if ((current || alongside) && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
     else if (current && isClaude(plan.command)) {
       const live = liveConversationId(deps.env, deps.home, current.proc.pid);
       choice = live
@@ -1619,24 +1684,20 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return res.status ?? 1;
   }
 
-  if (running.length > 1) {
+  if (alongside) {
+    const others = running.map((r) => `${r.pane.session} ${r.pane.paneId}`).join(', ');
     log(
-      `note: ${running.length} panes run ${plan.command} in this project: ` +
-        `${running.map((r) => `${r.pane.session} ${r.pane.paneId}`).join(', ')} — using the first`,
+      `note: ${others} keep${running.length === 1 ? 's' : ''} running ${plan.command} — starting another one next to it, ` +
+        `in ${opts.conversation ? `conversation ${opts.conversation.slice(0, 8)}` : 'a new conversation'}`,
     );
   }
 
   if (current && !opts.restart) {
-    if (opts.fresh)
-      log(`note: ${current.pane.session} already runs ${plan.command} — --new replaces it only with --restart`);
-    if (opts.conversation) {
-      const live = liveConversationId(deps.env, deps.home, current.proc.pid);
-      if (live !== opts.conversation) {
-        log(
-          `note: ${current.pane.session} is in ${live ? `conversation ${live.slice(0, 8)}` : 'another conversation'} — ` +
-            `to switch it: vdx ai --restart ${shellQuote(projectRoot)} --conversation ${opts.conversation}`,
-        );
-      }
+    if (current === unreadable) {
+      log(
+        `note: ${current.pane.session} runs ${plan.command} in a conversation vdx cannot read — attaching to it; ` +
+          `to switch it: vdx ai --restart ${shellQuote(projectRoot)} --conversation ${opts.conversation}`,
+      );
     }
     const unfocused = plan.focused && !runningFocused;
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
@@ -1649,7 +1710,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
     const drift = `${current.pane.session}: ${plan.command} is running${unfocused ? ', not focused' : ` without ${missing.join(' ')}`}`;
-    const fix = `vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}`;
+    const fix =
+      `vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
+      (opts.conversation ? ` --conversation ${opts.conversation}` : '');
     const effect = plan.resumeArgs.length
       ? 'stops the running agent, then resumes its conversation'
       : opts.fresh
@@ -1675,6 +1738,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       log('nothing done');
       return EXIT_DRIFT;
     }
+    // As --restart: the conversation the agent is in, not the folder's newest — another agent's, maybe.
+    const live = isClaude(plan.command) && plan.resumeArgs.length > 0 ? conversationOf(current) : null;
+    if (live) plan = { ...plan, resumeArgs: resumeId(live) };
   }
 
   if (current) {

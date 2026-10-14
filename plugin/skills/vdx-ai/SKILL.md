@@ -16,7 +16,8 @@ from a personal profile, not from a command anyone types:
   project's files (`config_value`, `has_file`, …) and the `args` it adds,
   plus `confirm` for a prompt the flag causes; `wakes: true` marks a rule
   that is there to wake the agent (a channel flag);
-- `resume_args` — continue the last conversation on every start except `--new`.
+- `resume_args` — continue the last conversation on every start except `--new`
+  and `--focused`.
   For Claude Code vdx picks which one: the session-start line opens with the
   machine this session runs on (``vdx ai: this machine is `lft` ``), and that
   line, kept in the transcript, tells later starts whose conversation it is.
@@ -44,7 +45,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   it and runs `vdx ai <root>`.
 - **A session nobody should wake: `vdx ai --focused`.** The agent, its hooks
   and MCP servers get `VDX_FOCUSED=1`, and the profile's `wakes` rules are
-  left out. When the session-start line says **this session is focused**:
+  left out. From vdx 0.25 it is a new conversation, next to the project's
+  running agent; back to it: `vdx ai --focused --conversation <id>`. When the session-start line says **this session is focused**:
   work on what the user gave you; do not read the inbox or follow a wake
   pointer unless the user asks.
 
@@ -52,16 +54,16 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 
 | Command | What it does |
 |---|---|
-| `vdx ai [path]` | start the agent, or attach to the running one |
+| `vdx ai [path]` | start the agent, or attach to the running one; several running — a list, Enter takes the newest |
 | `vdx ai --dry-run [path]` | the plan (agent, flags, matched conditions) and the project's running agents; starts nothing — safe to run |
 | `vdx ai --check [path]` | this session against the profile; what the session-start hook prints |
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
-| `vdx ai --new [path]` | a new conversation instead of continuing the last one |
-| `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); a running agent keeps its mode until `--restart` |
-| `vdx ai --conversation <id> [path]` | continue this Claude Code conversation (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
+| `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
+| `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
+| `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |
 | `vdx ai --help` | flags and exit codes |
 
 Exit codes: 0 — the agent runs per the profile; 2 — profile or usage error;
-3 — the running agent lacks profile flags, or is not focused under `--focused`;
+3 — the running agent lacks profile flags, or is not focused under `--focused --conversation`;
 4 — the start was not confirmed.

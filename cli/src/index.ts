@@ -68,6 +68,7 @@ interface CommandSpec {
 }
 
 const AI_HELP = `Starts your agent in the project, or attaches to the one already running there.
+Several running there: a list to pick from — Enter takes the newest.
 Which agent, its flags and whether it runs in tmux come from your profile:
 $VDX_ENVIRONMENT, else ~/.vdx-environment.yaml, else a plain claude/codex.
 
@@ -77,15 +78,20 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
 
   project_path  the project (default: cwd); its git toplevel is used
   @host         the same command on <host> over ssh: its vdx, profile and tmux
-  --new         a new conversation instead of continuing the last one
-  --focused     a session nothing wakes: the agent, its hooks and MCP servers get
-                VDX_FOCUSED=1 — for the plugins that wake sessions to leave it
-                alone — and the profile's rules marked \`wakes: true\` (a channel
-                flag) are left out. A running agent keeps its mode; --restart
-                applies this one
+  --new         a new conversation instead of continuing the last one; an agent
+                already running here keeps running, the new one starts next to
+                it (a new tmux window)
+  --focused     a new conversation, as --new, in a session nothing wakes: the
+                agent, its hooks and MCP servers get VDX_FOCUSED=1 — for the
+                plugins that wake sessions to leave it alone — and the profile's
+                rules marked \`wakes: true\` (a channel flag) are left out. Back
+                to it: --focused --conversation <id>. A running agent keeps its
+                mode: plain vdx ai attaches to it as it is
   --conversation <id>
-                continue this Claude Code conversation
-  --restart     restart the running agent in its pane — applies a changed profile.
+                continue this Claude Code conversation: attach to the agent in
+                it, or start one next to the agents running here
+  --restart     restart the running agent in its pane — applies a changed profile;
+                with --new, --focused or --conversation, it is replaced by that.
                 Without it, an agent running without the profile's flags is
                 a question in a terminal: Enter attaches to it as is, r
                 restarts it, q leaves it

@@ -1167,12 +1167,22 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(out).toMatch(/running:  proj@testhost %\d+ — matches the profile/);
   });
 
-  it('--new leaves a running agent alone without --restart', () => {
+  it('--new starts another agent next to the running one, in a new conversation, and leaves that one alone', () => {
     writeProfile(['--base', '--extra']);
-    const before = agentArgs();
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const [running] = agents();
+    expect(agents()).toHaveLength(1);
     expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
-    expect(logs.join('\n')).toContain('--new replaces it only with --restart');
-    expect(agentArgs()).toEqual(before);
+    expect(logs.join('\n')).toContain(
+      `note: proj@testhost ${running!.pane.paneId} keeps running ${path.join(base, 'fake-agent')} — ` +
+        'starting another one next to it, in a new conversation',
+    );
+    expect(agents()).toHaveLength(2);
+    const added = agents().find((a) => a.proc.pid !== running!.proc.pid)!;
+    expect(added.pane.session).toBe('proj@testhost');
+    expect(added.proc.args).toMatch(/fake-agent --base --extra --chan plugin:x@y$/);
+    expect(agents().find((a) => a.proc.pid === running!.proc.pid)?.proc.args).toBe(running!.proc.args);
+    tmux.tryRun(['kill-pane', '-t', added.pane.paneId]);
   });
 
   it('--restart --new replaces the agent in the same pane with a new conversation', () => {
@@ -1238,6 +1248,95 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     }
   }, 30_000); // two starts, each answering the prompt and seeing the agent twice a second apart
 
+  it('--conversation attaches to the agent in it, or starts one next to the agents here', () => {
+    tmux.tryRun(['kill-server']);
+    const claude = path.join(base, 'bin', 'claude');
+    fs.mkdirSync(path.dirname(claude), { recursive: true });
+    fs.copyFileSync(path.join(base, 'fake-agent'), claude);
+    fs.chmodSync(claude, 0o755);
+    fs.writeFileSync(
+      profile,
+      [
+        'agent:',
+        `  command: ${claude}`,
+        '  args: [--base]',
+        '  resume_args: [--continue]',
+        'session: {multiplexer: tmux, name: "{project}@{host}"}',
+        '',
+      ].join('\n'),
+    );
+    const cc = path.join(base, 'cc-conversation');
+    fs.mkdirSync(path.join(cc, 'sessions'), { recursive: true });
+    const d = (): AiDeps => ({ ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } });
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    const inConversation = (pid: number, id: string) =>
+      fs.writeFileSync(path.join(cc, 'sessions', `${pid}.json`), JSON.stringify({ sessionId: id }));
+    try {
+      expect(runAi({ ...opts, path: root, conversation: ID.c }, d())).toBe(EXIT_OK);
+      const first = agents()[0]!;
+      expect(first.proc.args).toMatch(new RegExp(`claude --base --resume ${ID.c}$`));
+      inConversation(first.proc.pid, ID.c);
+
+      // The agent in it: attached, nothing started.
+      expect(runAi({ ...opts, path: root, conversation: ID.c }, d())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('already running with the profile');
+      expect(agents()).toHaveLength(1);
+
+      // Another conversation: a second agent next to it.
+      logs = [];
+      expect(runAi({ ...opts, path: root, conversation: ID.d }, d())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('starting another one next to it, in conversation dddddddd');
+      expect(agents().map((a) => a.proc.args)).toEqual([
+        first.proc.args,
+        expect.stringMatching(new RegExp(`claude --base --resume ${ID.d}$`)),
+      ]);
+
+      // The second has no session file: it may be in any conversation — no third agent blindly.
+      logs = [];
+      expect(runAi({ ...opts, path: root, conversation: ID.a }, d())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('in a conversation vdx cannot read — attaching to it');
+      expect(agents()).toHaveLength(2);
+    } finally {
+      tmux.tryRun(['kill-server']);
+    }
+  }, 30_000);
+
+  it('r at the drift question resumes the conversation the agent is in, not the newest in the folder', () => {
+    tmux.tryRun(['kill-server']);
+    const claude = path.join(base, 'bin', 'claude');
+    fs.mkdirSync(path.dirname(claude), { recursive: true });
+    fs.copyFileSync(path.join(base, 'fake-agent'), claude);
+    fs.chmodSync(claude, 0o755);
+    const claudeProfile = (args: string) =>
+      fs.writeFileSync(
+        profile,
+        [
+          'agent:',
+          `  command: ${claude}`,
+          `  args: [${args}]`,
+          '  resume_args: [--continue]',
+          'session: {multiplexer: tmux, name: "{project}@{host}"}',
+          '',
+        ].join('\n'),
+      );
+    claudeProfile('--base');
+    const cc = path.join(base, 'cc-drift');
+    fs.mkdirSync(path.join(cc, 'sessions'), { recursive: true });
+    const d = (): AiDeps => ({ ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } });
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    try {
+      expect(runAi({ ...opts, path: root, conversation: ID.c }, d())).toBe(EXIT_OK);
+      fs.writeFileSync(path.join(cc, 'sessions', `${agents()[0]!.proc.pid}.json`), JSON.stringify({ sessionId: ID.c }));
+      claudeProfile('--base, --extra');
+      expect(runAi({ ...opts, path: root, detach: true }, { ...d(), interactive: true, ask: () => 'r' })).toBe(EXIT_OK);
+      expect(agents().map((a) => a.proc.args)).toEqual([
+        expect.stringMatching(new RegExp(`claude --base --extra --resume ${ID.c}$`)),
+      ]);
+    } finally {
+      tmux.tryRun(['kill-server']);
+    }
+  }, 30_000);
+
   it('--new on a fresh start runs the agent without the resume args', () => {
     writeProfile(['--base', '--extra']);
     tmux.tryRun(['kill-server']);
@@ -1248,32 +1347,47 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agentArgs()).toEqual([expect.stringMatching(/fake-agent --base --extra --chan plugin:x@y$/)]);
   });
 
-  it('--focused: a running agent keeps its mode until --restart says otherwise', () => {
+  it('--focused starts a focused agent in a new conversation next to the running one; a plain start then picks', () => {
     writeProfile(['--base'], true);
     tmux.tryRun(['kill-server']);
-    const agent = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent')[0]!.proc;
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(agent().args).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
-    expect(deps().agentFocused!(agent().pid)).toBe(false);
+    const plain = agents()[0]!;
+    expect(plain.proc.args).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
+    expect(deps().agentFocused!(plain.proc.pid)).toBe(false);
 
-    // Asked for focus, it finds a plain agent: names it and the fix, touches nothing.
-    expect(runAi({ ...opts, path: root, focused: true }, deps())).toBe(EXIT_DRIFT);
-    expect(logs.join('\n')).toContain('is running, not focused');
-    expect(logs.join('\n')).toContain(`to focus it: vdx ai --restart --focused ${shellQuote(root)}`);
+    // A new conversation, focused: no resume args, the channel flag left out; the plain agent runs on.
+    expect(runAi({ ...opts, path: root, focused: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('starting another one next to it, in a new conversation');
+    const focused = agents().find((a) => a.proc.pid !== plain.proc.pid)!;
+    expect(focused.proc.args).toMatch(/fake-agent --base$/);
+    expect(deps().agentFocused!(focused.proc.pid)).toBe(true);
+    expect(agents().find((a) => a.proc.pid === plain.proc.pid)?.proc.args).toBe(plain.proc.args);
 
-    // The fake agent prompts as with the channel flag; focused, nobody answers it — it waits, alive.
-    expect(runAi({ ...opts, path: root, focused: true, restart: true }, deps())).toBe(EXIT_OK);
-    expect(agent().args).toMatch(/fake-agent --base --resume-me$/);
-    expect(deps().agentFocused!(agent().pid)).toBe(true);
-
-    // A plain start takes the focused agent as it is: the left-out flag is not drift.
+    // Two agents. In a terminal the person picks; the focused one is taken as it is.
     logs = [];
-    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    const asked: string[] = [];
+    const pick = { ...deps(), interactive: true, ask: (p: string) => (asked.push(p), '2') };
+    expect(runAi({ ...opts, path: root, detach: true }, pick)).toBe(EXIT_OK);
+    expect(asked).toEqual(['Which one? [1]: ']);
+    expect(logs.join('\n')).toContain(`  2) proj@testhost ${focused.pane.paneId} — focused`);
     expect(logs.join('\n')).toContain('already running with the profile, focused');
 
-    expect(runAi({ ...opts, path: root, restart: true }, deps())).toBe(EXIT_OK);
-    expect(agent().args).toMatch(/fake-agent --base --chan plugin:x@y --resume-me$/);
-    expect(deps().agentFocused!(agent().pid)).toBe(false);
+    // Without a terminal: the newest by the session file's start time.
+    logs = [];
+    const cc = path.join(base, 'cc-started');
+    fs.mkdirSync(path.join(cc, 'sessions'), { recursive: true });
+    fs.writeFileSync(path.join(cc, 'sessions', `${plain.proc.pid}.json`), JSON.stringify({ startedAt: 2000 }));
+    fs.writeFileSync(path.join(cc, 'sessions', `${focused.proc.pid}.json`), JSON.stringify({ startedAt: 1000 }));
+    const withStarts = { ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } };
+    expect(runAi({ ...opts, path: root }, withStarts)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`taking the newest, proj@testhost ${plain.pane.paneId}`);
+
+    // --restart --focused replaces the agent it picks with a new focused conversation.
+    expect(runAi({ ...opts, path: root, focused: true, restart: true }, withStarts)).toBe(EXIT_OK);
+    const replaced = agents().find((a) => a.pane.paneId === plain.pane.paneId)!;
+    expect(replaced.proc.args).toMatch(/fake-agent --base$/);
+    expect(deps().agentFocused!(replaced.proc.pid)).toBe(true);
   }, 30_000);
 });
 
