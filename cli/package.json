@@ -34,6 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "vdx": "tsx src/index.ts",
     "vdx-mcp": "tsx src/mcp-server.ts",
     "audit": "tsx src/index.ts audit",

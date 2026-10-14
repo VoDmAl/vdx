@@ -1,0 +1,14 @@
+#!/bin/sh
+# Before a push — the vocabulary's tasks CI runs on main (.github/workflows/ci.yml),
+# so a push that passes here does not fail there on a check.
+#
+# The tests make git repositories of their own in temporary directories. The
+# variables git exports to a hook would point them at this one (githooks(5)).
+unset $(git rev-parse --local-env-vars)
+
+if ! command -v mise >/dev/null 2>&1; then
+  echo 'pre-push: mise is not on PATH — the checks run through it (https://mise.jdx.dev)' >&2
+  exit 1
+fi
+
+mise run check && mise run test

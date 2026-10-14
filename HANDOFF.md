@@ -18,11 +18,11 @@
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
   `mise run test`; зелёный на `65f5543`.
-- **vdx по своей рубрике — L1** (аудит 2026-10-14, CLI из `cli/`, сет v1.4.2).
-  Критичные оси: `lifecycle-interface` L4, `tests` L3, `static-analysis` L4, `ci` L4,
-  `branch-protection` — неизвестно; вспомогательных на L2 — 4 из 6, нужно 5.
-  Требование догфудинга из CLAUDE.md не выполнено; подъём — кристалл
-  `vdx-dogfooding`.
+- **vdx по своей рубрике — L2** (аудит 2026-10-14, CLI 0.26.0, сет v1.4.2) —
+  потолок, пока `branch-protection` L3 «неизвестно». Критичные оси:
+  `lifecycle-interface` L4, `tests` L3, `static-analysis` L4, `ci` L4;
+  вспомогательные на L4, кроме `dependency-hygiene` L1 и `docs` L3. Поднять
+  `tests`, `dependency-hygiene` и `docs` до L4 — кристалл `vdx-dogfooding`.
 
 ### Что умеет CLI
 
@@ -94,6 +94,8 @@ vdx/
 ├── Makefile             ← те же задачи через npm, без mise; `make build` — typecheck,
 │                          а `mise run build` — npm install
 ├── .vdx-overrides.yml   ← secrets-config, shared-infra, shared-infra-drift — не про vdx
+├── .githooks/pre-push   ← `mise run check` и `mise run test` перед push; включает
+│                          `prepare` в `cli/package.json` (`mise run build`)
 ├── .github/workflows/ci.yml
 ├── marketplace/         ← inline-маркетплейс для чужих (README); у владельца плагин
 │                          едет через VoDmAl/ai-dev-plugins
@@ -168,6 +170,10 @@ Decision Log её кристалла.
    `doctor`, `personal-hooks`, `publish`).
 4. **tmux < 3.5 печатает вывод `run-shell` в панель, а не вызывающему.** На
    раннере CI (ubuntu) tmux 3.4: ответ сервера tmux брать из файла.
+5. **Push идёт через `pre-push` репо — около 1,5 мин** (`check` и `test`), и
+   push выпуска в `vdx publish` тоже. Хук сбрасывает переменные, которые git
+   отдаёт хуку (`git rev-parse --local-env-vars`): иначе временные репо тестов
+   смотрели бы в `.git` vdx (githooks(5)).
 5. **Тесты tmux в `ai.test.ts` зависят от порядка.** `vitest -t <фильтр>` их
    роняет — гонять файл целиком. Под нагрузкой машины полный прогон
    иногда упирается в таймауты (doctor, `--version`) — перезапустить, прежде
@@ -192,7 +198,7 @@ Decision Log её кристалла.
 
 ```bash
 cd "/Users/vdm/AI Projects/vdx"
-mise run build          # npm install в cli/
+mise run build          # npm install в cli/; prepare включает .githooks/
 mise run check          # typecheck (с тестами), Prettier, ESLint в cli/ — его зовёт CI
 mise run fix            # eslint --fix и Prettier в cli/; после правок кода — до коммита
 mise run test           # unit-тесты cli/

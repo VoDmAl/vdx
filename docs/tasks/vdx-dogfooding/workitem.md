@@ -34,10 +34,10 @@ relates-to:
 ## Текущая модель
 
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
-Сейчас (CLI из `cli/`, 0.25 и ESLint, сет v1.4.2, override) — тоже **L1**:
-на L2 вспомогательных 4 из 6 (`reproducibility`, `code-style`, `docs`,
-`release-artifact`), нужно 5. Держат `dependency-hygiene` и `git-hygiene`.
-Колонка «Сейчас» в таблице — это состояние.
+Сейчас (2026-10-14, выпущенный CLI 0.26.0, сет v1.4.2, override, хук
+`pre-push` — DL #11) — **L2**, цель по общему уровню: на L2 вспомогательных
+5 из 6. До L4 не хватает `tests` (L3), `dependency-hygiene` (L1) и `docs`
+(L3). Колонка «Сейчас» в таблице — это состояние.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -72,7 +72,7 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
 | `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
 | `dependency-hygiene` | s | L1 | L2: нет `npm audit` / `check:code:security` | задача аудита; L3 — dependabot (нужна правка оценщика); L4 — `knip` |
-| `git-hygiene` | s | L1 | L2: репо не ставит своих хуков | `up` ставит `core.hooksPath .githooks`; `pre-push` зовёт `mise run check` и `mise run test` |
+| `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
 | `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
 | `docs` | s | L3 | L4: нет `docs/adr/`, `docs/architecture.md`, `docs/onboarding.md` | `docs/architecture.md` — карта модулей CLI |
 | `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4 |
@@ -318,6 +318,34 @@ flat-имена, и `strict` — он строже `recommended`.
 станциях. D4 в `docs/decisions.md` — приписка 2026-10-13.
 **Cross:** см. Sidetrack #6
 
+### #11 / 2026-10-14 / Хуки репо — `.githooks/` и `prepare`, без фреймворка
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** `.githooks/pre-push`, запущенный как его запускает git (с
+`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` в окружении): код 0 за 92 с, 404
+теста; `.git/config`, ссылки, stash и статус vdx до и после совпали. Без mise в
+`PATH` — код 1 и строка о mise. `npx -p @vodmal/vdx-cli@0.26.0 vdx audit .`:
+`git-hygiene` L4, общий L2. Не проверено: настоящий `git push` через хук —
+`core.hooksPath` в этом клоне ещё не выставлен (пометка ⚑ в аудите). Что тесты
+без сброса переменных пишут в `.git` vdx — по githooks(5), не проверял.
+**Context:** `git-hygiene` L1: репо не ставило своих хуков. Варианты: husky,
+lefthook или simple-git-hooks — зависимость ради одного хука; `core.hooksPath`
+в задаче `up` — у библиотеки vdx её нет (DL #6); `prepare` в `cli/package.json`
+— его зовёт обычная установка (`mise run build` = `npm --prefix cli install`,
+`npm ci` в CI).
+**Why:** «Комбайн»: у git свой механизм, и распознаватель рубрики его знает
+(`git config core.hooksPath .githooks` в шаге установки). `prepare` не
+выполняется при установке пакета из npm, только в клоне. `|| true` — чтобы
+установка без `.git` (архив исходников) не падала. Хук сбрасывает переменные
+git (`unset $(git rev-parse --local-env-vars)`): тесты создают свои репо во
+временных папках, а с `GIT_DIR` из окружения git работал бы с `.git` vdx.
+**Implication:** каждый push — около 1,5 мин (`check` и `test`), push
+выпуска в `vdx publish` тоже; упавший хук после `npm publish` оставляет
+пакет в npm и тег, push — руками (`publish.ts` так и пишет). Личные хуки
+станции (`hook.<имя>` в `~/.gitconfig`, Git 2.54) идут рядом: `core.hooksPath`
+их не выключает. CLAUDE.md «Выпуск CLI», HANDOFF — гоча #5.
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -421,9 +449,9 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 - [x] Prettier: `cli/.prettierrc`, `.prettierignore` (сет, фикстуры, проза —
       не трогает); `check` и `fix` в `cli/package.json`; разовое
       переформатирование
-- [ ] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
-      `core.hooksPath` ставит шаг установки — проверить, что распознаватель
-      `git_hooks_arranged` это видит
+- [x] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
+      `core.hooksPath` ставит `prepare` в `cli/package.json`; распознаватель
+      видит, `git-hygiene` L4 (DL #11)
 - [x] ESLint flat (`recommendedTypeChecked`): `any` разборщиков → `unknown`
       с сужением, тесты под `tsc`; `lint` в `check`, `eslint --fix` в `fix`;
       `.git-blame-ignore-revs` (DL #8)

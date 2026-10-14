@@ -4,6 +4,13 @@
 
 ## 2026-10-14
 
+### Хук `pre-push` в репо: перед push — то, что проверяет CI
+
+`.githooks/pre-push` зовёт `mise run check` и `mise run test`, `core.hooksPath`
+ставит `prepare` в `cli/package.json` при установке. `git-hygiene` — L4, vdx по
+своей рубрике на CLI 0.26.0 — L2, это потолок
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #11).
+
 ### Выпуск 0.26.0 и плагин 0.9.3
 
 `@vodmal/vdx-cli@0.26.0` в npm (`9ae7224`): манифест в `[_.vdx]`, старый
