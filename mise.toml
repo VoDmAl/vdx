@@ -34,7 +34,8 @@ run = "npm --prefix cli run check:code:security"
 description = "Format the CLI sources"
 run = "npm --prefix cli run fix"
 
-[vdx]
+# Манифест vdx — в [_.vdx]: таблицу [_] mise не читает (D4, vdx 0.26+).
+[_.vdx]
 schema_version = "0.2"
 baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.5.0"
 stack = "meta"

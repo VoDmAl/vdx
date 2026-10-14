@@ -4,6 +4,14 @@
 
 ## 2026-10-14
 
+### vdx 0.28.0 на станциях; манифест vdx — в `[_.vdx]`, два override сняты
+
+На m3 и lft vdx 0.28.0 — `npm update -g` тем npm, что видит ssh, не дожидаясь
+topgrade. Манифест vdx переехал в `[_.vdx]`, и mise больше не предупреждает о
+нём; override `observability` и `mock-infra` сняты — сет v1.5.0 исключает их у
+библиотеки. Аудит 0.28.0 — L2; echelon и mediko — письмо о переносе
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md)).
+
 ### Выпуск 0.28.0
 
 `@vodmal/vdx-cli@0.28.0` в npm (`3e13bb6`): сет v1.5.0 внутри — `observability`

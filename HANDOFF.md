@@ -9,12 +9,12 @@
 ## Где мы (2026-10-14)
 
 - **CLI** `@vodmal/vdx-cli@0.28.0` — в npm с 2026-10-14 (`3e13bb6`), Node 22 и
-  новее; на станции едет с ближайшим topgrade (на m3 и lft 2026-10-14 ещё 0.24.0).
+  новее; на m3 и lft — 0.28.0 с 2026-10-14.
 - **Сет** `vdx-rubric-vodmal@v1.5.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
   `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`, в npm с 0.28.0.
-- **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26).
-  Старый `[vdx]` читается; у vdx, echelon и mediko манифест пока там.
+- **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
+  читается; echelon и mediko — письмо `vdx-manifest-to-underscore` (2026-10-14).
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
@@ -45,7 +45,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель достигнута 2026-10-14 (общий L2, оси, кроме `branch-protection`, — L4); осталось: перенос манифестов в `[_.vdx]`, побеги |
+| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель достигнута 2026-10-14 (общий L2, оси, кроме `branch-protection`, — L4); осталось: побеги #7 и #8 |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
@@ -77,14 +77,11 @@
 
 Не запланирован. 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
 `mock-infra` только у приложения (`vdx-dogfooding` DL #15); путь в `has_file` и
-`file_contains` — с регистром, как написан, и на macOS (Sidetrack #4). Когда
-0.28 будет на m3 и lft — снять у vdx override этих двух осей в
-`.vdx-overrides.yml`. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
+`file_contains` — с регистром, как написан, и на macOS (Sidetrack #4). 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
 (`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не
 стартует. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
 DL #10) и сеты v1.4.1 и v1.4.2; плагин 0.9.3 — скилл `vdx-discover` о
-`[_.vdx]`. Когда 0.26+ будет на m3 и lft — перенести манифест vdx в `[_.vdx]`
-и написать агентам echelon и mediko. Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
+`[_.vdx]`. Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
 [CLAUDE.md](CLAUDE.md).
 
 ---

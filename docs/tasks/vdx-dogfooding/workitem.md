@@ -36,10 +36,10 @@ relates-to:
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
 Сейчас (2026-10-14, выпущенный CLI 0.26.0, сет v1.4.2) — **L2**, и все оси,
 кроме `branch-protection`, — L4: **цель DL #3 достигнута**. Держится на
-override двух сервисных осей, хуке `pre-push` (DL #11), аудите зависимостей
+сете v1.5.0 (сервисные оси у библиотеки `excluded`, DL #15), хуке `pre-push` (DL #11), аудите зависимостей
 (DL #12), `test:e2e` и `docs/architecture.md` (DL #13). Колонка «Сейчас» в
-таблице — это состояние. С сетом v1.5.0 (DL #15) `observability` и
-`mock-infra` у библиотеки `excluded`; override vdx снимается, когда 0.28 будет на обеих станциях.
+таблице — это состояние. С 2026-10-14 на обеих станциях vdx 0.28.0, override
+`observability` и `mock-infra` у vdx сняты.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -54,8 +54,8 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 
 **Где манифест** (DL #10). С vdx 0.26 — `[_.vdx]` в `mise.toml`: таблицу `[_]`
 mise не читает, а на `[vdx]` mise 2026.10 предупреждает при каждом запуске.
-Старый `[vdx]` vdx читает по-прежнему; у самого vdx манифест там, пока 0.26 не
-доедет до обеих станций.
+Старый `[vdx]` vdx читает по-прежнему. vdx перенёс свой 2026-10-14, echelon и
+mediko — письмо `vdx-manifest-to-underscore` в тот же день.
 
 **Мета-репо.** Ось с `applies_to` оценивается в `cli/` (`primary_subpackage`),
 ось без него — в корне. До DL #5 половины не видели файлов друг друга
@@ -75,9 +75,9 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
 | `dependency-hygiene` | s | L4 | — | `check:code:security` (`npm audit`) в CI по понедельникам; `.github/dependabot.yml`, корень читается с DL #5; `knip` в `check` (DL #12) |
 | `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
-| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13; с сетом v1.5.0 у библиотеки — excluded, override снимается, когда 0.28 будет на станциях (DL #15) |
+| `observability` | s | excluded | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI); с сетом v1.5.0 у библиотеки — excluded (DL #15), override с 2026-10-13 по 2026-10-14 |
 | `docs` | s | L4 | — | `docs/architecture.md` — карта модулей CLI и путь вызова |
-| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4; с сетом v1.5.0 — excluded, override снимается, когда 0.28 будет на станциях (DL #15) |
+| `mock-infra` | s | excluded | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»); с сетом v1.5.0 у библиотеки — excluded (DL #15), override с 2026-10-13 по 2026-10-14. Прежний L2 — случайность, Sidetrack #4 |
 | `release-artifact` | s | L4 | — | — |
 
 **Цель (DL #3):** общий L2, каждая ось, кроме `branch-protection`, — L4.
@@ -611,17 +611,19 @@ pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое до
       (`0e28906`); сет CLI, зеркала, `DEFAULT_BASELINE`
 - [x] Выпуск 0.26 (minor): `[_.vdx]`, сеты v1.4.1 и v1.4.2 — 0.26.0 в npm
       2026-10-14 (`9ae7224`); плагин 0.9.3 — скилл `vdx-discover` о `[_.vdx]`
-- [ ] После 0.26 на m3 и lft: `mise.toml` vdx — в `[_.vdx]`; письма агентам
-      echelon и mediko — их манифест в `[vdx]`
+- [x] После 0.26 на m3 и lft: `mise.toml` vdx — в `[_.vdx]`; письма агентам
+      echelon и mediko — их манифест в `[vdx]` — 2026-10-14: vdx перенёс,
+      письма `vdx-manifest-to-underscore` во входящих echelon и mediko
 - [x] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности):
       0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
 - [x] Выпуск 0.27 (minor): пол Node 22 (DL #13) — 0.27.0 в npm 2026-10-14
       (`33fca96`); push выпуска — после `npm ci` на m3 (DL #14)
 - [x] Выпуск 0.28 (minor): сет v1.5.0 (DL #15), путь с регистром (Sidetrack #4)
       — 0.28.0 в npm 2026-10-14 (`3e13bb6`); аудит vdx на нём — L2
-- [ ] Когда 0.28 будет на m3 и lft: снять override `observability` и
-      `mock-infra` в `.vdx-overrides.yml` — оси `excluded` по сету (DL #15);
-      раньше vdx 0.24 на станциях посчитал бы их L1
+- [x] Когда 0.28 будет на m3 и lft: снять override `observability` и
+      `mock-infra` в `.vdx-overrides.yml` — оси `excluded` по сету (DL #15) —
+      2026-10-14: 0.28.0 на обеих станциях (`ssh <станция> npm update -g
+      @vodmal/vdx-cli` по просьбе владельца), override сняты; аудит 0.28.0 — L2
 
 **Побеги:**
 
