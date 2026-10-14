@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-14)
 
-- **CLI** `@vodmal/vdx-cli@0.26.0` — в npm с 2026-10-14 (`9ae7224`); на станции
-  едет с ближайшим topgrade (на lft 2026-10-14 ещё 0.24.0).
+- **CLI** `@vodmal/vdx-cli@0.27.0` — в npm с 2026-10-14 (`33fca96`), Node 22 и
+  новее; на станции едет с ближайшим topgrade (на m3 и lft 2026-10-14 ещё 0.24.0).
 - **Сет** `vdx-rubric-vodmal@v1.4.2` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
   `cli/src/init.ts` и сет внутри CLI — `@v1.4.2`, в npm с 0.26.0.
@@ -45,7 +45,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель достигнута 2026-10-14 (общий L2, оси, кроме `branch-protection`, — L4); осталось: выпуск 0.27, перенос манифестов в `[_.vdx]`, побеги |
+| [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель достигнута 2026-10-14 (общий L2, оси, кроме `branch-protection`, — L4); осталось: перенос манифестов в `[_.vdx]`, побеги |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
@@ -75,11 +75,11 @@
 
 ### Следующий выпуск CLI
 
-Minor (0.27): пол Node 22 — `engines`, `vdx doctor` (`vdx-dogfooding` DL #13).
-Пользователю на Node 20 сейчас установка ставит tsx 4.23.15, и vdx падает на
-старте; с 0.27 npm хотя бы предупредит. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
+Не запланирован. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
+(`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не
+стартует. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
 DL #10) и сеты v1.4.1 и v1.4.2; плагин 0.9.3 — скилл `vdx-discover` о
-`[_.vdx]`. Когда 0.26 будет на m3 и lft — перенести манифест vdx в `[_.vdx]`
+`[_.vdx]`. Когда 0.26+ будет на m3 и lft — перенести манифест vdx в `[_.vdx]`
 и написать агентам echelon и mediko. Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
 [CLAUDE.md](CLAUDE.md).
 
@@ -195,6 +195,11 @@ Decision Log её кристалла.
     `test:e2e`), и push выпуска в `vdx publish` тоже. Хук сбрасывает
     переменные, которые git отдаёт хуку (`git rev-parse --local-env-vars`):
     иначе временные репо тестов смотрели бы в `.git` vdx (githooks(5)).
+12. **`cli/node_modules` между станциями не синхронизируется** (`.git` и
+    исходники — да). Зависимости, сменённые на одной станции, на другой
+    появятся только после `npm --prefix cli ci`. Хук `pre-push` сверяет
+    `node_modules` с lock-файлом первым и называет недостающие пакеты; так
+    упал push выпуска 0.27.0 на m3 (`vdx-dogfooding` DL #14).
 
 ---
 

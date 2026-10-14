@@ -4,6 +4,15 @@
 
 ## 2026-10-14
 
+### Выпуск 0.27.0; хук сверяет `node_modules` с lock-файлом
+
+`@vodmal/vdx-cli@0.27.0` в npm (`33fca96`): пол Node 22. Push выпуска на m3
+упал в хуке на `prettier: command not found`: `cli/node_modules` там старше
+Prettier, ESLint и knip, а между станциями он не синхронизируется. Хук
+`pre-push` теперь первым сверяет `node_modules` с lock-файлом (`npm ls`) и
+называет пакеты и команду — `npm --prefix cli ci`
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #14).
+
 ### `test:e2e` — пакет, каким его отдаёт npm; пол Node 22
 
 `npm pack`, установка во временный префикс, оба бинарника: `vdx --version`,

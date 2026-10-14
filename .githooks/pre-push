@@ -11,4 +11,12 @@ if ! command -v mise >/dev/null 2>&1; then
   exit 1
 fi
 
+# A clone whose node_modules predates the lockfile — the dependencies changed in
+# another clone — fails the check on a missing command. Say which, and the remedy.
+if ! problems=$(mise exec -- npm --prefix cli ls --depth=0 2>&1 >/dev/null); then
+  echo 'pre-push: cli/node_modules does not match cli/package-lock.json — run: npm --prefix cli ci' >&2
+  printf '%s\n' "$problems" | grep -E 'missing|invalid|extraneous' >&2
+  exit 1
+fi
+
 mise run check && mise run test && mise run test:e2e

@@ -406,6 +406,31 @@ CI и в `pre-push` (push — около 1 мин 40 с). Пользовател
 `npm update` включил хук в этом клоне (`core.hooksPath .githooks`). Гоча
 HANDOFF о push — #11, не #5, как сказано в DL #11: номер 5 был занят.
 
+### #14 / 2026-10-14 / Хук сверяет `cli/node_modules` с lock-файлом
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** выпуск 0.27.0 на m3: `npm publish` прошёл (npm 12.2.0
+ответил 202 «being processed», в реестре версия с 20:30:14Z — около 2 мин
+после принятия), коммит и тег встали, push упал в хуке: `[check]` → `sh:
+prettier: command not found`. `cli/node_modules/.package-lock.json` на m3 —
+от 2026-09-30, `npm ls` там: 6 пакетов нет (`@eslint/js`, `eslint`,
+`eslint-config-prettier`, `knip`, `prettier`, `typescript-eslint`), 2 старые
+(`vitest`, `@vitest/coverage-v8` 4.1.7). Syncthing не возит `node_modules`
+(`(?d)node_modules` в `.stprojectsignore`). Проверка `npm ls --depth=0` — 0,8 с
+на lft, выход 0; на m3 до `npm ci` — выход 1 и тот же список, после — 0. Push
+выпуска после `npm --prefix cli ci` прошёл (владелец, m3).
+**Context:** хук мог бы ставить зависимости сам (`npm ci` в хуке), отказывать
+с причиной или промолчать — и `vdx publish` сверял бы это до `npm publish`.
+**Why:** Отказ с причиной: push не должен переписывать `node_modules` за
+спиной и ходить в сеть; сверка дешёвая и превращает невнятное «command not
+found» в список пакетов и команду. Сравнивает npm (`npm ls`), своего
+сравнения lock-файлов нет.
+**Implication:** push на станции с отставшими зависимостями останавливается
+за секунду со списком и `npm --prefix cli ci`. Push выпуска всё равно идёт
+после `npm publish` — Sidetrack #8. CLAUDE.md («Выпуск CLI»), гоча HANDOFF #12.
+**Cross:** см. Sidetrack #8
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -498,6 +523,20 @@ fsevents@2.3.3». CLI и тесты работают и так: бинарник
 
 **Status:** open
 
+### #8. `vdx publish` узнаёт о хуке `pre-push`, когда пакет уже в npm
+
+**Возникло в:** DL #14
+**Описание:** порядок `vdx publish` — bump, `npm publish`, коммит, тег, push.
+Хук `pre-push` проекта идёт последним, и то, что он находит в клоне
+(отставшие `node_modules`, красный тест), всплывает, когда версия уже в npm:
+откатить её нельзя, остаётся `git push --follow-tags` после починки. Так было
+с 0.27.0 на m3. Вариант: pre-flight запускает хук сам (`git hook run
+pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое дольше, если push не
+идёт с `--no-verify`. Решать, если повторится не на зависимостях: их хук
+теперь ловит за секунду (DL #14).
+
+**Status:** open
+
 ## Next actions
 
 **Развилки — к владельцу:**
@@ -546,7 +585,8 @@ fsevents@2.3.3». CLI и тесты работают и так: бинарник
       echelon и mediko — их манифест в `[vdx]`
 - [x] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности):
       0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
-- [ ] Выпуск 0.27 (minor): пол Node 22 (DL #13)
+- [x] Выпуск 0.27 (minor): пол Node 22 (DL #13) — 0.27.0 в npm 2026-10-14
+      (`33fca96`); push выпуска — после `npm ci` на m3 (DL #14)
 
 **Побеги:**
 
@@ -557,6 +597,7 @@ fsevents@2.3.3». CLI и тесты работают и так: бинарник
 - [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
 - [x] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml` (DL #10)
 - [ ] см. Sidetrack #7 — npm 11 и install-скрипты esbuild, fsevents
+- [ ] см. Sidetrack #8 — `vdx publish` и хук `pre-push` после `npm publish`
 
 ## References
 
