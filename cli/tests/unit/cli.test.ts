@@ -73,7 +73,7 @@ describe('vdx ai --help and unknown options', () => {
         expect(r.stdout).toBe('');
       }
     }
-  });
+  }, 30_000); // 6 starts of the CLI
 
   it('refuses a second path instead of dropping it', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, os.tmpdir(), '--dry-run');
@@ -93,7 +93,7 @@ describe('vdx ai --help and unknown options', () => {
       expect(r.stderr).toContain('--check takes only the project path');
       expect(r.stdout).toBe('');
     }
-  });
+  }, 20_000); // 3 starts of the CLI
 
   it('still accepts --resume, a no-op since 0.13', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, '--resume', '--dry-run');

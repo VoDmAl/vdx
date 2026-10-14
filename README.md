@@ -123,7 +123,7 @@ agent:
 session:
   multiplexer: tmux                     # falls back to this terminal without tmux
   name: "{project}@{host}"              # {host} = $VDX_HOST or the short hostname
-  project_names:                        # {project}: [vdx] name in mise.toml, then these, then the repo name
+  project_names:                        # {project}: [_.vdx] name in mise.toml, then these, then the repo name
     - {file: "~/.claude/vdm/intercom/_registry/{repo}.json", jsonpath: names.0}
 git:
   author_pool: ["~/AI Projects", "~/PhpstormProjects"]   # where to look for a commit author to propose
@@ -257,7 +257,7 @@ full per-step log and [HANDOFF.md](HANDOFF.md) for live state). Highlights:
 | Document | What it specifies |
 |----------|-------------------|
 | [docs/specs/rubric-format.md](docs/specs/rubric-format.md) | Format of the `vdx-rubric.yaml` owner baseline + predicate DSL + `applies_to` |
-| [docs/specs/manifest-format.md](docs/specs/manifest-format.md) | The `[vdx]` block in `mise.toml` + `AGENTS.md` projection |
+| [docs/specs/manifest-format.md](docs/specs/manifest-format.md) | The `[_.vdx]` block in `mise.toml` (the older `[vdx]` is read too) + `AGENTS.md` projection |
 | [docs/specs/overrides-format.md](docs/specs/overrides-format.md) | `.vdx-overrides.yml` for per-project overrides |
 | [docs/specs/mcp-api.md](docs/specs/mcp-api.md) | Contract of the vdx MCP server |
 | [docs/specs/drift-algorithm.md](docs/specs/drift-algorithm.md) | Level computation + drift algorithm |

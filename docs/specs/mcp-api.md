@@ -111,8 +111,9 @@ output: {
 }
 ```
 
-Записывает задачи в `[tasks]` секцию `mise.toml`, обновляет `[vdx]` и
-`[vdx.success_path]`. Если `AGENTS.md` существует — обновляет секцию
+Записывает задачи в `[tasks]` секцию `mise.toml`, обновляет манифест и его
+`success_path`: в `[_.vdx]`, а у манифеста в старом `[vdx]` — там же (см.
+[manifest-format.md](manifest-format.md), «Расположение»). Если `AGENTS.md` существует — обновляет секцию
 `<!-- vdx:commands -->`.
 
 ## Ошибки

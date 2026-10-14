@@ -68,11 +68,11 @@ Then in Claude Code:
 
 After install, the following MCP tools are available in any project:
 
-- `list_capabilities` — read `mise.toml` `[vdx]` block + tasks
+- `list_capabilities` — read the `[_.vdx]` block of `mise.toml` (or the older `[vdx]`) + tasks
 - `vdx_up`, `vdx_down`, `vdx_build`, `vdx_test`, `vdx_check`, `vdx_fix` —
   lifecycle wrappers over `mise run <verb>`
 - `vdx_audit` — maturity audit against the canonical rubric
-  (`github.com/VoDmAl/vdx-rubric-vodmal@v1.4.1` by default)
+  (`github.com/VoDmAl/vdx-rubric-vodmal@v1.4.2` by default)
 - `vdx_record_success_path` — persist discovered commands into `mise.toml`
 
 The `vdx-discover` skill auto-suggests itself when Claude enters a project
@@ -104,7 +104,7 @@ asks. The `vdx-ai` skill tells the agent the same.
   Canonical record of the success path still goes through the
   `vdx_record_success_path` MCP tool (called by the agent, not by the hook).
 - Bundled rubric in `@vodmal/vdx-cli` is a snapshot of canonical
-  `vdx-rubric-vodmal@v1.4.1` at CLI release time. Newer canonical tags
+  `vdx-rubric-vodmal@v1.4.2` at CLI release time. Newer canonical tags
   require either a CLI republish or per-project override of the rubric path.
 - See open questions O26 (TOML round-trip with comments) and O27 (real
   shared-infra precheck) in `../docs/decisions.md`.

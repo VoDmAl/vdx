@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as TOML from 'smol-toml';
 import { planInit, selectVerbTask } from '../../src/init.ts';
+import { manifestTable } from '../../src/manifest.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(here, '..', 'fixtures');
@@ -55,6 +57,17 @@ describe('planInit: regular stacks (regression)', () => {
     const testMapping = plan.mappings.find((m) => m.verb === 'test');
     expect(testMapping?.runCommand).toBe('npm run test');
     expect(testMapping?.reason).toBe('exact');
+  });
+});
+
+describe('planInit: where the manifest goes', () => {
+  it('writes [_.vdx], the table mise leaves alone, and the reader finds it there', () => {
+    const plan = planInit(path.join(FIXTURES, 'node-with-vitest'));
+    expect(plan.miseTomlContent).toMatch(/^\[_\.vdx\]$/m);
+    expect(plan.miseTomlContent).not.toMatch(/^\[vdx\]$/m);
+    const found = manifestTable(TOML.parse(plan.miseTomlContent));
+    expect(found?.place).toBe('_.vdx');
+    expect(found?.table).toMatchObject({ schema_version: '0.2', stack: 'node' });
   });
 });
 

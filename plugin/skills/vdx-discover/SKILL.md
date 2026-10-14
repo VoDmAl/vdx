@@ -1,6 +1,6 @@
 ---
 name: vdx-discover
-description: Bootstrap and verify the project's lifecycle interface. Use when entering a project that has no mise.toml [vdx] block, when `vdx <verb>` reports a missing task, or when verifying that recorded lifecycle commands still work.
+description: Bootstrap and verify the project's lifecycle interface. Use when entering a project that has no vdx manifest in mise.toml ([_.vdx], or the older [vdx]), when `vdx <verb>` reports a missing task, or when verifying that recorded lifecycle commands still work.
 ---
 
 # vdx discover-and-record workflow
@@ -123,7 +123,7 @@ Call `vdx_audit` (format: json). Surface the diff to the user:
   either pick the most canonical sub-command (e.g. `build:prod`), or ask
   the user.
 - **Don't overwrite an existing manifest** without explicit consent. If
-  `mise.toml` already has `[vdx]`, treat it as ground truth and only
-  patch missing entries.
+  `mise.toml` already has `[_.vdx]` (or the older `[vdx]`), treat it as
+  ground truth and only patch missing entries.
 - **Don't record unverified commands.** `vdx_record_success_path` is
   meant to persist commands you have actually observed succeed.

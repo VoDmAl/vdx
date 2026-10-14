@@ -13,7 +13,7 @@ D8 (shared-infra), D9 (overrides), D10 (нативный оценщик).
    на проекте (читает файлы, парсит конфиги, при необходимости вызывает
    shell-команды).
 3. **Overrides** — `.vdx-overrides.yml` (D9).
-4. **Watermark** *(опционально)* — последнее состояние из `[vdx.audit]` в
+4. **Watermark** *(опционально)* — последнее состояние из `[_.vdx.audit]` в
    манифесте: `baseline_version_at_run`, `achieved_level`.
 
 ## Алгоритм (high-level)
@@ -45,7 +45,7 @@ D8 (shared-infra), D9 (overrides), D10 (нативный оценщик).
        if critical_ok and supporting_ok: return L
 
 5. (опционально) Watermark drift:
-     if manifest [vdx.audit] exists and baseline_version_at_run != baseline.version:
+     if manifest [_.vdx.audit] exists and baseline_version_at_run != baseline.version:
        baseline_prev = load(baseline_version_at_run)
        changed_axes = [a.id for a in baseline_current.axes
                        if axis_target(a) > axis_target(baseline_prev[a.id])]

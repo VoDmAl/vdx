@@ -6,7 +6,7 @@ import YAML from 'js-yaml';
 import { evalPredicate } from './evaluator.ts';
 import { GIT_HOOK_EVENTS } from './hooks.ts';
 import { autoDetectStack, readStructured, resolveConfigPath, type Ctx } from './facts.ts';
-import { loadManifest } from './manifest.ts';
+import { loadManifestAt } from './manifest.ts';
 import { type Author, effectiveAuthor, isGitRepo, rankAuthors, scanPool, writeAuthor } from './author.ts';
 import type { Predicate } from './rubric.ts';
 import {
@@ -83,7 +83,7 @@ export interface NameSource {
 export interface SessionProfile {
   multiplexer?: Multiplexer;
   name?: string;
-  /** Tried after `[vdx] name` in the project's mise.toml; the first non-empty string wins. */
+  /** Tried after `[_.vdx] name` (or the older `[vdx]`) in the project's mise.toml; the first non-empty string wins. */
   project_names?: NameSource[];
   /** The machines a project's agent may run on, as ssh destinations; vdx asks the others what runs there. */
   machines?: string[];
@@ -541,7 +541,7 @@ export interface ProjectName {
 }
 
 /**
- * `{project}`: `[vdx] name` in the project's mise.toml, else the first profile
+ * `{project}`: `[_.vdx] name` (or the older `[vdx]`) in the project's mise.toml, else the first profile
  * source holding a non-empty string, else the repository name. A source that is
  * missing or unreadable is skipped — a name is a label, not a reason to fail.
  */
@@ -552,8 +552,9 @@ export function resolveProjectName(input: {
   home: string;
   profileDir: string;
 }): ProjectName {
-  const own = loadManifest(input.projectRoot)?.name;
-  if (typeof own === 'string' && own.trim()) return { name: own.trim(), source: 'mise.toml [vdx] name' };
+  const found = loadManifestAt(input.projectRoot);
+  const own = found?.manifest.name;
+  if (typeof own === 'string' && own.trim()) return { name: own.trim(), source: `mise.toml [${found!.place}] name` };
   for (const src of input.sources) {
     const file = path.resolve(
       input.profileDir,

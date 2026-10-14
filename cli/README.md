@@ -91,7 +91,7 @@ vdx ai@m3
 `vdx ai` reads a personal profile, never a bundled one: `$VDX_ENVIRONMENT`, else
 `~/.vdx-environment.yaml`, else a plain `claude`/`codex` with no flags. Format:
 [docs/specs/environment-format.md](../docs/specs/environment-format.md).
-The session's `{project}` is `[vdx] name` from the project's `mise.toml`, else the
+The session's `{project}` is `[_.vdx] name` (or the older `[vdx]`) from the project's `mise.toml`, else the
 first file in the profile's `session.project_names` that has one, else the repo
 name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
 profile and tmux, the path taken under its home directory; `--detach` only
@@ -126,7 +126,7 @@ npm run typecheck
 ## Structure
 
 - `src/rubric.ts`     — types + YAML loader
-- `src/manifest.ts`   — parser for `[vdx]` block in `mise.toml` + `.vdx-overrides.yml`
+- `src/manifest.ts`   — parser for the `[_.vdx]` block in `mise.toml` (the older `[vdx]` too) + `.vdx-overrides.yml`
 - `src/facts.ts`      — fact source loaders (tasks, packages, configs, sub-package detection)
 - `src/predicates.ts` — predicate registry; true / false / unknown with a reason (schema 0.3)
 - `src/evaluator.ts`  — recursive evaluator + sugar notation

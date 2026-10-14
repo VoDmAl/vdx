@@ -11,7 +11,7 @@ schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "1.4.1"
+  version: "1.4.2"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -573,10 +573,17 @@ axes:
         requires:
           any_of:
             - file_contains: { path: scripts/docker-up.sh, pattern: "(traefik|nginx-proxy)" }
+            # Манифест vdx — в [_.vdx] (vdx 0.26+) или в старом [vdx]; оба места — с v1.4.2.
+            - config_value: { path: mise.toml, jsonpath: "_.vdx.shared_infra.precheck", equals: true }
             - config_value: { path: mise.toml, jsonpath: "vdx.shared_infra.precheck", equals: true }
       L4:
         requires:
           any_of:
+            - config_value:
+                path: mise.toml
+                jsonpath: "_.vdx.shared_infra.provider"
+                op: matches
+                pattern: "github.com/.+@v\\d+"
             - config_value:
                 path: mise.toml
                 jsonpath: "vdx.shared_infra.provider"

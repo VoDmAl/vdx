@@ -8,7 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import * as TOML from 'smol-toml';
 
 import { loadRubric } from './rubric.ts';
-import { loadManifest, loadOverrides } from './manifest.ts';
+import { loadManifest, loadOverrides, manifestTable } from './manifest.ts';
 import { autoDetectStack, readToml, type Ctx } from './facts.ts';
 import { audit } from './audit.ts';
 import { reportJson, reportMarkdown } from './report.ts';
@@ -36,7 +36,7 @@ function readMiseToml(): unknown {
 }
 
 function getVdxBlock(): Dict | null {
-  return dict(at(readMiseToml(), 'vdx')) ?? null;
+  return manifestTable(readMiseToml())?.table ?? null;
 }
 
 function getTasks(): Dict {
@@ -154,7 +154,9 @@ function recordSuccessPath(input: {
   }
   doc['tasks'] = tasks;
 
-  const vdx = dict(doc['vdx']) ?? {
+  // An existing manifest is updated where it is; a new one goes into [_.vdx].
+  const found = manifestTable(doc);
+  const vdx = found?.table ?? {
     schema_version: '0.2',
     baseline: DEFAULT_BASELINE,
     stack: autoDetectStack(PROJECT_ROOT),
@@ -173,7 +175,7 @@ function recordSuccessPath(input: {
     verified_by: 'vdx-mcp',
     ...(input.notes ? { notes: input.notes } : {}),
   };
-  doc['vdx'] = vdx;
+  if (!found) doc['_'] = { ...dict(doc['_']), vdx };
 
   const newText = TOML.stringify(doc);
   fs.writeFileSync(manifestPath, newText, 'utf8');
@@ -234,7 +236,7 @@ server.registerTool(
   'vdx_record_success_path',
   {
     description:
-      'Записывает обнаруженные команды в [tasks.X] секцию mise.toml + обновляет [vdx.success_path]. Используется после успешной верификации команд агентом.',
+      'Записывает обнаруженные команды в [tasks.X] секцию mise.toml + обновляет [_.vdx.success_path] (у манифеста в старом [vdx] — там). Используется после успешной верификации команд агентом.',
     inputSchema: {
       verbs: z.array(z.object({ name: z.string(), command: z.string() })),
       shared_infra: z.object({ provider: z.string(), precheck: z.boolean() }).optional(),

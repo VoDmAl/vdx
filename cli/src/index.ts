@@ -2,7 +2,7 @@
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadRubric } from './rubric.ts';
-import { loadManifest, loadOverrides } from './manifest.ts';
+import { loadManifest, loadManifestAt, loadOverrides } from './manifest.ts';
 import { autoDetectStack, type Ctx } from './facts.ts';
 import { at, errorMessage } from './narrow.ts';
 import { LIFECYCLE_VERBS, type LifecycleVerb, resolveLifecycleVerb, renderResolveError } from './run.ts';
@@ -286,7 +286,14 @@ function cmdAudit(opts: ParsedArgs): void {
     );
   }
 
-  const manifest = loadManifest(projectRoot);
+  const found = loadManifestAt(projectRoot);
+  const manifest = found?.manifest ?? null;
+  if (found?.place === 'vdx') {
+    process.stderr.write(
+      'note: the manifest is in [vdx] of mise.toml, and mise 2026.10 warns about it on every run; ' +
+        'its place is [_.vdx], once every machine of the project runs vdx 0.26 or newer\n',
+    );
+  }
   const overrides = loadOverrides(projectRoot);
 
   const rubricPath = (opts.flags.rubric as string) || DEFAULT_RUBRIC;

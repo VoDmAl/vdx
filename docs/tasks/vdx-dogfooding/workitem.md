@@ -5,7 +5,7 @@ description: "Поднимает vdx по его же рубрике: что д�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-13
-last-updated: 2026-10-13
+last-updated: 2026-10-14
 relates-to:
   - "[[vdm-gates-wiring-axis/workitem|vdm-gates-wiring-axis]]"
 ---
@@ -34,7 +34,7 @@ relates-to:
 ## Текущая модель
 
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
-Сейчас (CLI из `cli/`, 0.25 и ESLint, сет v1.4.0, override) — тоже **L1**:
+Сейчас (CLI из `cli/`, 0.25 и ESLint, сет v1.4.2, override) — тоже **L1**:
 на L2 вспомогательных 4 из 6 (`reproducibility`, `code-style`, `docs`,
 `release-artifact`), нужно 5. Держат `dependency-hygiene` и `git-hygiene`.
 Колонка «Сейчас» в таблице — это состояние.
@@ -49,6 +49,11 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 «неизвестно», пока у vdx нет расширения хостинга (DL #12 кристалла гейтов).
 Неизвестное считается невыполненным, так что общий L3 и выше сегодня не
 получит никто.
+
+**Где манифест** (DL #10). С vdx 0.26 — `[_.vdx]` в `mise.toml`: таблицу `[_]`
+mise не читает, а на `[vdx]` mise 2026.10 предупреждает при каждом запуске.
+Старый `[vdx]` vdx читает по-прежнему; у самого vdx манифест там, пока 0.26 не
+доедет до обеих станций.
 
 **Мета-репо.** Ось с `applies_to` оценивается в `cli/` (`primary_subpackage`),
 ось без него — в корне. До DL #5 половины не видели файлов друг друга
@@ -288,6 +293,31 @@ flat-имена, и `strict` — он строже `recommended`.
 `DEFAULT_BASELINE` и baseline vdx — на v1.4.1. В npm придёт со следующим
 выпуском CLI (patch). `static-analysis` vdx — L4.
 
+### #10 / 2026-10-14 / Манифест — в `[_.vdx]`; старый `[vdx]` читается
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** развилку владельцу задал 2026-10-13, ответ: «Перенести в
+[_.vdx] (Recommended)», затем «Окей вперед». Проверено (observed): mise
+2026.10.3 на `[_.vdx]` молчит, на `[vdx]` печатает `unknown field`; dev CLI
+читает оба места, `vdx_record_success_path` по stdio пишет новый манифест в
+`[_.vdx]`, а старый дописывает в `[vdx]`; калибровочные проекты на v1.4.2 — как
+на v1.4.1. Не проверено: с какой версии mise предупреждает.
+**Context:** Sidetrack #6. Варианты: перенести в `[_.vdx]`; оставить `[vdx]` и
+терпеть предупреждение; вынести манифест в отдельный файл.
+**Why:** `[_]` — единственное место для чужих данных, которое mise
+документирует. Манифест остаётся в `mise.toml` (D4 не меняется по сути), а
+предупреждение уходит. Чтение обоих мест делает переход постепенным: проект
+переезжает, когда новый CLI есть на всех его машинах, и старый CLI не теряет
+манифест раньше времени.
+**Implication:** `cli/src/manifest.ts` — `manifestTable` и `loadManifestAt`
+(место манифеста); `vdx init` пишет `[_.vdx]`; `vdx audit` на `[vdx]` пишет
+строку `note`; имя проекта для `vdx ai` — из обоих мест. Сет v1.4.2 (`0e28906`):
+`shared-infra` ищет `precheck` и `provider` в обоих местах. Выпуск — minor
+0.26. Перенос echelon, mediko и самого vdx — после того как 0.26 будет на обеих
+станциях. D4 в `docs/decisions.md` — приписка 2026-10-13.
+**Cross:** см. Sidetrack #6
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -365,7 +395,8 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 `[_.vdx]`, чтение обоих мест, `vdx init` и `vdx_record_success_path` пишут
 новое — minor CLI. Развилка — к владельцу.
 
-**Status:** open
+**Status:** resolved — 2026-10-14: в коде и сете v1.4.2 (DL #10); перенос
+проектов — Next actions
 
 ## Next actions
 
@@ -404,6 +435,13 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 - [ ] `docs/architecture.md`; `README.md` — `mise run up`
 - [x] Выпуск CLI с правкой оценщика и сетом v1.4.0 — 0.25.0 в npm
       2026-10-13 (`0d1f41f`)
+- [x] Манифест в `[_.vdx]` (DL #10): чтение обоих мест, `vdx init` и
+      `vdx_record_success_path` пишут новое, `note` в аудите; сет v1.4.2
+      (`0e28906`); сет CLI, зеркала, `DEFAULT_BASELINE`
+- [ ] Выпуск 0.26 (minor): `[_.vdx]`, сеты v1.4.1 и v1.4.2; плагин 0.9.3 —
+      скилл `vdx-discover` о `[_.vdx]`
+- [ ] После 0.26 на m3 и lft: `mise.toml` vdx — в `[_.vdx]`; письма агентам
+      echelon и mediko — их манифест в `[vdx]`
 - [ ] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности)
 
 **Побеги:**
@@ -413,7 +451,7 @@ echelon, mediko, vdx. Правка — формат манифеста (D4, `man
 - [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
 - [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
 - [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
-- [ ] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml`, развилка владельцу
+- [x] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml` (DL #10)
 
 ## References
 

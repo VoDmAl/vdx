@@ -6,8 +6,18 @@ D4 (манифест = `mise.toml` + vdx-метаблок), D6 (MCP-сервер
 
 ## Расположение
 
-В корневом `mise.toml` проекта — таблица `[vdx]` с подтаблицами. mise сам этот
-блок игнорирует (это custom data); vdx читает.
+В корневом `mise.toml` проекта — таблица `[_.vdx]` с подтаблицами (с vdx
+0.26). Документация mise: «mise never reads the `[_]` table, so you can keep
+your own data in a config file without mise rejecting the key» — это её место
+для данных других инструментов.
+
+До 0.26 манифест жил в `[vdx]`. vdx читает и его, если `[_.vdx]` нет; `vdx
+audit` тогда пишет строку `note`. mise 2026.10 на `[vdx]` печатает `mise WARN
+unknown field … vdx` при каждом запуске (Sidetrack #6 кристалла
+vdx-dogfooding). Переносить проект стоит, когда на всех его машинах vdx 0.26
+или новее: старый vdx `[_.vdx]` не видит. `vdx init` пишет `[_.vdx]`;
+`vdx_record_success_path` дописывает манифест там, где он уже есть, а новый —
+в `[_.vdx]`.
 
 ## Полная схема
 
@@ -31,7 +41,7 @@ run = "composer test"
 # ... аналогично build/check/fix
 
 # === vdx metadata ===
-[vdx]
+[_.vdx]
 schema_version = "0.2"
 name = "vodmalbot"                   # optional: короткое имя проекта (сессия vdx ai)
 baseline = "github.com/vodmal/vdx-rubric@v0.2.0"
@@ -40,18 +50,18 @@ primary_language = "PHP"
 primary_subpackage = "api"           # optional: stack-specific предикаты идут в эту папку
 verbs = ["up", "down", "build", "test", "check", "fix"]
 
-[vdx.shared_infra]
+[_.vdx.shared_infra]
 provider = "github.com/vodmal/traefik-global@v1.0.0"
 precheck = true                      # vdx up автоматически поднимает infra
 healthcheck_url = "https://traefik.localhost.lime.co"
 
-[vdx.success_path]
+[_.vdx.success_path]
 last_verified = "2026-05-22"
 verified_by = "claude-code"
 host_os = "macos-25"
 notes = "tested in Ghostty + OrbStack"
 
-[vdx.audit]
+[_.vdx.audit]
 last_run = "2026-05-22T14:30:00Z"
 baseline_version_at_run = "v0.2.0"
 achieved_level = "L2"
@@ -85,11 +95,11 @@ acknowledged_drift = []              # axis_ids, дрейф осознанно �
 - `verbs` — список стандартных глаголов, которые проект **обязуется** выставить.
   Если задача `up` определена в `[tasks]`, она должна быть в `verbs`. vdx-audit
   падает при расхождении.
-- `[vdx.shared_infra]` — декларация зависимости от общей инфры (D8). `precheck:
+- `[_.vdx.shared_infra]` — декларация зависимости от общей инфры (D8). `precheck:
   true` → `vdx up` сам поднимает её перед `mise run up`.
-- `[vdx.success_path]` — для self-improving discovery: hooks (D6) пишут сюда
+- `[_.vdx.success_path]` — для self-improving discovery: hooks (D6) пишут сюда
   после успешной верификации команд (фиксация мгновенно-работающего пути).
-- `[vdx.audit]` — последний результат аудита: watermark для drift-алгоритма.
+- `[_.vdx.audit]` — последний результат аудита: watermark для drift-алгоритма.
 
 ## Проекция в AGENTS.md (D4)
 
@@ -126,7 +136,7 @@ falsified коммит.
 1. **Bootstrap** (`vdx init`):
    определяет стек по `composer.json`/`package.json`/`go.mod`/etc., генерирует
    начальный `mise.toml` с шеллящими задачами поверх существующих
-   `composer scripts` / `npm scripts` / `Makefile`. Добавляет `[vdx]` блок и
+   `composer scripts` / `npm scripts` / `Makefile`. Добавляет блок `[_.vdx]` и
    секцию в `AGENTS.md`.
 2. **Discover-and-record** (нет манифеста, агент в проекте):
    vdx skill через Claude Code анализирует проект, находит native команды,

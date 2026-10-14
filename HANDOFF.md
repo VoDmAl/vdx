@@ -6,18 +6,20 @@
 
 ---
 
-## Где мы (2026-10-13)
+## Где мы (2026-10-14)
 
 - **CLI** `@vodmal/vdx-cli@0.25.0` — в npm с 2026-10-13 (`0d1f41f`, выпуск с
   m3); на станции едет с ближайшим topgrade.
-- **Сет** `vdx-rubric-vodmal@v1.4.1` (schema 0.3): рубрика и личный профиль
+- **Сет** `vdx-rubric-vodmal@v1.4.2` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.4.1`; в npm (0.25.0) — v1.4.0.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.4.2`; в npm (0.25.0) — v1.4.0.
+- **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26; в `cli/`, не выпущено).
+  Старый `[vdx]` читается; у vdx, echelon и mediko манифест пока там.
 - **Плагин** vdx 0.9.2 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
   `mise run test`; зелёный на `65f5543`.
-- **vdx по своей рубрике — L1** (аудит 2026-10-13, CLI 0.25). Критичные оси:
-  `lifecycle-interface` L4, `tests` L3, `static-analysis` L2, `ci` L4,
+- **vdx по своей рубрике — L1** (аудит 2026-10-14, CLI из `cli/`, сет v1.4.2).
+  Критичные оси: `lifecycle-interface` L4, `tests` L3, `static-analysis` L4, `ci` L4,
   `branch-protection` — неизвестно; вспомогательных на L2 — 4 из 6, нужно 5.
   Требование догфудинга из CLAUDE.md не выполнено; подъём — кристалл
   `vdx-dogfooding`.
@@ -28,7 +30,7 @@
 |---|---|
 | `vdx up\|down\|build\|test\|check\|fix` | `mise run <verb>`; нет задачи — exit 2 с подсказкой |
 | `vdx audit [path]` | уровень проекта по рубрике сета; `--format=ansi\|markdown\|json` |
-| `vdx init [path]` | `[vdx]` блок и задачи словаря в `mise.toml` из того, что уже есть в проекте |
+| `vdx init [path]` | блок `[_.vdx]` и задачи словаря в `mise.toml` из того, что уже есть в проекте |
 | `vdx publish <patch\|minor\|major>` | выпуск одной командой: вход в npm, bump, publish, тег, push, ожидание registry |
 | `vdx doctor [path]` | окружение и хуки; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` |
 | `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--restart`, `--detach`, `--dry-run`, `--check` |
@@ -75,8 +77,11 @@
 
 ### Следующий выпуск CLI
 
-Без срочности, patch (0.25.1): сет v1.4.1 внутри — имена конфигов ESLint и
-Prettier (`vdx-dogfooding` DL #9). 0.25.0 (2026-10-13) увёз аудит мета-репо целиком
+Minor (0.26): манифест в `[_.vdx]` — mise 2026.10 предупреждает о `[vdx]` при
+каждом запуске (`vdx-dogfooding` DL #10); сеты v1.4.1 (имена конфигов ESLint и
+Prettier, DL #9) и v1.4.2 внутри. Вместе с выпуском — плагин 0.9.3: скилл
+`vdx-discover` знает `[_.vdx]`. Когда 0.26 будет на m3 и lft — перенести
+манифест vdx в `[_.vdx]` и написать агентам echelon и mediko. 0.25.0 (2026-10-13) увёз аудит мета-репо целиком
 (`vdx-dogfooding` DL #5), сет v1.4.0 (DL #6), `vdx ai --new` и `--focused`
 рядом с идущим агентом (`vdx-ai` DL #35) и проверку папок через файл
 (Sidetrack #21 vdx-ai). Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
@@ -141,7 +146,7 @@ Decision Log её кристалла.
 |----|---------|
 | D1–D2 | Рубрика принадлежит человеку/организации; иерархия general → стек |
 | D3 | Раннер — mise, не свой |
-| D4 | Манифест — `mise.toml` + `[vdx]` блок |
+| D4 | Манифест — `mise.toml` + блок `[_.vdx]` (до 0.26 — `[vdx]`) |
 | D5, D10 | Аудит: готовый сбор фактов, своё — рубрика и drift; движок нативный |
 | D6 | Упаковка для Claude Code — плагин (MCP + skill + hook) |
 | D7 | Скоринг: критичные оси — минимум, вспомогательные — ≥ 80 % |

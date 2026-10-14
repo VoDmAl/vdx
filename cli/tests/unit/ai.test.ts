@@ -1514,6 +1514,11 @@ describe('project name: mise.toml, then profile sources, then the repository nam
     expect(resolve([registry])).toEqual({ name: 'tgbot', source: 'mise.toml [vdx] name' });
   });
 
+  it('reads the name from [_.vdx] too, and says so', () => {
+    fs.writeFileSync(path.join(project, 'mise.toml'), '[_.vdx]\nname = "tgbot"\n');
+    expect(resolve([registry])).toEqual({ name: 'tgbot', source: 'mise.toml [_.vdx] name' });
+  });
+
   it('skips a missing file or a value that is not a string, then falls back to the repository name', () => {
     const missing = { file: '~/reg/nope-{repo}.json', jsonpath: 'names.0' };
     const notString = { file: '~/reg/{repo}.json', jsonpath: 'names' };
