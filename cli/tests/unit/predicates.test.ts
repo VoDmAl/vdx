@@ -28,6 +28,14 @@ describe('has_file', () => {
   it('returns false in empty project', () => {
     expect(REGISTRY.has_file!({ path: 'package.json' }, mkCtx('empty'))).toBe(false);
   });
+  // APFS finds `Tests` for `tests`, ext4 does not: the level must not depend on the machine.
+  it('takes each segment in the case it is written', () => {
+    const ctx = mkCtx('node-with-vitest');
+    expect(REGISTRY.has_file!({ path: 'Package.json' }, ctx)).toBe(false);
+    expect(REGISTRY.has_file!({ path: 'Tests/.gitkeep' }, ctx)).toBe(false);
+    expect(REGISTRY.has_file!({ path: './tests/.gitkeep' }, ctx)).toBe(true);
+    expect(REGISTRY.file_contains!({ path: 'PACKAGE.JSON', pattern: '"vitest"' }, ctx)).toBe(false);
+  });
 });
 
 describe('has_task', () => {

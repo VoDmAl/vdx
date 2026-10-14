@@ -477,7 +477,11 @@ compose up`. README vdx описывает команду `vdx up` как час
 теперь неважно (ось подавлена). Правка — сравнивать имя с записью
 `readdir` по каждому сегменту пути; patch CLI.
 
-**Status:** open
+**Status:** resolved — 2026-10-14: `cli/src/facts.ts` ищет путь по сегментам
+в записях `readdir` (кеш на контекст) — `has_file`, `file_contains` и чтение
+JSON/YAML/TOML; в `cli/` `has_file: tests/Fixtures` — `false`. Тест на старом
+коде падает. Уровни vdx и трёх калибровочных проектов не изменились. Выпуск —
+patch 0.27.1
 
 ### #5. `eslint_type_checked` ищет `recommended-type-checked` через дефис
 
@@ -593,7 +597,7 @@ pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое до
 - [x] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета (v1.4.1)
 - [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
 - [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
-- [ ] см. Sidetrack #4 — `has_file` на macOS не различает регистр, patch CLI
+- [x] см. Sidetrack #4 — `has_file` на macOS не различает регистр — в коде; выпуск — patch 0.27.1
 - [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
 - [x] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml` (DL #10)
 - [ ] см. Sidetrack #7 — npm 11 и install-скрипты esbuild, fsevents

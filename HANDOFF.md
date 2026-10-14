@@ -75,7 +75,9 @@
 
 ### Следующий выпуск CLI
 
-Не запланирован. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
+Patch (0.27.1): путь в `has_file` и `file_contains` — с регистром, как
+написан, и на macOS (`vdx-dogfooding` Sidetrack #4); уровень оси больше не
+зависит от ФС машины. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
 (`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не
 стартует. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
 DL #10) и сеты v1.4.1 и v1.4.2; плагин 0.9.3 — скилл `vdx-discover` о

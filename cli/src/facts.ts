@@ -16,12 +16,43 @@ export interface Ctx {
   fallbackRoot?: string;
 }
 
-/** Absolute path of `rel`: here, else in `fallbackRoot` when it is there. */
-function locate(ctx: Ctx, rel: string): string {
-  const here = path.join(ctx.projectRoot, rel);
-  if (ctx.fallbackRoot === undefined || fs.existsSync(here)) return here;
-  const there = path.join(ctx.fallbackRoot, rel);
-  return fs.existsSync(there) ? there : here;
+/** Names in `dir`, read once per context; none when it cannot be read. */
+function entries(ctx: Ctx, dir: string): string[] {
+  const key = `dir:${dir}`;
+  let names = ctx.cache.get(key) as string[] | undefined;
+  if (!names) {
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      names = [];
+    }
+    ctx.cache.set(key, names);
+  }
+  return names;
+}
+
+/**
+ * `rel` under `root`, each segment in the case it is written. APFS and NTFS find a file
+ * under any case and ext4 does not: `tests/Fixtures` was there on a Mac that has only
+ * `tests/fixtures`, and the same project got another level on Linux.
+ */
+function existsAsWritten(ctx: Ctx, root: string, rel: string): boolean {
+  let dir = root;
+  for (const name of path.normalize(rel).split(path.sep)) {
+    if (name === '' || name === '.') continue;
+    if (name !== '..' && !entries(ctx, dir).includes(name)) return false;
+    dir = path.join(dir, name);
+  }
+  return fs.existsSync(dir);
+}
+
+/** Absolute path of `rel`: here, else in `fallbackRoot`; null when in neither. */
+function locate(ctx: Ctx, rel: string): string | null {
+  if (existsAsWritten(ctx, ctx.projectRoot, rel)) return path.join(ctx.projectRoot, rel);
+  if (ctx.fallbackRoot !== undefined && existsAsWritten(ctx, ctx.fallbackRoot, rel)) {
+    return path.join(ctx.fallbackRoot, rel);
+  }
+  return null;
 }
 
 /** The same directory without the fallback: a project's tasks are the ones its own runner sees. */
@@ -36,13 +67,17 @@ function ownCtx(ctx: Ctx): Ctx {
 }
 
 export function fileExists(ctx: Ctx, rel: string): boolean {
-  return fs.existsSync(locate(ctx, rel));
+  return locate(ctx, rel) !== null;
 }
 
 export function readText(ctx: Ctx, rel: string): string | null {
   const key = `file:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key) as string | null;
   const abs = locate(ctx, rel);
+  if (abs === null) {
+    ctx.cache.set(key, null);
+    return null;
+  }
   try {
     const t = fs.readFileSync(abs, 'utf8');
     ctx.cache.set(key, t);
@@ -183,13 +218,9 @@ export function expandPaths(paths: string[], ctx: Ctx): string[] {
         const dir = m[1];
         const ext = m[2];
         const abs = locate(ctx, dir);
-        try {
-          const files = fs.readdirSync(abs);
-          for (const f of files) {
-            if (f.endsWith('.' + ext)) out.push(path.join(dir, f));
-          }
-        } catch {
-          /* dir missing — silent */
+        // A missing dir lists nothing.
+        for (const f of abs === null ? [] : entries(ctx, abs)) {
+          if (f.endsWith('.' + ext)) out.push(path.join(dir, f));
         }
       }
     } else {

@@ -4,6 +4,14 @@
 
 ## 2026-10-14
 
+### Путь в рубрике — с регистром, как написан, и на macOS
+
+`has_file: tests/Fixtures` на Mac находил `tests/fixtures`: APFS не различает
+регистр, а на Linux тот же проект получал уровень ниже. `cli/src/facts.ts`
+сверяет каждый сегмент пути с записями каталога — `has_file`, `file_contains`
+и чтение конфигов. Уровни vdx и калибровочных проектов не изменились; выйдет
+в 0.27.1 ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), Sidetrack #4).
+
 ### Выпуск 0.27.0; хук сверяет `node_modules` с lock-файлом
 
 `@vodmal/vdx-cli@0.27.0` в npm (`33fca96`): пол Node 22. Push выпуска на m3
