@@ -36,6 +36,6 @@ run = "npm --prefix cli run fix"
 
 [vdx]
 schema_version = "0.2"
-baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.4.2"
+baseline = "github.com/VoDmAl/vdx-rubric-vodmal@v1.5.0"
 stack = "meta"
 verbs = ["build", "test", "check", "fix"]

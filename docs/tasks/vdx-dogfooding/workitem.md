@@ -38,7 +38,8 @@ relates-to:
 кроме `branch-protection`, — L4: **цель DL #3 достигнута**. Держится на
 override двух сервисных осей, хуке `pre-push` (DL #11), аудите зависимостей
 (DL #12), `test:e2e` и `docs/architecture.md` (DL #13). Колонка «Сейчас» в
-таблице — это состояние.
+таблице — это состояние. С сетом v1.5.0 (DL #15) `observability` и
+`mock-infra` у библиотеки `excluded`; override vdx снимается после выпуска 0.28.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -70,13 +71,13 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `static-analysis` | C | L4 | — | ESLint с `recommendedTypeChecked` (DL #8), сет v1.4.1 (DL #9): 4.3/4.8 = 0.90 ≥ 0.85 |
 | `ci` | C | L4 | — | — |
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
-| `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
+| `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта, принято как есть (Sidetrack #3, DL #15) |
 | `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
 | `dependency-hygiene` | s | L4 | — | `check:code:security` (`npm audit`) в CI по понедельникам; `.github/dependabot.yml`, корень читается с DL #5; `knip` в `check` (DL #12) |
 | `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
-| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
+| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13; с сетом v1.5.0 у библиотеки — excluded, override снимается после 0.28 (DL #15) |
 | `docs` | s | L4 | — | `docs/architecture.md` — карта модулей CLI и путь вызова |
-| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4 |
+| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4; с сетом v1.5.0 — excluded, override снимается после 0.28 (DL #15) |
 | `release-artifact` | s | L4 | — | — |
 
 **Цель (DL #3):** общий L2, каждая ось, кроме `branch-protection`, — L4.
@@ -431,6 +432,30 @@ found» в список пакетов и команду. Сравнивает n
 после `npm publish` — Sidetrack #8. CLAUDE.md («Выпуск CLI»), гоча HANDOFF #12.
 **Cross:** см. Sidetrack #8
 
+### #15 / 2026-10-14 / Сервисные оси — только у приложения; README vdx — как есть
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** владелец 2026-10-14: «Исключать для библиотек (Recommended)»
+(Sidetrack #2) и «Принять как есть (Recommended)» (Sidetrack #3). Проверено
+после: с сетом v1.5.0 пакет `cli/` (`bin`) получает обе оси `excluded` (на
+v1.4.2 — L1, недобор); у vdx и трёх калибровочных проектов (все — `private`
+или composer `type: project`) уровни те же. Тест на сет внутри пакета на
+v1.4.2 падает, на v1.5.0 проходит.
+**Context:** #2 — исключать ось (`applies_when`), пропускать её уровни
+(`any_of` с lib-intent, как `up`/`down` в `lifecycle-interface` L3) или
+оставить override каждому проекту. #3 — принять, написать в README строку
+подъёма и добавить в шаблон «одной командой» или уточнить шаблон.
+**Why:** «Не применимо» честнее, чем L4 даром: уровень библиотеки не растёт
+от того, чего у неё нет. Цена — у библиотеки пропадает и L2 `mock-infra`
+(msw, nock). #3: ложное «да» бывает только у проекта, чей README рассказывает
+о vdx, а клон vdx и правда поднимается одной командой (`mise run build`).
+**Implication:** сет v1.5.0 (`04601f4`, minor): `applies_when: { not:
+*lib_intent }` у `observability` и `mock-infra`. В CLI — с 0.28: выпуск minor,
+а не patch 0.27.1; после него override этих двух осей у vdx снимается.
+`secrets-config`, `shared-infra`, `shared-infra-drift` тоже про сервис, в
+побег не входили и не тронуты.
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -453,7 +478,8 @@ found» в список пакетов и команду. Сравнивает n
 условия нет. CLI и библиотека упираются в них так же, как vdx. Решение для vdx —
 развилка B; общее решение для рубрики — minor сета, отдельно.
 
-**Status:** open
+**Status:** resolved — 2026-10-14: сет v1.5.0, обе оси только у приложения
+(DL #15)
 
 ### #3. `reproducibility` L4 засчитывает `vdx up` в README продукта
 
@@ -465,7 +491,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 чей README говорит о vdx. Варианты: принять как есть, написать в README vdx
 настоящую строку подъёма или уточнить предикат (patch сета).
 
-**Status:** open
+**Status:** resolved — 2026-10-14: принято как есть (DL #15)
 
 ### #4. `has_file` на macOS не различает регистр
 
@@ -481,7 +507,7 @@ compose up`. README vdx описывает команду `vdx up` как час
 в записях `readdir` (кеш на контекст) — `has_file`, `file_contains` и чтение
 JSON/YAML/TOML; в `cli/` `has_file: tests/Fixtures` — `false`. Тест на старом
 коде падает. Уровни vdx и трёх калибровочных проектов не изменились. Выпуск —
-patch 0.27.1
+0.28 (minor, вместе с сетом v1.5.0, DL #15)
 
 ### #5. `eslint_type_checked` ищет `recommended-type-checked` через дефис
 
@@ -591,13 +617,16 @@ pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое до
       0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
 - [x] Выпуск 0.27 (minor): пол Node 22 (DL #13) — 0.27.0 в npm 2026-10-14
       (`33fca96`); push выпуска — после `npm ci` на m3 (DL #14)
+- [ ] Выпуск 0.28 (minor): сет v1.5.0 (DL #15), путь с регистром (Sidetrack #4)
+- [ ] После 0.28: снять override `observability` и `mock-infra` в
+      `.vdx-overrides.yml` — оси `excluded` по сету (DL #15)
 
 **Побеги:**
 
 - [x] см. Sidetrack #1 — `code-style` и `eslint.config.mjs`, patch сета (v1.4.1)
-- [ ] см. Sidetrack #2 — условие применимости для сервисных осей, minor сета
-- [ ] см. Sidetrack #3 — `reproducibility` L4 по README продукта
-- [x] см. Sidetrack #4 — `has_file` на macOS не различает регистр — в коде; выпуск — patch 0.27.1
+- [x] см. Sidetrack #2 — условие применимости для сервисных осей — сет v1.5.0 (DL #15)
+- [x] см. Sidetrack #3 — `reproducibility` L4 по README продукта — принято как есть (DL #15)
+- [x] см. Sidetrack #4 — `has_file` на macOS не различает регистр — в коде; выпуск — 0.28
 - [x] см. Sidetrack #5 — `eslint_type_checked` и flat-конфиг, patch сета (v1.4.1)
 - [x] см. Sidetrack #6 — `[vdx]` → `[_.vdx]` в `mise.toml` (DL #10)
 - [ ] см. Sidetrack #7 — npm 11 и install-скрипты esbuild, fsevents

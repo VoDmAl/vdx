@@ -10,9 +10,10 @@
 
 - **CLI** `@vodmal/vdx-cli@0.27.0` — в npm с 2026-10-14 (`33fca96`), Node 22 и
   новее; на станции едет с ближайшим topgrade (на m3 и lft 2026-10-14 ещё 0.24.0).
-- **Сет** `vdx-rubric-vodmal@v1.4.2` (schema 0.3): рубрика и личный профиль
+- **Сет** `vdx-rubric-vodmal@v1.5.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.4.2`, в npm с 0.26.0.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`; в npm — v1.4.2 (0.26–0.27),
+  v1.5.0 — с выпуском 0.28.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26).
   Старый `[vdx]` читается; у vdx, echelon и mediko манифест пока там.
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
@@ -75,9 +76,10 @@
 
 ### Следующий выпуск CLI
 
-Patch (0.27.1): путь в `has_file` и `file_contains` — с регистром, как
-написан, и на macOS (`vdx-dogfooding` Sidetrack #4); уровень оси больше не
-зависит от ФС машины. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
+Minor (0.28): сет v1.5.0 — `observability` и `mock-infra` только у
+приложения (`vdx-dogfooding` DL #15); путь в `has_file` и `file_contains` — с
+регистром, как написан, и на macOS (Sidetrack #4). После выпуска — снять у vdx
+override этих двух осей в `.vdx-overrides.yml`. 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
 (`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не
 стартует. 0.26.0 (2026-10-14) увёз манифест в `[_.vdx]` (`vdx-dogfooding`
 DL #10) и сеты v1.4.1 и v1.4.2; плагин 0.9.3 — скилл `vdx-discover` о

@@ -229,3 +229,37 @@ describe('bundled set: lifecycle-interface L3 asks up/down only of an applicatio
     expect(lifecycle('meta', { primary_subpackage: 'cli' })).toBe('L3');
   });
 });
+
+describe('bundled set: observability and mock-infra apply to an application only', () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  function kinds(pkgPath: string, pkg: object, stack: string, manifest: { primary_subpackage: string } | null = null) {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-service-'));
+    fs.mkdirSync(path.dirname(path.join(dir, pkgPath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, pkgPath), JSON.stringify(pkg));
+    const full = loadRubric(BUNDLED_RUBRIC_PATH);
+    const rubric = { ...full, axes: full.axes.filter((a) => a.id === 'observability' || a.id === 'mock-infra') };
+    const res = audit(rubric, { projectRoot: dir, stack, cache: new Map() }, [], 'test@v0.0.0', manifest);
+    return Object.fromEntries(res.per_axis.map((a) => [a.axis_id, a.drift_kind]));
+  }
+
+  it('a library gets both excluded', () => {
+    expect(kinds('package.json', { name: 'lib', bin: { lib: 'bin/lib.js' } }, 'node')).toEqual({
+      observability: 'excluded',
+      'mock-infra': 'excluded',
+    });
+  });
+
+  it('an application is measured on both', () => {
+    const k = kinds('package.json', { name: 'app', private: true, main: 'index.js' }, 'node');
+    expect(k['observability']).not.toBe('excluded');
+    expect(k['mock-infra']).not.toBe('excluded');
+  });
+
+  it('a meta repo is a library by the manifest of its subpackage', () => {
+    expect(
+      kinds('cli/package.json', { name: 'lib', bin: { lib: 'bin/lib.js' } }, 'meta', { primary_subpackage: 'cli' }),
+    ).toEqual({ observability: 'excluded', 'mock-infra': 'excluded' });
+  });
+});

@@ -11,7 +11,7 @@ schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "1.4.2"
+  version: "1.5.0"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -470,6 +470,10 @@ axes:
 
   - id: observability
     class: supporting
+    # v1.5.0: логгер, Sentry и релиз в Sentry — у процесса, который работает и
+    # падает без человека. Библиотека и CLI (lib-intent) пишут в stderr и код
+    # выхода — у них ось excluded. Определение lib-intent — в lifecycle-interface.L3.
+    applies_when: { not: *lib_intent }
     storage: level
     default_target: L4
     fact_sources: [composer.json, package.json, .github/workflows/]
@@ -526,6 +530,9 @@ axes:
   - id: mock-infra
     class: supporting
     applies_to: [php, node, go, python]
+    # v1.5.0: mock-сервер и проверка, что моков нет в проде, — у сервиса с
+    # зависимостями. У библиотеки и CLI (lib-intent) ось excluded.
+    applies_when: { not: *lib_intent }
     storage: level
     default_target: L4
     fact_sources: [composer.json, package.json, docker-compose.yml, mock-server/]

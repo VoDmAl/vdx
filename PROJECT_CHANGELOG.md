@@ -4,13 +4,21 @@
 
 ## 2026-10-14
 
+### Сет v1.5.0: `observability` и `mock-infra` — только у приложения
+
+Логгер, Sentry и mock-сервер — у сервиса; библиотека и CLI упирались в эти
+оси и обходили их только override. Теперь у них `applies_when: { not:
+lib-intent }`, у библиотеки оси `excluded`; калибровочные проекты — приложения,
+не сдвинулись. В CLI — с 0.28; README vdx и `reproducibility` L4 — как есть
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #15).
+
 ### Путь в рубрике — с регистром, как написан, и на macOS
 
 `has_file: tests/Fixtures` на Mac находил `tests/fixtures`: APFS не различает
 регистр, а на Linux тот же проект получал уровень ниже. `cli/src/facts.ts`
 сверяет каждый сегмент пути с записями каталога — `has_file`, `file_contains`
 и чтение конфигов. Уровни vdx и калибровочных проектов не изменились; выйдет
-в 0.27.1 ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), Sidetrack #4).
+в 0.28 ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), Sidetrack #4).
 
 ### Выпуск 0.27.0; хук сверяет `node_modules` с lock-файлом
 

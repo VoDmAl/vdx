@@ -229,7 +229,7 @@ requires:
 | `always_true` | — | для L0 |
 | `has_task` | task | задача с именем `task` в mise.toml / composer scripts / npm scripts / Makefile |
 | `has_task_matching` | pattern | regex-имя задачи |
-| `has_file` | path | файл/директория от корня проекта; регистр — как написан, на любой ФС (с CLI 0.27.1) |
+| `has_file` | path | файл/директория от корня проекта; регистр — как написан, на любой ФС (с CLI 0.28) |
 | `file_contains` | path, pattern | regex-match в файле |
 | `package_present` | name, ecosystem? | composer/npm/pip пакет |
 | `config_value` | path, jsonpath, op | значение в JSON/YAML/TOML |
