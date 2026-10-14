@@ -1,0 +1,5 @@
+# Commits git blame skips: formatting only, no change in what the code does.
+# GitHub reads this file by itself; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# vdx-dogfooding: Prettier — a one-off reformat of cli/src and cli/tests
+8f024f3250398588cc961ce5c615ae764189a355

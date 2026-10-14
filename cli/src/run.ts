@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as TOML from 'smol-toml';
+import { errorMessage } from './narrow.ts';
 
 export const LIFECYCLE_VERBS = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 export type LifecycleVerb = (typeof LIFECYCLE_VERBS)[number];
@@ -21,8 +22,8 @@ export function resolveLifecycleVerb(projectRoot: string, verb: string): VerbRes
   let parsed: unknown;
   try {
     parsed = TOML.parse(fs.readFileSync(miseTomlPath, 'utf8'));
-  } catch (e: any) {
-    return { ok: false, reason: 'parse-error', detail: e?.message ?? String(e) };
+  } catch (e) {
+    return { ok: false, reason: 'parse-error', detail: errorMessage(e) };
   }
   const tasks = (parsed as { tasks?: Record<string, unknown> })?.tasks;
   if (!tasks || typeof tasks !== 'object' || !(verb in tasks)) {

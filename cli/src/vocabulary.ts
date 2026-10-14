@@ -5,6 +5,7 @@
  * predicates (what a hook runs), so both read "the project's task" the same way.
  */
 import { listAllTasks, readJson, readToml, type Ctx } from './facts.ts';
+import { at, dict, list } from './narrow.ts';
 
 export const LIFECYCLE_VOCABULARY = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 
@@ -99,11 +100,9 @@ export function isVocabularyTask(name: string, words: readonly string[] = ['test
 /** Tasks a task's definition calls: composer `@refs`, `npm run X` inside a script, mise `depends`/`run`. */
 export function taskChildren(ctx: Ctx, name: string): string[] {
   const out: string[] = [];
-  const composer = readJson(ctx, 'composer.json');
-  const entry = composer?.scripts?.[name];
+  const entry = at(readJson(ctx, 'composer.json'), 'scripts', name);
   if (entry !== undefined) {
-    const list = Array.isArray(entry) ? entry : [entry];
-    for (const e of list) {
+    for (const e of Array.isArray(entry) ? (entry as unknown[]) : [entry]) {
       if (typeof e !== 'string') continue;
       if (e.startsWith('@')) {
         const [ref, ...rest] = e.slice(1).trim().split(/\s+/);
@@ -114,15 +113,12 @@ export function taskChildren(ctx: Ctx, name: string): string[] {
       }
     }
   }
-  const pkg = readJson(ctx, 'package.json');
-  const script = pkg?.scripts?.[name];
+  const script = at(readJson(ctx, 'package.json'), 'scripts', name);
   if (typeof script === 'string') out.push(...runnerCalls(script));
-  const mise = readToml(ctx, 'mise.toml');
-  const task = mise?.tasks?.[name];
-  if (task && typeof task === 'object') {
-    if (Array.isArray(task.depends))
-      out.push(...task.depends.filter((d: unknown): d is string => typeof d === 'string'));
-    const runs = Array.isArray(task.run) ? task.run : [task.run];
+  const task = dict(at(readToml(ctx, 'mise.toml'), 'tasks', name));
+  if (task) {
+    out.push(...list(task['depends']).filter((d): d is string => typeof d === 'string'));
+    const runs = Array.isArray(task['run']) ? (task['run'] as unknown[]) : [task['run']];
     for (const r of runs) if (typeof r === 'string') out.push(...runnerCalls(r));
   }
   const tasks = listAllTasks(ctx);

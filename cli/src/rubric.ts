@@ -124,8 +124,8 @@ export function parseRubric(text: string, source: string): Rubric {
   }
   // нормализуем default_target (если кто-то напишет "L4" со spaces)
   for (const ax of data.axes) {
-    ax.default_target = (ax.default_target ?? 'L4') as LevelName;
-    ax.storage = (ax.storage ?? 'level') as Storage;
+    ax.default_target = ax.default_target ?? 'L4';
+    ax.storage = ax.storage ?? 'level';
   }
   if (compareSchema(schema, '0.3')! >= 0) {
     const bad = invalidPredicates(data);

@@ -1,6 +1,7 @@
 import type { Predicate } from './rubric.ts';
 import type { Ctx } from './facts.ts';
-import { REGISTRY, isUnknown, type Unknown, type Verdict } from './predicates.ts';
+import { REGISTRY, isUnknown, type Args, type Unknown, type Verdict } from './predicates.ts';
+import { at, isDict, list } from './narrow.ts';
 
 export { isUnknown, type Unknown, type Verdict };
 
@@ -34,21 +35,21 @@ export function evalVerdict(p: Predicate, ctx: Ctx): Verdict {
   if (p === null || p === undefined) return false;
   if (typeof p === 'boolean') return p;
 
-  if (typeof p === 'object' && !Array.isArray(p)) {
-    const obj = p as Record<string, any>;
+  if (isDict(p)) {
+    const obj = p;
 
     if ('all_of' in obj) {
-      const vs = (obj.all_of as Predicate[]).map((q) => evalVerdict(q, ctx));
+      const vs = list(obj['all_of']).map((q) => evalVerdict(q, ctx));
       if (vs.some((v) => v === false)) return false;
       return firstUnknown(vs) ?? true;
     }
     if ('any_of' in obj) {
-      const vs = (obj.any_of as Predicate[]).map((q) => evalVerdict(q, ctx));
+      const vs = list(obj['any_of']).map((q) => evalVerdict(q, ctx));
       if (vs.some((v) => v === true)) return true;
       return firstUnknown(vs) ?? false;
     }
     if ('at_least_n_of' in obj) {
-      const { n, predicates } = obj.at_least_n_of as { n: number; predicates: Predicate[] };
+      const { n, predicates } = obj['at_least_n_of'] as { n: number; predicates: Predicate[] };
       const vs = predicates.map((q) => evalVerdict(q, ctx));
       const matched = vs.filter((v) => v === true).length;
       if (matched >= n) return true;
@@ -57,16 +58,18 @@ export function evalVerdict(p: Predicate, ctx: Ctx): Verdict {
       return firstUnknown(vs)!;
     }
     if ('not' in obj) {
-      const v = evalVerdict(obj.not, ctx);
+      const v = evalVerdict(obj['not'], ctx);
       return isUnknown(v) ? v : !v;
     }
     if ('fn' in obj) {
-      const fn = REGISTRY[String(obj.fn)];
+      const name = String(obj['fn']);
+      const fn = REGISTRY[name];
       if (!fn) {
-        process.stderr.write(`warning: unknown predicate "${obj.fn}"\n`);
+        process.stderr.write(`warning: unknown predicate "${name}"\n`);
         return false;
       }
-      return fn(obj.args ?? {}, ctx);
+      // `args` is the predicate's to read: package_present takes a bare string too.
+      return fn((obj['args'] ?? {}) as Args, ctx);
     }
 
     // Sugar form: single-key object where key is a registered predicate
@@ -76,9 +79,7 @@ export function evalVerdict(p: Predicate, ctx: Ctx): Verdict {
       const fn = REGISTRY[key];
       if (fn) {
         const value = obj[key];
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          return fn(value, ctx);
-        }
+        if (isDict(value)) return fn(value, ctx);
         const argKey = SUGAR_ARG_KEY[key];
         if (argKey) {
           return fn({ [argKey]: value }, ctx);
@@ -104,14 +105,14 @@ export function evalPredicate(p: Predicate, ctx: Ctx): boolean {
 export function predicateNames(p: Predicate): string[] {
   const out: string[] = [];
   const walk = (q: Predicate): void => {
-    if (q === null || q === undefined || typeof q !== 'object' || Array.isArray(q)) return;
-    const obj = q as Record<string, any>;
-    if ('all_of' in obj) return (obj.all_of as Predicate[]).forEach(walk);
-    if ('any_of' in obj) return (obj.any_of as Predicate[]).forEach(walk);
-    if ('at_least_n_of' in obj) return ((obj.at_least_n_of?.predicates as Predicate[]) ?? []).forEach(walk);
-    if ('not' in obj) return walk(obj.not);
+    if (!isDict(q)) return;
+    const obj = q;
+    if ('all_of' in obj) return list(obj['all_of']).forEach(walk);
+    if ('any_of' in obj) return list(obj['any_of']).forEach(walk);
+    if ('at_least_n_of' in obj) return list(at(obj, 'at_least_n_of', 'predicates')).forEach(walk);
+    if ('not' in obj) return walk(obj['not']);
     if ('fn' in obj) {
-      out.push(String(obj.fn));
+      out.push(String(obj['fn']));
       return;
     }
     const keys = Object.keys(obj);

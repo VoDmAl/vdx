@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   type AiDeps,
+  type AiOptions,
   type Environment,
   EXIT_DRIFT,
   EXIT_LAUNCH_FAILED,
@@ -681,7 +682,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(sshCalls).toHaveLength(1); // asked once; nothing run there
     // said under the list, before the person picks — not only after Enter
     expect(text()).toMatch(
-      /n\) a new conversation\n  note: m3 does not answer over ssh — what runs there is not known\n/,
+      /n\) a new conversation\n {2}note: m3 does not answer over ssh — what runs there is not known\n/,
     );
     expect(text()).toContain('m3 does not answer over ssh');
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
@@ -773,7 +774,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
 
   it('a conversation running here outside tmux is continued only after a yes — two sessions would write to it', () => {
     conv(ID.a, 'lft', 30);
-    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: null }];
     answers = ['', ''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
     expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running here now \(pid 4242, busy\)/);
@@ -785,7 +786,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   it('…without a terminal it is not taken, and a machine that does not answer is named', () => {
     conv(ID.a, 'lft', 30);
     conv(ID.b, 'm3', 300);
-    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: null }];
     remoteLive = null;
     expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
     expect(text()).toContain('resume:   —');
@@ -799,7 +800,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   it('started by `vdx ai@lft` from m3: lft goes by its name, and m3 is where the person is', () => {
     conv(ID.a, 'lft', 30);
     conv(ID.c, 'm3', 5);
-    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: null }];
     const d = deps();
     d.env['VDX_AI_FROM'] = 'm3';
     expect(runAi({ ...opts, path: root, dryRun: true }, d)).toBe(EXIT_OK);
@@ -815,7 +816,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
 
   it('…and a conversation that runs on lft is asked about on lft, not "here"', () => {
     conv(ID.a, 'lft', 30);
-    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy' }];
+    liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: null }];
     const questions: string[] = [];
     answers = ['', ''];
     const d = deps({ ask: (q) => (questions.push(q), answers.shift() ?? null) });
@@ -1006,6 +1007,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
     sleep: sleepSync,
     confirmTimeoutMs: 10_000,
+    ask: () => null,
   });
   const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
   const agentArgs = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').map((f) => f.proc.args);
@@ -1148,7 +1150,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     process.env['LANG'] = 'C';
     try {
       expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
-      expect(logs.join('\n')).toMatch(/running:  proj@testhost %\d+ — matches the profile/);
+      expect(logs.join('\n')).toMatch(/running: {2}proj@testhost %\d+ — matches the profile/);
     } finally {
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) delete process.env[k];
@@ -1164,7 +1166,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(out).toContain('resume:   --resume-me');
     expect(out).toContain('matched:  chan');
     expect(out).toContain('confirm:  "FAKE PROMPT" → Enter');
-    expect(out).toMatch(/running:  proj@testhost %\d+ — matches the profile/);
+    expect(out).toMatch(/running: {2}proj@testhost %\d+ — matches the profile/);
   });
 
   it('--new starts another agent next to the running one, in a new conversation, and leaves that one alone', () => {
@@ -1392,7 +1394,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 });
 
 describe('vdx ai@host', () => {
-  const opts = { path: '.', restart: false, fresh: false, detach: false, dryRun: false };
+  const opts: AiOptions = { path: '.', restart: false, fresh: false, detach: false, dryRun: false };
 
   it('maps a path under the local home to the remote home, anything else as is', () => {
     expect(remotePathWord('/Users/vdm', '/Users/vdm')).toBe('"$HOME"');

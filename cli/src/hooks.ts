@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import YAML from 'js-yaml';
 import { fileExists, isPackagePresent, readJson, readText, readToml, type Ctx } from './facts.ts';
+import { at, dict, isDict, list } from './narrow.ts';
 
 export type FrameworkId = 'husky' | 'lefthook' | 'simple-git-hooks' | 'cghooks' | 'githooks';
 
@@ -69,7 +70,7 @@ interface InstallStep {
 
 /** Yarn 2+ does not run a project's `prepare` (husky docs, How To → Yarn). */
 export function yarnBerry(ctx: Ctx): boolean {
-  const pm = readJson(ctx, 'package.json')?.packageManager;
+  const pm = at(readJson(ctx, 'package.json'), 'packageManager');
   if (typeof pm === 'string') {
     const m = pm.match(/^yarn@(\d+)/);
     if (m) return parseInt(m[1]!, 10) >= 2;
@@ -79,22 +80,24 @@ export function yarnBerry(ctx: Ctx): boolean {
 
 function installSteps(ctx: Ctx): InstallStep[] {
   const out: InstallStep[] = [];
-  const pkg = readJson(ctx, 'package.json');
-  const scripts = pkg?.scripts ?? {};
+  const scripts = dict(at(readJson(ctx, 'package.json'), 'scripts')) ?? {};
   const npmHooks = yarnBerry(ctx) ? ['postinstall'] : ['prepare', 'postinstall'];
   for (const name of npmHooks) {
-    if (typeof scripts[name] === 'string') {
-      out.push({ where: `package.json ${name}`, text: expandNpm(scripts, scripts[name]) });
+    const body = scripts[name];
+    if (typeof body === 'string') {
+      out.push({ where: `package.json ${name}`, text: expandNpm(scripts, body) });
     }
   }
-  const composer = readJson(ctx, 'composer.json');
-  const cmd = composer?.scripts?.['post-install-cmd'];
+  const composerScripts = dict(at(readJson(ctx, 'composer.json'), 'scripts')) ?? {};
+  const cmd = composerScripts['post-install-cmd'];
   if (cmd !== undefined) {
-    out.push({ where: 'composer post-install-cmd', text: expandComposer(composer.scripts, cmd) });
+    out.push({ where: 'composer post-install-cmd', text: expandComposer(composerScripts, cmd) });
   }
-  const up = readToml(ctx, 'mise.toml')?.tasks?.up;
-  if (up && typeof up === 'object') {
-    const runs = (Array.isArray(up.run) ? up.run : [up.run]).filter((r: unknown) => typeof r === 'string');
+  const up = dict(at(readToml(ctx, 'mise.toml'), 'tasks', 'up'));
+  if (up) {
+    const runs = (Array.isArray(up['run']) ? (up['run'] as unknown[]) : [up['run']]).filter(
+      (r): r is string => typeof r === 'string',
+    );
     if (runs.length > 0) out.push({ where: 'mise task up', text: runs.join('\n') });
   }
   return out;
@@ -135,7 +138,7 @@ function findStep(steps: InstallStep[], re: RegExp): string | null {
 /** Hook scripts in a directory: file name = event; the body is the command. */
 function hooksFromDir(ctx: Ctx, dir: string): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  let names: string[] = [];
+  let names: string[];
   try {
     names = fs.readdirSync(path.join(ctx.projectRoot, dir));
   } catch {
@@ -162,15 +165,14 @@ function scriptBody(text: string): string {
 
 function lefthookRuns(node: unknown): string[] {
   const out: string[] = [];
-  if (!node || typeof node !== 'object') return out;
-  const o = node as Record<string, any>;
-  if (typeof o.run === 'string') out.push(o.run);
-  if (typeof o.runner === 'string') out.push(o.runner);
+  if (!isDict(node)) return out;
+  if (typeof node['run'] === 'string') out.push(node['run']);
+  if (typeof node['runner'] === 'string') out.push(node['runner']);
   for (const key of ['commands', 'scripts']) {
-    if (o[key] && typeof o[key] === 'object') for (const v of Object.values(o[key])) out.push(...lefthookRuns(v));
+    for (const v of Object.values(dict(node[key]) ?? {})) out.push(...lefthookRuns(v));
   }
-  if (Array.isArray(o.jobs)) for (const j of o.jobs) out.push(...lefthookRuns(j));
-  if (o.group && typeof o.group === 'object') out.push(...lefthookRuns(o.group));
+  for (const j of list(node['jobs'])) out.push(...lefthookRuns(j));
+  out.push(...lefthookRuns(node['group']));
   return out;
 }
 
@@ -204,14 +206,14 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
   for (const file of LEFTHOOK_FILES) {
     const text = readText(ctx, file);
     if (text === null) continue;
-    let data: any;
+    let data: unknown;
     try {
       data = YAML.load(text);
     } catch {
       continue;
     }
     const hooks = new Map<string, string[]>();
-    for (const [event, def] of Object.entries((data ?? {}) as Record<string, unknown>)) {
+    for (const [event, def] of Object.entries(dict(data) ?? {})) {
       if (GIT_HOOK_EVENTS.has(event)) hooks.set(event, lefthookRuns(def));
     }
     if (hooks.size === 0) continue;
@@ -231,11 +233,9 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
     break;
   }
 
-  const sgh =
-    (pkg?.['simple-git-hooks'] as Record<string, unknown> | undefined) ??
-    readJson(ctx, '.simple-git-hooks.json') ??
-    readJson(ctx, 'simple-git-hooks.json');
-  if (sgh && typeof sgh === 'object') {
+  const sghInPackage = dict(at(pkg, 'simple-git-hooks'));
+  const sgh = sghInPackage ?? dict(readJson(ctx, '.simple-git-hooks.json') ?? readJson(ctx, 'simple-git-hooks.json'));
+  if (sgh) {
     const hooks = new Map<string, string[]>();
     for (const [event, cmd] of Object.entries(sgh)) {
       if (GIT_HOOK_EVENTS.has(event) && typeof cmd === 'string') hooks.set(event, [cmd]);
@@ -243,7 +243,7 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
     if (hooks.size > 0) {
       out.push({
         id: 'simple-git-hooks',
-        declaredIn: pkg?.['simple-git-hooks'] ? 'package.json simple-git-hooks' : 'simple-git-hooks.json',
+        declaredIn: sghInPackage ? 'package.json simple-git-hooks' : 'simple-git-hooks.json',
         hooks,
         installedBy: isPackagePresent('simple-git-hooks', 'npm', ctx)
           ? 'simple-git-hooks package (its postinstall)'
@@ -255,10 +255,10 @@ export function detectHookFrameworks(ctx: Ctx): HookFramework[] {
     }
   }
 
-  const extra = composer?.extra?.hooks;
-  if (extra && typeof extra === 'object') {
+  const extra = dict(at(composer, 'extra', 'hooks'));
+  if (extra) {
     const hooks = new Map<string, string[]>();
-    for (const [event, cmd] of Object.entries(extra as Record<string, unknown>)) {
+    for (const [event, cmd] of Object.entries(extra)) {
       if (!GIT_HOOK_EVENTS.has(event)) continue;
       const list = (Array.isArray(cmd) ? cmd : [cmd]).filter((c): c is string => typeof c === 'string');
       if (list.length > 0) hooks.set(event, list);
@@ -301,7 +301,7 @@ export function installCommand(fw: HookFramework, ctx: Ctx): string {
   if (fw.installedBy === null) return fw.manualInstall;
   if (fw.installedBy.startsWith('composer')) return 'composer install';
   if (fw.installedBy === 'mise task up') return 'vdx up';
-  const pm = readJson(ctx, 'package.json')?.packageManager;
+  const pm = at(readJson(ctx, 'package.json'), 'packageManager');
   if (typeof pm === 'string' && pm.startsWith('pnpm')) return 'pnpm install';
   if ((typeof pm === 'string' && pm.startsWith('yarn')) || fileExists(ctx, 'yarn.lock')) return 'yarn install';
   if (fileExists(ctx, 'pnpm-lock.yaml')) return 'pnpm install';

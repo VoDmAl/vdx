@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import YAML from 'js-yaml';
 import { fileExists, readText, type Ctx } from './facts.ts';
+import { at, dict, isDict, list, str } from './narrow.ts';
 import { projectTaskCalls } from './vocabulary.ts';
 
 export interface GhaStep {
@@ -48,9 +49,8 @@ function filterMatches(pattern: string, branch: string): boolean {
 }
 
 function branchSelected(filters: unknown, branch: string): boolean {
-  const list = Array.isArray(filters) ? filters : [filters];
   let selected = false;
-  for (const f of list) {
+  for (const f of Array.isArray(filters) ? (filters as unknown[]) : [filters]) {
     if (typeof f !== 'string') continue;
     if (f.startsWith('!')) {
       if (filterMatches(f.slice(1), branch)) selected = false;
@@ -65,15 +65,16 @@ function branchSelected(filters: unknown, branch: string): boolean {
 export function pushesMain(on: unknown): boolean {
   if (on === 'push') return true;
   if (Array.isArray(on)) return on.includes('push');
-  if (!on || typeof on !== 'object') return false;
-  if (!('push' in on)) return false;
-  const push = (on as Record<string, any>).push;
-  if (push === null || push === undefined || typeof push !== 'object') return true;
-  const hasBranchFilter = push.branches !== undefined || push['branches-ignore'] !== undefined;
-  if (!hasBranchFilter && (push.tags !== undefined || push['tags-ignore'] !== undefined)) return false;
+  if (!isDict(on) || !('push' in on)) return false;
+  const push = dict(on['push']);
+  if (!push) return true;
+  const { branches, tags } = push;
+  const branchesIgnore = push['branches-ignore'];
+  const hasBranchFilter = branches !== undefined || branchesIgnore !== undefined;
+  if (!hasBranchFilter && (tags !== undefined || push['tags-ignore'] !== undefined)) return false;
   return MAIN_BRANCHES.some((b) => {
-    if (push.branches !== undefined) return branchSelected(push.branches, b);
-    if (push['branches-ignore'] !== undefined) return !branchSelected(push['branches-ignore'], b);
+    if (branches !== undefined) return branchSelected(branches, b);
+    if (branchesIgnore !== undefined) return !branchSelected(branchesIgnore, b);
     return true;
   });
 }
@@ -83,34 +84,41 @@ function truthy(v: unknown): boolean {
 }
 
 export function parseWorkflow(file: string, text: string): GhaWorkflow | null {
-  let data: any;
+  let data: unknown;
   try {
     data = YAML.load(text);
   } catch {
     return null;
   }
+  // An array is an object too, and the workflow it would be has no jobs.
   if (!data || typeof data !== 'object') return null;
   const jobs: GhaJob[] = [];
-  for (const [id, job] of Object.entries((data.jobs ?? {}) as Record<string, any>)) {
-    if (!job || typeof job !== 'object') continue;
-    const needs = job.needs === undefined ? [] : Array.isArray(job.needs) ? job.needs : [job.needs];
-    const steps: GhaStep[] = (Array.isArray(job.steps) ? job.steps : [])
-      .filter((s: unknown) => s && typeof s === 'object')
-      .map((s: any) => ({
-        ...(typeof s.run === 'string' ? { run: s.run } : {}),
-        ...(typeof s.uses === 'string' ? { uses: s.uses } : {}),
-        continueOnError: truthy(s['continue-on-error']),
-      }));
+  for (const [id, value] of Object.entries(dict(at(data, 'jobs')) ?? {})) {
+    const job = dict(value);
+    if (!job) continue;
+    const needs = job['needs'] === undefined ? [] : Array.isArray(job['needs']) ? list(job['needs']) : [job['needs']];
+    const steps: GhaStep[] = list(job['steps'])
+      .filter(isDict)
+      .map((s) => {
+        const run = str(s['run']);
+        const uses = str(s['uses']);
+        return {
+          ...(run !== undefined ? { run } : {}),
+          ...(uses !== undefined ? { uses } : {}),
+          continueOnError: truthy(s['continue-on-error']),
+        };
+      });
+    const name = str(job['name']);
     jobs.push({
       id,
-      ...(typeof job.name === 'string' ? { name: job.name } : {}),
-      needs: needs.filter((n: unknown): n is string => typeof n === 'string'),
+      ...(name !== undefined ? { name } : {}),
+      needs: needs.filter((n): n is string => typeof n === 'string'),
       steps,
       continueOnError: truthy(job['continue-on-error']),
-      matrix: Boolean(job.strategy?.matrix),
+      matrix: Boolean(at(job, 'strategy', 'matrix')),
     });
   }
-  return { file, pushesMain: pushesMain(data.on), jobs };
+  return { file, pushesMain: pushesMain(at(data, 'on')), jobs };
 }
 
 export function readWorkflows(ctx: Ctx): GhaWorkflow[] {
@@ -118,7 +126,7 @@ export function readWorkflows(ctx: Ctx): GhaWorkflow[] {
   if (ctx.cache.has(key)) return ctx.cache.get(key) as GhaWorkflow[];
   const dir = path.join(ctx.projectRoot, '.github', 'workflows');
   const out: GhaWorkflow[] = [];
-  let files: string[] = [];
+  let files: string[];
   try {
     files = fs
       .readdirSync(dir)

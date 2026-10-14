@@ -20,7 +20,7 @@ function levelAxis(levels: Partial<Record<'L1' | 'L2' | 'L3' | 'L4', boolean>>):
       L3: { requires: requires(levels.L3 ?? false) },
       L4: { requires: requires(levels.L4 ?? false) },
     },
-  } as Axis;
+  };
 }
 
 describe('evalAxis — delta-style levels', () => {
@@ -58,7 +58,7 @@ describe('evalAxis — flags-storage axis', () => {
           level_thresholds: { L1: 0.1, L2: 0.35, L3: 0.65, L4: 0.85 },
         },
       },
-    } as Axis;
+    };
   }
 
   it('0 of 4 → L0', () => {

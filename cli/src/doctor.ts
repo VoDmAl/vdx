@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { effectiveAuthor, isGitRepo, rankAuthors, scanPool } from './author.ts';
 import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
 import { checkRepoHooks } from './clone-checks.ts';
+import { at, dict } from './narrow.ts';
 import {
   checkPersonalHooks,
   defaultPersonalHookDeps,
@@ -354,7 +355,7 @@ export function checkClaudeCodePlugin(
   claudeDir: string = process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude'),
 ): CheckResult {
   const base = { id: 'claude-plugin', label: 'Claude Code vdx plugin' };
-  const readJson = (file: string): any => {
+  const readJson = (file: string): unknown => {
     try {
       return JSON.parse(fs.readFileSync(path.join(claudeDir, file), 'utf8'));
     } catch {
@@ -370,13 +371,13 @@ export function checkClaudeCodePlugin(
       remedy: PLUGIN_INSTALL_HINT,
     };
   }
-  const key = Object.keys(installed.plugins ?? {}).find((k) => k.startsWith('vdx@'));
+  const key = Object.keys(dict(at(installed, 'plugins')) ?? {}).find((k) => k.startsWith('vdx@'));
   if (!key) {
     return { ...base, status: 'warning', message: 'not installed', remedy: PLUGIN_INSTALL_HINT };
   }
-  const version = installed.plugins[key]?.[0]?.version;
+  const version = at(installed, 'plugins', key, '0', 'version');
   const label = `${key}${typeof version === 'string' ? ` ${version}` : ''}`;
-  if (readJson('settings.json')?.enabledPlugins?.[key] === false) {
+  if (at(readJson('settings.json'), 'enabledPlugins', key) === false) {
     return { ...base, status: 'warning', message: `${label} installed but disabled`, remedy: `/plugin enable ${key}` };
   }
   return { ...base, status: 'ok', message: label };

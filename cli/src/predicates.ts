@@ -15,8 +15,9 @@ import {
 import { checkingJobs, ciSystems, ciTaskCalls, mainPushSteps, readWorkflows, shippingJobs, upstream } from './gha.ts';
 import { detectHookFrameworks } from './hooks.ts';
 import { covers, expandTasks, isVocabularyTask, projectTaskCalls } from './vocabulary.ts';
+import { at, isStringList, str } from './narrow.ts';
 
-type Args = Record<string, any>;
+export type Args = Record<string, unknown>;
 
 /** A fact vdx could not read here — a CI system or a hosting it does not inspect. */
 export interface Unknown {
@@ -42,7 +43,7 @@ const DEFAULT_TEST_PATTERN =
 
 function testPattern(args: Args): RegExp {
   try {
-    return new RegExp(String(args.pattern ?? DEFAULT_TEST_PATTERN));
+    return new RegExp(str(args.pattern) ?? DEFAULT_TEST_PATTERN);
   } catch {
     return new RegExp(DEFAULT_TEST_PATTERN);
   }
@@ -102,7 +103,7 @@ export const REGISTRY: Record<string, PredicateFn> = {
   has_file: (args, ctx) => fileExists(ctx, String(args.path)),
 
   file_contains: (args, ctx) => {
-    const paths: string[] = Array.isArray(args.paths) ? args.paths : [String(args.path)];
+    const paths = isStringList(args.paths) ? args.paths : [String(args.path)];
     const expanded = expandPaths(paths, ctx);
     let re: RegExp;
     try {
@@ -119,7 +120,7 @@ export const REGISTRY: Record<string, PredicateFn> = {
 
   package_present: (args, ctx) => {
     if (typeof args === 'string') return isPackagePresent(args, 'any', ctx);
-    return isPackagePresent(String(args.name), String(args.ecosystem ?? 'any'), ctx);
+    return isPackagePresent(String(args.name), str(args.ecosystem) ?? 'any', ctx);
   },
 
   tsc_flag: (args, ctx) => {
@@ -143,7 +144,7 @@ export const REGISTRY: Record<string, PredicateFn> = {
   gh_workflow_blocks_pr: (args, ctx) => {
     const dir = path.join(ctx.projectRoot, '.github', 'workflows');
     if (!fs.existsSync(dir)) return false;
-    const wanted = args.check_name ? String(args.check_name) : null;
+    const wanted = str(args.check_name) || null;
     try {
       for (const f of fs.readdirSync(dir)) {
         if (!/\.ya?ml$/.test(f)) continue;
@@ -166,21 +167,19 @@ export const REGISTRY: Record<string, PredicateFn> = {
       const text = readText(ctx, f);
       if (text && new RegExp(`^${hook}:`, 'm').test(text)) return true;
     }
-    const composer = readJson(ctx, 'composer.json');
-    if (composer?.extra?.hooks?.[hook]) return true;
-    return false;
+    return Boolean(at(readJson(ctx, 'composer.json'), 'extra', 'hooks', hook));
   },
 
   config_value: (args, ctx) => {
-    const filePath = String(args.path ?? '');
-    const jsonpath = String(args.jsonpath ?? '');
+    const filePath = str(args.path) ?? '';
+    const jsonpath = str(args.jsonpath) ?? '';
     if (!filePath || !jsonpath) return false;
     const data = readStructured(ctx, filePath);
     if (data === null || data === undefined) return false;
     const value = resolveConfigPath(data, jsonpath);
 
     // Operator resolution: explicit `op`, otherwise infer from arg shape.
-    let op = args.op ? String(args.op) : null;
+    let op = str(args.op) || null;
     if (!op) {
       if (args.equals !== undefined) op = 'equals';
       else if (args.gte !== undefined) op = 'gte';

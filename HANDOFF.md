@@ -191,8 +191,8 @@ Decision Log её кристалла.
 ```bash
 cd "/Users/vdm/AI Projects/vdx"
 mise run build          # npm install в cli/
-mise run check          # typecheck и формат cli/ (Prettier) — его зовут CI
-mise run fix            # переформатировать cli/; после правок кода — до коммита
+mise run check          # typecheck (с тестами), Prettier, ESLint в cli/ — его зовёт CI
+mise run fix            # eslint --fix и Prettier в cli/; после правок кода — до коммита
 mise run test           # unit-тесты cli/
 mise run test:smoke     # аудит трёх калибровочных проектов (не в CI)
 vdx audit .             # vdx по своей рубрике

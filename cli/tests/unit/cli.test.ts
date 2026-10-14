@@ -17,7 +17,7 @@ function vdxEnv(env: NodeJS.ProcessEnv, ...args: string[]) {
 
 describe('vdx --version', () => {
   it('prints the package version to stdout and exits 0', () => {
-    const pkg = JSON.parse(fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8')) as { version: string };
     const r = vdx('--version');
     expect(r.status).toBe(0);
     expect(r.stdout).toBe(`${pkg.version}\n`);

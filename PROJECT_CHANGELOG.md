@@ -4,6 +4,14 @@
 
 ## 2026-10-13
 
+### ESLint в CLI: разобранные файлы — `unknown`, пока не проверены
+
+`cli/eslint.config.js` (`recommendedTypeChecked`), ноль находок. JSON, YAML и
+TOML из чужих проектов теперь `unknown` до проверки (`cli/src/narrow.ts`),
+тесты проверяет `tsc`. `mise run check` зовёт линтер, `mise run fix` —
+`eslint --fix`. Коммит переформатирования — в `.git-blame-ignore-revs`
+([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #8).
+
 ### Выпуск 0.25.0 и плагин 0.9.2
 
 `@vodmal/vdx-cli@0.25.0` в npm (`0d1f41f`): аудит мета-репо целиком, сет

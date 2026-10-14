@@ -80,7 +80,7 @@ describe('rubric schema', () => {
 });
 
 function axis(levels: Axis['levels']): Axis {
-  return { id: 'bp', class: 'critical', storage: 'level', default_target: 'L4', levels } as Axis;
+  return { id: 'bp', class: 'critical', storage: 'level', default_target: 'L4', levels };
 }
 
 describe('not_required levels and unknown', () => {

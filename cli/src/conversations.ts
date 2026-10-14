@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { at, dict, str } from './narrow.ts';
 
 /**
  * Claude Code conversations of a project, and the machine each one was last
@@ -86,17 +87,20 @@ export function readConversation(file: string, updated: Date): Conversation | nu
     const isTitle = line.includes('"ai-title"') || line.includes('"last-prompt"');
     if (!turns && line.includes('"type":"user"')) turns = true;
     if (!isHook && !isTitle) continue;
-    let entry: any;
+    let entry: unknown;
     try {
       entry = JSON.parse(line);
     } catch {
       continue;
     }
-    if (entry?.type === 'ai-title' && typeof entry.aiTitle === 'string') aiTitle = entry.aiTitle;
-    else if (entry?.type === 'last-prompt' && typeof entry.lastPrompt === 'string') lastPrompt = entry.lastPrompt;
-    else if (entry?.type === 'attachment' && entry.attachment?.type === 'hook_additional_context') {
-      const content = entry.attachment.content;
-      for (const part of Array.isArray(content) ? content : [content]) {
+    const type = at(entry, 'type');
+    const title = str(at(entry, 'aiTitle'));
+    const prompt = str(at(entry, 'lastPrompt'));
+    if (type === 'ai-title' && title !== undefined) aiTitle = title;
+    else if (type === 'last-prompt' && prompt !== undefined) lastPrompt = prompt;
+    else if (type === 'attachment' && at(entry, 'attachment', 'type') === 'hook_additional_context') {
+      const content = at(entry, 'attachment', 'content');
+      for (const part of Array.isArray(content) ? (content as unknown[]) : [content]) {
         const label = typeof part === 'string' ? part.match(MACHINE_LINE_RE)?.[1] : undefined;
         if (label && LABEL_RE.test(label)) machine = label;
       }
@@ -197,9 +201,11 @@ export function latestPerMachine(
  */
 export function liveConversationId(env: NodeJS.ProcessEnv, home: string, pid: number): string | null {
   try {
-    const data = JSON.parse(fs.readFileSync(path.join(claudeConfigDir(env, home), 'sessions', `${pid}.json`), 'utf8'));
-    const id = data?.sessionId;
-    return typeof id === 'string' && isConversationId(id) ? id : null;
+    const data: unknown = JSON.parse(
+      fs.readFileSync(path.join(claudeConfigDir(env, home), 'sessions', `${pid}.json`), 'utf8'),
+    );
+    const id = str(at(data, 'sessionId'));
+    return id !== undefined && isConversationId(id) ? id : null;
   } catch {
     return null;
   }
@@ -209,9 +215,8 @@ export function liveConversationId(env: NodeJS.ProcessEnv, home: string, pid: nu
 export function liveStartedAt(env: NodeJS.ProcessEnv, home: string, pid: number): number | null {
   try {
     const file = path.join(claudeConfigDir(env, home), 'sessions', `${pid}.json`);
-    const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const at = typeof data === 'object' && data !== null ? (data as { startedAt?: unknown }).startedAt : undefined;
-    return typeof at === 'number' ? at : null;
+    const started = at(JSON.parse(fs.readFileSync(file, 'utf8')), 'startedAt');
+    return typeof started === 'number' ? started : null;
   } catch {
     return null;
   }
@@ -234,20 +239,22 @@ export function parseLiveSessions(text: string): LiveSession[] {
   const out: LiveSession[] = [];
   for (const line of text.split('\n')) {
     if (!line.trim().startsWith('{')) continue;
-    let data: any;
+    let data: Record<string, unknown> | undefined;
     try {
-      data = JSON.parse(line);
+      data = dict(JSON.parse(line));
     } catch {
       continue;
     }
-    if (!Number.isInteger(data?.pid) || typeof data?.sessionId !== 'string' || !isConversationId(data.sessionId))
-      continue;
+    const pid = data?.['pid'];
+    const conversation = str(data?.['sessionId']);
+    if (typeof pid !== 'number' || !Number.isInteger(pid) || conversation === undefined) continue;
+    if (!isConversationId(conversation)) continue;
     out.push({
-      pid: data.pid,
-      conversation: data.sessionId,
-      tmux: typeof data.tmux === 'string' ? data.tmux : null,
-      status: typeof data.status === 'string' ? data.status : null,
-      cwd: typeof data.cwd === 'string' ? data.cwd : null,
+      pid,
+      conversation,
+      tmux: str(data?.['tmux']) ?? null,
+      status: str(data?.['status']) ?? null,
+      cwd: str(data?.['cwd']) ?? null,
     });
   }
   return out;
@@ -277,8 +284,8 @@ function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (e: any) {
-    return e?.code === 'EPERM';
+  } catch (e) {
+    return at(e, 'code') === 'EPERM';
   }
 }
 

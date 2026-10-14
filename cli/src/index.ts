@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { loadRubric } from './rubric.ts';
 import { loadManifest, loadOverrides } from './manifest.ts';
 import { autoDetectStack, type Ctx } from './facts.ts';
+import { at, errorMessage } from './narrow.ts';
 import { LIFECYCLE_VERBS, type LifecycleVerb, resolveLifecycleVerb, renderResolveError } from './run.ts';
 import { audit } from './audit.ts';
 import {
@@ -346,8 +347,8 @@ function cmdInit(opts: ParsedArgs): void {
   try {
     writeInit(plan, { force: Boolean(opts.flags.force) });
     process.stderr.write(`\n✓ wrote ${plan.miseTomlPath}\n`);
-  } catch (e: any) {
-    process.stderr.write(`\nerror: ${e?.message ?? String(e)}\n`);
+  } catch (e) {
+    process.stderr.write(`\nerror: ${errorMessage(e)}\n`);
     process.exit(2);
   }
 }
@@ -380,8 +381,8 @@ function cmdPublish(opts: ParsedArgs): void {
   const replan = () => {
     try {
       return planPublish(planOpts, auditResult, ctx);
-    } catch (e: any) {
-      process.stderr.write(`error: ${e?.message ?? String(e)}\n`);
+    } catch (e) {
+      process.stderr.write(`error: ${errorMessage(e)}\n`);
       process.exit(2);
     }
   };
@@ -418,8 +419,8 @@ function cmdPublish(opts: ParsedArgs): void {
 
   try {
     executePublish(plan, deps);
-  } catch (e: any) {
-    process.stderr.write(`\nerror: ${e?.message ?? String(e)}\n`);
+  } catch (e) {
+    process.stderr.write(`\nerror: ${errorMessage(e)}\n`);
     process.exit(3);
   }
 }
@@ -434,14 +435,15 @@ function cmdRun(verb: LifecycleVerb): void {
 
   try {
     execFileSync('mise', ['run', verb], { cwd: projectRoot, stdio: 'inherit' });
-  } catch (e: any) {
-    if (e?.code === 'ENOENT') {
+  } catch (e) {
+    if (at(e, 'code') === 'ENOENT') {
       process.stderr.write(
         `vdx: \`mise\` binary not found on PATH\n` + `hint: install mise — https://mise.jdx.dev/getting-started.html\n`,
       );
       process.exit(127);
     }
-    process.exit(typeof e?.status === 'number' ? e.status : 1);
+    const status = at(e, 'status');
+    process.exit(typeof status === 'number' ? status : 1);
   }
 }
 
@@ -462,8 +464,8 @@ function cmdDoctor(opts: ParsedArgs): void {
       process.stderr.write(
         done.length > 0 ? done.map((d) => `✓ ${d}`).join('\n') + '\n' : 'nothing to fix in ~/.gitconfig\n',
       );
-    } catch (e: any) {
-      process.stderr.write(`vdx doctor --fix: ${e?.message ?? String(e)}\n`);
+    } catch (e) {
+      process.stderr.write(`vdx doctor --fix: ${errorMessage(e)}\n`);
       process.exit(2);
     }
   }

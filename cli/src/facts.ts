@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as TOML from 'smol-toml';
 import * as YAML from 'js-yaml';
+import { at, dict, str } from './narrow.ts';
 
 export interface Ctx {
   projectRoot: string;
@@ -52,7 +53,7 @@ export function readText(ctx: Ctx, rel: string): string | null {
   }
 }
 
-export function readJson(ctx: Ctx, rel: string): any {
+export function readJson(ctx: Ctx, rel: string): unknown {
   const key = `json:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   const text = readText(ctx, rel);
@@ -61,7 +62,7 @@ export function readJson(ctx: Ctx, rel: string): any {
     return null;
   }
   try {
-    const data = JSON.parse(text);
+    const data: unknown = JSON.parse(text);
     ctx.cache.set(key, data);
     return data;
   } catch {
@@ -70,7 +71,7 @@ export function readJson(ctx: Ctx, rel: string): any {
   }
 }
 
-export function readToml(ctx: Ctx, rel: string): any {
+export function readToml(ctx: Ctx, rel: string): unknown {
   const key = `toml:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   const text = readText(ctx, rel);
@@ -88,7 +89,7 @@ export function readToml(ctx: Ctx, rel: string): any {
   }
 }
 
-export function readYaml(ctx: Ctx, rel: string): any {
+export function readYaml(ctx: Ctx, rel: string): unknown {
   const key = `yaml:${rel}`;
   if (ctx.cache.has(key)) return ctx.cache.get(key);
   const text = readText(ctx, rel);
@@ -107,7 +108,7 @@ export function readYaml(ctx: Ctx, rel: string): any {
 }
 
 /** Parse a structured file by extension. Returns parsed object/array or null. */
-export function readStructured(ctx: Ctx, rel: string): any {
+export function readStructured(ctx: Ctx, rel: string): unknown {
   const lower = rel.toLowerCase();
   if (lower.endsWith('.json')) return readJson(ctx, rel);
   if (lower.endsWith('.toml')) return readToml(ctx, rel);
@@ -122,14 +123,7 @@ export function readStructured(ctx: Ctx, rel: string): any {
  */
 export function resolveConfigPath(root: unknown, jsonpath: string): unknown {
   if (root === null || root === undefined) return undefined;
-  const parts = jsonpath.split('.');
-  let cur: any = root;
-  for (const part of parts) {
-    if (cur === null || cur === undefined) return undefined;
-    if (typeof cur !== 'object') return undefined;
-    cur = (cur as Record<string, unknown>)[part];
-  }
-  return cur;
+  return at(root, ...jsonpath.split('.'));
 }
 
 /**
@@ -142,25 +136,12 @@ export function listAllTasks(ctx: Ctx): Set<string> {
   const tasks = new Set<string>();
   const own = ownCtx(ctx);
 
-  const miseT = readToml(own, 'mise.toml');
-  if (miseT?.tasks && typeof miseT.tasks === 'object') {
-    for (const k of Object.keys(miseT.tasks as object)) tasks.add(k);
-  }
-
-  const composer = readJson(own, 'composer.json');
-  if (composer?.scripts && typeof composer.scripts === 'object') {
-    for (const k of Object.keys(composer.scripts)) tasks.add(k);
-  }
-
-  const pkg = readJson(own, 'package.json');
-  if (pkg?.scripts && typeof pkg.scripts === 'object') {
-    for (const k of Object.keys(pkg.scripts)) tasks.add(k);
-  }
-
+  for (const k of Object.keys(dict(at(readToml(own, 'mise.toml'), 'tasks')) ?? {})) tasks.add(k);
+  for (const k of Object.keys(dict(at(readJson(own, 'composer.json'), 'scripts')) ?? {})) tasks.add(k);
+  for (const k of Object.keys(dict(at(readJson(own, 'package.json'), 'scripts')) ?? {})) tasks.add(k);
   // monorepo-ish fallback: server/package.json (см. bookmap)
-  const serverPkg = readJson(own, 'server/package.json');
-  if (serverPkg?.scripts && typeof serverPkg.scripts === 'object') {
-    for (const k of Object.keys(serverPkg.scripts)) tasks.add(`server:${k}`);
+  for (const k of Object.keys(dict(at(readJson(own, 'server/package.json'), 'scripts')) ?? {})) {
+    tasks.add(`server:${k}`);
   }
 
   const make = readText(own, 'Makefile');
@@ -180,18 +161,14 @@ export function isPackagePresent(name: string, ecosystem: string, ctx: Ctx): boo
   const eco = ecosystem ?? 'any';
   if (eco === 'any' || eco === 'composer') {
     const composer = readJson(ctx, 'composer.json');
-    if (composer) {
-      if (composer.require?.[name]) return true;
-      if (composer['require-dev']?.[name]) return true;
-    }
+    if (at(composer, 'require', name)) return true;
+    if (at(composer, 'require-dev', name)) return true;
   }
   if (eco === 'any' || eco === 'npm') {
     for (const rel of ['package.json', 'server/package.json']) {
       const pkg = readJson(ctx, rel);
-      if (pkg) {
-        if (pkg.dependencies?.[name]) return true;
-        if (pkg.devDependencies?.[name]) return true;
-      }
+      if (at(pkg, 'dependencies', name)) return true;
+      if (at(pkg, 'devDependencies', name)) return true;
     }
   }
   return false;
@@ -222,19 +199,17 @@ export function expandPaths(paths: string[], ctx: Ctx): string[] {
   return out;
 }
 
-export function readTsconfig(ctx: Ctx): any {
-  let cfg = readJson(ctx, 'tsconfig.json');
-  if (!cfg) cfg = readJson(ctx, 'server/tsconfig.json');
+export function readTsconfig(ctx: Ctx): { compilerOptions?: Record<string, unknown> } | null {
+  const cfg = dict(readJson(ctx, 'tsconfig.json')) ?? dict(readJson(ctx, 'server/tsconfig.json'));
   if (!cfg) return null;
+  const own = dict(cfg['compilerOptions']);
   // basic one-level `extends` resolution
-  if (cfg.extends && typeof cfg.extends === 'string' && cfg.extends.startsWith('.')) {
-    const baseRel = cfg.extends.endsWith('.json') ? cfg.extends : `${cfg.extends}.json`;
-    const base = readJson(ctx, baseRel);
-    if (base?.compilerOptions) {
-      cfg.compilerOptions = { ...base.compilerOptions, ...(cfg.compilerOptions ?? {}) };
-    }
+  const ext = str(cfg['extends']);
+  if (ext?.startsWith('.')) {
+    const base = dict(at(readJson(ctx, ext.endsWith('.json') ? ext : `${ext}.json`), 'compilerOptions'));
+    if (base) return { compilerOptions: { ...base, ...own } };
   }
-  return cfg;
+  return own ? { compilerOptions: own } : {};
 }
 
 const MANIFEST_TO_STACK: Array<[string, string]> = [

@@ -34,10 +34,10 @@ relates-to:
 ## Текущая модель
 
 **Состояние.** На старте (2026-10-13, vdx 0.24.0, сет v1.3.0) общий **L1**.
-Сейчас (CLI из `cli/` с правкой мета-репо, сет v1.4.0, override, Prettier и
-`fix`) — тоже **L1**: на L2 вспомогательных 4 из 6 (`reproducibility`,
-`code-style`, `docs`, `release-artifact`), нужно 5. Колонка «Сейчас» в
-таблице — это состояние.
+Сейчас (CLI из `cli/`, 0.25 и ESLint, сет v1.4.0, override) — тоже **L1**:
+на L2 вспомогательных 4 из 6 (`reproducibility`, `code-style`, `docs`,
+`release-artifact`), нужно 5. Держат `dependency-hygiene` и `git-hygiene`.
+Колонка «Сейчас» в таблице — это состояние.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -61,11 +61,11 @@ L засчитан, если каждая критичная ось ≥ L и ≥
 |---|:-:|:-:|---|---|
 | `lifecycle-interface` | C | L4 | — | `fix` — Prettier (DL #7); `up`/`down` библиотеке не нужны с v1.4.0 и vdx 0.25 (DL #6); L4 — `test:smoke` подходит под `test:.*` |
 | `tests` | C | L3 | L4: нет `test:e2e` / `test:mutation` | `test:e2e`: собранный CLI на фикстурах |
-| `static-analysis` | C | L2 | флаги 2.3 из 4.8 (0.48): `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` | ESLint flat + `recommendedTypeChecked` → 4.3/4.8 = 0.90 ≥ 0.85; 332 находки в `src/` (DL #7); предикат ищет `recommended-type-checked` через дефис (Sidetrack #5) |
+| `static-analysis` | C | L3 | флаги 3.3 из 4.8 (0.69): `eslint_type_checked` не видит `recommendedTypeChecked` (Sidetrack #5) | ESLint с `recommendedTypeChecked` стоит (DL #8); patch сета → 4.3/4.8 = 0.90 ≥ 0.85 |
 | `ci` | C | L4 | — | — |
 | `branch-protection` | C | L2 (L3 «неизвестно») | расширения хостинга нет | расширение `gh` + защита `main` на GitHub |
 | `reproducibility` | s | L4 | — | правка мета-репо (DL #5); L4 — по README продукта (Sidetrack #3) |
-| `code-style` | s | L3 | L4: нет `eslint.config.js` | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7); L4 — `eslint.config.js` (именно `.js`) |
+| `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
 | `dependency-hygiene` | s | L1 | L2: нет `npm audit` / `check:code:security` | задача аудита; L3 — dependabot (нужна правка оценщика); L4 — `knip` |
 | `git-hygiene` | s | L1 | L2: репо не ставит своих хуков | `up` ставит `core.hooksPath .githooks`; `pre-push` зовёт `mise run check` и `mise run test` |
 | `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13 |
@@ -239,6 +239,31 @@ any)`). Чинить — `unknown` и сужение. Выключить сем�
 на коммит переформатирования. `lifecycle-interface` — L4, `code-style` — L3.
 Флаг `eslint_type_checked` не увидит flat-конфиг (Sidetrack #5).
 
+### #8 / 2026-10-13 / ESLint: `any` разборщиков → `unknown` с сужением; тесты — под `tsc`
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** `cli/` 2026-10-13: `npx eslint .` — ноль находок (было 332 в
+`src/`, 34 в тестах и `bin/`); `tsc --noEmit` с тестами в `tsconfig` — ноль
+(было 13 в тестах). 398 тестов зелёные. MCP-сервер вне тестов проверен живьём
+по stdio: `list_capabilities`, `vdx_audit` (уровни как у CLI) и
+`vdx_record_success_path` на временной папке (`mise.toml` дописан верно).
+Аудит vdx (CLI из `cli/`): `static-analysis` L3, `code-style` L4, общий L1.
+**Context:** DL #7 отложил ESLint до честной починки, без выключенных правил.
+**Why:** `cli/src/narrow.ts` — проверка на входе: `isDict`, `dict`, `at`
+(уровень за уровнем, и по индексу массива — `names.0` в `project_names`
+профиля), `str`, `list`, `isStringList`, `errorMessage`, `stderrOf`. Дальше
+по коду типы настоящие. Пойманное по дороге: `catch (e: any)` → `unknown`
+плюс `{ cause }` у новой ошибки. Отключено одно правило и только для
+`bin/*.cjs`: `no-require-imports`. Это CommonJS-лаунчеры, `require` — их
+способ. Тесты вошли в `tsconfig`: 13 мест отстали от типов (`LiveSession.cwd`,
+`PublishPlan.projectRoot`, `baseline_target` → `target`). Тест, который
+расходится с типами, проверяет не то, что работает.
+**Implication:** `check` = `typecheck` + `format:check` + `lint`; `fix` =
+`eslint --fix` и Prettier. `.git-blame-ignore-revs` — коммит
+переформатирования `8f024f3`. `static-analysis` встанет на L4 с patch сета
+(Sidetrack #5).
+
 ## Sidetracks
 
 ### #1. `code-style` L2/L4 признаёт только `eslint.config.js`
@@ -328,10 +353,12 @@ L2, `recommended-type-checked` — L3. Флаг `eslint_flat` при этом т
 - [ ] Хуки репо: `.githooks/pre-push` — `mise run check` и `mise run test`;
       `core.hooksPath` ставит шаг установки — проверить, что распознаватель
       `git_hooks_arranged` это видит
-- [ ] ESLint flat (`recommendedTypeChecked`): `any` разборщиков → `unknown`
-      с сужением (332 находки в `src/`, тесты — отдельно, DL #7); `lint` в
-      `check`, `eslint --fix` в `fix`; `.git-blame-ignore-revs` — коммит
-      переформатирования; patch сета по Sidetrack #5 и #1 — до или вместе
+- [x] ESLint flat (`recommendedTypeChecked`): `any` разборщиков → `unknown`
+      с сужением, тесты под `tsc`; `lint` в `check`, `eslint --fix` в `fix`;
+      `.git-blame-ignore-revs` (DL #8)
+- [ ] Patch сета v1.4.1 по Sidetrack #5 и #1: `eslint_type_checked` видит
+      flat-конфиг, `code-style` — `eslint.config.mjs`/`.ts`; калибровка до и
+      после; сет CLI и зеркало
 - [ ] `test:e2e` — собранный CLI на фикстурах во временных папках
 - [ ] Аудит зависимостей (`check:code:security`), dependabot, `knip`
 - [ ] `docs/architecture.md`; `README.md` — `mise run up`

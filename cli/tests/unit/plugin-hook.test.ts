@@ -26,6 +26,10 @@ fi
 exit 0
 `;
 
+/** What the hook hands the session: `hookSpecificOutput.additionalContext` of its JSON. */
+const contextOf = (stdout: string): string =>
+  (JSON.parse(stdout) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext;
+
 describe('plugin SessionStart hook', () => {
   let dir: string;
   let bin: string;
@@ -70,14 +74,14 @@ describe('plugin SessionStart hook', () => {
     for (const version of ['0.22.0', '1.0.0']) {
       fs.rmSync(log, { force: true });
       const r = run({ STUB_VERSION: version, STUB_HOOKS: 'vdx doctor: git hooks — husky off' });
-      expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, version).toBe(
+      expect(contextOf(r.stdout), version).toBe(
         'vdx ai: started with "vdx ai"\n✗ this session runs without --flag\nvdx doctor: git hooks — husky off',
       );
       expect(calls(), version).toBe('ai --check /projects/my project\ndoctor --check /projects/my project\n');
     }
     // nothing from ai --check: the hooks line stands alone
     const r = run({ STUB_VERSION: '0.22.0', STUB_SILENT: '1', STUB_HOOKS: 'vdx doctor: personal hooks — off' });
-    expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).toBe('vdx doctor: personal hooks — off');
+    expect(contextOf(r.stdout)).toBe('vdx doctor: personal hooks — off');
   });
 
   it('never asks doctor --check of a vdx older than 0.22 — it would print the whole report', () => {

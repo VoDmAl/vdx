@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { AuditResult } from './audit.ts';
 import { stackForDir, type Ctx } from './facts.ts';
+import { at, dict, errorMessage, stderrOf, str } from './narrow.ts';
 
 export type BumpKind = 'patch' | 'minor' | 'major';
 
@@ -115,7 +116,7 @@ const runGit: GitRunner = (args, cwd) =>
  * since the last fetch; nothing is fetched.
  */
 export function planPush(projectRoot: string, enabled: boolean, git: GitRunner = runGit): PushPlan {
-  let upstream: string | null = null;
+  let upstream: string | null;
   try {
     upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], projectRoot).trim() || null;
   } catch {
@@ -144,10 +145,10 @@ function fetchPublishedVersion(packageName: string, npm: NpmRunner): string | nu
   try {
     const out = npm(['view', packageName, 'version']);
     return out.trim() || null;
-  } catch (e: any) {
-    const stderr = String(e?.stderr ?? e?.message ?? '');
+  } catch (e) {
+    const stderr = stderrOf(e);
     if (stderr.includes('E404') || stderr.includes('404 Not Found')) return null;
-    throw new Error(`npm view failed: ${stderr.split('\n')[0] ?? stderr}`);
+    throw new Error(`npm view failed: ${stderr.split('\n')[0] ?? stderr}`, { cause: e });
   }
 }
 
@@ -155,12 +156,10 @@ function fetchPublishedVersion(packageName: string, npm: NpmRunner): string | nu
  * The registry `npm publish` sends this package to, when it is not npm's
  * default: `publishConfig.registry`, else the scope's registry from npm config.
  */
-export function publishRegistry(
-  pkg: { name?: string; publishConfig?: { registry?: string } },
-  npm: NpmRunner,
-): string | null {
-  if (pkg.publishConfig?.registry) return pkg.publishConfig.registry;
-  const scope = pkg.name?.match(/^(@[^/]+)\//)?.[1];
+export function publishRegistry(pkg: unknown, npm: NpmRunner): string | null {
+  const registry = str(at(pkg, 'publishConfig', 'registry'));
+  if (registry) return registry;
+  const scope = str(at(pkg, 'name'))?.match(/^(@[^/]+)\//)?.[1];
   if (!scope) return null;
   try {
     const value = npm(['config', 'get', `${scope}:registry`]).trim();
@@ -184,8 +183,8 @@ export function checkNpmAuth(registry: string | null, npm: NpmRunner): Preflight
     const who = npm(registry ? ['whoami', '--registry', registry] : ['whoami']).trim();
     if (who) return { name: 'npm-auth', ok: true, message: `OK (logged in to ${where} as ${who})` };
     return { name: 'npm-auth', ok: false, message: `npm whoami answered nothing for ${where}. Run: ${login}`, fix };
-  } catch (e: any) {
-    const stderr = String(e?.stderr ?? e?.message ?? '');
+  } catch (e) {
+    const stderr = stderrOf(e);
     if (/E401|ENEEDAUTH/.test(stderr)) {
       return {
         name: 'npm-auth',
@@ -268,9 +267,9 @@ export function planPublish(
     throw new Error(`vdx publish: package.json not found at ${pkgJsonPath}`);
   }
 
-  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
-  const packageName: string = pkg.name ?? '(unnamed)';
-  const currentVersion: string = pkg.version ?? '0.0.0';
+  const pkg: unknown = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+  const packageName = str(at(pkg, 'name')) ?? '(unnamed)';
+  const currentVersion = str(at(pkg, 'version')) ?? '0.0.0';
   const newVersion = bumpSemver(currentVersion, opts.bump);
 
   const preflight: PreflightCheck[] = [];
@@ -312,8 +311,8 @@ export function planPublish(
   let registryError: string | null = null;
   try {
     published = fetchPublishedVersion(packageName, npm);
-  } catch (e: any) {
-    registryError = e?.message ?? String(e);
+  } catch (e) {
+    registryError = errorMessage(e);
   }
   if (registryError) {
     preflight.push({
@@ -416,9 +415,10 @@ export function defaultPublishDeps(): PublishDeps {
 
 /** Set `version` in package-lock.json — the root and its own entry under `packages`. */
 export function bumpLockText(text: string, version: string): string {
-  const lock = JSON.parse(text);
-  lock.version = version;
-  if (lock.packages?.['']) lock.packages[''].version = version;
+  const lock = dict(JSON.parse(text)) ?? {};
+  lock['version'] = version;
+  const self = dict(at(lock, 'packages', ''));
+  if (self) self['version'] = version;
   return JSON.stringify(lock, null, 2) + '\n';
 }
 
@@ -502,8 +502,8 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
     fs.writeFileSync(file, next(text), 'utf8');
   };
   rewrite(plan.packageJsonPath, (text) => {
-    const pkg = JSON.parse(text);
-    pkg.version = plan.newVersion;
+    const pkg = dict(JSON.parse(text)) ?? {};
+    pkg['version'] = plan.newVersion;
     return JSON.stringify(pkg, null, 2) + '\n';
   });
   if (plan.lockPath) rewrite(plan.lockPath, (text) => bumpLockText(text, plan.newVersion));
@@ -521,11 +521,13 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
   for (const s of signals) process.on(s, holdOut);
   try {
     deps.run('npm', ['publish'], path.dirname(plan.packageJsonPath));
-  } catch (e: any) {
+  } catch (e) {
     for (const [file, text] of originals) fs.writeFileSync(file, text, 'utf8');
-    const what = e?.signal ? `interrupted (${e.signal})` : `failed (exit ${e?.status ?? '?'})`;
+    const signal = str(at(e, 'signal'));
+    const status = at(e, 'status');
+    const what = signal ? `interrupted (${signal})` : `failed (exit ${typeof status === 'number' ? status : '?'})`;
     deps.log(`✗ npm publish ${what}; reverted ${bumped.map((f) => path.basename(f)).join(' and ')}`);
-    throw new Error(`npm publish ${e?.signal ? 'interrupted' : 'failed'}`);
+    throw new Error(`npm publish ${signal ? 'interrupted' : 'failed'}`, { cause: e });
   } finally {
     for (const s of signals) process.off(s, holdOut);
   }

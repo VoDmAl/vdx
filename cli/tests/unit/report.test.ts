@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { reportAnsi, reportMarkdown, reportJson } from '../../src/report.ts';
 import type { AuditResult } from '../../src/audit.ts';
 
@@ -54,22 +55,22 @@ describe('reportMarkdown', () => {
 describe('reportJson', () => {
   it('returns valid JSON containing per_axis array', () => {
     const out = reportJson(FIXTURE);
-    const parsed = JSON.parse(out);
+    const parsed = JSON.parse(out) as { achieved_level: string; per_axis: { axis_id: string }[] };
     expect(parsed.achieved_level).toBe('L2');
     expect(parsed.per_axis).toHaveLength(3);
-    expect(parsed.per_axis[0].axis_id).toBe('lifecycle-interface');
+    expect(parsed.per_axis[0]!.axis_id).toBe('lifecycle-interface');
   });
 });
 
 describe('reportAnsi', () => {
-  const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripAnsi = stripVTControlCharacters;
 
   it('contains ANSI escape sequences when chalk colors are forced', () => {
     const prev = process.env.FORCE_COLOR;
     process.env.FORCE_COLOR = '1';
     try {
       const out = reportAnsi(FIXTURE);
-      expect(out).toMatch(/\x1b\[/);
+      expect(out).toContain('\x1b[');
     } finally {
       if (prev === undefined) delete process.env.FORCE_COLOR;
       else process.env.FORCE_COLOR = prev;

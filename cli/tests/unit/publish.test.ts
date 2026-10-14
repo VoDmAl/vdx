@@ -66,9 +66,8 @@ function mockAudit(overrides: Partial<AuditResult> = {}): AuditResult {
         axis_id: 'release-artifact',
         class: 'supporting',
         achieved: 'L4',
-        baseline_target: 'L4',
+        target: 'L4',
         drift_kind: 'aligned',
-        evidence: [],
       },
     ],
     ...overrides,
@@ -123,9 +122,8 @@ describe('planPublish: pre-flight', () => {
           axis_id: 'release-artifact',
           class: 'supporting',
           achieved: 'L0',
-          baseline_target: 'L4',
+          target: 'L4',
           drift_kind: 'excluded',
-          evidence: [],
         },
       ],
     });
@@ -145,9 +143,8 @@ describe('planPublish: pre-flight', () => {
           axis_id: 'release-artifact',
           class: 'supporting',
           achieved: 'L1',
-          baseline_target: 'L4',
+          target: 'L4',
           drift_kind: 'gap',
-          evidence: [],
         },
       ],
     });
@@ -248,10 +245,10 @@ describe('publishRegistry', () => {
 describe('renderPublishPlan', () => {
   it('produces a markdown plan with pre-flight table and pipeline section when passed', () => {
     const projectRoot = path.join(FIXTURES, 'node-publishable-lib');
-    const ctx: Ctx = { projectRoot, stack: 'node', cache: new Map() };
     // Note: real pre-flight will call npm view + git status, so just smoke-test render output
     // via a hand-built plan (skipping planPublish to keep the test hermetic).
     const text = renderPublishPlan({
+      projectRoot,
       stack: 'node',
       packageName: 'demo',
       currentVersion: '1.0.0',
@@ -317,6 +314,7 @@ describe('renderPublishPlan', () => {
 
   it('renders delegated-to-mise mode', () => {
     const text = renderPublishPlan({
+      projectRoot: FIXTURES,
       stack: 'node',
       packageName: '(delegated)',
       currentVersion: '',

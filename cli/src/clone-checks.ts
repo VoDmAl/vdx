@@ -34,7 +34,7 @@ function isGitWorkTree(root: string): boolean {
 
 function executableHooks(dir: string): Map<string, string> {
   const out = new Map<string, string>();
-  let names: string[] = [];
+  let names: string[];
   try {
     names = fs.readdirSync(dir).filter((f) => !f.startsWith('.') && !f.endsWith('.sample'));
   } catch {

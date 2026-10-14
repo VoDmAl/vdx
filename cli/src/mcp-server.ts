@@ -14,6 +14,7 @@ import { audit } from './audit.ts';
 import { reportJson, reportMarkdown } from './report.ts';
 import { DEFAULT_BASELINE, STANDARD_VERBS, type Verb } from './init.ts';
 import { resolveDefaultRubric } from './defaults.ts';
+import { at, dict, errorMessage, isStringList, str, type Dict } from './narrow.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -30,18 +31,16 @@ function freshCtx(): Ctx {
   return { projectRoot: PROJECT_ROOT, stack, cache: new Map() };
 }
 
-function readMiseToml(): any {
+function readMiseToml(): unknown {
   return readToml(freshCtx(), 'mise.toml');
 }
 
-function getVdxBlock(): any {
-  const t = readMiseToml();
-  return t?.vdx ?? null;
+function getVdxBlock(): Dict | null {
+  return dict(at(readMiseToml(), 'vdx')) ?? null;
 }
 
-function getTasks(): Record<string, any> {
-  const t = readMiseToml();
-  return (t?.tasks as Record<string, any>) ?? {};
+function getTasks(): Dict {
+  return dict(at(readMiseToml(), 'tasks')) ?? {};
 }
 
 interface RunResult {
@@ -61,10 +60,10 @@ function spawnVerb(verb: Verb, extraArgs: string[]): Promise<RunResult> {
     });
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (b) => {
+    child.stdout.on('data', (b: Buffer) => {
       stdout += b.toString();
     });
-    child.stderr.on('data', (b) => {
+    child.stderr.on('data', (b: Buffer) => {
       stderr += b.toString();
     });
     child.on('error', (e) => {
@@ -91,32 +90,33 @@ function spawnVerb(verb: Verb, extraArgs: string[]): Promise<RunResult> {
 function buildCapabilities() {
   const vdxBlock = getVdxBlock();
   const tasks = getTasks();
-  const verbsList = (vdxBlock?.verbs as string[] | undefined) ?? STANDARD_VERBS.slice();
+  const declared = vdxBlock?.['verbs'];
+  const verbsList = isStringList(declared) ? declared : STANDARD_VERBS.slice();
   const verbs = verbsList.map((name) => {
     const t = tasks[name];
-    const nativeCommand = t && typeof t === 'object' && typeof t.run === 'string' ? t.run : null;
     return {
       name,
       has_manifest: Boolean(t),
-      native_command: nativeCommand,
+      native_command: str(at(t, 'run')) ?? null,
     };
   });
 
-  const sharedInfra = vdxBlock?.shared_infra
+  const infra = dict(vdxBlock?.['shared_infra']);
+  const sharedInfra = infra
     ? {
-        provider: String(vdxBlock.shared_infra.provider ?? ''),
-        precheck: Boolean(vdxBlock.shared_infra.precheck),
+        provider: str(infra['provider']) ?? '',
+        precheck: Boolean(infra['precheck']),
         is_running: false,
       }
     : null;
 
   return {
-    schema_version: String(vdxBlock?.schema_version ?? '0.2'),
-    stack: String(vdxBlock?.stack ?? autoDetectStack(PROJECT_ROOT)),
-    baseline: String(vdxBlock?.baseline ?? `file://${DEFAULT_RUBRIC}`),
+    schema_version: str(vdxBlock?.['schema_version']) ?? '0.2',
+    stack: str(vdxBlock?.['stack']) ?? autoDetectStack(PROJECT_ROOT),
+    baseline: str(vdxBlock?.['baseline']) ?? `file://${DEFAULT_RUBRIC}`,
     verbs,
     shared_infra: sharedInfra,
-    last_verified: vdxBlock?.success_path?.last_verified ?? null,
+    last_verified: at(vdxBlock, 'success_path', 'last_verified') ?? null,
   };
 }
 
@@ -138,40 +138,42 @@ function recordSuccessPath(input: {
   notes?: string;
 }): { ok: boolean; manifest_path: string; agents_md_updated: boolean } {
   const manifestPath = path.join(PROJECT_ROOT, 'mise.toml');
-  let doc: any = {};
+  let doc: Dict = {};
   if (fs.existsSync(manifestPath)) {
     const text = fs.readFileSync(manifestPath, 'utf8');
     try {
       doc = TOML.parse(text);
-    } catch (e: any) {
-      throw new Error(`mise.toml parse error: ${e?.message}`);
+    } catch (e) {
+      throw new Error(`mise.toml parse error: ${errorMessage(e)}`, { cause: e });
     }
   }
 
-  doc.tasks = doc.tasks ?? {};
+  const tasks = dict(doc['tasks']) ?? {};
   for (const v of input.verbs) {
-    doc.tasks[v.name] = { run: v.command };
+    tasks[v.name] = { run: v.command };
   }
+  doc['tasks'] = tasks;
 
-  doc.vdx = doc.vdx ?? {
+  const vdx = dict(doc['vdx']) ?? {
     schema_version: '0.2',
     baseline: DEFAULT_BASELINE,
     stack: autoDetectStack(PROJECT_ROOT),
   };
-  doc.vdx.verbs = input.verbs.map((v) => v.name);
+  vdx['verbs'] = input.verbs.map((v) => v.name);
 
   if (input.shared_infra) {
-    doc.vdx.shared_infra = {
+    vdx['shared_infra'] = {
       provider: input.shared_infra.provider,
       precheck: input.shared_infra.precheck,
     };
   }
 
-  doc.vdx.success_path = {
+  vdx['success_path'] = {
     last_verified: new Date().toISOString().slice(0, 10),
     verified_by: 'vdx-mcp',
     ...(input.notes ? { notes: input.notes } : {}),
   };
+  doc['vdx'] = vdx;
 
   const newText = TOML.stringify(doc);
   fs.writeFileSync(manifestPath, newText, 'utf8');
@@ -191,7 +193,7 @@ server.registerTool(
       'Возвращает manifest проекта: stack, baseline, доступные глаголы и их native команды, shared_infra и last_verified. Самый частый вызов агента, входящего в проект.',
     inputSchema: {},
   },
-  async () => {
+  () => {
     const payload = buildCapabilities();
     return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
   },
@@ -221,7 +223,7 @@ server.registerTool(
       format: z.enum(['json', 'markdown']).optional(),
     },
   },
-  async ({ baseline, format }) => {
+  ({ baseline, format }) => {
     const fmt = format ?? 'json';
     const payload = buildAuditPayload(baseline, fmt);
     return { content: [{ type: 'text', text: payload }] };
@@ -239,7 +241,7 @@ server.registerTool(
       notes: z.string().optional(),
     },
   },
-  async ({ verbs, shared_infra, notes }) => {
+  ({ verbs, shared_infra, notes }) => {
     const args: Parameters<typeof recordSuccessPath>[0] = { verbs };
     if (shared_infra) args.shared_infra = shared_infra;
     if (notes !== undefined) args.notes = notes;
@@ -254,7 +256,7 @@ async function main() {
   process.stderr.write(`vdx-mcp connected (project: ${PROJECT_ROOT})\n`);
 }
 
-main().catch((e) => {
-  process.stderr.write(`vdx-mcp fatal: ${e?.message ?? e}\n`);
+main().catch((e: unknown) => {
+  process.stderr.write(`vdx-mcp fatal: ${errorMessage(e)}\n`);
   process.exit(1);
 });

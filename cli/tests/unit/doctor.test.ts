@@ -193,7 +193,7 @@ describe('reportDoctor formatters', () => {
 
   it('json parses with checks array', () => {
     const r = runDoctor();
-    const parsed = JSON.parse(reportDoctorJson(r));
+    const parsed = JSON.parse(reportDoctorJson(r)) as { checks: unknown[] };
     expect(parsed.checks.length).toBe(r.checks.length);
   });
 
@@ -202,7 +202,7 @@ describe('reportDoctor formatters', () => {
     process.env.FORCE_COLOR = '1';
     try {
       const out = reportDoctorAnsi(runDoctor());
-      expect(out).toMatch(/\x1b\[/);
+      expect(out).toContain('\x1b[');
     } finally {
       if (prev === undefined) delete process.env.FORCE_COLOR;
       else process.env.FORCE_COLOR = prev;

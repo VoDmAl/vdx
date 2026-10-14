@@ -40,8 +40,9 @@
     "smoke": "bash smoke.sh",
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check .",
-    "check": "npm run typecheck && npm run format:check",
-    "fix": "prettier --write .",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run format:check && npm run lint",
+    "fix": "eslint --fix . && prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "coverage": "vitest run --coverage"
@@ -57,12 +58,16 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/js-yaml": "^4.0.9",
     "@types/marked-terminal": "^6.1.1",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.1.7",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.10",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.71.2",
     "vitest": "^4.1.7"
   },
   "publishConfig": {

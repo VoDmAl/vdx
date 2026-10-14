@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Ctx, readJson, listAllTasks, autoDetectStack, findSubPackages, type SubPackage } from './facts.ts';
+import { at } from './narrow.ts';
 
 export const STANDARD_VERBS = ['up', 'down', 'build', 'test', 'check', 'fix'] as const;
 export type Verb = (typeof STANDARD_VERBS)[number];
@@ -225,14 +226,10 @@ export function mapVerb(verb: Verb, tasks: Set<string>): string | null {
 
 function collectTools(ctx: Ctx): Record<string, string> {
   const tools: Record<string, string> = {};
-  const composer = readJson(ctx, 'composer.json');
-  if (composer?.require?.php && typeof composer.require.php === 'string') {
-    tools.php = stripVersionConstraint(composer.require.php);
-  }
-  const pkg = readJson(ctx, 'package.json');
-  if (pkg?.engines?.node && typeof pkg.engines.node === 'string') {
-    tools.node = stripVersionConstraint(pkg.engines.node);
-  }
+  const php = at(readJson(ctx, 'composer.json'), 'require', 'php');
+  if (typeof php === 'string' && php) tools.php = stripVersionConstraint(php);
+  const node = at(readJson(ctx, 'package.json'), 'engines', 'node');
+  if (typeof node === 'string' && node) tools.node = stripVersionConstraint(node);
   return tools;
 }
 

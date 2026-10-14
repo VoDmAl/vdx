@@ -28,6 +28,7 @@ import {
   parseMachineReport,
   runsInProject,
 } from './conversations.ts';
+import { at, errorMessage, isStringList, str } from './narrow.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -144,13 +145,9 @@ export function resolveEnvironmentPath(
   return fs.existsSync(user) ? user : null;
 }
 
-function isStringList(v: unknown): v is string[] {
-  return Array.isArray(v) && v.every((x) => typeof x === 'string');
-}
-
 /** Parse and validate a profile. Throws with the offending key named. */
 export function parseEnvironment(text: string, source: string): Environment {
-  const data = YAML.load(text) as unknown;
+  const data: unknown = YAML.load(text);
   if (data === null || data === undefined) return {};
   if (typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`${source}: expected a YAML mapping at the top level`);
@@ -271,8 +268,8 @@ export function loadEnvironment(file: string): Environment {
   let text: string;
   try {
     text = fs.readFileSync(file, 'utf8');
-  } catch (e: any) {
-    throw new Error(`cannot read profile ${file}: ${e?.code ?? e?.message ?? e}`);
+  } catch (e) {
+    throw new Error(`cannot read profile ${file}: ${str(at(e, 'code')) ?? errorMessage(e)}`, { cause: e });
   }
   return parseEnvironment(text, file);
 }
@@ -372,7 +369,7 @@ export function planLaunch(input: {
 }
 
 export function shellQuote(s: string): string {
-  if (s !== '' && /^[A-Za-z0-9_\/.:@%+=,-]+$/.test(s)) return s;
+  if (s !== '' && /^[A-Za-z0-9_/.:@%+=,-]+$/.test(s)) return s;
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
@@ -741,7 +738,7 @@ export interface AiDeps {
 
 export function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
   const res = spawnSync('ssh', args, { stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'inherit', encoding: 'utf8' });
-  if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return null;
+  if (at(res.error, 'code') === 'ENOENT') return null;
   return { status: res.status ?? 1, stdout: res.stdout ?? '' };
 }
 
@@ -758,8 +755,8 @@ export function askLine(prompt: string): string | null {
     let n: number;
     try {
       n = fs.readSync(0, buf, 0, buf.length, null);
-    } catch (e: any) {
-      if (e?.code === 'EAGAIN') {
+    } catch (e) {
+      if (at(e, 'code') === 'EAGAIN') {
         sleepSync(50);
         continue;
       }
@@ -1351,8 +1348,8 @@ function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | num
   if (profilePath) {
     try {
       environment = loadEnvironment(profilePath);
-    } catch (e: any) {
-      log(`vdx ai: ${e?.message ?? e}`);
+    } catch (e) {
+      log(`vdx ai: ${errorMessage(e)}`);
       return EXIT_USAGE;
     }
   }
@@ -1390,8 +1387,8 @@ function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | num
   let plan: LaunchPlan;
   try {
     plan = replan(focused);
-  } catch (e: any) {
-    log(`vdx ai: ${profilePath ?? 'profile'}: ${e?.message ?? e}`);
+  } catch (e) {
+    log(`vdx ai: ${profilePath ?? 'profile'}: ${errorMessage(e)}`);
     return EXIT_USAGE;
   }
   return { projectRoot, environment, profilePath, profileDir, plan, replan };
@@ -1445,8 +1442,9 @@ export function unreadableFolders(tmux: Tmux | null, home: string): string[] {
     try {
       fs.readdirSync(d);
       return false;
-    } catch (e: any) {
-      return e?.code === 'EPERM' || e?.code === 'EACCES';
+    } catch (e) {
+      const code = at(e, 'code');
+      return code === 'EPERM' || code === 'EACCES';
     }
   });
 }
@@ -1672,7 +1670,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const env = plan.focused ? { ...process.env, [FOCUSED_ENV_VAR]: '1' } : undefined;
     const startedAt = Date.now();
     let res = spawnSync(plan.command, [...plan.args, ...plan.resumeArgs], { cwd: projectRoot, stdio: 'inherit', env });
-    if ((res.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+    if (at(res.error, 'code') === 'ENOENT') {
       log(`vdx ai: \`${plan.command}\` not found on PATH`);
       return 127;
     }
