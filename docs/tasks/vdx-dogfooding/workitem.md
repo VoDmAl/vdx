@@ -39,7 +39,7 @@ relates-to:
 override двух сервисных осей, хуке `pre-push` (DL #11), аудите зависимостей
 (DL #12), `test:e2e` и `docs/architecture.md` (DL #13). Колонка «Сейчас» в
 таблице — это состояние. С сетом v1.5.0 (DL #15) `observability` и
-`mock-infra` у библиотеки `excluded`; override vdx снимается после выпуска 0.28.
+`mock-infra` у библиотеки `excluded`; override vdx снимается, когда 0.28 будет на обеих станциях.
 
 **Как считается общий уровень** (`cli/src/scoring.ts`, `projectLevel`). Уровень
 L засчитан, если каждая критичная ось ≥ L и ≥ 80 % видимых вспомогательных ≥ L.
@@ -75,9 +75,9 @@ mise не читает, а на `[vdx]` mise 2026.10 предупреждает 
 | `code-style` | s | L4 | — | `.prettierrc`, `check`/`fix` в `cli/package.json` (DL #7), `eslint.config.js` (DL #8) |
 | `dependency-hygiene` | s | L4 | — | `check:code:security` (`npm audit`) в CI по понедельникам; `.github/dependabot.yml`, корень читается с DL #5; `knip` в `check` (DL #12) |
 | `git-hygiene` | s | L4 | — | `.githooks/pre-push` — `mise run check` и `mise run test`; `core.hooksPath` ставит `prepare` в `cli/package.json` (DL #11) |
-| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13; с сетом v1.5.0 у библиотеки — excluded, override снимается после 0.28 (DL #15) |
+| `observability` | s | override | — | ось про сервис (L2 — логгер, L3 — Sentry, L4 — Sentry-release в CI): override с 2026-10-13; с сетом v1.5.0 у библиотеки — excluded, override снимается, когда 0.28 будет на станциях (DL #15) |
 | `docs` | s | L4 | — | `docs/architecture.md` — карта модулей CLI и путь вызова |
-| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4; с сетом v1.5.0 — excluded, override снимается после 0.28 (DL #15) |
+| `mock-infra` | s | override | — | ось про сервис (L3 — mock-сервер, L4 — проверка «нет моков в проде»): override с 2026-10-13. Прежний L2 — случайность, Sidetrack #4; с сетом v1.5.0 — excluded, override снимается, когда 0.28 будет на станциях (DL #15) |
 | `release-artifact` | s | L4 | — | — |
 
 **Цель (DL #3):** общий L2, каждая ось, кроме `branch-protection`, — L4.
@@ -617,9 +617,11 @@ pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое до
       0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
 - [x] Выпуск 0.27 (minor): пол Node 22 (DL #13) — 0.27.0 в npm 2026-10-14
       (`33fca96`); push выпуска — после `npm ci` на m3 (DL #14)
-- [ ] Выпуск 0.28 (minor): сет v1.5.0 (DL #15), путь с регистром (Sidetrack #4)
-- [ ] После 0.28: снять override `observability` и `mock-infra` в
-      `.vdx-overrides.yml` — оси `excluded` по сету (DL #15)
+- [x] Выпуск 0.28 (minor): сет v1.5.0 (DL #15), путь с регистром (Sidetrack #4)
+      — 0.28.0 в npm 2026-10-14 (`3e13bb6`); аудит vdx на нём — L2
+- [ ] Когда 0.28 будет на m3 и lft: снять override `observability` и
+      `mock-infra` в `.vdx-overrides.yml` — оси `excluded` по сету (DL #15);
+      раньше vdx 0.24 на станциях посчитал бы их L1
 
 **Побеги:**
 

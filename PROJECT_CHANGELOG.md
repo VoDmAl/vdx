@@ -4,6 +4,13 @@
 
 ## 2026-10-14
 
+### Выпуск 0.28.0
+
+`@vodmal/vdx-cli@0.28.0` в npm (`3e13bb6`): сет v1.5.0 внутри — `observability`
+и `mock-infra` только у приложения; путь в рубрике — с регистром, как написан,
+и на macOS. Аудит vdx на выпущенном 0.28.0 — L2; у пакета `cli/` обе
+сервисные оси `excluded` ([vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md), DL #15).
+
 ### Сет v1.5.0: `observability` и `mock-infra` — только у приложения
 
 Логгер, Sentry и mock-сервер — у сервиса; библиотека и CLI упирались в эти
