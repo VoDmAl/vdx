@@ -8,18 +8,19 @@
 
 ## Где мы (2026-10-13)
 
-- **CLI** `@vodmal/vdx-cli@0.24.0` — в npm и на обеих станциях (lft, m3).
+- **CLI** `@vodmal/vdx-cli@0.25.0` — в npm с 2026-10-13 (`0d1f41f`, выпуск с
+  m3); на станции едет с ближайшим topgrade.
 - **Сет** `vdx-rubric-vodmal@v1.4.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.4.0`; в npm (0.24.0) — ещё
-  v1.3.0.
-- **Плагин** vdx 0.9.1 (`plugin/`), едет через маркетплейс vodmal.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.4.0`.
+- **Плагин** vdx 0.9.2 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 20 и 22, шаги `mise run check` и
   `mise run test`; зелёный на `65f5543`.
-- **vdx по своей рубрике — L1** (аудит 2026-10-08). Критичные оси:
-  `lifecycle-interface` L2, `tests` L3, `static-analysis` L2, `ci` L4,
-  `branch-protection` — неизвестно. Требование догфудинга из CLAUDE.md не
-  выполнено; подъём — кристалл `vdx-dogfooding` (с 2026-10-13).
+- **vdx по своей рубрике — L1** (аудит 2026-10-13, CLI 0.25). Критичные оси:
+  `lifecycle-interface` L4, `tests` L3, `static-analysis` L2, `ci` L4,
+  `branch-protection` — неизвестно; вспомогательных на L2 — 4 из 6, нужно 5.
+  Требование догфудинга из CLAUDE.md не выполнено; подъём — кристалл
+  `vdx-dogfooding`.
 
 ### Что умеет CLI
 
@@ -45,7 +46,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | in-progress | цель — общий L2, оси до L4; правка оценщика для мета-репо, сет v1.4.0, ESLint/Prettier, `test:e2e`, хуки репо |
-| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; Sidetrack #21 — выйдет со следующим выпуском |
+| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
 **vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). Общий выше L2 сегодня
@@ -74,13 +75,11 @@
 
 ### Следующий выпуск CLI
 
-Minor (0.25): аудит мета-репо читает обе половины (`vdx-dogfooding` DL #5),
-внутри — сет v1.4.0 (DL #6); `vdx ai --new` и `--focused` запускают второго
-агента рядом, при нескольких — список (`vdx-ai` DL #35, по вопросу владельца 13.10). С ним
-же — плагин: поднять `version`, скилл `vdx-ai` говорит о 0.25. Ещё ждёт:
-Sidetrack #21 vdx-ai (проверка папок через файл — на tmux < 3.5 прежняя
-проверка читала все папки как доступные; на станциях tmux ≥ 3.5, 0.24.0 у них
-верен). Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в [CLAUDE.md](CLAUDE.md).
+Ничего не ждёт. 0.25.0 (2026-10-13) увёз аудит мета-репо целиком
+(`vdx-dogfooding` DL #5), сет v1.4.0 (DL #6), `vdx ai --new` и `--focused`
+рядом с идущим агентом (`vdx-ai` DL #35) и проверку папок через файл
+(Sidetrack #21 vdx-ai). Порядок выпуска — «Выпуск CLI» и «Выпуск плагина» в
+[CLAUDE.md](CLAUDE.md).
 
 ---
 
