@@ -5,7 +5,7 @@ description: "Запускает нужного агента в нужном р�
 status: dormant
 session-type: prd-work
 created: 2026-09-28
-last-updated: 2026-10-13
+last-updated: 2026-10-14
 ---
 
 # vdx ai — запуск агента в проекте по личному профилю
@@ -119,8 +119,10 @@ last-updated: 2026-10-13
 - **Состояние на 2026-10-13:** ssh между станциями работает и из ssh-сессии
   (nas-info: `ssh-self-alias` 09.10, `ssh-peers-agent` 13.10) — Sidetrack #18
   закрыт. `@vodmal/vdx-cli@0.25.0` в npm (`0d1f41f`, выпуск с m3): Sidetrack
-  #21 и DL #35; плагин 0.9.2. Ждут живая проверка DL #35 и наблюдение за
-  `.git/index.sync-conflict-*`.
+  #21 и DL #35; плагин 0.9.2.
+- **Состояние на 2026-10-14:** на обеих станциях vdx 0.28.0. Владелец проверил
+  `vdx ai --new` живьём — работает; копий `.git/index.sync-conflict-*` после
+  выпусков с m3 нет. Открытых пунктов нет.
 
 ## Decision Log
 
@@ -1260,7 +1262,7 @@ Code есть `--session-id <uuid>` и `--resume <id>` (`claude --help`, 2.1.288
 #27: `vdx ai@m3` и передача беседы на m3 идут через ssh и попадают в 0.15.0,
 которая молча отбрасывает `--conversation` и стартует с `--continue`.
 
-**Status:** open — ответ nas-info `vdx-two-installs-m3-outcome` (2026-10-06):
+**Status:** resolved — 2026-10-06 (ниже). Ответ nas-info `vdx-two-installs-m3-outcome` (2026-10-06):
 общий `~/.zshenv` ставит первым каталог fnm default — ssh и терминал на m3
 запускают один файл (0.18.0), действует сразу; на lft без изменений. Модуль
 `vdx.sh` ставит и сверяет vdx тем npm, что видит ssh, и снимает копию другого
@@ -1510,12 +1512,17 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       reminder-хуках и `git-guard-hook.py` (vdm 2.40.1, vdm-git 2.16.1), тест
       `tests/hook-index-writes.test.sh` в pre-commit. Проверено мной: коммит
       `60a56d1` есть, в GitHub `master` (`d233ce8`) уже входит
-- [ ] После vdm ≥ 2.40.1 и vdm-git ≥ 2.16.1 (установлены 2026-09-30,
+- [x] После vdm ≥ 2.40.1 и vdm-git ≥ 2.16.1 (установлены 2026-09-30,
       `/reload-plugins` на lft; `~/.claude` в Dropbox — кеш общий для m3 и lft;
       копий в `.git` vdx и рубрики на этот момент нет) смотреть, появляются ли
       `.git/index.sync-conflict-*`. Решающая проверка — следующий выпуск на m3,
       пока владелец пишет в сессию на lft. Появятся — индекс пишет не хук, письмо
       ai-dev-plugins с `--reply-to ai-dev-plugins/hooks-no-optional-locks`.
+      2026-10-14: выпуски 0.26.0 и 0.27.0 шли с m3, пока владелец писал в
+      сессию на lft; в `.git` vdx и рубрики копий индекса нет (`find … -name
+      '*sync-conflict*'` — пусто). Единственная копия дня —
+      `logs/refs/remotes/origin/main` от моего `git fetch` во время push m3,
+      не индекс; разобрана в тот же день
       Предел их защиты: `git diff` без ревизии и `git describe --dirty` пишут
       индекс и с `GIT_OPTIONAL_LOCKS=0`; `git-guard-prepare` (не хук) зовёт
       `git diff --name-only`. 2026-10-07: в `.git` vdx и рубрики копий нет.
@@ -1723,10 +1730,10 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
       (с третьего запуска — Sidetrack #20); 0.23.0 на lft и m3 (npm той копии,
       что стоит); ответы `…-outcome` ушли, письма в архиве; сет — `9538259`,
       тег `v1.2.0` на GitHub
-- [ ] DL #35: `--new` и `--focused` — второй агент рядом, список при
-      нескольких — 0.25.0 в npm 2026-10-13 (`0d1f41f`), плагин 0.9.2. Ждёт
-      живой проверки владельцем: `vdx ai --new` при идущем агенте, когда
-      0.25 доедет до станции
+- [x] DL #35: `--new` и `--focused` — второй агент рядом, список при
+      нескольких — 0.25.0 в npm 2026-10-13 (`0d1f41f`), плагин 0.9.2. Живая
+      проверка владельцем на 0.28.0, 2026-10-14: «vdx ai --new — все гуд
+      работает»
 - [x] Sidetrack #21: проверка папок через файл, не вывод `run-shell` — в
       0.25.0 (npm 2026-10-13)
 - [x] Sidetrack #20: `vdx publish` откатывает поднятую версию и по сигналу;

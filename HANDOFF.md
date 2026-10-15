@@ -46,7 +46,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
-| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | наблюдение за `.git/index.sync-conflict-*`; DL #35 (`--new`, `--focused` рядом) — живая проверка владельцем |
+| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | открытых пунктов нет: DL #35 (`--new` рядом) проверен владельцем на 0.28.0, копий `.git/index.sync-conflict-*` после выпусков с m3 нет (2026-10-14) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
 **vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). Общий выше L2 сегодня
