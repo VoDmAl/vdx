@@ -15,11 +15,11 @@ vdx — исследование и (позже) реализация систе
 
 ## Текущая фаза
 
-**Спека ядра выложена (2026-05-22).** Решения D1–D11 в
-[docs/decisions.md](docs/decisions.md) приняты. Спека draft v0.2 — в
-`docs/specs/` (rubric-format, manifest-format, overrides-format, mcp-api,
-drift-algorithm). Следующая фаза — реализация: bootstrap-репо рубрики
-(`vdx-rubric-vodmal`), нативный оценщик предикатов, MCP-сервер, плагин Claude Code.
+**Реализация (с 2026-05).** CLI `@vodmal/vdx-cli` в npm, сет
+`vdx-rubric-vodmal`, MCP-сервер, плагин Claude Code; решения — D1–D14 в
+[docs/decisions.md](docs/decisions.md), спека — `docs/specs/`. vdx по своей
+рубрике — общий L2: выше не даёт `branch-protection`, пока нет расширения
+хостинга. Версии и что открыто — [HANDOFF.md](HANDOFF.md).
 
 ## Ключевые ограничения
 
