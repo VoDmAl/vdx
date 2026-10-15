@@ -5,5 +5,7 @@ export default defineConfig({
   test: {
     include: ['tests/e2e/**/*.test.ts'],
     testTimeout: 30_000,
+    // The fixtures sit inside vdx's own clone, and its origin is on GitHub: no test asks the hosting.
+    env: { VDX_OFFLINE: '1' },
   },
 });

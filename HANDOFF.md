@@ -46,6 +46,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
+| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в коде, не выпущено (0.29); жить ли vdx под гейтом; gitolite и GitLab — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | открытых пунктов нет: DL #35 (`--new` рядом) проверен владельцем на 0.28.0, копий `.git/index.sync-conflict-*` после выпусков с m3 нет (2026-10-14) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
@@ -76,7 +77,8 @@
 
 ### Следующий выпуск CLI
 
-Не запланирован. 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
+0.29 (minor) — `branch-protection` L3 спрашивает GitHub (`src/hosting.ts`,
+кристалл `hosting-extension`). 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
 `mock-infra` только у приложения (`vdx-dogfooding` DL #15); путь в `has_file` и
 `file_contains` — с регистром, как написан, и на macOS (Sidetrack #4). 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
 (`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не

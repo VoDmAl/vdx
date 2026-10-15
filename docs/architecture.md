@@ -45,9 +45,9 @@ report.ts      markdown, ansi, json
 недостающий файл в другой половине (`fallbackRoot`), а задачи берутся только
 свои (`ownCtx`) — `manifest-format.md`, DL #5 кристалла `vdx-dogfooding`.
 
-Предикат, который vdx проверить не может (хостинг, CI не на GitHub Actions),
-отвечает `unknown`. Уровень на нём останавливается, и отчёт называет причину
-(`rubric-format.md`).
+Предикат, который vdx проверить не может (хостинг не GitHub, нет сети, CI не
+на GitHub Actions), отвечает `unknown`. Уровень на нём останавливается, и отчёт
+называет причину (`rubric-format.md`).
 
 Распознаватели, на которые опираются предикаты:
 
@@ -56,7 +56,11 @@ report.ts      markdown, ansi, json
 - `hooks.ts` — фреймворки git-хуков (husky, lefthook, simple-git-hooks,
   cghooks, `.githooks/`): кто их ставит и что они зовут, для `git-hygiene`;
 - `vocabulary.ts` — какие задачи проекта зовёт командная строка через его
-  раннер (mise, npm, composer, make…).
+  раннер (mise, npm, composer, make…);
+- `hosting.ts` — защита ветки по умолчанию у `origin` на GitHub для оси
+  `branch-protection`. Единственный, кто ходит в сеть: запрос делает дочерний
+  `node`, аудит остаётся синхронным; `VDX_OFFLINE=1` — не спрашивать (тесты
+  так и запускаются) — кристалл `hosting-extension`.
 
 ## Остальные команды
 

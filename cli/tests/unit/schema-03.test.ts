@@ -9,7 +9,7 @@ import type { Ctx } from '../../src/facts.ts';
 const ctx = (): Ctx => ({ projectRoot: '/dev/null', stack: 'node', cache: new Map() });
 const T = { always_true: {} };
 const F = { has_file: 'nonexistent-path' };
-const U = { branch_requires_checks: {} }; // unknown everywhere today
+const U = { branch_requires_checks: {} }; // unknown in the tests: VDX_OFFLINE (vitest.config.ts)
 
 describe('three-valued predicates', () => {
   it('a predicate can answer unknown, with its reason', () => {

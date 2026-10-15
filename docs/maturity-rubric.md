@@ -41,7 +41,7 @@
 | **tests** | **critical** | Нет | Один прогон | unit/integration разделены | + coverage measured | + threshold + e2e + mutation |
 | **static-analysis** | **critical** | Нет | Один линтер базово | tsc strict / phpstan low | + полная строгость (см. стек) | + двойной слой (phpstan+psalm / tsc+eslint+typed-rules) + кастомные метрики |
 | **ci** | **critical** | Нет | Конфиг CI есть | Тесты на каждый push в `main`, падение не замаскировано (`\|\| true`, `continue-on-error` не в счёт) | + CI вызывает задачи проекта `check` и `test` (паритет с локальным) | + `matrix` у проверяющей задачи, или всё, что CI выкладывает, ждёт её через `needs:` |
-| **branch-protection** | **critical** | — | не требуется | не требуется | `main` на хостинге принимает изменения только после обязательной проверки (пока «неизвестно» у всех — нет расширения хостинга) | не требуется сверх L3 (позже: force-push, удаление, ревью) |
+| **branch-protection** | **critical** | — | не требуется | не требуется | `main` на хостинге принимает изменения только после обязательной проверки (GitHub — с CLI 0.29; другие хостинги — «неизвестно») | не требуется сверх L3 (позже: force-push, удаление, ревью) |
 | **reproducibility** | supporting | Прозой | docker-compose | + version диапазон | + pinned versions (`.tool-versions` / `mise.toml`) | + onboarding одной командой |
 | **code-style** | supporting | Нет | Маньяк | Форматтер настроен | enforced в `check` | + комбинация (ECS+PHPCS / prettier+eslint-stylistic) |
 | **dependency-hygiene** | supporting | Lockfile не закоммичен | Lockfile | + `audit` / `security-advisories` | + Renovate/Dependabot | + require-checker / deptrac / knip + jack/outdated |

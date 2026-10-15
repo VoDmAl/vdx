@@ -112,6 +112,13 @@ By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 [vdx-rubric-vodmal](https://github.com/VoDmAl/vdx-rubric-vodmal) at the time of
 each CLI release). Override via `--rubric <path>` or the env var `VDX_RUBRIC`.
 
+`branch-protection` is the one axis the files cannot answer: `vdx audit` asks
+GitHub whether the default branch of `origin` takes changes only after a check
+required of everyone, admins included. A public repo needs no token; a private
+one takes it from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`. Another
+hosting, no network or no token where one is needed leave the axis unknown,
+with the reason in the report; `VDX_OFFLINE=1` does not ask at all.
+
 ## Dev
 
 ```bash

@@ -14,6 +14,7 @@ import {
 } from './facts.ts';
 import { checkingJobs, ciSystems, ciTaskCalls, mainPushSteps, readWorkflows, shippingJobs, upstream } from './gha.ts';
 import { detectHookFrameworks } from './hooks.ts';
+import { branchRequiresChecks } from './hosting.ts';
 import { covers, expandTasks, isVocabularyTask, projectTaskCalls } from './vocabulary.ts';
 import { at, isStringList, str } from './narrow.ts';
 
@@ -248,10 +249,8 @@ export const REGISTRY: Record<string, PredicateFn> = {
 
   // --- branch-protection: only the hosting knows (schema 0.3) ---
 
-  /** L3: main takes changes only after a required check. No hosting extension yet — unknown everywhere (DL #12). */
-  branch_requires_checks: () => ({
-    unknown: 'only the hosting knows whether main is protected — vdx has no extension for it yet',
-  }),
+  /** L3: the default branch takes changes only after a check required of everyone — asked of GitHub (docs/tasks/hosting-extension). */
+  branch_requires_checks: (_args, ctx) => branchRequiresChecks(ctx),
 
   // --- git-hygiene: the hook recognizer (schema 0.3) ---
 

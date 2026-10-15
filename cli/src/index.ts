@@ -125,6 +125,9 @@ const COMMANDS: Record<string, CommandSpec> = {
     usage: 'vdx audit [project_path] [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]',
     help: `Scores the project (default: cwd) against the rubric and prints the report.
 Reads only. The rubric is the bundled one unless --rubric or $VDX_RUBRIC names another.
+For branch-protection it asks GitHub whether the default branch of origin requires
+a check, with a token from $GH_TOKEN, $GITHUB_TOKEN or gh when there is one;
+VDX_OFFLINE=1 does not ask, and the axis says unknown.
 `,
     bools: ['json'],
     values: ['rubric', 'stack', 'format'],
