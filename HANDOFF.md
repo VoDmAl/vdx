@@ -14,8 +14,8 @@
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
   `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`, в npm с 0.28.0.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
-  читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko письмо
-  `vdx-manifest-to-underscore` во входящих.
+  читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
+  (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.

@@ -621,7 +621,9 @@ pre-push`, Git 2.36+) до bump — но тогда выпуск вдвое до
 - [x] После 0.26 на m3 и lft: `mise.toml` vdx — в `[_.vdx]`; письма агентам
       echelon и mediko — их манифест в `[vdx]` — 2026-10-14: vdx перенёс,
       письма `vdx-manifest-to-underscore` во входящих echelon и mediko;
-      echelon перенёс (`fb4f525`, ответ 2026-10-14), mediko — не ответил
+      echelon перенёс (`fb4f525`, ответ 2026-10-14); у mediko перенёс vdx —
+      2026-10-15, по просьбе владельца, письмо убрано; `vdx audit .` — тот же
+      L0, без заметки о `[vdx]`; `mise.toml` mediko не в git
 - [x] `vdx audit .` на выпущенном CLI — целевой уровень (критерий готовности):
       0.26.0, 2026-10-14 — L2, все оси, кроме `branch-protection`, — L4
 - [x] Выпуск 0.27 (minor): пол Node 22 (DL #13) — 0.27.0 в npm 2026-10-14
