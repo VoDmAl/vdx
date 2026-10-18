@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-15, @vodmal/vdx-cli@0.28.0)
+# vdx — Handoff (2026-10-18, @vodmal/vdx-cli@0.30.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -6,10 +6,12 @@
 
 ---
 
-## Где мы (2026-10-15)
+## Где мы (2026-10-18)
 
-- **CLI** `@vodmal/vdx-cli@0.28.0` — в npm с 2026-10-14 (`3e13bb6`), Node 22 и
-  новее; на m3 и lft — 0.28.0 с 2026-10-14.
+- **CLI** `@vodmal/vdx-cli@0.30.0` — в npm с 2026-10-18 (`9bd6e5e`), Node 22 и
+  новее. Код — тот же, что у 0.29.0 (2026-10-15, `c16f56c`): между тегами
+  только коммит выпуска. На m3 и lft — 0.28.0 (2026-10-18), новый доедет с
+  topgrade.
 - **Сет** `vdx-rubric-vodmal@v1.5.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
   `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`, в npm с 0.28.0.
@@ -19,9 +21,10 @@
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
-- **vdx по своей рубрике — L2** (аудит 2026-10-14, CLI 0.28.0, сет v1.5.0) —
-  потолок, пока `branch-protection` L3 «неизвестно». Все остальные оси — L4
-  (цель кристалла `vdx-dogfooding`).
+- **vdx по своей рубрике — L2** (аудит 2026-10-18, CLI 0.29.0, сет v1.5.0):
+  `branch-protection` L3 известен и «не выполнено» — `main` на GitHub не
+  защищён. Все остальные оси — L4 (цель кристалла `vdx-dogfooding`). Выше —
+  только с защитой `main`; решать владельцу (кристалл `hosting-extension`).
 
 ### Что умеет CLI
 
@@ -46,14 +49,15 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в коде, не выпущено (0.29); жить ли vdx под гейтом; gitolite и GitLab — побеги |
+| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; ждёт владельца: жить ли vdx под гейтом; gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | открытых пунктов нет: DL #35 (`--new` рядом) проверен владельцем на 0.28.0, копий `.git/index.sync-conflict-*` после выпусков с m3 нет (2026-10-14) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
-**vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). Общий выше L2 сегодня
-не получит никто: `branch-protection` L3 — «неизвестно», пока нет расширения
-хостинга. Поэтому цель — L2 и каждая ось, кроме этой, на L4.
+**vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). До 0.29 общий выше L2
+не получал никто: `branch-protection` L3 был «неизвестно» у всех. Поэтому
+цель — L2 и каждая ось, кроме этой, на L4. С 0.29 у репо на GitHub L3
+известен, у vdx — «не выполнено» (`hosting-extension`).
 `observability` и `mock-infra` у библиотеки сет v1.5.0 исключает (DL #15).
 `up`/`down` рубрика не требует от библиотек (сет v1.4.0).
 
@@ -77,8 +81,9 @@
 
 ### Следующий выпуск CLI
 
-0.29 (minor) — `branch-protection` L3 спрашивает GitHub (`src/hosting.ts`,
-кристалл `hosting-extension`). 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
+Ничего не ждёт. 0.30.0 (2026-10-18, с m3) — второй `vdx publish minor` без
+изменений: код 0.29.0. 0.29.0 (2026-10-15) — `branch-protection` L3
+спрашивает GitHub (`src/hosting.ts`, кристалл `hosting-extension`). 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
 `mock-infra` только у приложения (`vdx-dogfooding` DL #15); путь в `has_file` и
 `file_contains` — с регистром, как написан, и на macOS (Sidetrack #4). 0.27.0 (2026-10-14) — пол Node 22: `engines`, `vdx doctor`
 (`vdx-dogfooding` DL #13); на Node 20 npm теперь предупреждает, vdx там не

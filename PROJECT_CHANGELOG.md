@@ -2,6 +2,16 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-10-18
+
+### 0.29.0 и 0.30.0 в npm; критерий `hosting-extension` выполнен
+
+0.29.0 (2026-10-15) увёз ответ GitHub для `branch-protection` L3. Аудит им:
+у vdx L3 известен и «не выполнено», общий L2; у telegram — «неизвестно:
+origin is on git.vorobyev.name». 0.30.0 (2026-10-18) — второй
+`vdx publish minor` с m3, код тот же: между тегами только коммит выпуска
+([hosting-extension](docs/tasks/hosting-extension/workitem.md), Sidetrack #6).
+
 ## 2026-10-15
 
 ### `branch-protection` L3 — ответ GitHub вместо «неизвестно»

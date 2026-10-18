@@ -18,8 +18,9 @@ vdx — исследование и (позже) реализация систе
 **Реализация (с 2026-05).** CLI `@vodmal/vdx-cli` в npm, сет
 `vdx-rubric-vodmal`, MCP-сервер, плагин Claude Code; решения — D1–D14 в
 [docs/decisions.md](docs/decisions.md), спека — `docs/specs/`. vdx по своей
-рубрике — общий L2: выше не даёт `branch-protection`, пока нет расширения
-хостинга. Версии и что открыто — [HANDOFF.md](HANDOFF.md).
+рубрике — общий L2: выше не даёт `branch-protection` — L3 «не выполнено»,
+`main` на GitHub не защищён (с 0.29 vdx спрашивает GitHub). Версии и что
+открыто — [HANDOFF.md](HANDOFF.md).
 
 ## Ключевые ограничения
 
