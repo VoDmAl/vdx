@@ -11,8 +11,8 @@
 же коммит в ветку с тегами; без обязательных проверок — обычный `git push`.
 `vdx publish` пушит коммит выпуска тем же путём после `npm publish`. Хук
 `pre-push` vdx уступает CI по `VDX_GATE_PUSH=1`, `ci.yml` идёт и на
-`vdx-gate/**`. Владелец решил жить vdx под гейтом; выйдет в 0.31, потом защита
-`main` ([hosting-extension](docs/tasks/hosting-extension/workitem.md), DL #8–#10).
+`vdx-gate/**`. Владелец решил жить vdx под гейтом; вышло в 0.31.0, дальше —
+защита `main` ([hosting-extension](docs/tasks/hosting-extension/workitem.md), DL #8–#10).
 
 ### 0.29.0 и 0.30.0 в npm; критерий `hosting-extension` выполнен
 
