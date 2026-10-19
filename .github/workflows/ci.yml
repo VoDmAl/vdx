@@ -20,7 +20,7 @@ jobs:
     env:
       MISE_NODE_VERSION: ${{ matrix.node-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
       - name: Install cli dependencies
         working-directory: cli
