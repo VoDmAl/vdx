@@ -33,7 +33,7 @@
 | `vdx init [path]` | блок `[_.vdx]` и задачи словаря в `mise.toml` из того, что уже есть в проекте |
 | `vdx publish <patch\|minor\|major>` | выпуск одной командой: вход в npm, bump, publish, тег, push, ожидание registry |
 | `vdx push [path]` | push ветки; ветка на GitHub с обязательными проверками получает коммит через `vdx-gate/<ветка>`, когда CI его проверил (с 0.31) |
-| `vdx doctor [path]` | окружение и хуки; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` |
+| `vdx doctor [path]` | окружение и хуки, токен GitHub у репо на GitHub; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` |
 | `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--restart`, `--detach`, `--dry-run`, `--check` |
 | `vdx-mcp` | MCP-сервер для агента (`vdx_audit`, `vdx_build`, …) |
 
@@ -80,7 +80,8 @@
 
 ### Следующий выпуск CLI
 
-Не назначен. 0.31.2 (2026-10-19, `1e2dbe6`) — второй агент рядом с идущим — в
+Patch — `vdx doctor` называет токен GitHub и работает ли он (`hosting-extension`
+Sidetrack #7). 0.31.2 (2026-10-19, `1e2dbe6`) — второй агент рядом с идущим — в
 своей сессии tmux (`<имя>-2`, `-3`…), а не окном, которое уводило все
 терминалы сессии (`vdx-ai` DL #36); registry показал версию позже 3 мин
 ожидания (`hosting-extension` Sidetrack #9). 0.31.1 (2026-10-19, `8e26027`) — `vdx push` ждёт коммит, которого

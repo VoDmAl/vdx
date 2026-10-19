@@ -6,11 +6,13 @@ import { execFileSync } from 'node:child_process';
 import {
   checkClaudeCodePlugin,
   checkGitAuthor,
+  checkGithubToken,
   runDoctor,
   resolveDoctorCtx,
   looksLikeProject,
 } from '../../src/doctor.ts';
 import { reportDoctorMarkdown, reportDoctorJson, reportDoctorAnsi } from '../../src/report.ts';
+import type { Answer, HostingIo } from '../../src/hosting.ts';
 
 // The machine's own profile would make the author check scan the owner's repos.
 const savedProfile = process.env['VDX_ENVIRONMENT'];
@@ -104,7 +106,7 @@ describe('runDoctor with explicit ctx', () => {
   });
 
   it('machine-level checks are unaffected by projectRoot', () => {
-    const projectScoped = new Set(['git-hooks', 'git-author']);
+    const projectScoped = new Set(['git-hooks', 'git-author', 'github-token']);
     const machine = (ids: string[]) => ids.filter((id) => !projectScoped.has(id));
     const withRoot = runDoctor({ projectRoot: process.cwd() });
     const without = runDoctor({ projectRoot: null });
@@ -345,5 +347,72 @@ describe('claude-plugin: the vdx plugin as Claude Code records it', () => {
 
   it('warns without plugin records at all', () => {
     expect(checkClaudeCodePlugin(dir).message).toContain('no plugin records');
+  });
+});
+
+describe('checkGithubToken: the token vdx asks GitHub with', () => {
+  const rate = (limit: number, remaining: number): Answer => ({
+    status: 200,
+    body: { resources: { core: { limit, remaining } } },
+  });
+  const io = (o: { env?: NodeJS.ProcessEnv; gh?: string | null; origin?: string; answer?: Answer | Error }) => {
+    const asked: Array<string | null> = [];
+    const fake: HostingIo = {
+      env: o.env ?? {},
+      git: () => o.origin ?? 'git@github.com:VoDmAl/vdx.git',
+      ghToken: () => o.gh ?? null,
+      get: (_path, token) => {
+        asked.push(token);
+        if (o.answer instanceof Error) throw o.answer;
+        return o.answer ?? rate(60, 60);
+      },
+    };
+    return Object.assign(fake, { asked });
+  };
+  const ctx = { projectRoot: '/repo' };
+
+  it('a token from gh that works: its limit and what is left', () => {
+    const f = io({ gh: 'gho_x', answer: rate(5000, 4981) });
+    expect(checkGithubToken(ctx, f, true)).toMatchObject({
+      status: 'ok',
+      message: 'from gh: 5000 requests an hour, 4981 left',
+    });
+    expect(f.asked).toEqual(['gho_x']);
+  });
+  it('GH_TOKEN before gh, as gh itself picks', () => {
+    expect(
+      checkGithubToken(ctx, io({ env: { GH_TOKEN: 't' }, gh: 'g', answer: rate(5000, 1) }), true)?.message,
+    ).toMatch(/^from GH_TOKEN/);
+  });
+  it('no token: 60 an hour, and how to get one — gh login, or gh itself', () => {
+    const none = checkGithubToken(ctx, io({}), true);
+    expect(none).toMatchObject({ status: 'warning', remedy: 'gh auth login -h github.com' });
+    expect(none?.message).toContain('none — GitHub answers 60 requests an hour without one, 60 left');
+    expect(checkGithubToken(ctx, io({}), false)?.remedy).toMatch(/^install gh/);
+  });
+  it('over ssh on macOS gh may be logged in and still give no token: the keychain is named', () => {
+    const r = checkGithubToken(ctx, io({ env: { SSH_CONNECTION: '10.0.0.1 1 10.0.0.2 22' } }), true, 'darwin');
+    expect(r?.remedy).toMatch(/^over ssh gh cannot read the macOS keychain/);
+  });
+  it('a token that no longer works is named — worse than none: every answer is a 401', () => {
+    const bad: Answer = { status: 401, body: { message: 'Bad credentials' } };
+    expect(checkGithubToken(ctx, io({ gh: 'old', answer: bad }), true)).toMatchObject({
+      status: 'warning',
+      message: 'the token from gh does not work (GitHub: Bad credentials) — every answer is a 401',
+      remedy: 'gh auth login -h github.com',
+    });
+  });
+  it('no row off GitHub or outside a project; VDX_OFFLINE asks nothing', () => {
+    expect(checkGithubToken(ctx, io({ origin: 'vdm@git.vorobyev.name:telegram.vorobyev.name' }), true)).toBeNull();
+    expect(checkGithubToken({ projectRoot: null }, null, true)).toBeNull();
+    const off = io({ env: { VDX_OFFLINE: '1' } });
+    expect(checkGithubToken(ctx, off, true)).toMatchObject({ status: 'ok', message: /VDX_OFFLINE/ });
+    expect(off.asked).toEqual([]);
+  });
+  it('no answer from GitHub', () => {
+    expect(checkGithubToken(ctx, io({ answer: new Error('ENOTFOUND') }), true)).toMatchObject({
+      status: 'warning',
+      message: 'GitHub did not answer: ENOTFOUND',
+    });
   });
 });

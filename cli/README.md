@@ -48,7 +48,7 @@ vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
 # Push the branch; one that requires checks on GitHub takes the commit once they pass
 vdx push [project-path] [--dry-run]   # default: cwd
 
-# Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project)
+# Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project; the GitHub token vdx asks with)
 vdx doctor [project-path] [--format=ansi|markdown|json]   # default: cwd
 vdx doctor --check [project-path]   # one line per hook declared but not running here — the plugin's SessionStart hook tells the agent
 vdx doctor --fix                    # write the profile's personal hooks (git.hooks) into ~/.gitconfig

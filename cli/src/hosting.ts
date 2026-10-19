@@ -170,7 +170,15 @@ export function githubRepo(io: HostingIo, remote: string): { repo: string; token
   // The host only: a URL can carry a token.
   if (host !== 'github.com')
     return { unknown: `${remote} is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub only` };
-  return { repo, token: io.env.GH_TOKEN || io.env.GITHUB_TOKEN || io.ghToken() };
+  return { repo, token: githubToken(io)?.token ?? null };
+}
+
+/** The token vdx asks GitHub with and where it comes from — `GH_TOKEN`, `GITHUB_TOKEN`, then gh, as gh itself picks. */
+export function githubToken(io: HostingIo): { token: string; source: 'GH_TOKEN' | 'GITHUB_TOKEN' | 'gh' } | null {
+  if (io.env.GH_TOKEN) return { token: io.env.GH_TOKEN, source: 'GH_TOKEN' };
+  if (io.env.GITHUB_TOKEN) return { token: io.env.GITHUB_TOKEN, source: 'GITHUB_TOKEN' };
+  const gh = io.ghToken();
+  return gh ? { token: gh, source: 'gh' } : null;
 }
 
 function isUnknownRepo(v: { repo: string } | Unknown): v is Unknown {

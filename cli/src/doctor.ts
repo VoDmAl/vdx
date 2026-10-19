@@ -3,10 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { effectiveAuthor, isGitRepo, rankAuthors, scanPool } from './author.ts';
+import { effectiveAuthor, isGitRepo, rankAuthors, remoteParts, scanPool } from './author.ts';
 import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
 import { checkRepoHooks } from './clone-checks.ts';
-import { at, dict } from './narrow.ts';
+import { githubToken, machineIo, type HostingIo } from './hosting.ts';
+import { at, dict, errorMessage, str } from './narrow.ts';
 import {
   checkPersonalHooks,
   defaultPersonalHookDeps,
@@ -417,6 +418,61 @@ export function checkGitAuthor(ctx: DoctorCtx): CheckResult | null {
   };
 }
 
+/**
+ * The token vdx asks GitHub with, for a repository whose origin is there — the audit
+ * (`branch-protection`) and `vdx push` ask. Without one GitHub answers 60 requests an
+ * hour; a token that no longer works is worse than none: every answer is a 401.
+ * `/rate_limit` tells both apart and costs nothing of the limit.
+ */
+export function checkGithubToken(
+  ctx: DoctorCtx,
+  io: HostingIo | null = ctx.projectRoot ? machineIo(ctx.projectRoot) : null,
+  ghOnPath: boolean = findOnPath('gh') !== null,
+  platform: NodeJS.Platform = process.platform,
+): CheckResult | null {
+  if (ctx.projectRoot === null || io === null) return null;
+  const url = io.git(['remote', 'get-url', 'origin']);
+  if (!url || remoteParts(url).host !== 'github.com') return null;
+  const id = 'github-token';
+  const label = 'GitHub token';
+  if (io.env.VDX_OFFLINE) return { id, label, status: 'ok', message: 'VDX_OFFLINE is set — vdx does not ask GitHub' };
+  const t = githubToken(io);
+  let status: number;
+  let body: unknown;
+  try {
+    ({ status, body } = io.get('/rate_limit', t?.token ?? null));
+  } catch (e) {
+    return { id, label, status: 'warning', message: `GitHub did not answer: ${errorMessage(e)}` };
+  }
+  if (status === 401 && t) {
+    return {
+      id,
+      label,
+      status: 'warning',
+      message: `the token from ${t.source} does not work (GitHub: ${str(at(body, 'message')) ?? '401'}) — every answer is a 401`,
+      remedy: t.source === 'gh' ? 'gh auth login -h github.com' : `a working ${t.source}, or unset it`,
+    };
+  }
+  if (status !== 200) return { id, label, status: 'warning', message: `GitHub answered ${status} for /rate_limit` };
+  const limit = at(body, 'resources', 'core', 'limit');
+  const left = at(body, 'resources', 'core', 'remaining');
+  const hour = typeof limit === 'number' ? `${limit} requests an hour` : 'its limit';
+  const remaining = typeof left === 'number' ? `, ${left} left` : '';
+  if (t) return { id, label, status: 'ok', message: `from ${t.source}: ${hour}${remaining}` };
+  return {
+    id,
+    label,
+    status: 'warning',
+    message: `none — GitHub answers ${hour} without one${remaining}; an audit takes about 3, vdx push about 10`,
+    remedy: !ghOnPath
+      ? 'install gh (https://cli.github.com) and gh auth login, or set GH_TOKEN'
+      : io.env.SSH_CONNECTION && platform === 'darwin'
+        ? // m3, 2026-10-19: logged in, and `ssh m3 gh` saw no token, while tmux there did.
+          'over ssh gh cannot read the macOS keychain where it keeps the token — in a local terminal or tmux it can; else gh auth login -h github.com'
+        : 'gh auth login -h github.com',
+  };
+}
+
 const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkVdxVersion,
   checkVdx,
@@ -430,6 +486,7 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   (ctx) => checkRepoHooks(ctx.projectRoot),
   (ctx) => checkPersonalHooks(ctx.projectRoot),
   checkGitAuthor,
+  (ctx) => checkGithubToken(ctx),
 ];
 
 export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {

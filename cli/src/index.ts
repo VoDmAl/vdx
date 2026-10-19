@@ -193,7 +193,9 @@ or GitHub stopped answering; a plain git push exits with git's own code.
     help: `Checks this machine for what vdx needs (Node, git, mise, npm auth, docker, the
 Claude Code plugin) and, inside a project (default: cwd), its commit author and
 its git hooks: are the hooks the repository declares on in this clone, and do
-the personal hooks of your profile (git.hooks) run on this machine. Reads only.
+the personal hooks of your profile (git.hooks) run on this machine; with origin on
+GitHub, the token vdx asks GitHub with ($GH_TOKEN, $GITHUB_TOKEN or gh) and
+whether it works — without one GitHub answers 60 requests an hour. Reads only.
 Exit 2 when something is missing.
 
   --check  for the agent's own session (the vdx plugin's SessionStart hook): one

@@ -421,7 +421,11 @@ Enter («с v0.29.0 нет коммитов — выпустить всё рав
 вход недействителен — `gh auth login`. Без токена — 60 запросов в час на аудит
 и `vdx push`.
 
-**Status:** open
+**Status:** resolved — 2026-10-19: строка `GitHub token` в `vdx doctor`
+(`checkGithubToken`, `src/doctor.ts`): источник токена, `/rate_limit` — лимит
+и остаток или 401; без токена — `gh auth login`, без gh — установить его; по
+ssh на macOS — что gh не видит keychain. Живой прогон: lft — «from gh: 5000
+requests an hour»; m3 по ssh — «none» и подсказка про keychain
 
 ### #8. `gh` из ssh-сессии на m3 не видит токен
 
@@ -432,7 +436,11 @@ VoDmAl»), а `ssh m3 gh auth status` пишет «The token in default is inval
 токен (не проверено). Тогда агенты, которых `vdx ai@m3` запускает через ssh,
 без токена. Передано nas-info в брифе `gh-on-lft`.
 
-**Status:** open
+**Status:** resolved — 2026-10-19, ответ nas-info (`gh-on-lft-outcome`):
+keychain macOS открыт процессам графической сессии, сервер tmux поднят при
+входе — агенты `vdx ai@m3` в tmux токен получают, голый `ssh m3 gh` — нет.
+Проверено: `ssh m3 "tmux run-shell 'gh auth status'"` — «✓ Logged in …
+(keyring)»
 
 ### #9. Registry показал 0.31.2 позже, чем `vdx publish` ждёт
 
@@ -473,9 +481,11 @@ registry начинается после CI — можно считать его
       2026-10-18)
 - [x] Выпуск с ними, пока `main` открыт; `vdx` на m3 и lft — 0.31.0
       (`464d991`, 2026-10-18)
-- [ ] nas-info: `gh` на lft, как `glab` (бриф `gh-on-lft`, 2026-10-18)
-- [ ] Sidetrack #7: проверка токена GitHub в `vdx doctor` — после живого гейта
-- [ ] Sidetrack #8: `gh` из ssh на m3 — ответ nas-info
+- [x] nas-info: `gh` на lft, как `glab` — стоит, 2.102.0 (`gh-on-lft-outcome`,
+      2026-10-19); вход владельца на lft — есть
+- [x] Sidetrack #7: проверка токена GitHub в `vdx doctor` (2026-10-19; выйдет
+      со следующим выпуском)
+- [x] Sidetrack #8: `gh` из ssh на m3 — ответ nas-info, проверено (2026-10-19)
 - [ ] Sidetrack #9: ожидание registry в `vdx publish` короче, чем отставание npm
 - [x] Владелец: защита `main` — проверки `cli (node 22)` и `cli (node 24)`,
       без обхода (DL #3); включена через `gh` на m3 (2026-10-18)
