@@ -34,6 +34,7 @@ import {
   type PublishOptions,
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
+import { defaultGateDeps, GATE_PREFIX, planGate, pushThroughGate } from './gate.ts';
 import { runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
 import { isConversationId } from './conversations.ts';
 
@@ -44,6 +45,7 @@ const USAGE = `Usage:
   vdx audit   [project_path]  [--rubric <path>] [--stack <stack>] [--format=ansi|markdown|json] [--json]   (default: cwd)
   vdx init    [project_path]  [--stack <id>] [--baseline <ref>] [--dry-run] [--force]                     (default: cwd)
   vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
+  vdx push    [project_path] [--dry-run]                     (default: cwd; through the branch's required checks)
   vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
   vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
@@ -151,12 +153,39 @@ mise.toml is overwritten only with --force.
   the version bump in package.json and package-lock.json;
   npm publish (npm asks for an OTP or a confirmation in the browser; Ctrl-C
   there puts the version back);
-  git commit and tag, then \`git push --follow-tags\` to the branch's upstream;
+  git commit and tag, then \`git push --follow-tags\` to the branch's upstream —
+  through its checks when it requires some, as \`vdx push\` does: the pre-flight
+  then refuses local commits not pushed yet, npm would get them before CI;
   a wait until the registry shows the new version (up to 3 min).
 --dry-run runs the pre-flight and prints the plan; --force goes on past a failed
 pre-flight; --no-push leaves the commit and the tag local.
 `,
     bools: ['dry-run', 'force', 'no-push'],
+    positionals: 1,
+  },
+  push: {
+    usage: 'vdx push [project_path] [--dry-run]',
+    help: `Pushes the current branch to its upstream. When the upstream is on GitHub and
+requires checks (branch protection or a ruleset), the commit goes to
+${GATE_PREFIX}<branch> first: CI checks it there, vdx waits for the checks and then
+pushes the same commit to the branch, with its annotated tags (--follow-tags).
+A failed check leaves the branch as it was and names the check. A branch that
+requires no checks, a remote not on GitHub, a GitHub that does not answer: a
+plain \`git push\`, hooks and all.
+
+The pushes through the checks carry VDX_GATE_PUSH=1: a pre-push hook that runs
+what CI runs may step aside. GitHub is asked with a token from $GH_TOKEN,
+$GITHUB_TOKEN or gh when there is one — without one it answers 60 requests an
+hour, and a push takes about ten; VDX_OFFLINE=1 does not ask.
+
+  project_path  the repository (default: cwd)
+  --dry-run     say which way the push goes; push nothing
+
+Exit codes: 0 pushed; 2 nowhere to push it (no branch, no upstream, behind it);
+3 the branch did not take the commit — a check failed, did not finish in 20 min,
+or GitHub stopped answering; a plain git push exits with git's own code.
+`,
+    bools: ['dry-run'],
     positionals: 1,
   },
   doctor: {
@@ -435,6 +464,39 @@ function cmdPublish(opts: ParsedArgs): void {
   }
 }
 
+function cmdPush(opts: ParsedArgs): void {
+  const root = path.resolve(opts.positionals[0] ?? '.');
+  const deps = defaultGateDeps(root);
+  const plan = planGate(deps.io);
+  if (plan.kind === 'refuse') {
+    process.stderr.write(`vdx push: ${plan.message}\n`);
+    process.exit(2);
+  }
+  if (plan.kind === 'plain') {
+    process.stderr.write(`→ git push — ${plan.why}\n`);
+    if (opts.flags['dry-run']) return;
+    try {
+      execFileSync('git', ['-C', root, 'push'], { stdio: 'inherit' });
+    } catch (e) {
+      const status = at(e, 'status');
+      process.exit(typeof status === 'number' ? status : 1);
+    }
+    return;
+  }
+  const t = plan.target;
+  process.stderr.write(
+    `→ ${t.remote}/${t.branch} requires ${t.checks.join(', ')}: through ${GATE_PREFIX}${t.branch}, ` +
+      `then ${t.branch} once they pass\n`,
+  );
+  if (opts.flags['dry-run']) return;
+  try {
+    pushThroughGate(t, deps);
+  } catch (e) {
+    process.stderr.write(`\nerror: ${errorMessage(e)}\n`);
+    process.exit(3);
+  }
+}
+
 function cmdRun(verb: LifecycleVerb): void {
   const projectRoot = process.cwd();
   const res = resolveLifecycleVerb(projectRoot, verb);
@@ -551,6 +613,7 @@ else if (['--help', '-h', 'help'].includes(parsed.cmd)) process.stdout.write(USA
 else if (parsed.cmd === 'audit') cmdAudit(checkArgs('audit', parsed));
 else if (parsed.cmd === 'init') cmdInit(checkArgs('init', parsed));
 else if (parsed.cmd === 'publish') cmdPublish(checkArgs('publish', parsed));
+else if (parsed.cmd === 'push') cmdPush(checkArgs('push', parsed));
 else if (parsed.cmd === 'doctor') cmdDoctor(checkArgs('doctor', parsed));
 else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(checkArgs('ai', parsed));
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd)) {

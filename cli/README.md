@@ -45,6 +45,9 @@ vdx init  [project-path] [--baseline github.com/org/repo@vX.Y] [--stack <id>] [-
 # Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
 
+# Push the branch; one that requires checks on GitHub takes the commit once they pass
+vdx push [project-path] [--dry-run]   # default: cwd
+
 # Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project)
 vdx doctor [project-path] [--format=ansi|markdown|json]   # default: cwd
 vdx doctor --check [project-path]   # one line per hook declared but not running here — the plugin's SessionStart hook tells the agent
@@ -87,6 +90,17 @@ vdx ai
 # 5. The same on another machine (an ssh host with vdx), attaching from here
 vdx ai@m3
 ```
+
+`vdx push` pushes the current branch to its upstream. When the upstream is on
+GitHub and requires checks (branch protection or a ruleset), the commit goes to
+`vdx-gate/<branch>` first; CI checks it there — its workflow has to run on
+`vdx-gate/**` — and vdx waits for the checks, then pushes the same commit to the
+branch with its annotated tags. A failed check leaves the branch as it was and
+names the check. Without required checks, or off GitHub, it is a plain
+`git push`. Its pushes through the checks carry `VDX_GATE_PUSH=1`, so a pre-push
+hook that runs what CI runs can step aside. `vdx publish` sends its release
+commit the same way, after `npm publish`, and then refuses local commits not
+pushed yet: npm would get them before CI.
 
 `vdx ai` reads a personal profile, never a bundled one: `$VDX_ENVIRONMENT`, else
 `~/.vdx-environment.yaml`, else a plain `claude`/`codex` with no flags. Format:

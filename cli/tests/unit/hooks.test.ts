@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { cloneHookStates, detectHookFrameworks, missingMachinePaths } from '../../src/hooks.ts';
+import { cloneHookStates, detectHookFrameworks, missingMachinePaths, unsetGatingVars } from '../../src/hooks.ts';
 import { checkRepoHooks } from '../../src/clone-checks.ts';
 import { REGISTRY } from '../../src/predicates.ts';
 import type { Ctx } from '../../src/facts.ts';
@@ -235,6 +235,16 @@ describe('is it on in this clone (cloneHookStates, checkRepoHooks)', () => {
     ]);
     expect(missingMachinePaths(['echo "see $HOME/no-such-dir-vdx/x"'])).toEqual([]);
     expect(missingMachinePaths(['"$HOME" && true'])).toEqual([]);
+  });
+  it('a variable that lets the hook step aside is no gate: unset, the hook runs in full', () => {
+    const env = {};
+    expect(
+      unsetGatingVars(['if [ -n "$VDX_GATE_PUSH" ]; then\n  echo skipped >&2\n  exit 0\nfi\nmise run test'], env),
+    ).toEqual([]);
+    expect(unsetGatingVars(['[ -n "${SKIP_HOOKS:-}" ] && exit 0\nnpm test'], env)).toEqual([]);
+    // A block that does the work is the gate it looks like.
+    expect(unsetGatingVars(['if [ -n "$TOOL" ]; then "$TOOL" check; exit 0; fi'], env)).toEqual(['TOOL']);
+    expect(unsetGatingVars(['[ -x "$CHECKER" ] && "$CHECKER"'], env)).toEqual(['CHECKER']);
   });
   it('no row when the repo declares no hooks', () => {
     expect(checkRepoHooks(repo({ 'package.json': '{}' }))).toBeNull();

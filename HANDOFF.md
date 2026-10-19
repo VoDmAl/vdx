@@ -34,6 +34,7 @@
 | `vdx audit [path]` | уровень проекта по рубрике сета; `--format=ansi\|markdown\|json` |
 | `vdx init [path]` | блок `[_.vdx]` и задачи словаря в `mise.toml` из того, что уже есть в проекте |
 | `vdx publish <patch\|minor\|major>` | выпуск одной командой: вход в npm, bump, publish, тег, push, ожидание registry |
+| `vdx push [path]` | push ветки; ветка на GitHub с обязательными проверками получает коммит через `vdx-gate/<ветка>`, когда CI его проверил (с 0.31) |
 | `vdx doctor [path]` | окружение и хуки; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` |
 | `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--restart`, `--detach`, `--dry-run`, `--check` |
 | `vdx-mcp` | MCP-сервер для агента (`vdx_audit`, `vdx_build`, …) |
@@ -49,7 +50,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; ждёт владельца: жить ли vdx под гейтом; gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
+| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом (DL #8): `vdx push` в коде, выпуск 0.31, затем защита `main`; gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | открытых пунктов нет: DL #35 (`--new` рядом) проверен владельцем на 0.28.0, копий `.git/index.sync-conflict-*` после выпусков с m3 нет (2026-10-14) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
@@ -81,7 +82,10 @@
 
 ### Следующий выпуск CLI
 
-Ничего не ждёт. 0.30.0 (2026-10-18, с m3) — второй `vdx publish minor` без
+0.31 (minor) — `vdx push` и выпуск через проверки ветки (`src/gate.ts`,
+`hosting-extension` DL #8–#10); распознаватель хуков не считает гейтом
+переменную, которая только выпускает хук (`VDX_GATE_PUSH`). Выпустить, пока
+`main` открыт, потом защита `main`. 0.30.0 (2026-10-18, с m3) — второй `vdx publish minor` без
 изменений: код 0.29.0. 0.29.0 (2026-10-15) — `branch-protection` L3
 спрашивает GitHub (`src/hosting.ts`, кристалл `hosting-extension`). 0.28.0 (2026-10-14) — сет v1.5.0: `observability` и
 `mock-infra` только у приложения (`vdx-dogfooding` DL #15); путь в `has_file` и

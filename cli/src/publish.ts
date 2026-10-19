@@ -3,6 +3,8 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { AuditResult } from './audit.ts';
 import { stackForDir, type Ctx } from './facts.ts';
+import { defaultGateDeps, GATE_PREFIX, planGate, pushThroughGate, type GatePlan, type GateTarget } from './gate.ts';
+import { machineIo } from './hosting.ts';
 import { at, dict, errorMessage, stderrOf, str } from './narrow.ts';
 
 export type BumpKind = 'patch' | 'minor' | 'major';
@@ -34,6 +36,8 @@ export interface PushPlan {
   ahead: number;
   /** Upstream commits not here: the push would be refused. */
   behind: number;
+  /** The upstream requires checks: the release commit goes through them (`vdx push`). */
+  gate?: GateTarget;
 }
 
 export interface PublishPlan {
@@ -226,6 +230,7 @@ export function planPublish(
   ctx: Ctx,
   npm: NpmRunner = runNpm,
   git: GitRunner = runGit,
+  gate: (projectRoot: string) => GatePlan = (root) => planGate(machineIo(root)),
 ): PublishPlan {
   if (checkMiseOverride(opts.projectRoot)) {
     return {
@@ -339,6 +344,10 @@ export function planPublish(
   }
 
   const push = planPush(opts.projectRoot, opts.push ?? true, git);
+  if (push.enabled && push.upstream) {
+    const g = gate(opts.projectRoot);
+    if (g.kind === 'gate') push.gate = g.target;
+  }
   if (push.enabled && push.upstream && push.behind > 0) {
     preflight.push({
       name: 'push-target',
@@ -347,13 +356,25 @@ export function planPublish(
         `${push.upstream} has ${push.behind} commit(s) this branch lacks — the push after npm publish ` +
         `would be refused. Pull first (or --no-push)`,
     });
+  } else if (push.gate && push.ahead > 0) {
+    // npm publish comes before the push (DL #9 of docs/tasks/hosting-extension): what
+    // CI has not seen would reach npm first.
+    preflight.push({
+      name: 'push-target',
+      ok: false,
+      message:
+        `${push.ahead} local commit(s) are not on ${push.upstream}, which requires ${push.gate.checks.join(', ')}: ` +
+        `npm would get them before CI checks them. Push them first: vdx push`,
+    });
   } else if (push.enabled) {
     preflight.push({
       name: 'push-target',
       ok: true,
-      message: push.upstream
-        ? `OK (${push.upstream}${push.ahead ? `, ${push.ahead} local commit(s) go with the release` : ''})`
-        : 'no upstream for this branch — the release commit and tag stay local',
+      message: push.gate
+        ? `OK (${push.upstream}, through ${push.gate.checks.join(', ')})`
+        : push.upstream
+          ? `OK (${push.upstream}${push.ahead ? `, ${push.ahead} local commit(s) go with the release` : ''})`
+          : 'no upstream for this branch — the release commit and tag stay local',
     });
   }
 
@@ -394,6 +415,8 @@ export interface PublishDeps {
   registryWaitMs: number;
   /** Rewrites one status line in place (a terminal); without it the wait logs a line now and then. */
   progress?: (text: string) => void;
+  /** HEAD through the upstream's checks, with the tag (`vdx push`); throws when the upstream did not take it. */
+  gatePush: (target: GateTarget, projectRoot: string) => void;
 }
 
 function sleepSync(ms: number): void {
@@ -410,6 +433,7 @@ export function defaultPublishDeps(): PublishDeps {
     sleep: sleepSync,
     registryWaitMs: 180_000,
     progress: process.stderr.isTTY ? (text) => process.stderr.write(`\r${text}\x1b[K`) : undefined,
+    gatePush: (target, projectRoot) => pushThroughGate(target, defaultGateDeps(projectRoot)),
   };
 }
 
@@ -480,6 +504,7 @@ export function waitForRegistry(name: string, version: string, deps: PublishDeps
  *      is recoverable manually).
  *   4. `git push --follow-tags` to the branch's upstream, unless `--no-push`
  *      or there is none. The pre-flight refused a branch behind its upstream.
+ *      An upstream that requires checks takes the commit through them (`vdx push`).
  *   5. Wait until the registry shows the version.
  *
  * On npm publish failure or interruption (Ctrl-C at its prompt) → restore the original files.
@@ -541,7 +566,18 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
 
   // 4. push
   const push = plan.push;
-  if (push?.enabled && push.upstream) {
+  if (push?.enabled && push.gate) {
+    try {
+      deps.gatePush(push.gate, plan.projectRoot);
+    } catch (e) {
+      deps.log(
+        `✗ ${errorMessage(e)} — ${plan.packageName}@${plan.newVersion} is published and tagged here; ` +
+          `once the checks pass: vdx push`,
+      );
+      throw new Error(`${push.upstream} did not take the release commit`, { cause: e });
+    }
+    deps.log(`✓ pushed to ${push.upstream} with tag v${plan.newVersion}, through ${push.gate.checks.join(', ')}`);
+  } else if (push?.enabled && push.upstream) {
     deps.log(`→ git push --follow-tags (${push.upstream})...`);
     try {
       deps.run('git', ['push', '--follow-tags'], plan.projectRoot);
@@ -616,9 +652,11 @@ export function renderPublishPlan(plan: PublishPlan): string {
     lines.push(
       !push?.enabled
         ? '5. Not pushed (`--no-push`): `git push --follow-tags` is yours'
-        : push.upstream
-          ? `5. \`git push --follow-tags\` → ${push.upstream}${push.ahead ? ` (with ${push.ahead} local commit(s) not pushed yet)` : ''}`
-          : '5. Not pushed: the branch has no upstream',
+        : push.gate
+          ? `5. Through CI (\`vdx push\`): \`${GATE_PREFIX}${push.gate.branch}\`, then ${push.upstream} with the tag once ${push.gate.checks.join(', ')} pass`
+          : push.upstream
+            ? `5. \`git push --follow-tags\` → ${push.upstream}${push.ahead ? ` (with ${push.ahead} local commit(s) not pushed yet)` : ''}`
+            : '5. Not pushed: the branch has no upstream',
     );
     lines.push(`6. Wait until the registry shows ${plan.newVersion} (up to 3 min)`);
   } else {

@@ -20,6 +20,7 @@
 | `vdx init` | `init.ts` |
 | `vdx doctor` | `doctor.ts` |
 | `vdx publish` | `publish.ts` |
+| `vdx push` | `gate.ts` |
 | `vdx ai[@host]` | `ai.ts` |
 
 Свой раннер vdx не держит: глаголы исполняет mise (D3).
@@ -58,7 +59,8 @@ report.ts      markdown, ansi, json
 - `vocabulary.ts` — какие задачи проекта зовёт командная строка через его
   раннер (mise, npm, composer, make…);
 - `hosting.ts` — защита ветки по умолчанию у `origin` на GitHub для оси
-  `branch-protection`. Единственный, кто ходит в сеть: запрос делает дочерний
+  `branch-protection`, обязательные проверки ветки и проверки коммита для
+  `vdx push`. Единственный, кто ходит в сеть: запрос делает дочерний
   `node`, аудит остаётся синхронным; `VDX_OFFLINE=1` — не спрашивать (тесты
   так и запускаются) — кристалл `hosting-extension`.
 
@@ -72,6 +74,10 @@ report.ts      markdown, ansi, json
   (`hook.<имя>.*`, Git 2.54+). `author.ts` — автор коммитов в `.git/config`.
 - `publish.ts` — выпуск одной командой: pre-flight, bump, `npm publish`, тег,
   push, ожидание реестра.
+- `gate.ts` — `vdx push`: ветка, которая требует проверок, получает коммит
+  через `vdx-gate/<ветка>`, когда проверки прошли; список проверок и их
+  состояние — у GitHub через `hosting.ts`. Тем же путём `vdx publish` пушит
+  коммит выпуска (кристалл `hosting-extension`, DL #8–#10).
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
   с машиной и разговором; `conversations.ts` — разговоры Claude Code проекта и
   машина, на которой каждый запускали.
@@ -93,7 +99,8 @@ report.ts      markdown, ansi, json
   (`mise run test:smoke`, не в CI).
 
 `mise run check` — `tsc` (с тестами), Prettier, ESLint, knip. CI и хук
-`pre-push` зовут `check`, `test` и `test:e2e`.
+`pre-push` зовут `check`, `test` и `test:e2e`; push от `vdx push` через
+проверки хук пропускает (`VDX_GATE_PUSH=1`): их делает CI на `vdx-gate/**`.
 
 ## Где менять
 

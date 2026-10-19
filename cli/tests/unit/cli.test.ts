@@ -103,7 +103,7 @@ describe('vdx ai --help and unknown options', () => {
 });
 
 describe('every command: --help, unknown options, stray arguments', () => {
-  const COMMANDS = ['audit', 'init', 'publish', 'doctor', 'ai', 'up', 'down', 'build', 'test', 'check', 'fix'];
+  const COMMANDS = ['audit', 'init', 'publish', 'push', 'doctor', 'ai', 'up', 'down', 'build', 'test', 'check', 'fix'];
   // A project init would write mise.toml for and a verb would run in: if an
   // argument is misread, the command shows up as a file or as a mise run.
   let dir: string;
@@ -145,7 +145,7 @@ describe('every command: --help, unknown options, stray arguments', () => {
       }
     }
     expect(fs.existsSync(path.join(dir, 'mise.toml'))).toBe(false);
-  }, 60_000); // 22 starts of the CLI, ~0.6 s each — past the default 5 s on a loaded machine
+  }, 60_000); // 24 starts of the CLI, ~0.6 s each — past the default 5 s on a loaded machine
 
   it('<command> refuses an unknown option with exit 2 and runs nothing', () => {
     for (const cmd of COMMANDS) {
@@ -156,7 +156,7 @@ describe('every command: --help, unknown options, stray arguments', () => {
       expect(r.stdout, cmd).toBe('');
     }
     expect(fs.existsSync(path.join(dir, 'mise.toml'))).toBe(false);
-  }, 30_000); // 11 starts of the CLI
+  }, 30_000); // 12 starts of the CLI
 
   it('refuses a stray argument and a value flag without its value', () => {
     for (const [args, message] of [
@@ -171,6 +171,12 @@ describe('every command: --help, unknown options, stray arguments', () => {
       expect(r.stderr).toContain(message);
     }
     expect(fs.existsSync(path.join(dir, 'mise.toml'))).toBe(false);
+  });
+
+  it('vdx push outside a repository: nowhere to push, exit 2', () => {
+    const r = inDir('push');
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('vdx push: HEAD is not on a branch');
   });
 
   it('gives back the path after a flag that takes no value', () => {

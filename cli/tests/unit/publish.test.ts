@@ -22,6 +22,7 @@ import {
   waitForRegistry,
 } from '../../src/publish.ts';
 import type { AuditResult } from '../../src/audit.ts';
+import type { GateTarget } from '../../src/gate.ts';
 import type { Ctx } from '../../src/facts.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -401,9 +402,13 @@ describe('the release goes out whole: lock, push, registry', () => {
       log: (l) => logs.push(l),
       sleep: () => {},
       registryWaitMs: 60_000,
+      // What vdx push does once the checks pass: the commit to the branch, with its tags.
+      gatePush: (_t, root) =>
+        execFileSync('git', ['push', '-q', '--follow-tags', 'origin', 'HEAD:refs/heads/main'], { cwd: root }),
       ...over,
     };
   };
+  const GATE: GateTarget = { remote: 'origin', branch: 'main', repo: 'o/demo', token: null, checks: ['cli (node 22)'] };
   const releasePlan = (over: Partial<PublishPlan> = {}): PublishPlan => ({
     projectRoot: work,
     stack: 'node',
@@ -537,6 +542,73 @@ describe('the release goes out whole: lock, push, registry', () => {
     });
     expect(waitForRegistry('demo', '1.1.0', d)).toBe(false);
     expect(logs.join('\n')).toContain('not visible on the registry after 0 min — npm accepted it');
+  });
+
+  it('a branch that requires checks: the release commit goes through them after npm publish, the tag with it', () => {
+    const through: string[] = [];
+    const d = deps();
+    const viaGate = deps({
+      gatePush: (t, root) => {
+        through.push(`${t.branch}@${git(['log', '-1', '--format=%s']).trim()}`);
+        d.gatePush(t, root);
+      },
+    });
+    executePublish(releasePlan({ push: { ...planPush(work, true), gate: GATE } }), viaGate);
+    expect(viaGate.npmRuns).toEqual([['publish']]);
+    expect(through).toEqual(['main@release: v1.1.0']); // after npm publish and the commit
+    expect(git(['ls-remote', '--tags', 'origin', 'v1.1.0'])).toContain('refs/tags/v1.1.0');
+    expect(logs.join('\n')).toContain('✓ pushed to origin/main with tag v1.1.0, through cli (node 22)');
+  });
+
+  it('a red check after npm publish: the release is here and in npm, and the next step is named', () => {
+    const d = deps({
+      gatePush: () => {
+        throw new Error('cli (node 22) — failure: main did not take 1a2b3c4');
+      },
+    });
+    expect(() => executePublish(releasePlan({ push: { ...planPush(work, true), gate: GATE } }), d)).toThrow(
+      'origin/main did not take the release commit',
+    );
+    expect(git(['log', '-1', '--format=%s']).trim()).toBe('release: v1.1.0');
+    expect(git(['tag', '--list', 'v1.1.0']).trim()).toBe('v1.1.0');
+    expect(logs.join('\n')).toContain(
+      '✗ cli (node 22) — failure: main did not take 1a2b3c4 — demo@1.1.0 is published and tagged here; once the checks pass: vdx push',
+    );
+  });
+
+  it('under the gate the pre-flight refuses commits not pushed yet: npm would get them before CI', () => {
+    const ahead: GitRunner = (args) => {
+      if (args.includes('@{u}') && args[0] === 'rev-parse') return 'origin/main\n';
+      if (args.includes('@{u}..HEAD')) return '2\n';
+      return '0\n';
+    };
+    const projectRoot = path.join(FIXTURES, 'node-with-vitest');
+    const ctx: Ctx = { projectRoot, stack: 'node', cache: new Map() };
+    const plan = (git: GitRunner) =>
+      planPublish(
+        { projectRoot, bump: 'patch', dryRun: true, force: false },
+        mockAudit(),
+        ctx,
+        fixtureNpm(),
+        git,
+        () => ({
+          kind: 'gate',
+          target: GATE,
+        }),
+      );
+    expect(plan(ahead).preflight.find((c) => c.name === 'push-target')).toEqual({
+      name: 'push-target',
+      ok: false,
+      message:
+        '2 local commit(s) are not on origin/main, which requires cli (node 22): npm would get them before CI checks them. Push them first: vdx push',
+    });
+    const even: GitRunner = (args) => (args[0] === 'rev-parse' ? 'origin/main\n' : '0\n');
+    const ok = plan(even);
+    expect(ok.preflight.find((c) => c.name === 'push-target')?.message).toBe('OK (origin/main, through cli (node 22))');
+    // The tree of this checkout is the fixture's: whether it is clean says nothing here.
+    expect(renderPublishPlan({ ...ok, preflightPassed: true })).toContain(
+      '5. Through CI (`vdx push`): `vdx-gate/main`, then origin/main with the tag once cli (node 22) pass',
+    );
   });
 
   it("writes the lock back in npm's own format", () => {

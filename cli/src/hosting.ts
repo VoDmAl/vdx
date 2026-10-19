@@ -60,7 +60,7 @@ function get(apiPath: string, token: string | null): Answer {
   return { status, body };
 }
 
-function machineIo(root: string): HostingIo {
+export function machineIo(root: string): HostingIo {
   const run = (cmd: string, args: string[]): string | null => {
     try {
       return (
@@ -152,17 +152,129 @@ export function branchRequiresChecks(ctx: Ctx, io: HostingIo = machineIo(ctx.pro
 }
 
 function ask(io: HostingIo): Verdict {
-  if (io.env.VDX_OFFLINE) return { unknown: 'VDX_OFFLINE is set — the hosting was not asked' };
-  const url = io.git(['remote', 'get-url', 'origin']);
-  if (!url) return { unknown: 'no origin remote — the hosting is not known' };
-  const { host, path: repo } = remoteParts(url);
-  // The host only: a URL can carry a token.
-  if (host !== 'github.com')
-    return { unknown: `origin is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub only` };
-  const token = io.env.GH_TOKEN || io.env.GITHUB_TOKEN || io.ghToken();
+  const gh = githubRepo(io, 'origin');
+  if (isUnknownRepo(gh)) return gh;
   try {
-    return judge(io, repo, token);
+    return judge(io, gh.repo, gh.token);
   } catch (e) {
     return { unknown: `GitHub did not answer: ${errorMessage(e)}` };
   }
+}
+
+/** A remote's repository on GitHub and the token to ask with; unknown, with the reason, when vdx cannot ask. */
+export function githubRepo(io: HostingIo, remote: string): { repo: string; token: string | null } | Unknown {
+  if (io.env.VDX_OFFLINE) return { unknown: 'VDX_OFFLINE is set — the hosting was not asked' };
+  const url = io.git(['remote', 'get-url', remote]);
+  if (!url) return { unknown: `no ${remote} remote — the hosting is not known` };
+  const { host, path: repo } = remoteParts(url);
+  // The host only: a URL can carry a token.
+  if (host !== 'github.com')
+    return { unknown: `${remote} is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub only` };
+  return { repo, token: io.env.GH_TOKEN || io.env.GITHUB_TOKEN || io.ghToken() };
+}
+
+function isUnknownRepo(v: { repo: string } | Unknown): v is Unknown {
+  return 'unknown' in v;
+}
+
+/**
+ * The checks a branch requires before it takes a commit — of classic protection and of
+ * rulesets together, whoever they bind: what GitHub will ask of the commit.
+ */
+export function requiredChecks(io: HostingIo, repo: string, branch: string, token: string | null): string[] | Unknown {
+  const ref = encodeURIComponent(branch);
+  const names = new Set<string>();
+  const b = io.get(`/repos/${repo}/branches/${ref}`, token);
+  const refusedBranch = refusal(b, repo, token);
+  if (refusedBranch) return refusedBranch;
+  const classic = at(b.body, 'protection', 'required_status_checks');
+  if (at(classic, 'enforcement_level') !== 'off') {
+    for (const c of list(at(classic, 'checks'))) add(names, at(c, 'context'));
+    for (const c of list(at(classic, 'contexts'))) add(names, c);
+  }
+  const rules = io.get(`/repos/${repo}/rules/branches/${ref}`, token);
+  const refusedRules = refusal(rules, repo, token);
+  if (refusedRules) return refusedRules;
+  for (const rule of list(rules.body)) {
+    if (at(rule, 'type') !== 'required_status_checks') continue;
+    for (const c of list(at(rule, 'parameters', 'required_status_checks'))) add(names, at(c, 'context'));
+  }
+  return [...names];
+}
+
+function add(names: Set<string>, name: unknown): void {
+  const n = str(name);
+  if (n) names.add(n);
+}
+
+/** Where one required check of a commit stands. */
+export interface CheckState {
+  name: string;
+  state: 'pending' | 'passed' | 'failed';
+  /** GitHub's word for it: `in_progress`, `success`, `failure`, `not started`. */
+  detail: string;
+  url?: string;
+}
+
+/**
+ * The named checks of a commit: its check runs (GitHub Actions), else its commit
+ * statuses (an outside CI). A check that has not reported yet is pending.
+ */
+export function commitChecks(
+  io: HostingIo,
+  repo: string,
+  sha: string,
+  names: string[],
+  token: string | null,
+): CheckState[] | Unknown {
+  const runs = io.get(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`, token);
+  const refusedRuns = refusal(runs, repo, token);
+  if (refusedRuns) return refusedRuns;
+  // A re-run is a new check run under the same name: the newest one counts.
+  const latest = new Map<string, unknown>();
+  for (const run of list(at(runs.body, 'check_runs'))) {
+    const name = str(at(run, 'name'));
+    const id = at(run, 'id');
+    if (!name || typeof id !== 'number') continue;
+    const seen = at(latest.get(name), 'id');
+    if (typeof seen !== 'number' || id > seen) latest.set(name, run);
+  }
+  let statuses: Map<string, unknown> | null = null;
+  const states: CheckState[] = [];
+  for (const name of names) {
+    const run = latest.get(name);
+    if (run !== undefined) {
+      const status = str(at(run, 'status')) ?? 'queued';
+      const conclusion = str(at(run, 'conclusion')) ?? '';
+      const url = str(at(run, 'html_url'));
+      const state =
+        status !== 'completed'
+          ? 'pending'
+          : ['success', 'neutral', 'skipped'].includes(conclusion)
+            ? 'passed'
+            : 'failed';
+      states.push({ name, state, detail: status === 'completed' ? conclusion : status, ...(url ? { url } : {}) });
+      continue;
+    }
+    if (statuses === null) {
+      const combined = io.get(`/repos/${repo}/commits/${sha}/status`, token);
+      const refused = refusal(combined, repo, token);
+      if (refused) return refused;
+      statuses = new Map();
+      for (const s of list(at(combined.body, 'statuses'))) {
+        const context = str(at(s, 'context'));
+        if (context && !statuses.has(context)) statuses.set(context, s);
+      }
+    }
+    const status = statuses.get(name);
+    const word = str(at(status, 'state'));
+    const url = str(at(status, 'target_url'));
+    states.push({
+      name,
+      state: word === 'success' ? 'passed' : word === 'failure' || word === 'error' ? 'failed' : 'pending',
+      detail: word ?? 'not started',
+      ...(url ? { url } : {}),
+    });
+  }
+  return states;
 }

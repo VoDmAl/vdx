@@ -428,10 +428,28 @@ export function unsetGatingVars(commands: string[], env: NodeJS.ProcessEnv = pro
   for (const body of commands) {
     for (const m of body.matchAll(GATING_VAR_RE)) {
       const name = m[1] ?? m[2];
-      if (name && !env[name]) out.add(name);
+      if (name && !env[name] && !opensAnEscape(body.slice(m.index + m[0].length))) out.add(name);
     }
   }
   return [...out].sort();
+}
+
+/**
+ * `[ -n "$VAR" ] && exit 0`, `if [ -n "$VAR" ]; then echo …; exit 0; fi`: the variable
+ * lets the hook step aside (`VDX_GATE_PUSH` of `vdx push`), and unset, the hook runs in
+ * full — no gate is a no-op. A block doing anything but saying so and exiting 0 is a gate.
+ */
+function opensAnEscape(afterTest: string): boolean {
+  const m = afterTest.match(/^\s*\](?:\s*;?\s*then\b([\s\S]*?)\bfi\b|\s*&&([^\n]*))/);
+  const block = m?.[1] ?? m?.[2];
+  if (block === undefined) return false;
+  const statements = block
+    .split(/\n|;/)
+    .map((st) => st.trim())
+    .filter((st) => st !== '');
+  return (
+    statements.at(-1) === 'exit 0' && statements.every((st) => st === 'exit 0' || /^(?:echo|printf|:)(?:\s|$)/.test(st))
+  );
 }
 
 /**

@@ -91,6 +91,7 @@ vdx down  # tear down
 
 # 4. Publish a library (Node MVP; PHP/Python coming in Y.3)
 vdx publish minor   # bump (+lock), npm publish (OTP or browser), git commit+tag+push, wait for the registry
+vdx push            # push; a GitHub branch that requires checks takes the commit once CI passes it
 
 # 5. Check your local environment (Node version, mise, git, docker, Claude Code plugin)
 vdx doctor

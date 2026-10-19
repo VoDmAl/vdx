@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # vdx-gate/<branch>: vdx push leaves a commit there for CI, and the branch
+    # takes it once the checks pass (docs/tasks/hosting-extension, DL #10).
+    branches: [main, 'vdx-gate/**']
   pull_request:
 
 jobs:
