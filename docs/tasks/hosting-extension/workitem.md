@@ -5,7 +5,7 @@ description: "Делает L3 оси branch-protection известным: сп�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-15
-last-updated: 2026-10-18
+last-updated: 2026-10-19
 ---
 
 # Расширение хостинга для branch-protection
@@ -434,6 +434,20 @@ VoDmAl»), а `ssh m3 gh auth status` пишет «The token in default is inval
 
 **Status:** open
 
+### #9. Registry показал 0.31.2 позже, чем `vdx publish` ждёт
+
+**Возникло в:** выпуск 0.31.2 (2026-10-19, `1e2dbe6`, с lft)
+**Описание:** `npm publish` прошёл в 19:02:49 UTC, гейт ждал CI около 2 мин,
+потом `waitForRegistry` 180 с спрашивал `npm view …@0.31.2 --prefer-online` —
+и написал «not visible after 3 min». Через пару минут `npm view` и
+`registry.npmjs.org/@vodmal%2fvdx-cli` уже отдавали 0.31.2 (`latest`). Отставание
+вышло больше 5 мин от publish; у 0.31.1 жалобы не было. Под гейтом ожидание
+registry начинается после CI — можно считать его от publish, дать больше или
+спрашивать адрес версии (`/<пакет>/<версия>`); что быстрее отдаёт новую версию —
+не проверено. Выпуск не сломан: строка `!` честно говорит «npm accepted it».
+
+**Status:** open
+
 ## Next actions
 
 Развилки — к владельцу; ответ — запись в Decision Log.
@@ -462,6 +476,7 @@ VoDmAl»), а `ssh m3 gh auth status` пишет «The token in default is inval
 - [ ] nas-info: `gh` на lft, как `glab` (бриф `gh-on-lft`, 2026-10-18)
 - [ ] Sidetrack #7: проверка токена GitHub в `vdx doctor` — после живого гейта
 - [ ] Sidetrack #8: `gh` из ssh на m3 — ответ nas-info
+- [ ] Sidetrack #9: ожидание registry в `vdx publish` короче, чем отставание npm
 - [x] Владелец: защита `main` — проверки `cli (node 22)` и `cli (node 24)`,
       без обхода (DL #3); включена через `gh` на m3 (2026-10-18)
 - [x] `vdx audit .` под гейтом — общий L4 (0.31.0, 2026-10-18)

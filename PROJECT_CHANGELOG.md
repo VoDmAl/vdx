@@ -4,6 +4,13 @@
 
 ## 2026-10-19
 
+### 0.31.2 в npm
+
+`1e2dbe6`, через гейт с первого раза; на m3 и lft — 0.31.2. `vdx ai --new
+--dry-run` в vdx называет `vdx@lft-2`. Registry показал версию позже 3 мин,
+которые ждёт `vdx publish` ([hosting-extension](docs/tasks/hosting-extension/workitem.md)
+Sidetrack #9).
+
 ### Второй агент проекта — в своей сессии tmux
 
 `vdx ai@lft --focused` при идущем агенте вставал новым окном в `vdx@lft` и
