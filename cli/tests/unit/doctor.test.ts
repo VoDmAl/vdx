@@ -22,7 +22,9 @@ afterAll(() => {
   else process.env['VDX_ENVIRONMENT'] = savedProfile;
 });
 
-describe('runDoctor', () => {
+// runDoctor asks the machine itself — node, git, mise, npm whoami, npm view: on lft
+// at a load of ~10 one call took past vitest's 5 s (2026-10-19).
+describe('runDoctor', { timeout: 30_000 }, () => {
   it('returns a report with checks array and counters that sum correctly', () => {
     const r = runDoctor();
     expect(Array.isArray(r.checks)).toBe(true);

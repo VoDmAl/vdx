@@ -132,15 +132,18 @@ export function pushThroughGate(t: GateTarget, d: GateDeps): void {
     d.log(`✓ ${where} is at ${short}`);
   };
 
-  // Pushed once and checked: the branch takes it now.
-  const before = ask();
-  if (!isUnknown(before) && passed(before)) {
-    d.log(`✓ ${short} has passed ${names}`);
-    toBranch();
-    return;
+  const gate = GATE_PREFIX + t.branch;
+  // On the gate branch already (a second vdx push) and checked: the branch takes it now.
+  // A commit not pushed yet is not asked about — GitHub would only answer 422.
+  if (d.io.git(['rev-parse', '--verify', '--quiet', `refs/remotes/${t.remote}/${gate}`]) === sha) {
+    const before = ask();
+    if (!isUnknown(before) && passed(before)) {
+      d.log(`✓ ${short} has passed ${names}`);
+      toBranch();
+      return;
+    }
   }
 
-  const gate = GATE_PREFIX + t.branch;
   d.log(`→ git push --force ${t.remote} ${short}:${gate} — ${where} requires ${names}; CI checks the commit there`);
   d.push(['push', '--force', t.remote, `${sha}:refs/heads/${gate}`]);
   d.log(`→ waiting for ${names} on ${short} (asking every ${Math.round(d.pollMs / 1000)} s): ${link}`);

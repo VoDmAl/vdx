@@ -173,14 +173,15 @@ describe('planGate: which way the push goes', () => {
 
 describe('pushThroughGate', () => {
   it('the gate branch, the wait, then the same commit to the branch with its tags', () => {
-    const f = fake({ answers: { [checksPath]: [NOT_THERE, QUEUED, RUNNING, GREEN] } });
+    const f = fake({ answers: { [checksPath]: [QUEUED, RUNNING, GREEN] } });
     const d = deps(f);
     pushThroughGate(TARGET, d);
     expect(d.pushes).toEqual([
       ['push', '--force', 'origin', `${SHA}:refs/heads/vdx-gate/main`],
       ['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`],
     ]);
-    expect(f.asked.filter((p) => p === checksPath)).toHaveLength(4); // before, then every 15 s
+    // Not asked before the push — the commit is not on GitHub yet; then every 15 s.
+    expect(f.asked.filter((p) => p === checksPath)).toHaveLength(3);
     expect(d.logs.join('\n')).toContain(`https://github.com/owner/repo/commit/${SHA}/checks`);
     expect(d.logs.join('\n')).toMatch(/✓ cli \(node 22\), cli \(node 24\) passed \(45 s\)/);
     expect(d.logs.at(-1)).toBe('✓ origin/main is at a43b981');
@@ -190,12 +191,17 @@ describe('pushThroughGate', () => {
     const d = deps(f);
     pushThroughGate(TARGET, d);
     expect(d.pushes.map((p) => p[3])).toEqual([`${SHA}:refs/heads/vdx-gate/main`, `${SHA}:refs/heads/main`]);
-    expect(d.logs.join('\n')).toMatch(/passed \(45 s\)/);
+    expect(d.logs.join('\n')).toMatch(/passed \(60 s\)/); // asked at 15, 30, 45 and 60 s
   });
-  it('a commit whose checks passed already goes to the branch at once', () => {
-    const d = deps(fake({ answers: { [checksPath]: GREEN } }));
+  it('a second vdx push of a commit whose checks passed on the gate branch: to the branch at once', () => {
+    const onGate = { 'rev-parse --verify --quiet refs/remotes/origin/vdx-gate/main': SHA };
+    const d = deps(fake({ git: onGate, answers: { [checksPath]: GREEN } }));
     pushThroughGate(TARGET, d);
     expect(d.pushes).toEqual([['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]]);
+    // Still running there: pushed to the gate branch again (a no-op for git) and waited for.
+    const running = deps(fake({ git: onGate, answers: { [checksPath]: [RUNNING, GREEN] } }));
+    pushThroughGate(TARGET, running);
+    expect(running.pushes.map((p) => p[3])).toEqual([`${SHA}:refs/heads/vdx-gate/main`, `${SHA}:refs/heads/main`]);
   });
   it('a failed check: the branch is left as it was, and the check is named with its link', () => {
     const d = deps(fake({ answers: { [checksPath]: [NOT_THERE, RED] } }));
@@ -226,7 +232,7 @@ describe('pushThroughGate', () => {
     );
     const d = deps(fake({ answers: { [checksPath]: rerun } }));
     pushThroughGate(TARGET, d);
-    expect(d.pushes).toEqual([['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]]);
+    expect(d.pushes.at(-1)).toEqual(['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]);
   });
   it('a check an outside CI reports as a commit status', () => {
     const status: Answer = {
@@ -235,7 +241,7 @@ describe('pushThroughGate', () => {
     };
     const d = deps(fake({ answers: { [checksPath]: runs(), [`${BASE}/commits/${SHA}/status`]: status } }));
     pushThroughGate({ ...TARGET, checks: ['ci/jenkins'] }, d);
-    expect(d.pushes).toEqual([['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]]);
+    expect(d.pushes.at(-1)).toEqual(['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]);
   });
   it('the upstream at HEAD already: nothing to push', () => {
     const d = deps(fake({ git: { 'rev-parse @{u}': SHA } }));
