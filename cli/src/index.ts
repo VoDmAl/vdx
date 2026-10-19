@@ -35,7 +35,7 @@ import {
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 import { defaultGateDeps, GATE_PREFIX, planGate, pushThroughGate } from './gate.ts';
-import { runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
+import { askLine, runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
 import { isConversationId } from './conversations.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
@@ -156,7 +156,10 @@ mise.toml is overwritten only with --force.
   git commit and tag, then \`git push --follow-tags\` to the branch's upstream —
   through its checks when it requires some, as \`vdx push\` does: the pre-flight
   then refuses local commits not pushed yet, npm would get them before CI;
-  a wait until the registry shows the new version (up to 3 min).
+  a wait until the registry shows the new version (up to 10 min from npm publish;
+  Ctrl-C there stops only the wait).
+Nothing in the package's directory changed since the tag of its version: the
+same package under a new number — at a terminal a question, Enter releases nothing.
 --dry-run runs the pre-flight and prints the plan; --force goes on past a failed
 pre-flight; --no-push leaves the commit and the tag local.
 `,
@@ -440,7 +443,8 @@ function cmdPublish(opts: ParsedArgs): void {
   const deps = defaultPublishDeps();
   const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
   if (!plan.preflightPassed && !planOpts.force && interactive && preflightFixable(plan)) {
-    for (const c of plan.preflight.filter((c) => !c.ok && c.fix)) {
+    const fixes = plan.preflight.filter((c) => !c.ok && c.fix);
+    for (const c of fixes) {
       process.stderr.write(`\n→ ${c.name}: ${c.fix!.cmd} ${c.fix!.args.join(' ')}\n`);
       try {
         deps.run(c.fix!.cmd, c.fix!.args, projectRoot);
@@ -449,11 +453,27 @@ function cmdPublish(opts: ParsedArgs): void {
         process.exit(2);
       }
     }
-    plan = replan();
-    process.stdout.write('\n' + renderPublishPlan(plan));
+    if (fixes.length > 0) {
+      plan = replan();
+      process.stdout.write('\n' + renderPublishPlan(plan));
+    }
   }
 
-  if (!plan.preflightPassed && !planOpts.force) {
+  // A failure the person may waive (nothing changed since the release): a question, Enter no.
+  let waived = false;
+  const left = plan.preflight.filter((c) => !c.ok);
+  if (!planOpts.force && interactive && left.length > 0 && left.every((c) => c.waive)) {
+    for (const c of left) {
+      process.stderr.write(`\n${c.name}: ${c.message}\n`);
+      if (!/^y(es)?$/i.test(askLine(c.waive!) ?? '')) {
+        process.stderr.write('nothing released\n');
+        process.exit(2);
+      }
+    }
+    waived = true;
+  }
+
+  if (!plan.preflightPassed && !planOpts.force && !waived) {
     process.stderr.write('\nerror: pre-flight failed (use --force to bypass)\n');
     process.exit(2);
   }

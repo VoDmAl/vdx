@@ -762,7 +762,7 @@ export function sleepSync(ms: number): void {
 }
 
 /** Read one line from the terminal, synchronously: the prompt runs before tmux takes it. */
-function askLine(prompt: string): string | null {
+export function askLine(prompt: string): string | null {
   process.stderr.write(prompt);
   const buf = Buffer.alloc(256);
   let text = '';

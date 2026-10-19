@@ -11,6 +11,7 @@ import {
   type PublishPlan,
   bumpLockText,
   bumpSemver,
+  checkChangesSinceRelease,
   checkNpmAuth,
   compareSemver,
   executePublish,
@@ -529,7 +530,7 @@ describe('the release goes out whole: lock, push, registry', () => {
     expect(waitForRegistry('demo', '1.1.0', deps({ progress: (t) => lines.push(t) }))).toBe(true);
     expect(lines.slice(0, 10)).toEqual(Array(10).fill('  … 0 s of 60 s'));
     expect(lines.at(-1)).toBe(''); // the counter line is cleared before the result
-    expect(logs[0]).toContain('npm has taken it; the registry usually shows it within ~2 min');
+    expect(logs[0]).toContain('npm has taken it; the registry has taken up to 6 min to show a version');
     expect(logs.at(-1)).toMatch(/✓ demo@1\.1\.0 is on the registry/);
   });
 
@@ -611,8 +612,69 @@ describe('the release goes out whole: lock, push, registry', () => {
     );
   });
 
+  it('the wait counts from npm publish: the push through CI before it is part of the time', () => {
+    const lines: string[] = [];
+    const twoMinAgo = Date.now() - 120_000;
+    waitForRegistry('demo', '1.1.0', deps({ progress: (t) => lines.push(t), registryWaitMs: 600_000 }), twoMinAgo);
+    expect(lines[0]).toBe('  … 120 s of 600 s');
+    expect(logs[0]).toContain('giving it 600 s from publish; Ctrl-C stops only this wait');
+  });
+
   it("writes the lock back in npm's own format", () => {
     const text = fs.readFileSync(path.join(work, 'package-lock.json'), 'utf8');
     expect(bumpLockText(text, '1.0.0')).toBe(text);
+  });
+});
+
+describe('checkChangesSinceRelease: is there anything to release', () => {
+  // 0.30.0 went out with nothing since v0.29.0 but its release commit (2026-10-18).
+  const git =
+    (counts: Record<string, string>, tags: string[] = ['v0.29.0']): GitRunner =>
+    (args) => {
+      if (args[0] === 'rev-parse') {
+        if (tags.includes(args.at(-1)!.replace('refs/tags/', ''))) return 'abc\n';
+        throw new Error('fatal: needed a single revision');
+      }
+      const c = counts[args.slice(2).join(' ')];
+      if (c === undefined) throw new Error(`unexpected git ${args.join(' ')}`);
+      return c;
+    };
+
+  it('nothing in the package since the tag of its version: a question, Enter no', () => {
+    const c = checkChangesSinceRelease('/r/cli', '/r/cli', '0.29.0', '0.30.0', git({ 'v0.29.0..HEAD -- .': '0\n' }));
+    expect(c).toEqual({
+      name: 'changes-since-release',
+      ok: false,
+      message: 'nothing in cli/ has changed since v0.29.0: 0.30.0 would be the package 0.29.0 is',
+      waive: 'Release 0.30.0 anyway, the same package under a new number? [y/N] ',
+    });
+  });
+  it('commits in the package since the tag: OK, and how many', () => {
+    const c = checkChangesSinceRelease('/r', '/r/cli', '0.29.0', '0.30.0', git({ 'v0.29.0..HEAD -- cli': '3\n' }));
+    expect(c).toMatchObject({ ok: true, message: 'OK (3 commit(s) in cli/ since v0.29.0)' });
+  });
+  it('no tag of the current version: nothing to compare with, not a refusal', () => {
+    expect(checkChangesSinceRelease('/r', '/r', '1.0.0', '1.1.0', git({}, []))).toMatchObject({ ok: true });
+  });
+  it('a plan whose only failure is a question shows the pipeline, with the question first', () => {
+    const projectRoot = path.join(FIXTURES, 'node-with-vitest');
+    const plan: PublishPlan = {
+      projectRoot,
+      stack: 'node',
+      packageName: 'demo',
+      currentVersion: '0.29.0',
+      newVersion: '0.30.0',
+      bump: 'minor',
+      packageJsonPath: path.join(projectRoot, 'package.json'),
+      preflight: [
+        checkChangesSinceRelease(projectRoot, projectRoot, '0.29.0', '0.30.0', git({ 'v0.29.0..HEAD -- .': '0' })),
+      ],
+      preflightPassed: false,
+      delegatedToMise: false,
+    };
+    expect(preflightFixable(plan)).toBe(true);
+    expect(renderPublishPlan(plan)).toContain(
+      '0. At a terminal: Release 0.30.0 anyway, the same package under a new number? [y/N] — Enter releases nothing',
+    );
   });
 });

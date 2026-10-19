@@ -24,6 +24,8 @@ export interface PreflightCheck {
   message: string;
   /** A failed check a command at the terminal can fix — `npm login` for an expired session. */
   fix?: { cmd: string; args: string[] };
+  /** A failed check the person at the terminal may waive: the question, Enter answering no. */
+  waive?: string;
 }
 
 /** Where the release goes after the tag. */
@@ -311,6 +313,9 @@ export function planPublish(
   });
 
   preflight.push(checkNpmAuth(publishRegistry(pkg, npm), npm));
+  preflight.push(
+    checkChangesSinceRelease(opts.projectRoot, path.dirname(pkgJsonPath), currentVersion, newVersion, git),
+  );
 
   let published: string | null = null;
   let registryError: string | null = null;
@@ -397,10 +402,50 @@ export function planPublish(
   };
 }
 
-/** Every failed check has a command that fixes it — run at a terminal, then plan again. */
+/**
+ * Anything to release? 0.30.0 went out on 2026-10-18 with nothing since v0.29.0 but
+ * its release commit (hosting-extension Sidetrack #6). Nothing in the package's
+ * directory since the tag of the current version — the same package under a new
+ * number; a terminal asks, Enter answering no.
+ */
+export function checkChangesSinceRelease(
+  projectRoot: string,
+  packageDir: string,
+  current: string,
+  next: string,
+  git: GitRunner,
+): PreflightCheck {
+  const name = 'changes-since-release';
+  const tag = `v${current}`;
+  try {
+    git(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`], projectRoot);
+  } catch {
+    return { name, ok: true, message: `OK (no tag ${tag} to compare with)` };
+  }
+  const where = path.relative(projectRoot, packageDir) || '.';
+  const shown = where === '.' ? `${path.basename(packageDir)}/` : `${where}/`;
+  let count: number;
+  try {
+    count = parseInt(git(['rev-list', '--count', `${tag}..HEAD`, '--', where], projectRoot).trim(), 10) || 0;
+  } catch {
+    return { name, ok: true, message: `OK (git could not compare with ${tag})` };
+  }
+  if (count > 0) return { name, ok: true, message: `OK (${count} commit(s) in ${shown} since ${tag})` };
+  return {
+    name,
+    ok: false,
+    message: `nothing in ${shown} has changed since ${tag}: ${next} would be the package ${current} is`,
+    waive: `Release ${next} anyway, the same package under a new number? [y/N] `,
+  };
+}
+
+/**
+ * Every failed check is resolved at a terminal: a command that fixes it (run, then
+ * plan again) or a question the person may answer yes to.
+ */
 export function preflightFixable(plan: PublishPlan): boolean {
   const failed = plan.preflight.filter((c) => !c.ok);
-  return failed.length > 0 && failed.every((c) => c.fix);
+  return failed.length > 0 && failed.every((c) => c.fix || c.waive);
 }
 
 /** Runs a command on this terminal (stdio inherited); throws on a non-zero exit. */
@@ -431,7 +476,7 @@ export function defaultPublishDeps(): PublishDeps {
     npm: runNpm,
     log: (line) => process.stderr.write(line + '\n'),
     sleep: sleepSync,
-    registryWaitMs: 180_000,
+    registryWaitMs: 10 * 60_000,
     progress: process.stderr.isTTY ? (text) => process.stderr.write(`\r${text}\x1b[K`) : undefined,
     gatePush: (target, projectRoot) => pushThroughGate(target, defaultGateDeps(projectRoot)),
   };
@@ -447,19 +492,22 @@ export function bumpLockText(text: string, version: string): string {
 }
 
 /**
- * npm answers `202 Accepted` and the version shows up a minute or two later;
- * until then `npm view` and `npx` still see the previous one. Waiting here
- * turns "is it out?" into an answer. A version that does not show up in time
- * is not a failure: npm took it.
+ * npm answers `202 Accepted` and the version shows up minutes later — 0.30.0
+ * about 6 min after publish, 0.31.2 past 5 (hosting-extension Sidetrack #9); until
+ * then `npm view` and `npx` still see the previous one. Waiting here turns "is it
+ * out?" into an answer. The time counts from `npm publish` (`since`): the push
+ * through CI before the wait is part of it. A version that does not show up in
+ * time is not a failure: npm took it.
  */
-export function waitForRegistry(name: string, version: string, deps: PublishDeps): boolean {
-  const started = Date.now();
+export function waitForRegistry(name: string, version: string, deps: PublishDeps, since = Date.now()): boolean {
+  const started = since;
   const deadline = started + deps.registryWaitMs;
   const limit = Math.round(deps.registryWaitMs / 1000);
   const seconds = () => Math.round((Date.now() - started) / 1000);
   deps.log(
     `→ waiting for the registry to show ${name}@${version} — npm has taken it; ` +
-      `the registry usually shows it within ~2 min (giving it ${limit} s)`,
+      `the registry has taken up to 6 min to show a version (giving it ${limit} s from publish; ` +
+      `Ctrl-C stops only this wait)`,
   );
   const shown = () => {
     try {
@@ -556,6 +604,7 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
   } finally {
     for (const s of signals) process.off(s, holdOut);
   }
+  const publishedAt = Date.now();
   deps.log(`✓ published ${plan.packageName}@${plan.newVersion}`);
 
   // 3. git add + commit + tag (at project root)
@@ -597,7 +646,7 @@ export function executePublish(plan: PublishPlan, deps: PublishDeps = defaultPub
   }
 
   // 5. registry
-  waitForRegistry(plan.packageName, plan.newVersion, deps);
+  waitForRegistry(plan.packageName, plan.newVersion, deps, publishedAt);
 }
 
 export function renderPublishPlan(plan: PublishPlan): string {
@@ -643,7 +692,10 @@ export function renderPublishPlan(plan: PublishPlan): string {
       const fixes = plan.preflight
         .filter((c) => !c.ok && c.fix)
         .map((c) => `\`${c.fix!.cmd} ${c.fix!.args.join(' ')}\``);
-      lines.push(`0. ${fixes.join(', ')} — at a terminal, then the pre-flight again`);
+      if (fixes.length > 0) lines.push(`0. ${fixes.join(', ')} — at a terminal, then the pre-flight again`);
+      for (const c of plan.preflight.filter((c) => !c.ok && c.waive)) {
+        lines.push(`0. At a terminal: ${c.waive!.trim()} — Enter releases nothing`);
+      }
     }
     lines.push(`1. Set \`version\` in ${files} → \`${plan.newVersion}\``);
     lines.push(`2. \`npm publish\` (cwd = directory containing package.json)`);
@@ -658,7 +710,7 @@ export function renderPublishPlan(plan: PublishPlan): string {
             ? `5. \`git push --follow-tags\` → ${push.upstream}${push.ahead ? ` (with ${push.ahead} local commit(s) not pushed yet)` : ''}`
             : '5. Not pushed: the branch has no upstream',
     );
-    lines.push(`6. Wait until the registry shows ${plan.newVersion} (up to 3 min)`);
+    lines.push(`6. Wait until the registry shows ${plan.newVersion} (up to 10 min from publish)`);
   } else {
     lines.push('> Pre-flight failed. Use `--force` to bypass at your own risk.');
   }
