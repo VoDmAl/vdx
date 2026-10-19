@@ -18,9 +18,9 @@ vdx — исследование и (позже) реализация систе
 **Реализация (с 2026-05).** CLI `@vodmal/vdx-cli` в npm, сет
 `vdx-rubric-vodmal`, MCP-сервер, плагин Claude Code; решения — D1–D14 в
 [docs/decisions.md](docs/decisions.md), спека — `docs/specs/`. vdx по своей
-рубрике — общий L2: выше не даёт `branch-protection` — L3 «не выполнено»,
-`main` на GitHub не защищён (с 0.29 vdx спрашивает GitHub). Версии и что
-открыто — [HANDOFF.md](HANDOFF.md).
+рубрике — общий L4 (с 2026-10-18): `main` на GitHub берёт коммит только после
+проверок CI, обязательных для всех. Версии и что открыто —
+[HANDOFF.md](HANDOFF.md).
 
 ## Ключевые ограничения
 
@@ -88,6 +88,17 @@ Canonical owner-baseline живёт в отдельном репо:
 4. Default baseline в `cli/src/init.ts` (константа `DEFAULT_BASELINE`)
    обновлять при выпуске нового тега.
 
+## Push в `main`
+
+- `main` под защитой (с 2026-10-18): проверки `cli (node 22)` и `cli (node 24)`
+  обязательны для всех, админов тоже; PR не нужен. Прямой `git push` в `main`
+  GitHub отклоняет — push только `vdx push`: коммит уходит в `vdx-gate/main`, CI
+  около 1,5 мин, потом тот же коммит в `main` (кристалл `hosting-extension`).
+- Строка коммита для владельца кончается на
+  `&& vdx push '/Users/vdm/AI Projects/vdx'`, не на `git push`. Хук `pre-push`
+  под `vdx push` проверки не гоняет — их делает CI; красная проверка оставляет
+  `main` как был и называет проверку со ссылкой.
+
 ## Выпуск CLI
 
 - `vdx publish <patch|minor|major>` запускает владелец в своём терминале — одной
@@ -97,10 +108,11 @@ Canonical owner-baseline живёт в отдельном репо:
   тег, `git push --follow-tags`, ожидание версии в registry (до 3 мин).
   `--no-push` оставляет коммит и тег локальными.
 - Pre-flight требует чистое дерево: незакоммиченное до выпуска — закоммитить
-  заранее. Push выпуска проходит `pre-push` репо (`check`, `test` и
-  `test:e2e`, около 1 мин 40 с); упал — пакет в npm и тег уже есть,
-  `git push --follow-tags` после починки. Ветка позади upstream — отказ до
-  bump (push после публикации не прошёл бы).
+  заранее. Push выпуска идёт через проверки CI, как `vdx push` (с 0.31):
+  коммит выпуска — в `vdx-gate/main`, потом `main` с тегом; красный CI — пакет
+  в npm и тег уже есть, `vdx push` после починки. Коммиты, которых нет в
+  `main`, — отказ до bump (npm получил бы их раньше CI): сначала `vdx push`.
+  Ветка позади upstream — тоже отказ до bump.
 - `cli/node_modules` между станциями не синхронизируется: зависимости,
   сменённые на другой станции, — `npm --prefix cli ci` до выпуска. Хук
   сверяет `node_modules` с lock-файлом первым (`npm ls`) и называет пакеты.

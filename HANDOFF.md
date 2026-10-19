@@ -19,10 +19,10 @@
 - **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
-- **vdx по своей рубрике — L2** (аудит 2026-10-18, CLI 0.29.0, сет v1.5.0):
-  `branch-protection` L3 известен и «не выполнено» — `main` на GitHub не
-  защищён. Все остальные оси — L4 (цель кристалла `vdx-dogfooding`). Выше —
-  только с защитой `main`; решать владельцу (кристалл `hosting-extension`).
+- **vdx по своей рубрике — L4** (аудит 2026-10-18, CLI 0.31.0, сет v1.5.0):
+  `main` под защитой — `cli (node 22)` и `cli (node 24)` обязательны для всех,
+  `branch-protection` L3; остальные оси — L4 (кристалл `vdx-dogfooding`).
+  Push в `main` — только `vdx push` (CLAUDE.md, «Push в `main`»).
 
 ### Что умеет CLI
 
@@ -48,7 +48,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом (DL #8): `vdx push` в 0.31.0, ждёт защиты `main` владельцем; gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
+| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом с 2026-10-18 (DL #8): `main` защищён, общий L4; `gh` на lft — у nas-info (`gh-on-lft`); токен в `vdx doctor` (#7), `gh` из ssh на m3 (#8); gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | открытых пунктов нет: DL #35 (`--new` рядом) проверен владельцем на 0.28.0, копий `.git/index.sync-conflict-*` после выпусков с m3 нет (2026-10-14) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
@@ -202,10 +202,14 @@ Decision Log её кристалла.
    `npm run vdx -- <команда>`.
 10. **Комбайн.** «Давай напишем свой X» — скорее всего, ошибка: сначала
     искать готовое.
-11. **Push идёт через `pre-push` репо — около 1 мин 40 с** (`check`, `test`,
-    `test:e2e`), и push выпуска в `vdx publish` тоже. Хук сбрасывает
-    переменные, которые git отдаёт хуку (`git rev-parse --local-env-vars`):
-    иначе временные репо тестов смотрели бы в `.git` vdx (githooks(5)).
+11. **Push в `main` — только `vdx push`, с 2026-10-18.** `main` под защитой:
+    прямой `git push` GitHub отклонит. `vdx push` кладёт коммит в
+    `vdx-gate/main`, ждёт `cli (node 22)` и `cli (node 24)` (около 1,5 мин) и
+    пушит тот же коммит в `main`; хук `pre-push` при этом проверки не гоняет
+    (`VDX_GATE_PUSH=1`). Обычный `git push` в другую ветку проходит хук —
+    около 1 мин 40 с. Хук сбрасывает переменные, которые git отдаёт хуку
+    (`git rev-parse --local-env-vars`): иначе временные репо тестов смотрели бы
+    в `.git` vdx (githooks(5)).
 12. **`cli/node_modules` между станциями не синхронизируется** (`.git` и
     исходники — да). Зависимости, сменённые на одной станции, на другой
     появятся только после `npm --prefix cli ci`. Хук `pre-push` сверяет

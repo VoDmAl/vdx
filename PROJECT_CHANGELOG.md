@@ -4,6 +4,14 @@
 
 ## 2026-10-18
 
+### vdx — общий L4: `main` под защитой с проверками для всех
+
+Владелец включил защиту `main` (через `gh` на m3): `cli (node 22)` и
+`cli (node 24)` обязательны, обойти нельзя и админам. Аудит 0.31.0 — общий L4,
+`branch-protection` L3. Прямой `git push` в `main` больше не проходит — push
+только `vdx push` (CLAUDE.md, «Push в `main`»;
+[hosting-extension](docs/tasks/hosting-extension/workitem.md)).
+
 ### `vdx push` — коммит в ветку с обязательными проверками, когда они прошли
 
 Ветка на GitHub, которая требует проверок, получает коммит через

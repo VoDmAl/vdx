@@ -98,8 +98,13 @@ telegram: запросы к GitHub добавляют около секунды.
 - **Порядок.** Сначала выпуск с новым потоком, пока `main` открыт, потом
   защита — иначе выпуск, который поток везёт, не запушится.
 
-**Под гейтом — выпущено в 0.31.0 (2026-10-18, `464d991`; решение — DL #8–#10);
-`main` ещё открыт.** На m3 и lft — 0.31.0 (`npm update -g`); `vdx push
+**vdx под гейтом с 2026-10-18.** Владелец включил классическую защиту `main`
+через `gh` на m3; API (анонимно): `protected: true`, `enforcement_level:
+everyone`, проверки `cli (node 22)` и `cli (node 24)`. `vdx push --dry-run` —
+«through vdx-gate/main, then main once they pass»; аудит 0.31.0 — общий L4,
+`branch-protection` L3, aligned.
+
+**Выпущено в 0.31.0 (2026-10-18, `464d991`; решение — DL #8–#10).** На m3 и lft — 0.31.0 (`npm update -g`); `vdx push
 --dry-run` там — «git push — origin/main requires no checks». `gh` на m3 не
 залогинен (`gh auth status`, 2026-10-18): там `vdx push` спрашивает GitHub без
 токена, как на lft. В коде:
@@ -390,6 +395,28 @@ Enter («с v0.29.0 нет коммитов — выпустить всё рав
 
 **Status:** open
 
+### #7. `vdx doctor` — есть ли у vdx токен GitHub
+
+**Возникло в:** вход в `gh` на m3 перед защитой `main` (2026-10-18)
+**Описание:** владелец: «это тогда можно сделать частью doctor». В проекте с
+`origin` на GitHub doctor говорит, чем vdx спросит GitHub (`GH_TOKEN`,
+`GITHUB_TOKEN`, `gh auth token`) и что делать без токена: `gh` нет — nas-info,
+вход недействителен — `gh auth login`. Без токена — 60 запросов в час на аудит
+и `vdx push`.
+
+**Status:** open
+
+### #8. `gh` из ssh-сессии на m3 не видит токен
+
+**Возникло в:** защита `main` через `gh` на m3 (2026-10-18)
+**Описание:** владелец вошёл в `gh` в своём терминале на m3 («✓ Logged in as
+VoDmAl»), а `ssh m3 gh auth status` пишет «The token in default is invalid»,
+и `gh api` отвечает 401. Похоже, ssh-сессии не виден keychain, где `gh` держит
+токен (не проверено). Тогда агенты, которых `vdx ai@m3` запускает через ssh,
+без токена. Передано nas-info в брифе `gh-on-lft`.
+
+**Status:** open
+
 ## Next actions
 
 Развилки — к владельцу; ответ — запись в Decision Log.
@@ -415,11 +442,15 @@ Enter («с v0.29.0 нет коммитов — выпустить всё рав
       2026-10-18)
 - [x] Выпуск с ними, пока `main` открыт; `vdx` на m3 и lft — 0.31.0
       (`464d991`, 2026-10-18)
-- [ ] Владелец: защита `main` — проверки `cli (node 22)` и `cli (node 24)`,
-      «Do not allow bypassing the above settings» (DL #3)
-- [ ] Первый `vdx push` под гейтом — живая проверка; `vdx audit .` — общий L4
-- [ ] После: строка коммита — `vdx push` вместо `git push`; «Выпуск CLI» в
-      CLAUDE.md, HANDOFF
+- [ ] nas-info: `gh` на lft, как `glab` (бриф `gh-on-lft`, 2026-10-18)
+- [ ] Sidetrack #7: проверка токена GitHub в `vdx doctor` — после живого гейта
+- [ ] Sidetrack #8: `gh` из ssh на m3 — ответ nas-info
+- [x] Владелец: защита `main` — проверки `cli (node 22)` и `cli (node 24)`,
+      без обхода (DL #3); включена через `gh` на m3 (2026-10-18)
+- [x] `vdx audit .` под гейтом — общий L4 (0.31.0, 2026-10-18)
+- [ ] Первый `vdx push` под гейтом — живая проверка (коммит с этим пунктом)
+- [x] После: строка коммита — `vdx push` вместо `git push`; «Push в `main`» и
+      «Выпуск CLI» в CLAUDE.md, HANDOFF (2026-10-18)
 - [ ] Sidetrack #1: что отвечает gitolite — «неизвестно» насовсем или
       расширение по `gitolite-admin` и хукам сервера
 - [ ] Sidetrack #2: расширение GitLab — после выпуска для GitHub, или
