@@ -4,13 +4,19 @@
 
 ## 2026-10-19
 
+### 0.31.1 в npm
+
+`8e26027`, рабочим CLI: push выпуска прошёл гейт с первого раза. На m3 и lft —
+0.31.1 (`npm update -g`); `vdx` в kratos на lft под node v16.19.0 из `.nvmrc`
+запускается ([hosting-extension](docs/tasks/hosting-extension/workitem.md)).
+
 ### vdx работает в проекте, который закрепил старый node
 
 `vdx ai@lft --new` в kratos на lft упал до старта: fnm по `.nvmrc` переключил
 node на v16.19.0, запускалки `env node` взяли его, и `tsx` отказался без
 `module.register()`. На m3 то же. Теперь ниже Node 22 vdx и `vdx-mcp`
 запускаются снова на `node` рядом со ссылкой на bin, node проекта остаётся
-для его команд ([architecture](docs/architecture.md)). Выйдет в 0.31.1.
+для его команд ([architecture](docs/architecture.md)). В 0.31.1.
 
 ### `vdx push` ждёт коммит, которого GitHub ещё не показывает
 
@@ -18,7 +24,7 @@ node на v16.19.0, запускалки `env node` взяли его, и `tsx` 
 «No commit found for SHA» на коммит, только что запушенный в новую ветку.
 Теперь это ожидание, а не отказ, и до push vdx не спрашивает о коммите, которого
 на GitHub ещё нет; повторный `vdx push` довёл коммит до `main`.
-Выйдет в 0.31.1 ([hosting-extension](docs/tasks/hosting-extension/workitem.md)).
+В 0.31.1 ([hosting-extension](docs/tasks/hosting-extension/workitem.md)).
 
 ## 2026-10-18
 
