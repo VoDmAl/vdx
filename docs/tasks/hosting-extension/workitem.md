@@ -102,7 +102,16 @@ telegram: запросы к GitHub добавляют около секунды.
 через `gh` на m3; API (анонимно): `protected: true`, `enforcement_level:
 everyone`, проверки `cli (node 22)` и `cli (node 24)`. `vdx push --dry-run` —
 «through vdx-gate/main, then main once they pass»; аудит 0.31.0 — общий L4,
-`branch-protection` L3, aligned.
+`branch-protection` L3, aligned. Первый живой `vdx push` (0.31.0, `106da5f`,
+2026-10-18) положил коммит в `vdx-gate/main` и остановился на первом же
+вопросе через 15 с: `check-runs` ответил 422 «No commit found for SHA» — сразу
+после push в новую ветку GitHub ещё не показывал коммит; через минуту — 200 и
+обе проверки `in_progress`. `main` не тронут, как и задумано. Исправление: 422
+«No commit found» — проверка ещё не видна, ожидание идёт дальше (тест на
+записанной последовательности); выйдет патчем. Повтор `vdx push` (0.31.0) —
+коммит был уже виден: `main` взял `106da5f` после обеих зелёных проверок
+(2026-10-19). У коммита — два прогона CI: на `vdx-gate/main` и снова на push
+в `main` (`ci.yml` идёт и на `main`).
 
 **Выпущено в 0.31.0 (2026-10-18, `464d991`; решение — DL #8–#10).** На m3 и lft — 0.31.0 (`npm update -g`); `vdx push
 --dry-run` там — «git push — origin/main requires no checks». `gh` на m3 не
@@ -448,7 +457,9 @@ VoDmAl»), а `ssh m3 gh auth status` пишет «The token in default is inval
 - [x] Владелец: защита `main` — проверки `cli (node 22)` и `cli (node 24)`,
       без обхода (DL #3); включена через `gh` на m3 (2026-10-18)
 - [x] `vdx audit .` под гейтом — общий L4 (0.31.0, 2026-10-18)
-- [ ] Первый `vdx push` под гейтом — живая проверка (коммит с этим пунктом)
+- [x] Первый `vdx push` под гейтом — живая проверка: со второго раза, `106da5f`
+      в `main` (2026-10-19); 422 сразу после push — исправлено, в 0.31.1
+- [ ] Выпуск 0.31.1 (patch) рабочим CLI, где исправление уже есть
 - [x] После: строка коммита — `vdx push` вместо `git push`; «Push в `main`» и
       «Выпуск CLI» в CLAUDE.md, HANDOFF (2026-10-18)
 - [ ] Sidetrack #1: что отвечает gitolite — «неизвестно» насовсем или

@@ -228,6 +228,11 @@ export function commitChecks(
   token: string | null,
 ): CheckState[] | Unknown {
   const runs = io.get(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`, token);
+  // Seconds after a push GitHub may not show the commit yet: 422 «No commit found
+  // for SHA» for 106da5f, 15 s after its push to a new branch (2026-10-18).
+  if (runs.status === 422 && /^No commit found/.test(str(at(runs.body, 'message')) ?? '')) {
+    return names.map((name) => ({ name, state: 'pending', detail: 'not on GitHub yet' }));
+  }
   const refusedRuns = refusal(runs, repo, token);
   if (refusedRuns) return refusedRuns;
   // A re-run is a new check run under the same name: the newest one counts.

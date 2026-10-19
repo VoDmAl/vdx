@@ -185,6 +185,13 @@ describe('pushThroughGate', () => {
     expect(d.logs.join('\n')).toMatch(/✓ cli \(node 22\), cli \(node 24\) passed \(45 s\)/);
     expect(d.logs.at(-1)).toBe('✓ origin/main is at a43b981');
   });
+  it('a commit GitHub does not show yet, seconds after the push, is waited for — the first live push stopped there', () => {
+    const f = fake({ answers: { [checksPath]: [NOT_THERE, NOT_THERE, RUNNING, GREEN] } });
+    const d = deps(f);
+    pushThroughGate(TARGET, d);
+    expect(d.pushes.map((p) => p[3])).toEqual([`${SHA}:refs/heads/vdx-gate/main`, `${SHA}:refs/heads/main`]);
+    expect(d.logs.join('\n')).toMatch(/passed \(45 s\)/);
+  });
   it('a commit whose checks passed already goes to the branch at once', () => {
     const d = deps(fake({ answers: { [checksPath]: GREEN } }));
     pushThroughGate(TARGET, d);
