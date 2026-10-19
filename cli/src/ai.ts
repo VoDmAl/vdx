@@ -292,6 +292,20 @@ export function renderSessionName(template: string, vars: Record<string, string>
   return name.replace(/[.:]/g, '_');
 }
 
+/**
+ * The session for an agent started next to running ones: `name`, `name-2`, `name-3`… — the
+ * first no agent of the project runs in (absent, or a shell left behind). Each agent has a
+ * session of its own: tmux keeps one current window per session, and an agent started as a
+ * window next to another moved every terminal on the session to it (vdx-ai DL #36).
+ */
+export function freeSessionName(name: string, running: { pane: { session: string } }[]): string {
+  const busy = new Set(running.map((a) => a.pane.session));
+  for (let n = 1; ; n++) {
+    const candidate = n === 1 ? name : `${name}-${n}`;
+    if (!busy.has(candidate)) return candidate;
+  }
+}
+
 export interface LaunchPlan {
   projectRoot: string;
   project: string;
@@ -804,7 +818,9 @@ function renderPlan(
   plan: LaunchPlan,
   multiplexer: Multiplexer,
   running: AgentPane[],
-  focusedOf: (pid: number) => boolean = () => false,
+  focusedOf: (pid: number) => boolean,
+  /** The session a start would make: next to running agents, one of its own. */
+  session: string,
 ): string {
   const lines = [
     `vdx ai — ${plan.projectRoot}`,
@@ -819,7 +835,7 @@ function renderPlan(
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
     multiplexer === 'tmux'
-      ? `  session:  tmux; a new session is named "${plan.sessionName}"`
+      ? `  session:  tmux; a new session is named "${session}"`
       : '  session:  this terminal (no tmux)',
   );
   if (multiplexer === 'tmux') {
@@ -1618,7 +1634,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home)
     : [];
   if (opts.dryRun) {
-    deps.out(renderPlan(plan, multiplexer, running, focusedOf));
+    deps.out(
+      renderPlan(plan, multiplexer, running, focusedOf, freeSessionName(plan.sessionName, alongside ? running : [])),
+    );
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
@@ -1758,10 +1776,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell);
-  const reuse = tmux.hasSession(plan.sessionName);
-  const paneId = reuse
-    ? tmux.newWindow(plan.sessionName, projectRoot, cmd)
-    : tmux.newSession(plan.sessionName, projectRoot, cmd);
-  log(`▶ ${plan.sessionName}${reuse ? ' (new window)' : ''}: ${line}`);
-  return finish(settleResumed(plan, paneId, deps), plan.sessionName, paneId, opts, deps);
+  const session = freeSessionName(plan.sessionName, running);
+  const reuse = tmux.hasSession(session);
+  const paneId = reuse ? tmux.newWindow(session, projectRoot, cmd) : tmux.newSession(session, projectRoot, cmd);
+  log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
+  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps);
 }

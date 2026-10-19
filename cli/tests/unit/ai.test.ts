@@ -33,6 +33,7 @@ import {
   remoteAiArgs,
   remotePathWord,
   renderSessionName,
+  freeSessionName,
   resolveProjectName,
   resolveEnvironmentPath,
   runAi,
@@ -272,6 +273,20 @@ describe('renderSessionName', () => {
 
   it('refuses an unknown placeholder', () => {
     expect(() => renderSessionName('{projcet}', { project: 'x' })).toThrow('{projcet}');
+  });
+});
+
+describe('freeSessionName', () => {
+  const at = (...sessions: string[]) => sessions.map((session) => ({ pane: { session } }));
+  it('the name itself when no agent of the project runs in it', () => {
+    expect(freeSessionName('vdx@lft', [])).toBe('vdx@lft');
+    expect(freeSessionName('vdx@lft', at('vdx@lft-2'))).toBe('vdx@lft');
+  });
+  it('next to running agents: the first numbered one free', () => {
+    expect(freeSessionName('vdx@lft', at('vdx@lft'))).toBe('vdx@lft-2');
+    // Two agents in one session (windows, before vdx-ai DL #36) still take one name.
+    expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft', 'vdx@lft-2'))).toBe('vdx@lft-3');
+    expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft-3'))).toBe('vdx@lft-2');
   });
 });
 
@@ -1191,7 +1206,9 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     );
     expect(agents()).toHaveLength(2);
     const added = agents().find((a) => a.proc.pid !== running!.proc.pid)!;
-    expect(added.pane.session).toBe('proj@testhost');
+    // A session of its own: a window in proj@testhost would move every terminal on it to the new one.
+    expect(added.pane.session).toBe('proj@testhost-2');
+    expect(tmux.run(['list-windows', '-t', '=proj@testhost', '-F', '#{pane_id}']).trim()).toBe(running!.pane.paneId);
     expect(added.proc.args).toMatch(/fake-agent --base --extra --chan plugin:x@y$/);
     expect(agents().find((a) => a.proc.pid === running!.proc.pid)?.proc.args).toBe(running!.proc.args);
     tmux.tryRun(['kill-pane', '-t', added.pane.paneId]);
@@ -1382,7 +1399,8 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     const pick = { ...deps(), interactive: true, ask: (p: string) => (asked.push(p), '2') };
     expect(runAi({ ...opts, path: root, detach: true }, pick)).toBe(EXIT_OK);
     expect(asked).toEqual(['Which one? [1]: ']);
-    expect(logs.join('\n')).toContain(`  2) proj@testhost ${focused.pane.paneId} — focused`);
+    expect(focused.pane.session).toBe('proj@testhost-2');
+    expect(logs.join('\n')).toContain(`  2) proj@testhost-2 ${focused.pane.paneId} — focused`);
     expect(logs.join('\n')).toContain('already running with the profile, focused');
 
     // Without a terminal: the newest by the session file's start time.

@@ -83,7 +83,7 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   @host         the same command on <host> over ssh: its vdx, profile and tmux
   --new         a new conversation instead of continuing the last one; an agent
                 already running here keeps running, the new one starts next to
-                it (a new tmux window)
+                it, in a tmux session of its own (<name>-2, -3, …)
   --focused     a new conversation, as --new, in a session nothing wakes: the
                 agent, its hooks and MCP servers get VDX_FOCUSED=1 — for the
                 plugins that wake sessions to leave it alone — and the profile's
