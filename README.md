@@ -45,7 +45,7 @@ into the things nobody else does — which is precisely why vdx exists.
 
 Prerequisites:
 
-- **Node.js** ≥ 20 (the CLI ships as ESM TypeScript via `tsx`, no build step required).
+- **Node.js** ≥ 22 (the CLI ships as ESM TypeScript via `tsx`, no build step required). A project may pin an older node for itself (`.nvmrc` with fnm or nvm, mise): vdx then runs on the node it was installed with, and the project's commands keep the project's node.
 - **[mise](https://mise.jdx.dev/getting-started.html)** — vdx delegates lifecycle execution to `mise run <verb>`.
 - **git** — for `vdx audit` rubric resolution (`github.com/.../vdx-rubric-vodmal@<tag>`) and for `vdx publish`.
 

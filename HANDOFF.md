@@ -83,6 +83,8 @@
 0.31.1 (patch) — `vdx push` ждёт коммит, которого GitHub сразу после push ещё
 не показывает (422 «No commit found»), а не останавливается; выпускать рабочим
 CLI (`npm run vdx -- publish patch`): у 0.31.0 эта ошибка и в push выпуска.
+Ещё в нём vdx в проекте, который закрепил старый node (`bin/node-guard.cjs`):
+до выпуска `vdx` в kratos на lft и m3 падает на node v16.19.0 из `.nvmrc`.
 0.31.0 (2026-10-18) — `vdx push` и выпуск через проверки
 ветки (`src/gate.ts`, `hosting-extension` DL #8–#10); распознаватель хуков не
 считает гейтом переменную, которая только выпускает хук (`VDX_GATE_PUSH`).
@@ -218,6 +220,14 @@ Decision Log её кристалла.
     появятся только после `npm --prefix cli ci`. Хук `pre-push` сверяет
     `node_modules` с lock-файлом первым и называет недостающие пакеты; так
     упал push выпуска 0.27.0 на m3 (`vdx-dogfooding` DL #14).
+13. **В проекте со старым node vdx — два процесса.** fnm на станциях
+    переключает node по `.nvmrc` (`--use-on-cd`), `env node` в запускалке
+    берёт node проекта; `bin/node-guard.cjs` запускает vdx снова на `node`
+    рядом со ссылкой на bin. Проверить руками — node 16 из fnm на lft:
+    `~/.local/share/fnm/node-versions/v16.19.0/installation/bin/node`.
+14. **Тесты из сессии `vdx ai --focused` несут `VDX_FOCUSED=1`** в агентов и
+    сервер tmux, которых запускают. `ai.test.ts` его сбрасывает; новый файл
+    тестов, который запускает агента, — тоже должен.
 
 ---
 

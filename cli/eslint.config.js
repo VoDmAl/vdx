@@ -15,11 +15,18 @@ export default defineConfig(
   },
   { files: ['**/*.js', '**/*.cjs'], extends: [tseslint.configs.disableTypeChecked] },
   {
-    // The launchers npm links as `vdx` and `vdx-mcp`: CommonJS, so they run without a loader flag.
+    // The launchers npm links as `vdx` and `vdx-mcp`, and the node check they share: CommonJS,
+    // so they run without a loader flag.
     files: ['bin/*.cjs'],
     languageOptions: {
       sourceType: 'commonjs',
-      globals: { require: 'readonly', __dirname: 'readonly', console: 'readonly', process: 'readonly' },
+      globals: {
+        require: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+      },
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },

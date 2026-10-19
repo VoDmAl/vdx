@@ -47,6 +47,16 @@ import { ID, hookLine, promptLine, startedOn, userLine, writeConversation, write
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
+// Run from a focused session (`vdx ai --focused`), the tests carry its VDX_FOCUSED=1 into the
+// agents and tmux servers they start, and a plain start reads as a focused one.
+const runnerFocused = process.env['VDX_FOCUSED'];
+beforeAll(() => {
+  delete process.env['VDX_FOCUSED'];
+});
+afterAll(() => {
+  if (runnerFocused !== undefined) process.env['VDX_FOCUSED'] = runnerFocused;
+});
+
 const OWNER_LIKE = `
 schema_version: "0.1"
 agent:

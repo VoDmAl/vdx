@@ -106,4 +106,49 @@ describe('the packed CLI', () => {
       child.kill();
     }
   }, 30_000);
+
+  describe('started by a node older than 22, as a project pins it (.nvmrc under fnm)', () => {
+    let oldNode: string;
+    const runOld = (script: string, ...args: string[]) =>
+      spawnSync(process.execPath, ['-r', oldNode, script, ...args], { encoding: 'utf8', cwd: dir });
+
+    beforeAll(() => {
+      oldNode = path.join(dir, 'old-node.cjs');
+      fs.writeFileSync(
+        oldNode,
+        "Object.defineProperty(process, 'versions', { value: { ...process.versions, node: '16.19.0' } });\n" +
+          "Object.defineProperty(process, 'version', { value: 'v16.19.0' });\n",
+      );
+    });
+
+    it('runs again on the node beside its bin link and passes the exit code through', () => {
+      // A wrapper, not a symlink: the node beside the bin is another node than the one that
+      // started it, and it logs each run — the faked version alone would not stop tsx.
+      const beside = path.join(path.dirname(bin('vdx')), 'node');
+      const log = path.join(dir, 'beside.log');
+      fs.writeFileSync(
+        beside,
+        `#!/bin/sh\necho "$*" >> ${JSON.stringify(log)}\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
+        { mode: 0o755 },
+      );
+      try {
+        const r = runOld(bin('vdx'), '--version');
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.stdout).toBe(`${PKG.version}\n`);
+        expect(runOld(bin('vdx'), 'frobnicate').status).toBe(run('vdx', 'frobnicate').status);
+        expect(fs.readFileSync(log, 'utf8')).toBe(
+          `${path.join(fs.realpathSync(installed), 'bin', 'vdx.cjs')} --version\n` +
+            `${path.join(fs.realpathSync(installed), 'bin', 'vdx.cjs')} frobnicate\n`,
+        );
+      } finally {
+        fs.rmSync(beside);
+      }
+    });
+
+    it('names the old node and where it may be pinned when no other node is beside the bin', () => {
+      const r = runOld(path.join(installed, 'bin', 'vdx.cjs'), '--version');
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/needs Node\.js 22 or newer; the node on PATH here is v16\.19\.0 .*\.nvmrc/);
+    });
+  });
 });

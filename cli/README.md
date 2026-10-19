@@ -167,6 +167,7 @@ npm run typecheck
 - `src/mcp-server.ts` — MCP stdio server (9 tools)
 - `src/defaults.ts`   — bundled rubric resolution
 - `bin/vdx.cjs`, `bin/vdx-mcp.cjs` — Node wrappers (tsx ESM loader in-process)
+- `bin/node-guard.cjs` — under a project's older node (`.nvmrc` with fnm, nvm, mise), runs the wrapper again on the node beside its bin link
 
 ## Not implemented yet
 
