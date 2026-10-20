@@ -584,7 +584,9 @@ merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плаги�
       «Выпуск CLI» в CLAUDE.md, HANDOFF (2026-10-18)
 - [x] Sidetrack #1: gitolite — отложен владельцем (DL #12, 2026-10-20)
 - [x] Sidetrack #2: расширение GitLab (DL #12, 2026-10-20)
-- [ ] Выпуск 0.33 (minor) с GitLab
+- [x] Выпуск 0.33 (minor) с GitLab — 0.33.0 (`6587434`, 2026-10-20), на m3 и
+      lft; аудит им: limeflow, ga-developer-portal, showcase — «нет» с причиной,
+      kratos — «неизвестно: origin is on git.finam.ru»
 - [ ] Sidetrack #10: Bitbucket Server — вопрос владельцу: делать ли
 - [x] Sidetrack #4: причина у «не выполнено» — `{ no }`, «Not met» (DL #11,
       2026-10-19)
