@@ -11,7 +11,7 @@ schema_version: "0.2"
 overrides:
   - axis: secrets-config
     suppress: true
-    reason: "vdx is a CLI/docs repo with no runtime env configuration; its optional variables — VDX_RUBRIC, VDX_OFFLINE and a GitHub token (GH_TOKEN, GITHUB_TOKEN) — are documented in cli/README.md"
+    reason: "vdx is a CLI/docs repo with no runtime env configuration; its optional variables — VDX_RUBRIC, VDX_OFFLINE and the hosting tokens (GH_TOKEN, GITHUB_TOKEN, GITLAB_TOKEN) — are documented in cli/README.md"
 
   - axis: shared-infra
     suppress: true

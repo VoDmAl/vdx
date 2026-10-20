@@ -4,7 +4,7 @@ import type { Ctx } from './facts.ts';
 import { at, errorMessage, list, str } from './narrow.ts';
 import type { Unknown, Verdict } from './predicates.ts';
 
-/** One answer of the GitHub API: its status and its body, parsed (null when not JSON). */
+/** One answer of a hosting's API: its status and its body, parsed (null when not JSON). */
 export interface Answer {
   status: number;
   body: unknown;
@@ -17,7 +17,9 @@ export interface HostingIo {
   git: (args: string[]) => string | null;
   /** The token `gh` keeps; null without gh or a login. */
   ghToken: () => string | null;
-  /** GET of an api.github.com path. Throws when no answer came at all. */
+  /** The token `glab` keeps for a GitLab host; null without glab or a login there. */
+  glabToken: (host: string) => string | null;
+  /** GET of an api.github.com path, or of a whole https:// URL. Throws when no answer came at all. */
   get: (apiPath: string, token: string | null) => Answer;
 }
 
@@ -26,7 +28,7 @@ export interface HostingIo {
 // environment, not its arguments — those are visible in ps.
 const GET = `
 const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'vdx' };
-if (process.env.VDX_GITHUB_TOKEN) headers.authorization = 'Bearer ' + process.env.VDX_GITHUB_TOKEN;
+if (process.env.VDX_HOSTING_TOKEN) headers.authorization = 'Bearer ' + process.env.VDX_HOSTING_TOKEN;
 try {
   const r = await fetch(process.argv[1], { headers, signal: AbortSignal.timeout(15000) });
   process.stdout.write(JSON.stringify({ status: r.status, text: await r.text() }));
@@ -37,10 +39,11 @@ try {
 
 function get(apiPath: string, token: string | null): Answer {
   const env = { ...process.env };
-  delete env.VDX_GITHUB_TOKEN;
-  if (token) env.VDX_GITHUB_TOKEN = token;
+  delete env.VDX_HOSTING_TOKEN;
+  if (token) env.VDX_HOSTING_TOKEN = token;
+  const url = apiPath.startsWith('https://') ? apiPath : `https://api.github.com${apiPath}`;
   const out: unknown = JSON.parse(
-    execFileSync(process.execPath, ['--input-type=module', '-e', GET, `https://api.github.com${apiPath}`], {
+    execFileSync(process.execPath, ['--input-type=module', '-e', GET, url], {
       encoding: 'utf8',
       env,
       // node's own start counts too: at a load of ~7 on lft 10 s ran out (2026-10-20).
@@ -76,6 +79,7 @@ export function machineIo(root: string): HostingIo {
     env: process.env,
     git: (args) => run('git', ['--no-optional-locks', '-C', root, ...args]),
     ghToken: () => run('gh', ['auth', 'token']),
+    glabToken: (host) => run('glab', ['config', 'get', 'token', '--host', host]),
     get,
   };
 }
@@ -160,7 +164,7 @@ function judge(io: HostingIo, repo: string, token: string | null): Verdict {
 
 /**
  * Whether the default branch on the hosting of `origin` takes changes only after a check
- * required of everyone. GitHub only; what vdx cannot ask is unknown, with the reason.
+ * required of everyone. GitHub and GitLab; what vdx cannot ask is unknown, with the reason.
  */
 export function branchRequiresChecks(ctx: Ctx, io: HostingIo = machineIo(ctx.projectRoot)): Verdict {
   const key = 'hosting:branch-requires-checks';
@@ -172,12 +176,90 @@ export function branchRequiresChecks(ctx: Ctx, io: HostingIo = machineIo(ctx.pro
 
 function ask(io: HostingIo): Verdict {
   const gh = githubRepo(io, 'origin');
-  if (isUnknownRepo(gh)) return gh;
-  try {
-    return judge(io, gh.repo, gh.token);
-  } catch (e) {
-    return { unknown: `GitHub did not answer: ${errorMessage(e)}` };
+  if (!isUnknownRepo(gh)) {
+    try {
+      return judge(io, gh.repo, gh.token);
+    } catch (e) {
+      return { unknown: `GitHub did not answer: ${errorMessage(e)}` };
+    }
   }
+  if (io.env.VDX_OFFLINE) return gh;
+  const url = io.git(['remote', 'get-url', 'origin']);
+  if (!url) return gh;
+  const { host, path: repo } = remoteParts(url);
+  // GitLab: the host GITLAB_HOST names, one glab has a token for (gitlab.finam.ru, DL #12),
+  // or one with gitlab in its name. A token goes only where it belongs: GITLAB_TOKEN to
+  // GITLAB_HOST, as glab sends it; glab's to its own host. Any other host is asked without
+  // one — an origin is the repository's to name, and may point anywhere.
+  const tokenHost = (io.env.GITLAB_HOST || 'gitlab.com')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase();
+  const glab = io.glabToken(host);
+  const token = (host.toLowerCase() === tokenHost ? io.env.GITLAB_TOKEN : undefined) || glab;
+  if (host.toLowerCase() === tokenHost || glab || host.includes('gitlab')) {
+    try {
+      return judgeGitlab(io, host, repo, token);
+    } catch (e) {
+      return { unknown: `${host} did not answer: ${errorMessage(e)}` };
+    }
+  }
+  return { unknown: `origin is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub and GitLab` };
+}
+
+/** A refusal of a GitLab API as the reason the answer is unknown; null for a 200. */
+function gitlabRefusal(a: Answer, host: string, repo: string, token: string | null): Unknown | null {
+  if (a.status === 200) return null;
+  const message = str(at(a.body, 'message')) ?? str(at(a.body, 'error')) ?? '';
+  if (a.status === 429) return { unknown: `${host}'s rate limit is spent` };
+  if ((a.status === 401 || a.status === 404) && !token) {
+    return {
+      unknown: `${host} does not show ${repo} without a token — private? glab auth login --hostname ${host}, or GITLAB_TOKEN`,
+    };
+  }
+  return { unknown: `${host} answered ${a.status} for ${repo}${message ? `: ${message}` : ''}` };
+}
+
+/**
+ * GitLab: the default branch takes changes only after a pipeline when nobody may push to
+ * it directly — a push skips the pipeline — and a merge request needs one that passed
+ * (`only_allow_merge_if_pipeline_succeeds`). The agent pushes as the owner (DL #3).
+ */
+function judgeGitlab(io: HostingIo, host: string, repo: string, token: string | null): Verdict {
+  const base = `https://${host}/api/v4/projects/${encodeURIComponent(repo)}`;
+  const p = io.get(base, token);
+  const refused = gitlabRefusal(p, host, repo, token);
+  if (refused) return refused;
+  const branch =
+    io.git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])?.replace(/^origin\//, '') ||
+    str(at(p.body, 'default_branch'));
+  if (!branch) return { unknown: `${host} names no default branch for ${repo}` };
+  const pipeline = at(p.body, 'only_allow_merge_if_pipeline_succeeds') === true;
+
+  const pb = io.get(`${base}/protected_branches/${encodeURIComponent(branch)}`, token);
+  const isProtected = pb.status === 200;
+  if (!isProtected && pb.status !== 404) {
+    const refusedBranch = gitlabRefusal(pb, host, repo, token);
+    if (refusedBranch) return refusedBranch;
+  }
+  // Who may push straight to the branch: a role above "No one" (0), a user, a group, a deploy key.
+  const pushers = list(at(pb.body, 'push_access_levels'))
+    .filter(
+      (l) =>
+        at(l, 'access_level') !== 0 ||
+        at(l, 'user_id') != null ||
+        at(l, 'group_id') != null ||
+        at(l, 'deploy_key_id') != null,
+    )
+    .map((l) => str(at(l, 'access_level_description')) ?? 'someone');
+  if (isProtected && pushers.length === 0 && pipeline) return true;
+
+  const why: string[] = [];
+  if (!isProtected) why.push(`${branch} is not protected`);
+  else if (pushers.length > 0)
+    why.push(`${branch} takes direct pushes from ${pushers.join(', ')} — a push skips the pipeline`);
+  if (!pipeline) why.push(`merge requests into ${branch} do not need a passing pipeline`);
+  return { no: why.join('; ') };
 }
 
 /** A remote's repository on GitHub and the token to ask with; unknown, with the reason, when vdx cannot ask. */

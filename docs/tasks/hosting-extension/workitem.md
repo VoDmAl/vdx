@@ -376,6 +376,34 @@ GitHub, хостинг не ответил — обычный `git push`, поэ
 отчёте — раздел «Not met»; `hosting.ts` называет причины. `rubric-format.md`,
 `architecture.md`.
 
+### #12 / 2026-10-20 / GitLab — да, gitolite — отложить; `git.finam.ru` — Bitbucket
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** на вопрос «Что делаем с хостингами, кроме GitHub, для оси
+branch-protection?» владелец выбрал «GitLab сделать, gitolite отложить
+(Recommended)» (2026-10-20). Вопрос опирался на мои слова «GitLab — 5 рабочих
+проектов (gitlab.finam.ru, git.finam.ru)», а это было неверно — наблюдение
+после ответа: `https://git.finam.ru/rest/api/1.0/application-properties` —
+`{"version":"5.16.1",…,"displayName":"Bitbucket"}`, ssh на 7999; GitLab —
+только `gitlab.finam.ru` (`/api/v4/version` → 401, с токеном — 18.11.12-ee).
+Реестр intercom: на `gitlab.finam.ru` — limeflow, ga-developer-portal,
+showcase; на `git.finam.ru` — global-auth, kratos, tx-auth-widget.
+**Context:** после GitHub ось `branch-protection` у рабочих проектов —
+«неизвестно».
+**Why:** у GitLab есть API и защищённые ветки, `glab` залогинен на
+`gitlab.finam.ru` (`glab auth status`); у gitolite API нет, обязательных
+проверок он сам не делает (Sidetrack #1).
+**Implication:** L3 на GitLab — по DL #3: в ветку по умолчанию никто не пушит
+напрямую (`push_access_levels` — только «No one»), и MR — только с успешным
+пайплайном (`only_allow_merge_if_pipeline_succeeds`). GitLab узнаётся по имени
+хоста, по `GITLAB_HOST` или по токену `glab` для него; токен — `glab config get
+token --host` или `GITLAB_TOKEN`, только если хост — `GITLAB_HOST` (`gitlab.com`
+по умолчанию, как у `glab`). Первый вариант слал `GITLAB_TOKEN` любому хосту
+кроме GitHub — автоматическая проверка безопасности (2026-10-20): `origin`
+называет репо, и склонированный чужой репо получил бы токен. Bitbucket Server —
+новый Sidetrack #10, вопрос владельцу.
+
 ## Sidetracks
 
 ### #1. gitolite (`git.vorobyev.name`) — девять проектов владельца
@@ -386,16 +414,21 @@ GitHub, хостинг не ответил — обычный `git push`, поэ
 не делает, если её не поставил хук. Пока — «неизвестно: gitolite»; честное
 «нет» потребует решить, откуда vdx знает про хуки.
 
-**Status:** open
+**Status:** deferred — 2026-10-20, владелец (DL #12): «неизвестно: origin is on git.vorobyev.name» остаётся
 
-### #2. GitLab (`gitlab.finam.ru`, `git.finam.ru`) — рабочие проекты
+### #2. GitLab (`gitlab.finam.ru`) — рабочие проекты
 
 **Возникло в:** DL #2
 **Описание:** пять проектов, среди них limeflow. Нужен токен (`glab` или
 `GITLAB_TOKEN`); защита ветки — `protected_branches`, обязательная проверка —
-«Pipelines must succeed» у MR. Второе расширение, после GitHub.
+«Pipelines must succeed» у MR. Второе расширение, после GitHub. (Поправка
+2026-10-20: на GitLab — три, `git.finam.ru` — Bitbucket, DL #12.)
 
-**Status:** open
+**Status:** resolved — 2026-10-20: `judgeGitlab` в `src/hosting.ts` (DL #12).
+Живой прогон рабочим CLI: limeflow — «main takes direct pushes from
+Maintainers — a push skips the pipeline»; ga-developer-portal и showcase — то
+же и «merge requests into … do not need a passing pipeline» (у showcase — и
+Instance admins, ветка `master`). Выйдет в 0.33
 
 ### #3. Зеркало: CI на GitHub, изменения принимает другой хостинг
 
@@ -495,6 +528,18 @@ Ctrl-C останавливает только его. Какой адрес reg
 раньше — не проверялось, вопрос `npm view … --prefer-online` остался. Выйдет со
 следующим выпуском
 
+### #10. Bitbucket Server (`git.finam.ru`) — три рабочих проекта
+
+**Возникло в:** DL #12
+**Описание:** global-auth, kratos, tx-auth-widget — `origin` на Bitbucket
+Server 5.16.1 (2019). Ось там — «неизвестно: origin is on git.finam.ru». REST
+`/rest/api/1.0/` есть; защита ветки — branch permissions, обязательная сборка —
+merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плагины
+сборок). Токен — HTTP access token Bitbucket; CLI вроде `gh`/`glab` у него нет.
+Что именно отдаёт этот сервер — не проверено.
+
+**Status:** open
+
 ## Next actions
 
 Развилки — к владельцу; ответ — запись в Decision Log.
@@ -537,15 +582,17 @@ Ctrl-C останавливает только его. Какой адрес reg
       первого раза; на m3 и lft — 0.31.1
 - [x] После: строка коммита — `vdx push` вместо `git push`; «Push в `main`» и
       «Выпуск CLI» в CLAUDE.md, HANDOFF (2026-10-18)
-- [ ] Sidetrack #1: что отвечает gitolite — «неизвестно» насовсем или
-      расширение по `gitolite-admin` и хукам сервера
-- [ ] Sidetrack #2: расширение GitLab — после выпуска для GitHub, или
-      отложить с причиной
+- [x] Sidetrack #1: gitolite — отложен владельцем (DL #12, 2026-10-20)
+- [x] Sidetrack #2: расширение GitLab (DL #12, 2026-10-20)
+- [ ] Выпуск 0.33 (minor) с GitLab
+- [ ] Sidetrack #10: Bitbucket Server — вопрос владельцу: делать ли
 - [x] Sidetrack #4: причина у «не выполнено» — `{ no }`, «Not met» (DL #11,
       2026-10-19)
 - [x] Выпуск 0.32 (minor) с Sidetrack #4 — 0.32.0 в npm (2026-10-20); push
       коммита выпуска остановился на `ETIMEDOUT`, доводит второй `vdx push`
-- [ ] 0.32.1 (patch): ожидание переживает запрос без ответа
+- [x] 0.32.1 (patch): ожидание переживает запрос без ответа — в npm
+      (`543d937`, 2026-10-20), на m3 и lft; аудит им: vdx — L4, у
+      `vdx-rubric-vodmal` — «Not met» с причиной; registry — 262 с от publish
 - [ ] Sidetrack #5: комментарий оси в сете — со следующим тегом сета
 - [x] Sidetrack #6: вопрос `vdx publish` о выпуске без изменений (2026-10-19)
 - [x] Выпуск (patch) с #6, #7, #9 — 0.31.3 (`2a48c55`, 2026-10-19); на m3 и lft

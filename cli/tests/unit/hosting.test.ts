@@ -52,6 +52,7 @@ function fake(opts: {
   head?: string | null;
   env?: NodeJS.ProcessEnv;
   gh?: string | null;
+  glab?: string | null;
   answers?: Record<string, Answer | Error>;
 }): Fake {
   const asked: Fake['asked'] = [];
@@ -63,6 +64,7 @@ function fake(opts: {
       env: opts.env ?? {},
       git: (args) => (args[0] === 'remote' ? origin : head),
       ghToken: () => opts.gh ?? null,
+      glabToken: () => opts.glab ?? null,
       get: (apiPath, token) => {
         asked.push({ path: apiPath, token });
         const a = opts.answers?.[apiPath];
@@ -94,9 +96,9 @@ describe('branch_requires_checks: what vdx does not ask', () => {
     expect(reason(branchRequiresChecks(ctx(), fake({ origin: null }).io))).toMatch(/no origin remote/);
   });
   it('origin on another hosting: named by its host, without what the URL carries', () => {
-    const f = fake({ origin: 'https://ci:secret-token@gitlab.example.com/group/repo.git' });
+    const f = fake({ origin: 'https://ci:secret-token@bitbucket.example.com/scm/group/repo.git' });
     const why = reason(branchRequiresChecks(ctx(), f.io));
-    expect(why).toMatch(/gitlab\.example\.com — vdx reads GitHub only/);
+    expect(why).toMatch(/bitbucket\.example\.com — vdx reads GitHub and GitLab/);
     expect(why).not.toMatch(/secret/);
     expect(f.asked).toEqual([]);
   });
@@ -215,5 +217,112 @@ describe('branch_requires_checks: refusals and the branch', () => {
     branchRequiresChecks(c, f.io);
     branchRequiresChecks(c, f.io);
     expect(f.asked).toHaveLength(2); // the branch and its rules, once
+  });
+});
+
+describe('branch_requires_checks: GitLab (DL #12)', () => {
+  // Shapes of gitlab.finam.ru's answers (GitLab 18.11 EE), 2026-10-20: limeflow,
+  // ga-developer-portal, showcase.
+  const ORIGIN = 'ssh://git@gitlab.finam.ru:2222/space/limeflow.git';
+  const BASE = 'https://gitlab.finam.ru/api/v4/projects/space%2Flimeflow';
+  const project = (pipeline: boolean): Answer => ({
+    status: 200,
+    body: { default_branch: 'main', only_allow_merge_if_pipeline_succeeds: pipeline, merge_method: 'ff' },
+  });
+  const pushers = (...levels: Array<[number, string]>): Answer => ({
+    status: 200,
+    body: {
+      name: 'main',
+      push_access_levels: levels.map(([access_level, access_level_description]) => ({
+        access_level,
+        access_level_description,
+        user_id: null,
+        group_id: null,
+        deploy_key_id: null,
+      })),
+      allow_force_push: false,
+    },
+  });
+  const gl = (answers: Record<string, Answer | Error>, glab: string | null = 'glpat-x') =>
+    fake({ origin: ORIGIN, glab, answers });
+
+  it('nobody pushes straight to main, and a merge request needs a passing pipeline — met', () => {
+    const f = gl({ [BASE]: project(true), [`${BASE}/protected_branches/main`]: pushers([0, 'No one']) });
+    expect(branchRequiresChecks(ctx(), f.io)).toBe(true);
+    expect(f.asked[0]).toEqual({ path: BASE, token: 'glpat-x' });
+  });
+  it('Maintainers push straight to main — not met, though merges need a pipeline (limeflow)', () => {
+    const f = gl({ [BASE]: project(true), [`${BASE}/protected_branches/main`]: pushers([40, 'Maintainers']) });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({
+      no: 'main takes direct pushes from Maintainers — a push skips the pipeline',
+    });
+  });
+  it('no pipeline needed and admins push too — both named (showcase)', () => {
+    const f = gl({
+      [BASE]: project(false),
+      [`${BASE}/protected_branches/main`]: pushers([60, 'Instance admins'], [40, 'Maintainers']),
+    });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({
+      no: 'main takes direct pushes from Instance admins, Maintainers — a push skips the pipeline; merge requests into main do not need a passing pipeline',
+    });
+  });
+  it('an unprotected branch — not met', () => {
+    const f = gl({
+      [BASE]: project(true),
+      [`${BASE}/protected_branches/main`]: { status: 404, body: { message: '404 Not found' } },
+    });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({ no: 'main is not protected' });
+  });
+  it('a private project without a token — unknown, and how to log in', () => {
+    const f = gl({ [BASE]: { status: 404, body: { message: '404 Project Not Found' } } }, null);
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'gitlab.finam.ru does not show space/limeflow without a token — private? glab auth login --hostname gitlab.finam.ru, or GITLAB_TOKEN',
+    );
+  });
+  it('GITLAB_TOKEN goes to GITLAB_HOST only — never to a host an origin names', () => {
+    const answers = {
+      'https://code.example.org/api/v4/projects/team%2Fapp': project(true),
+      'https://code.example.org/api/v4/projects/team%2Fapp/protected_branches/main': pushers([0, 'No one']),
+    };
+    const elsewhere = fake({ origin: 'git@code.example.org:team/app.git', env: { GITLAB_TOKEN: 'env-t' }, answers });
+    expect(reason(branchRequiresChecks(ctx(), elsewhere.io))).toMatch(
+      /code\.example\.org — vdx reads GitHub and GitLab/,
+    );
+    expect(elsewhere.asked).toEqual([]);
+    const named = fake({
+      origin: 'git@gitlab.evil.example:team/app.git',
+      env: { GITLAB_TOKEN: 'env-t' },
+      answers: { 'https://gitlab.evil.example/api/v4/projects/team%2Fapp': project(true) },
+    });
+    branchRequiresChecks(ctx(), named.io);
+    expect(named.asked[0]).toEqual({ path: 'https://gitlab.evil.example/api/v4/projects/team%2Fapp', token: null });
+    const own = fake({
+      origin: 'git@code.example.org:team/app.git',
+      env: { GITLAB_TOKEN: 'env-t', GITLAB_HOST: 'https://code.example.org' },
+      answers,
+    });
+    expect(branchRequiresChecks(ctx(), own.io)).toBe(true);
+    expect(own.asked[0]!.token).toBe('env-t');
+  });
+  it('GITLAB_TOKEN before glab on its host; a host without gitlab in its name counts when glab knows it', () => {
+    const env = fake({
+      origin: 'git@code.example.org:team/app.git',
+      env: { GITLAB_TOKEN: 'env-t', GITLAB_HOST: 'code.example.org' },
+      glab: 'glab-t',
+      answers: {
+        'https://code.example.org/api/v4/projects/team%2Fapp': project(true),
+        'https://code.example.org/api/v4/projects/team%2Fapp/protected_branches/main': pushers([0, 'No one']),
+      },
+    });
+    expect(branchRequiresChecks(ctx(), env.io)).toBe(true);
+    expect(env.asked[0]!.token).toBe('env-t');
+    const unknownHost = fake({ origin: 'git@code.example.org:team/app.git' });
+    expect(reason(branchRequiresChecks(ctx(), unknownHost.io))).toMatch(
+      /code\.example\.org — vdx reads GitHub and GitLab/,
+    );
+  });
+  it('no answer from the host', () => {
+    const f = gl({ [BASE]: new Error('ETIMEDOUT') });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe('gitlab.finam.ru did not answer: ETIMEDOUT');
   });
 });

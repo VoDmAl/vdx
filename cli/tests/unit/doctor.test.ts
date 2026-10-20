@@ -361,6 +361,7 @@ describe('checkGithubToken: the token vdx asks GitHub with', () => {
       env: o.env ?? {},
       git: () => o.origin ?? 'git@github.com:VoDmAl/vdx.git',
       ghToken: () => o.gh ?? null,
+      glabToken: () => null,
       get: (_path, token) => {
         asked.push(token);
         if (o.answer instanceof Error) throw o.answer;

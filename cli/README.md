@@ -127,11 +127,16 @@ By default the bundled `rubric/vdx-rubric.yaml` is used (a mirror of canonical
 each CLI release). Override via `--rubric <path>` or the env var `VDX_RUBRIC`.
 
 `branch-protection` is the one axis the files cannot answer: `vdx audit` asks
-GitHub whether the default branch of `origin` takes changes only after a check
-required of everyone, admins included. A public repo needs no token; a private
-one takes it from `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`. Another
-hosting, no network or no token where one is needed leave the axis unknown,
-with the reason in the report; `VDX_OFFLINE=1` does not ask at all.
+the hosting of `origin` whether its default branch takes changes only after a
+check required of everyone, admins included. GitHub: protection or a ruleset
+nobody bypasses; a public repo needs no token, a private one takes it from
+`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`. GitLab (a host with `gitlab` in
+its name, or one glab has a token for): nobody may push to the branch directly,
+and a merge request needs a passing pipeline; the token is glab's for that
+host, or `GITLAB_TOKEN` when the host is `GITLAB_HOST` (`gitlab.com` unless
+set) — vdx never sends a token to a host it does not belong to. Not met comes with the reason; another hosting, no network or no token
+where one is needed leave the axis unknown, with the reason too;
+`VDX_OFFLINE=1` does not ask at all.
 
 ## Dev
 
@@ -172,8 +177,8 @@ npm run typecheck
 ## Not implemented yet
 
 - Above L1 the `ci` axis reads GitHub Actions only; other CI systems answer
-  "unknown". `branch-protection` is "unknown" everywhere until a hosting
-  extension exists.
+  "unknown". `branch-protection` reads GitHub and GitLab; other hostings
+  (gitolite, Bitbucket) answer "unknown".
 - Baseline loading from a git ref is documented but evaluator still reads file
   paths only — `baseline:` in `mise.toml` is recorded but does not auto-fetch.
 - Watermark drift (phase 2 of `drift-algorithm.md`).
