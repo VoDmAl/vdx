@@ -119,11 +119,16 @@ export function pushThroughGate(t: GateTarget, d: GateDeps): void {
   const names = t.checks.join(', ');
   const link = `https://github.com/${t.repo}/commit/${sha}/checks`;
   const again = `once they pass: vdx push (${link})`;
-  const ask = () => {
+  // No answer at all — a timeout, the network — is not a refusal: the wait asks again
+  // (0.32.0's release push stopped on one ETIMEDOUT at a load of ~7, 2026-10-20).
+  let silent: string | null = null;
+  const ask = (): CheckState[] | Unknown | null => {
     try {
+      silent = null;
       return commitChecks(d.io, t.repo, sha, t.checks, t.token);
     } catch (e) {
-      return { unknown: `GitHub did not answer: ${errorMessage(e)}` };
+      silent = `GitHub did not answer: ${errorMessage(e)}`;
+      return null;
     }
   };
   const toBranch = () => {
@@ -137,7 +142,7 @@ export function pushThroughGate(t: GateTarget, d: GateDeps): void {
   // A commit not pushed yet is not asked about — GitHub would only answer 422.
   if (d.io.git(['rev-parse', '--verify', '--quiet', `refs/remotes/${t.remote}/${gate}`]) === sha) {
     const before = ask();
-    if (!isUnknown(before) && passed(before)) {
+    if (before !== null && !isUnknown(before) && passed(before)) {
       d.log(`✓ ${short} has passed ${names}`);
       toBranch();
       return;
@@ -165,6 +170,15 @@ export function pushThroughGate(t: GateTarget, d: GateDeps): void {
     }
     const states = ask();
     d.progress?.('');
+    if (states === null) {
+      if (d.now() - started >= d.timeoutMs) {
+        throw new Error(
+          `${silent} after ${Math.round(d.timeoutMs / 60_000)} min — ${t.branch} did not take ${short}; ${again}`,
+        );
+      }
+      d.log(`  … ${seconds()} s — ${silent}; asking again`);
+      continue;
+    }
     if (isUnknown(states)) throw new Error(`${states.unknown} — ${t.branch} did not take ${short}; ${again}`);
     const failed = states.filter((s) => s.state === 'failed');
     if (failed.length > 0) {

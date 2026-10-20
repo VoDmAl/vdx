@@ -28,7 +28,7 @@ const GET = `
 const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'vdx' };
 if (process.env.VDX_GITHUB_TOKEN) headers.authorization = 'Bearer ' + process.env.VDX_GITHUB_TOKEN;
 try {
-  const r = await fetch(process.argv[1], { headers, signal: AbortSignal.timeout(8000) });
+  const r = await fetch(process.argv[1], { headers, signal: AbortSignal.timeout(15000) });
   process.stdout.write(JSON.stringify({ status: r.status, text: await r.text() }));
 } catch (e) {
   process.stdout.write(JSON.stringify({ error: String(e?.cause?.code ?? e?.cause?.message ?? e?.message ?? e) }));
@@ -43,7 +43,8 @@ function get(apiPath: string, token: string | null): Answer {
     execFileSync(process.execPath, ['--input-type=module', '-e', GET, `https://api.github.com${apiPath}`], {
       encoding: 'utf8',
       env,
-      timeout: 10_000,
+      // node's own start counts too: at a load of ~7 on lft 10 s ran out (2026-10-20).
+      timeout: 20_000,
       stdio: ['ignore', 'pipe', 'ignore'],
     }),
   );

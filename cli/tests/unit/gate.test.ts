@@ -217,6 +217,18 @@ describe('pushThroughGate', () => {
     );
     expect(d.pushes).toHaveLength(1);
   });
+  it('no answer at all mid-wait (a timeout) is asked again — the 0.32.0 release push stopped on one', () => {
+    const d = deps(fake({ answers: { [checksPath]: [RUNNING, new Error('spawnSync node ETIMEDOUT'), GREEN] } }));
+    pushThroughGate(TARGET, d);
+    expect(d.pushes.at(-1)).toEqual(['push', '--follow-tags', 'origin', `${SHA}:refs/heads/main`]);
+    expect(d.logs.join('\n')).toContain('GitHub did not answer: spawnSync node ETIMEDOUT; asking again');
+  });
+  it('no answer for the whole wait: stopped, with the last reason', () => {
+    const d = deps(fake({ answers: { [checksPath]: new Error('ENOTFOUND') } }));
+    expect(() => pushThroughGate(TARGET, { ...d, timeoutMs: 60_000 })).toThrow(
+      /GitHub did not answer: ENOTFOUND after 1 min — main did not take a43b981/,
+    );
+  });
   it('GitHub stops answering mid-wait: the reason, and how to go on', () => {
     const limit: Answer = { status: 403, body: { message: 'API rate limit exceeded for 192.0.2.1.' } };
     const d = deps(fake({ answers: { [checksPath]: [NOT_THERE, limit] } }));
