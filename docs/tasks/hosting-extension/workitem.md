@@ -36,6 +36,14 @@ CLI (`gh`, `glab`), не vdx (DL #12 кристалла гейтов). Без с
 
 ## Текущая модель
 
+**Bitbucket — в работе, кода нет (2026-10-20; DL #13–#15).** `git.finam.ru` —
+Bitbucket Server 5.16.1: три рабочих проекта (global-auth, kratos,
+tx-auth-widget), ось — «неизвестно: origin is on git.finam.ru». Без токена —
+401 на всё; учётных данных для него на lft нет. Ограничения веток REST отдаёт
+только REPO_ADMIN (документация 5.16). Владелец хочет токен «так же, как у
+GitHub и GitLab» — через CLI, который его держит; нашёл кандидатов на GitHub,
+ссылки — у него. Бриф nas-info `bitbucket-env` не отправлен: способ не выбран.
+
 **Выпущено в 0.29.0 (2026-10-15, `c16f56c`); критерий выполнен
 (2026-10-18).** `cli/src/hosting.ts` и предикат `branch_requires_checks`;
 18 тестов на записанных ответах. Аудит выпущенным 0.29.0
@@ -404,6 +412,71 @@ token --host` или `GITLAB_TOKEN`, только если хост — `GITLAB_
 называет репо, и склонированный чужой репо получил бы токен. Bitbucket Server —
 новый Sidetrack #10, вопрос владельцу.
 
+### #13 / 2026-10-20 / Bitbucket — да, с токеном админа репозитория в keychain
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** владелец: «Bitbucket сделать» (2026-10-20), затем, после
+того как я назвал цену, — «Ну давай сделаем почему не сделать?». Цена —
+наблюдение: документация Bitbucket Server 5.16 об ограничениях веток —
+«The authenticated user must have REPO_ADMIN permission or higher to call this
+resource»; без токена `git.finam.ru` отвечает 401 на проект, ветку по
+умолчанию, ограничения и хуки; учётных данных для него на lft нет
+(`~/.netrc` — только Heroku). Не проверено: админ ли владелец в `wt/*` и
+`ftc/*`; нужен ли админ для настроек merge check (обязательные сборки).
+**Context:** три рабочих проекта (global-auth, kratos, tx-auth-widget) — на
+Bitbucket Server 5.16.1; ось там — «неизвестно».
+**Why:** владелец принял токен, которым можно менять настройки репо. Чтобы он
+не жил в окружении каждого процесса и агента, — keychain macOS: vdx читает его
+сам (`security find-generic-password -s vdx-bitbucket -a <хост> -w`) и шлёт
+только на этот хост; `BITBUCKET_TOKEN` — только для `BITBUCKET_HOST` (CI,
+не macOS), как у GitLab (DL #12).
+**Implication:** владелец заводит personal access token (Repository admin) и
+кладёт его в keychain на каждой станции; затем — замер ответов API этого
+сервера и только потом код: L3 — ветку по умолчанию меняют только через PR
+(ограничение без исключений) и PR требует успешной сборки.
+**Superseded-by:** #14
+
+### #14 / 2026-10-20 / Токен Bitbucket — как у GitHub и GitLab: переменная для своего хоста
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** владелец на keychain из DL #13: «Давай может быть делать так
+же как github и gitlab?» (2026-10-20).
+**Context:** DL #13 держал токен в keychain, чтобы его не видели все процессы.
+**Why:** разница меньше, чем казалось: агенты работают от имени владельца, и
+запись keychain, созданную `security`, они читают тем же `security`. Один
+способ для всех хостингов проще. CLI, который держал бы токен (как `gh`,
+`glab`), у Bitbucket нет — источник один, переменная.
+**Implication:** `BITBUCKET_TOKEN` — только для хоста из `BITBUCKET_HOST`;
+Bitbucket — хост из `BITBUCKET_HOST`. На станции переменные кладёт nas-info
+(бриф `bitbucket-env`); токен заводит владелец.
+**Supersedes:** #13
+**Superseded-by:** #15
+
+### #15 / 2026-10-20 / «Так же, как GitHub и GitLab» — CLI, который держит токен; кандидаты — у владельца
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** я напомнил, как сделано у GitHub и GitLab (наблюдение
+2026-10-20: ни на lft, ни на m3 нет `GH_TOKEN`, `GITHUB_TOKEN`, `GITLAB_TOKEN`
+— токены дают `gh` и `glab`, в которые владелец вошёл; переменные — запасной
+путь), и что у Bitbucket такого CLI нет; предложил два способа: хранилище
+git (`git credential fill` для `https://git.finam.ru`, `osxkeychain` у
+владельца настроен — моя рекомендация) или переменные через nas-info.
+Владелец: «Ну почему нет? Я вот погуглил и нашел несколько репозиториев на
+github. Надо только конечно убедиться что версия подходит.» Ссылок в чате нет.
+**Context:** DL #14 вёл к переменным `BITBUCKET_HOST`/`BITBUCKET_TOKEN` от
+nas-info; бриф `bitbucket-env` не отправлен.
+**Why:** «так же, как GitHub и GitLab» на машинах владельца — это CLI
+хостинга, в который один раз входят и который держит токен по хосту.
+**Implication:** первым — оценить CLI для Bitbucket Server с GitHub: работает
+ли с 5.16.1 (2019), держит ли токен по хосту и отдаёт ли его (как
+`gh auth token`, `glab config get token --host`). Подошёл — токен vdx берёт у
+него; нет — `git credential` или переменные. `BITBUCKET_TOKEN` для
+`BITBUCKET_HOST` — запасной путь при любом исходе, как у GitLab.
+**Supersedes:** #14
+
 ## Sidetracks
 
 ### #1. gitolite (`git.vorobyev.name`) — девять проектов владельца
@@ -587,7 +660,18 @@ merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плаги�
 - [x] Выпуск 0.33 (minor) с GitLab — 0.33.0 (`6587434`, 2026-10-20), на m3 и
       lft; аудит им: limeflow, ga-developer-portal, showcase — «нет» с причиной,
       kratos — «неизвестно: origin is on git.finam.ru»
-- [ ] Sidetrack #10: Bitbucket Server — вопрос владельцу: делать ли
+- [x] Sidetrack #10: Bitbucket Server — делаем (DL #13, #14)
+- [ ] Оценить CLI для Bitbucket Server с GitHub (DL #15): владелец нашёл
+      несколько, ссылки — у него (спросить или найти); подходит ли к 5.16.1,
+      держит ли токен по хосту и как его отдаёт; ни один — `git credential`
+      (моя рекомендация) или переменные
+- [ ] Владелец: админ ли он в wt/global-auth, wt/kratos, ftc/tx-auth-widget —
+      ограничения веток видит только REPO_ADMIN (DL #13); вопрос задан
+      2026-10-20, ответа нет
+- [ ] Владелец: personal access token Bitbucket (Repository admin) — туда, где
+      его будет держать выбранный способ
+- [ ] Замер API `git.finam.ru` с токеном: ветка по умолчанию, ограничения,
+      merge check сборок — потом расширение
 - [x] Sidetrack #4: причина у «не выполнено» — `{ no }`, «Not met» (DL #11,
       2026-10-19)
 - [x] Выпуск 0.32 (minor) с Sidetrack #4 — 0.32.0 в npm (2026-10-20); push
