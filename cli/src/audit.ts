@@ -137,7 +137,7 @@ export function audit(
       });
       continue;
     }
-    const { achieved, not_required, unknown } = evalAxisDetailed(axis, evalCtx);
+    const { achieved, not_required, unknown, not_met } = evalAxisDetailed(axis, evalCtx);
     const ov = overrideByAxis.get(axis.id);
     const target = (ov?.target as LevelName) ?? axis.default_target;
     const drift: 'aligned' | 'gap' | 'over' =
@@ -156,6 +156,7 @@ export function audit(
     if (ov?.target) entry.override_target = ov.target as LevelName;
     if (not_required) entry.not_required = not_required;
     if (unknown) entry.unknown = unknown;
+    if (not_met) entry.not_met = not_met;
     if (axis.clone_check) {
       const c = cloneCheck(axis.clone_check, ctx.projectRoot);
       if (c && c.status !== 'ok') entry.note = c.remedy ? `${c.message} → ${c.remedy}` : c.message;

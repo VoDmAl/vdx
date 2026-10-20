@@ -40,7 +40,7 @@ rubric.ts      сет: YAML → оси, уровни, предикаты (schema
 manifest.ts    манифест проекта ([_.vdx] в mise.toml, старый [vdx]) и .vdx-overrides.yml
 audit.ts       контекст каждой оси: корень или подпакет мета-репо (applies_to)
 evaluator.ts   дерево предиката: any_of / all_of / at_least_n_of / not, сахар { has_task: "up" }
-predicates.ts  реестр предикатов: факт → true | false | unknown
+predicates.ts  реестр предикатов: факт → true | false | { no } | unknown
 facts.ts       чтение проекта: файлы, JSON / YAML / TOML, задачи, стек; кеш на контекст
 scoring.ts     уровень оси и общий уровень (критичные + 80 % вспомогательных)
 report.ts      markdown, ansi, json
@@ -56,7 +56,9 @@ report.ts      markdown, ansi, json
 
 Предикат, который vdx проверить не может (хостинг не GitHub, нет сети, CI не
 на GitHub Actions), отвечает `unknown`. Уровень на нём останавливается, и отчёт
-называет причину (`rubric-format.md`).
+называет причину (`rubric-format.md`). Предикат, который знает, почему «нет»,
+отвечает `{ no: "<почему>" }` — везде это «нет», а отчёт называет причину в
+«Not met» (`not_met` в JSON).
 
 Распознаватели, на которые опираются предикаты:
 

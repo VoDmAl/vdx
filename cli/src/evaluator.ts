@@ -1,6 +1,6 @@
 import type { Predicate } from './rubric.ts';
 import type { Ctx } from './facts.ts';
-import { REGISTRY, isUnknown, type Args, type Unknown, type Verdict } from './predicates.ts';
+import { REGISTRY, isFalse, isNo, isUnknown, type Args, type No, type Unknown, type Verdict } from './predicates.ts';
 import { at, isDict, list } from './narrow.ts';
 
 export { isUnknown, type Verdict };
@@ -25,6 +25,11 @@ function firstUnknown(vs: Verdict[]): Unknown | undefined {
   return vs.find(isUnknown);
 }
 
+/** Not met, with the first reason a branch gave, if one did. */
+function no(vs: Verdict[]): false | No {
+  return vs.find(isNo) ?? false;
+}
+
 /**
  * Three-valued: true, false, or unknown with the reason the fact could not be
  * read (a CI system or a hosting vdx does not inspect). Unknown never turns
@@ -40,13 +45,13 @@ export function evalVerdict(p: Predicate, ctx: Ctx): Verdict {
 
     if ('all_of' in obj) {
       const vs = list(obj['all_of']).map((q) => evalVerdict(q, ctx));
-      if (vs.some((v) => v === false)) return false;
+      if (vs.some(isFalse)) return no(vs);
       return firstUnknown(vs) ?? true;
     }
     if ('any_of' in obj) {
       const vs = list(obj['any_of']).map((q) => evalVerdict(q, ctx));
       if (vs.some((v) => v === true)) return true;
-      return firstUnknown(vs) ?? false;
+      return firstUnknown(vs) ?? no(vs);
     }
     if ('at_least_n_of' in obj) {
       const { n, predicates } = obj['at_least_n_of'] as { n: number; predicates: Predicate[] };
@@ -54,12 +59,12 @@ export function evalVerdict(p: Predicate, ctx: Ctx): Verdict {
       const matched = vs.filter((v) => v === true).length;
       if (matched >= n) return true;
       const open = vs.filter(isUnknown).length;
-      if (matched + open < n) return false;
+      if (matched + open < n) return no(vs);
       return firstUnknown(vs)!;
     }
     if ('not' in obj) {
       const v = evalVerdict(obj['not'], ctx);
-      return isUnknown(v) ? v : !v;
+      return isUnknown(v) ? v : v !== true;
     }
     if ('fn' in obj) {
       const name = String(obj['fn']);

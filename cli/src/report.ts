@@ -47,6 +47,14 @@ export function reportMarkdown(r: AuditResult): string {
     lines.push(`| \`${a.axis_id}\` | ${cls} | ${achievedCell(a)} | ${a.target} | ${drift} |`);
   }
 
+  const notMet = r.per_axis.filter((a) => a.not_met && !a.suppressed && a.drift_kind !== 'excluded');
+  if (notMet.length > 0) {
+    lines.push('');
+    lines.push(`## Not met`);
+    lines.push('');
+    for (const a of notMet) lines.push(`- \`${a.axis_id}\` ${a.not_met!.level}: ${a.not_met!.reason}`);
+  }
+
   const unknown = r.per_axis.filter((a) => a.unknown);
   if (unknown.length > 0) {
     lines.push('');

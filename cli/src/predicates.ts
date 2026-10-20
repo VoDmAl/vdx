@@ -24,11 +24,24 @@ export type Args = Record<string, unknown>;
 export interface Unknown {
   unknown: string;
 }
-export type Verdict = boolean | Unknown;
+/** Not met, and why — from a predicate that knows (DL #11 of docs/tasks/hosting-extension). */
+export interface No {
+  no: string;
+}
+export type Verdict = boolean | Unknown | No;
 type PredicateFn = (args: Args, ctx: Ctx) => Verdict;
 
 export function isUnknown(v: Verdict): v is Unknown {
-  return typeof v === 'object' && v !== null;
+  return typeof v === 'object' && v !== null && 'unknown' in v;
+}
+
+export function isNo(v: Verdict): v is No {
+  return typeof v === 'object' && v !== null && 'no' in v;
+}
+
+/** Not met: `false`, or `false` with its reason. */
+export function isFalse(v: Verdict): v is false | No {
+  return v === false || isNo(v);
 }
 
 /**

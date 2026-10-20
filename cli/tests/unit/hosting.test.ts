@@ -107,17 +107,26 @@ describe('branch_requires_checks: classic protection', () => {
     expect(branchRequiresChecks(ctx(), fake({ answers: branch(FOR_EVERYONE) }).io)).toBe(true);
   });
   it('admins bypass the checks — not met: the agent pushes as the owner, an admin (DL #3)', () => {
-    expect(branchRequiresChecks(ctx(), fake({ answers: branch(ADMINS_BYPASS) }).io)).toBe(false);
+    expect(branchRequiresChecks(ctx(), fake({ answers: branch(ADMINS_BYPASS) }).io)).toEqual({
+      no: 'main requires checks of everyone but admins — and an agent pushes as its owner, an admin (DL #3), and no ruleset requires checks',
+    });
   });
   it('an unprotected branch without rulesets — not met', () => {
-    expect(branchRequiresChecks(ctx(), fake({ answers: branch(UNPROTECTED) }).io)).toBe(false);
+    expect(branchRequiresChecks(ctx(), fake({ answers: branch(UNPROTECTED) }).io)).toEqual({
+      no: 'main is not protected, and no ruleset requires checks',
+    });
   });
   it('everyone, but no check named — not met', () => {
     const none: Answer = {
       status: 200,
-      body: { protection: { required_status_checks: { enforcement_level: 'everyone', contexts: [], checks: [] } } },
+      body: {
+        protected: true,
+        protection: { required_status_checks: { enforcement_level: 'everyone', contexts: [], checks: [] } },
+      },
     };
-    expect(branchRequiresChecks(ctx(), fake({ answers: branch(none) }).io)).toBe(false);
+    expect(branchRequiresChecks(ctx(), fake({ answers: branch(none) }).io)).toEqual({
+      no: 'main is protected, but names no check it requires, and no ruleset requires checks',
+    });
   });
 });
 
@@ -145,11 +154,15 @@ describe('branch_requires_checks: rulesets', () => {
         },
       }),
     });
-    expect(branchRequiresChecks(ctx(), f.io)).toBe(false);
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({
+      no: 'main is not protected; a ruleset requires checks, but 1 actor(s) may bypass it',
+    });
   });
   it('a ruleset without checks counts for nothing', () => {
     const deletion: Answer = { status: 200, body: [{ type: 'deletion', ruleset_id: 7 }] };
-    expect(branchRequiresChecks(ctx(), fake({ answers: branch(UNPROTECTED, deletion) }).io)).toBe(false);
+    expect(branchRequiresChecks(ctx(), fake({ answers: branch(UNPROTECTED, deletion) }).io)).toEqual({
+      no: 'main is not protected, and no ruleset requires checks',
+    });
   });
 });
 

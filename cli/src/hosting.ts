@@ -115,13 +115,25 @@ function judge(io: HostingIo, repo: string, token: string | null): Verdict {
   const refusedBranch = refusal(b, repo, token);
   if (refusedBranch) return refusedBranch;
   const classic = at(b.body, 'protection', 'required_status_checks');
-  if (at(classic, 'enforcement_level') === 'everyone' && checkCount(classic) > 0) return true;
+  const level = at(classic, 'enforcement_level');
+  const named = checkCount(classic) > 0;
+  if (level === 'everyone' && named) return true;
+  // Why not, for the report (DL #11): what classic protection lacks.
+  const classicWhy =
+    at(b.body, 'protected') !== true
+      ? `${branch} is not protected`
+      : level === 'non_admins' && named
+        ? `${branch} requires checks of everyone but admins — and an agent pushes as its owner, an admin (DL #3)`
+        : level === 'everyone'
+          ? `${branch} is protected, but names no check it requires`
+          : `${branch} is protected without required checks`;
 
   // Rulesets: a rule that requires checks, in a ruleset nobody bypasses.
   const rules = io.get(`/repos/${repo}/rules/branches/${ref}`, token);
   const refusedRules = refusal(rules, repo, token);
   if (refusedRules) return refusedRules;
   let hidden = false;
+  let bypassers = 0;
   for (const rule of list(rules.body)) {
     if (at(rule, 'type') !== 'required_status_checks') continue;
     if (list(at(rule, 'parameters', 'required_status_checks')).length === 0) continue;
@@ -130,13 +142,19 @@ function judge(io: HostingIo, repo: string, token: string | null): Verdict {
     const bypass = ruleset?.status === 200 ? at(ruleset.body, 'bypass_actors') : undefined;
     if (!Array.isArray(bypass)) hidden = true;
     else if (bypass.length === 0) return true;
+    else bypassers = Math.max(bypassers, bypass.length);
   }
   if (hidden) {
     return {
       unknown: `a ruleset requires checks on ${branch}, but GitHub shows who bypasses it only to ${token ? 'a repository admin' : 'a token; gh auth login, or GH_TOKEN'}`,
     };
   }
-  return false;
+  return {
+    no:
+      bypassers > 0
+        ? `${classicWhy}; a ruleset requires checks, but ${bypassers} actor(s) may bypass it`
+        : `${classicWhy}, and no ruleset requires checks`,
+  };
 }
 
 /**

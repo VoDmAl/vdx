@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { evalVerdict, isUnknown } from '../../src/evaluator.ts';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { evalPredicate, evalVerdict, isUnknown } from '../../src/evaluator.ts';
+import { REGISTRY } from '../../src/predicates.ts';
 import { parseRubric, compareSchema, SUPPORTED_SCHEMA } from '../../src/rubric.ts';
 import { evalAxisDetailed, projectLevel, shownLevel, type AxisResult } from '../../src/scoring.ts';
 import { reportMarkdown } from '../../src/report.ts';
@@ -35,6 +36,60 @@ describe('three-valued predicates', () => {
   it('not keeps unknown unknown', () => {
     expect(isUnknown(evalVerdict({ not: U }, ctx()))).toBe(true);
     expect(evalVerdict({ not: F }, ctx())).toBe(true);
+  });
+});
+
+describe('not met, with its reason (DL #11 of docs/tasks/hosting-extension)', () => {
+  const N = { test_no_with_reason: {} };
+  beforeAll(() => {
+    REGISTRY['test_no_with_reason'] = () => ({ no: 'main is not protected' });
+  });
+  afterAll(() => {
+    delete REGISTRY['test_no_with_reason'];
+  });
+  const why = { no: 'main is not protected' };
+
+  it('counts as not met everywhere, and the reason travels up', () => {
+    expect(evalPredicate(N, ctx())).toBe(false);
+    expect(evalVerdict({ all_of: [T, N] }, ctx())).toEqual(why);
+    expect(evalVerdict({ all_of: [U, N] }, ctx())).toEqual(why); // not met wins over unknown, as false does
+    expect(evalVerdict({ any_of: [F, N] }, ctx())).toEqual(why);
+    expect(isUnknown(evalVerdict({ any_of: [N, U] }, ctx()))).toBe(true);
+    expect(evalVerdict({ any_of: [N, T] }, ctx())).toBe(true);
+    expect(evalVerdict({ at_least_n_of: { n: 2, predicates: [N, F, T] } }, ctx())).toEqual(why);
+    expect(evalVerdict({ not: N }, ctx())).toBe(true);
+  });
+  it('the axis stops at the level, naming why', () => {
+    const e = evalAxisDetailed(
+      axis({ L1: { not_required: true }, L2: { not_required: true }, L3: { requires: N }, L4: { not_required: true } }),
+      ctx(),
+    );
+    expect(e).toMatchObject({ achieved: 'L2', not_met: { level: 'L3', reason: 'main is not protected' } });
+    expect(e.unknown).toBeUndefined();
+  });
+  it('the report lists it under Not met; the cell stays —', () => {
+    const entry: AxisResult = {
+      axis_id: 'branch-protection',
+      class: 'critical',
+      achieved: 'L2',
+      target: 'L4',
+      drift_kind: 'gap',
+      not_required: ['L1', 'L2'],
+      not_met: { level: 'L3', reason: 'main is not protected, and no ruleset requires checks' },
+    };
+    const md = reportMarkdown({
+      baseline: 'b',
+      stack: 'node',
+      achieved_level: 'L2',
+      per_axis: [entry, { ...entry, axis_id: 'quiet', suppressed: true }],
+      overrides: [],
+      expired_overrides: [],
+    });
+    expect(md).toContain('| `branch-protection` | **C** | — | L4 |');
+    expect(md).toContain(
+      '## Not met\n\n- `branch-protection` L3: main is not protected, and no ruleset requires checks',
+    );
+    expect(md).not.toContain('`quiet` L3'); // a suppressed axis keeps quiet
   });
 });
 

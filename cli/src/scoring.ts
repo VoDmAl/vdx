@@ -1,6 +1,7 @@
 import type { Axis, LevelName, Rubric } from './rubric.ts';
 import type { Ctx } from './facts.ts';
 import { evalPredicate, evalVerdict, isUnknown } from './evaluator.ts';
+import { isNo } from './predicates.ts';
 
 const LEVELS: LevelName[] = ['L1', 'L2', 'L3', 'L4'];
 
@@ -18,6 +19,8 @@ export interface AxisResult {
   not_required?: LevelName[];
   /** The level whose requirement could not be checked, and why; the ascent stopped there. */
   unknown?: { level: LevelName; reason: string };
+  /** The level whose requirement is not met, and why — when the predicate knows. */
+  not_met?: { level: LevelName; reason: string };
   /** A clone check printed next to the axis; does not change the level. */
   note?: string;
 }
@@ -26,6 +29,7 @@ export interface AxisEvaluation {
   achieved: LevelName;
   not_required?: LevelName[];
   unknown?: { level: LevelName; reason: string };
+  not_met?: { level: LevelName; reason: string };
 }
 
 export function evalAxis(axis: Axis, ctx: Ctx): LevelName {
@@ -41,6 +45,7 @@ function evalAxisLevels(axis: Axis, ctx: Ctx): AxisEvaluation {
   let achieved: LevelName = 'L0';
   const notRequired: LevelName[] = [];
   let unknown: AxisEvaluation['unknown'];
+  let notMet: AxisEvaluation['not_met'];
   for (const L of LEVELS) {
     const lvl = axis.levels?.[L];
     if (!lvl) break;
@@ -55,6 +60,7 @@ function evalAxisLevels(axis: Axis, ctx: Ctx): AxisEvaluation {
     } else {
       // delta-style: discontinuity → stop ascent; unknown is "not met", named
       if (isUnknown(v)) unknown = { level: L, reason: v.unknown };
+      else if (isNo(v)) notMet = { level: L, reason: v.no };
       break;
     }
   }
@@ -62,6 +68,7 @@ function evalAxisLevels(axis: Axis, ctx: Ctx): AxisEvaluation {
     achieved,
     ...(notRequired.length > 0 ? { not_required: notRequired } : {}),
     ...(unknown ? { unknown } : {}),
+    ...(notMet ? { not_met: notMet } : {}),
   };
 }
 
