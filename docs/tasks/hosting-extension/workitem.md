@@ -36,7 +36,7 @@ CLI (`gh`, `glab`), не vdx (DL #12 кристалла гейтов). Без с
 
 ## Текущая модель
 
-**Bitbucket — код есть, не выпущен (2026-10-20; DL #13–#17).** `judgeBitbucket`
+**Bitbucket — выпущено в 0.34.0 (2026-10-21, `d851996`; DL #13–#17).** `judgeBitbucket`
 в `src/hosting.ts`; вход — `git credential fill` для хоста `origin` (DL #16),
 правило L3 и ответы сервера — DL #17. Bitbucket узнаётся по `BITBUCKET_HOST`,
 по `bitbucket` в имени хоста или по входу, который git хранит для хоста, — и
@@ -708,7 +708,7 @@ merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плаги�
 
 **Status:** resolved — 2026-10-20: `judgeBitbucket` в `src/hosting.ts`, вход из
 `git credential` (DL #16, #17). Живой прогон рабочим CLI: kratos, global-auth,
-tx-auth-widget — «нет» с причиной. Выйдет в 0.34
+tx-auth-widget — «нет» с причиной. В 0.34.0 (2026-10-21)
 
 ## Next actions
 
@@ -771,7 +771,9 @@ tx-auth-widget — «нет» с причиной. Выйдет в 0.34
       сборок (DL #17, 2026-10-20)
 - [x] Расширение Bitbucket — `judgeBitbucket`, тесты на записанных ответах,
       живой прогон по трём проектам (2026-10-20)
-- [ ] Выпуск 0.34 (minor) с Bitbucket; аудит им трёх проектов на lft
+- [x] Выпуск 0.34 (minor) с Bitbucket — 0.34.0 (`d851996`, 2026-10-21), на m3
+      и lft; аудит им: kratos, global-auth, tx-auth-widget — «нет» с причиной,
+      как рабочим CLI; на m3 (kratos, в tmux) — то же; vdx — L4
 - [x] Sidetrack #4: причина у «не выполнено» — `{ no }`, «Not met» (DL #11,
       2026-10-19)
 - [x] Выпуск 0.32 (minor) с Sidetrack #4 — 0.32.0 в npm (2026-10-20); push

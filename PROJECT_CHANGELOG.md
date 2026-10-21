@@ -11,7 +11,7 @@
 не исключает, а pull request требует успешной сборки. Вход — тот, что git хранит
 для хоста (`git credential fill`, без запроса), или `BITBUCKET_TOKEN` только для
 `BITBUCKET_HOST`; CLI для Bitbucket с GitHub владелец отклонил. У трёх рабочих
-проектов на `git.finam.ru` — «нет» с причиной. Выйдет в 0.34
+проектов на `git.finam.ru` — «нет» с причиной. Вышло в 0.34.0 (2026-10-21)
 ([hosting-extension](docs/tasks/hosting-extension/workitem.md), DL #16, #17).
 
 ### `branch-protection` на GitLab
