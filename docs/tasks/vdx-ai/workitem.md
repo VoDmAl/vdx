@@ -1465,12 +1465,37 @@ confirmation in the browser» — справка, README, CLAUDE.md. Дейст�
 
 **Status:** open
 
+### #24. Сессия на старом Claude Code и старых плагинах — `vdx ai --check` молчит
+
+**Возникло в:** письмо ai-dev-plugins `stale-session-plugins` (2026-10-20),
+ответ vdx 2026-10-21.
+**Описание:** живая сессия держит версии харнесса и плагинов, с которыми
+стартовала; новые — после перезапуска или `/reload-plugins` (документация
+Claude Code, по письму). Замер ai-dev-plugins на lft 2026-10-20: 7 из 13
+процессов `claude` на vdm старше установленной, два — 12 дней на vdm 2.44.0 и
+Claude Code 2.1.294 при 2.1.304. Эта сессия vdx: старт 2026-10-20 23:14 UTC,
+vdm 2.53.0; 2.54.0 установлен в 23:18 (`installed_plugins.json`,
+`lastUpdated`). Отставание — свойство процесса, поэтому сигнал — в `vdx ai
+--check`: он уже находит процесс сессии (`findOwnAgent`, `src/ai.ts`). Хук
+плагина vdx тонкий (зовёт глобальный CLI с плагина 0.7.0), поэтому проверка
+дойдёт и до живых сессий на их следующем SessionStart; предел — каталог версии
+vdx в кеше, удалённый через 14 дней. Набросок: Claude Code — `version` из
+`~/.claude/sessions/<pid>.json` против `claude --version`; плагины —
+`startedAt` сессии против `lastUpdated`; свой плагин — точно, по
+`CLAUDE_PLUGIN_ROOT`, и если он уже новый, значит был `/reload-plugins`.
+Предложить владельцу: `vdx ai --restart` (разговор продолжается) или
+`/reload-plugins`.
+**Routed to:** vdx-ai (explicit)
+
+**Status:** open
+
 ## Next actions
 
 ### Pending sidetracks
 
 - [x] см. Sidetrack #22 — `--focused` уводит все терминалы сессии на новое окно
 - [ ] см. Sidetrack #23 — прерванный прогон тестов оставляет сервер tmux `vdx-test-*`
+- [ ] Sidetrack #24: сигнал об отставшей сессии в `vdx ai --check`
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
       условия, имя сессии), юнит-тесты — 2026-09-28
