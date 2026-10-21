@@ -134,7 +134,16 @@ nobody bypasses; a public repo needs no token, a private one takes it from
 its name, or one glab has a token for): nobody may push to the branch directly,
 and a merge request needs a passing pipeline; the token is glab's for that
 host, or `GITLAB_TOKEN` when the host is `GITLAB_HOST` (`gitlab.com` unless
-set) — vdx never sends a token to a host it does not belong to. Not met comes with the reason; another hosting, no network or no token
+set) — vdx never sends a token to a host it does not belong to. Bitbucket
+Server (a host `BITBUCKET_HOST` names, one with `bitbucket` in its name, or one
+git keeps an https login for — and that says it is Bitbucket): a restriction
+lets nothing into the branch but a pull request and exempts nobody, and a pull
+request needs a successful build ("Minimum successful builds"); the login is
+the one git keeps for that host (`git credential fill`, never a prompt — log in
+once with `git ls-remote https://<host>/scm/<project>/<repo>.git`, a personal
+access token as the password), or `BITBUCKET_TOKEN` when the host is
+`BITBUCKET_HOST`. Branch restrictions are visible to a repository admin only.
+Not met comes with the reason; another hosting, no network or no token
 where one is needed leave the axis unknown, with the reason too;
 `VDX_OFFLINE=1` does not ask at all.
 
@@ -177,8 +186,9 @@ npm run typecheck
 ## Not implemented yet
 
 - Above L1 the `ci` axis reads GitHub Actions only; other CI systems answer
-  "unknown". `branch-protection` reads GitHub and GitLab; other hostings
-  (gitolite, Bitbucket) answer "unknown".
+  "unknown". `branch-protection` reads GitHub, GitLab and Bitbucket Server;
+  other hostings (gitolite, Bitbucket Cloud) answer "unknown", and so do
+  Bitbucket restrictions by pattern or branching model.
 - Baseline loading from a git ref is documented but evaluator still reads file
   paths only — `baseline:` in `mise.toml` is recorded but does not auto-fetch.
 - Watermark drift (phase 2 of `drift-algorithm.md`).

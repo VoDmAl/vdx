@@ -68,8 +68,8 @@ report.ts      markdown, ansi, json
   cghooks, `.githooks/`): кто их ставит и что они зовут, для `git-hygiene`;
 - `vocabulary.ts` — какие задачи проекта зовёт командная строка через его
   раннер (mise, npm, composer, make…);
-- `hosting.ts` — защита ветки по умолчанию у `origin` на GitHub и GitLab для
-  оси `branch-protection`, обязательные проверки ветки и проверки коммита для
+- `hosting.ts` — защита ветки по умолчанию у `origin` на GitHub, GitLab и
+  Bitbucket Server для оси `branch-protection`, обязательные проверки ветки и проверки коммита для
   `vdx push`. Единственный, кто ходит в сеть: запрос делает дочерний
   `node`, аудит остаётся синхронным; `VDX_OFFLINE=1` — не спрашивать (тесты
   так и запускаются) — кристалл `hosting-extension`.

@@ -75,6 +75,7 @@ function fake(opts: {
       git: (args) => git[args.join(' ')] ?? null,
       ghToken: () => null,
       glabToken: () => null,
+      gitCredential: () => null,
       get: (apiPath) => {
         asked.push(apiPath);
         const a = opts.answers?.[apiPath];

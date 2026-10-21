@@ -19,16 +19,26 @@ export interface HostingIo {
   ghToken: () => string | null;
   /** The token `glab` keeps for a GitLab host; null without glab or a login there. */
   glabToken: (host: string) => string | null;
-  /** GET of an api.github.com path, or of a whole https:// URL. Throws when no answer came at all. */
-  get: (apiPath: string, token: string | null) => Answer;
+  /** The login git keeps for https://<host> (`git credential fill`), never by a prompt; null without one. */
+  gitCredential: (host: string) => { username: string; password: string } | null;
+  /**
+   * GET of an api.github.com path, or of a whole https:// URL, with the token as `Bearer`
+   * or `Basic`. Throws when no answer came at all.
+   */
+  get: (apiPath: string, token: string | null, scheme?: 'Bearer' | 'Basic') => Answer;
 }
 
 // A child node runs the request: the audit is synchronous and fetch is not
 // (DL #6 of docs/tasks/hosting-extension). The token travels in its
-// environment, not its arguments — those are visible in ps.
+// environment, not its arguments — those are visible in ps. GitHub's media
+// type only to GitHub: Bitbucket answers it with 406 (DL #17).
 const GET = `
-const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'vdx' };
-if (process.env.VDX_HOSTING_TOKEN) headers.authorization = 'Bearer ' + process.env.VDX_HOSTING_TOKEN;
+const headers = new URL(process.argv[1]).host === 'api.github.com'
+  ? { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'vdx' }
+  : { accept: 'application/json', 'user-agent': 'vdx' };
+if (process.env.VDX_HOSTING_TOKEN) {
+  headers.authorization = (process.env.VDX_HOSTING_SCHEME || 'Bearer') + ' ' + process.env.VDX_HOSTING_TOKEN;
+}
 try {
   const r = await fetch(process.argv[1], { headers, signal: AbortSignal.timeout(15000) });
   process.stdout.write(JSON.stringify({ status: r.status, text: await r.text() }));
@@ -37,10 +47,11 @@ try {
 }
 `;
 
-function get(apiPath: string, token: string | null): Answer {
+function get(apiPath: string, token: string | null, scheme: 'Bearer' | 'Basic' = 'Bearer'): Answer {
   const env = { ...process.env };
   delete env.VDX_HOSTING_TOKEN;
-  if (token) env.VDX_HOSTING_TOKEN = token;
+  delete env.VDX_HOSTING_SCHEME;
+  if (token) Object.assign(env, { VDX_HOSTING_TOKEN: token, VDX_HOSTING_SCHEME: scheme });
   const url = apiPath.startsWith('https://') ? apiPath : `https://api.github.com${apiPath}`;
   const out: unknown = JSON.parse(
     execFileSync(process.execPath, ['--input-type=module', '-e', GET, url], {
@@ -80,6 +91,25 @@ export function machineIo(root: string): HostingIo {
     git: (args) => run('git', ['--no-optional-locks', '-C', root, ...args]),
     ghToken: () => run('gh', ['auth', 'token']),
     glabToken: (host) => run('glab', ['config', 'get', 'token', '--host', host]),
+    gitCredential: (host) => {
+      if (!/^[a-z0-9.-]+$/i.test(host)) return null;
+      try {
+        const out = execFileSync('git', ['--no-optional-locks', '-C', root, 'credential', 'fill'], {
+          encoding: 'utf8',
+          input: `protocol=https\nhost=${host}\n\n`,
+          // Without a login git would ask for one: no terminal, no askpass program, no window.
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', GCM_INTERACTIVE: 'never' },
+          stdio: ['pipe', 'pipe', 'ignore'],
+          timeout: 5_000,
+        });
+        const field = (key: string) => out.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1];
+        const username = field('username');
+        const password = field('password');
+        return username && password ? { username, password } : null;
+      } catch {
+        return null;
+      }
+    },
     get,
   };
 }
@@ -164,7 +194,8 @@ function judge(io: HostingIo, repo: string, token: string | null): Verdict {
 
 /**
  * Whether the default branch on the hosting of `origin` takes changes only after a check
- * required of everyone. GitHub and GitLab; what vdx cannot ask is unknown, with the reason.
+ * required of everyone. GitHub, GitLab and Bitbucket Server; what vdx cannot ask is unknown,
+ * with the reason.
  */
 export function branchRequiresChecks(ctx: Ctx, io: HostingIo = machineIo(ctx.projectRoot)): Verdict {
   const key = 'hosting:branch-requires-checks';
@@ -191,10 +222,7 @@ function ask(io: HostingIo): Verdict {
   // or one with gitlab in its name. A token goes only where it belongs: GITLAB_TOKEN to
   // GITLAB_HOST, as glab sends it; glab's to its own host. Any other host is asked without
   // one — an origin is the repository's to name, and may point anywhere.
-  const tokenHost = (io.env.GITLAB_HOST || 'gitlab.com')
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .toLowerCase();
+  const tokenHost = hostOf(io.env.GITLAB_HOST || 'gitlab.com');
   const glab = io.glabToken(host);
   const token = (host.toLowerCase() === tokenHost ? io.env.GITLAB_TOKEN : undefined) || glab;
   if (host.toLowerCase() === tokenHost || glab || host.includes('gitlab')) {
@@ -204,7 +232,45 @@ function ask(io: HostingIo): Verdict {
       return { unknown: `${host} did not answer: ${errorMessage(e)}` };
     }
   }
-  return { unknown: `origin is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub and GitLab` };
+  // Bitbucket Server: the host BITBUCKET_HOST names, one with bitbucket in its name, or one
+  // git keeps a login for (git.finam.ru, DL #16) — once the host, asked without a login,
+  // says it is Bitbucket. BITBUCKET_TOKEN goes to BITBUCKET_HOST only, git's login to the
+  // host git keeps it for.
+  const bitbucketHost = io.env.BITBUCKET_HOST ? hostOf(io.env.BITBUCKET_HOST) : null;
+  const login = io.gitCredential(host);
+  if (host.toLowerCase() === bitbucketHost || host.toLowerCase().includes('bitbucket') || login) {
+    const auth: BitbucketAuth | null =
+      host.toLowerCase() === bitbucketHost && io.env.BITBUCKET_TOKEN
+        ? { token: io.env.BITBUCKET_TOKEN, scheme: 'Bearer', source: 'BITBUCKET_TOKEN' }
+        : login
+          ? {
+              token: Buffer.from(`${login.username}:${login.password}`).toString('base64'),
+              scheme: 'Basic',
+              source: 'the login git keeps',
+            }
+          : null;
+    try {
+      const about = io.get(`https://${host}/rest/api/1.0/application-properties`, null);
+      if (about.status === 200 && at(about.body, 'displayName') === 'Bitbucket') {
+        return judgeBitbucket(io, host, repo, auth);
+      }
+    } catch (e) {
+      return { unknown: `${host} did not answer: ${errorMessage(e)}` };
+    }
+  }
+  // Not every host is asked whether it is Bitbucket: gitolite has no https, and the audit
+  // would wait out the timeout. The reason says how vdx tells Bitbucket.
+  return {
+    unknown: `origin is on ${host || 'a host vdx cannot tell'} — vdx reads GitHub, GitLab and Bitbucket Server, the last once git keeps a login for it or BITBUCKET_HOST names it`,
+  };
+}
+
+/** The host of a `*_HOST` variable, which may come as a URL. */
+function hostOf(value: string): string {
+  return value
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase();
 }
 
 /** A refusal of a GitLab API as the reason the answer is unknown; null for a 200. */
@@ -260,6 +326,112 @@ function judgeGitlab(io: HostingIo, host: string, repo: string, token: string | 
     why.push(`${branch} takes direct pushes from ${pushers.join(', ')} — a push skips the pipeline`);
   if (!pipeline) why.push(`merge requests into ${branch} do not need a passing pipeline`);
   return { no: why.join('; ') };
+}
+
+/** What vdx asks Bitbucket with, and where it comes from — for the reason when it is refused. */
+interface BitbucketAuth {
+  token: string;
+  scheme: 'Bearer' | 'Basic';
+  source: string;
+}
+
+const MIN_BUILDS = 'com.atlassian.bitbucket.server.bitbucket-build:requiredBuildsMergeCheck';
+
+/** A refusal of Bitbucket as the reason the answer is unknown; null for a 200. */
+function bitbucketRefusal(a: Answer, host: string, repo: string, auth: BitbucketAuth | null): Unknown | null {
+  if (a.status === 200) return null;
+  const message = str(at(list(at(a.body, 'errors'))[0], 'message')) ?? '';
+  if (a.status === 401 && !auth) {
+    return {
+      unknown: `${host} shows ${repo} only after a login — once: git ls-remote https://${host}/scm/${repo}.git, a token as the password; or BITBUCKET_TOKEN with BITBUCKET_HOST`,
+    };
+  }
+  if (a.status === 401) {
+    return { unknown: `${host} refused ${repo} to ${auth?.source} — no access, a changed password, a revoked token?` };
+  }
+  return { unknown: `${host} answered ${a.status} for ${repo}${message ? `: ${message}` : ''}` };
+}
+
+/**
+ * Bitbucket Server: the default branch takes changes only after a build when nothing
+ * reaches it but a pull request — a `pull-request-only` or `read-only` restriction on it
+ * exempts nobody; an exempt user pushes past the build — and a pull request needs a
+ * successful build (the merge check «Minimum successful builds»). Shapes of git.finam.ru,
+ * 5.16.1 (DL #17). The first refusal ends the questions: every login refused brings the
+ * owner's account nearer a CAPTCHA.
+ */
+function judgeBitbucket(io: HostingIo, host: string, path: string, auth: BitbucketAuth | null): Verdict {
+  const [project, slug, ...rest] = path.replace(/^scm\//, '').split('/');
+  if (!project || !slug || rest.length > 0) return { unknown: `${host}: no project and repository in ${path}` };
+  const repo = `${project}/${slug}`;
+  const repoPath = `projects/${encodeURIComponent(project)}/repos/${encodeURIComponent(slug)}`;
+  const api = `https://${host}/rest/api/1.0/${repoPath}`;
+  const ask = (url: string) => (auth ? io.get(url, auth.token, auth.scheme) : io.get(url, null));
+
+  let branch = io.git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])?.replace(/^origin\//, '');
+  if (!branch) {
+    const d = ask(`${api}/branches/default`);
+    const refused = bitbucketRefusal(d, host, repo, auth);
+    if (refused) return refused;
+    branch = str(at(d.body, 'displayId'));
+    if (!branch) return { unknown: `${host} names no default branch for ${repo}` };
+  }
+
+  // Whoever reads the repository sees its merge checks; only an admin sees its restrictions.
+  const hooks = ask(`${api}/settings/hooks?type=PRE_PULL_REQUEST_MERGE&limit=100`);
+  const refusedHooks = bitbucketRefusal(hooks, host, repo, auth);
+  if (refusedHooks) return refusedHooks;
+  const builds = list(at(hooks.body, 'values')).some(
+    (h) => at(h, 'details', 'key') === MIN_BUILDS && at(h, 'enabled') === true,
+  );
+  const noBuilds = `pull requests into ${branch} need no successful build`;
+
+  const r = ask(`https://${host}/rest/branch-permissions/2.0/${repoPath}/restrictions?limit=100`);
+  if (r.status !== 200) {
+    // Without the build check the branch takes unbuilt changes, whoever may push to it.
+    if (!builds) return { no: noBuilds };
+    if (r.status === 401 && auth) {
+      return { unknown: `${host} shows who may change ${branch} of ${repo} only to a repository admin` };
+    }
+    return bitbucketRefusal(r, host, repo, auth) ?? { unknown: `${host} answered ${r.status} for ${repo}` };
+  }
+  if (at(r.body, 'isLastPage') === false) return { unknown: `${repo} has more than 100 branch restrictions` };
+
+  let guarded = false;
+  let byPattern = false;
+  const exempt = new Set<string>();
+  for (const x of list(at(r.body, 'values'))) {
+    if (!['read-only', 'pull-request-only'].includes(str(at(x, 'type')) ?? '')) continue;
+    if (at(x, 'matcher', 'type', 'id') !== 'BRANCH') {
+      byPattern = true;
+      continue;
+    }
+    if (at(x, 'matcher', 'id') !== `refs/heads/${branch}`) continue;
+    const who = [
+      ...list(at(x, 'users')).map((u) => str(at(u, 'name')) ?? 'a user'),
+      ...list(at(x, 'groups')).map((g) => `group ${str(g) ?? '?'}`),
+      ...list(at(x, 'accessKeys')).map((k) => `access key ${str(at(k, 'key', 'label')) ?? '?'}`),
+    ];
+    if (who.length === 0) guarded = true;
+    for (const w of who) exempt.add(w);
+  }
+
+  // A pattern or the branching model may cover the branch: vdx does not read them (DL #17).
+  if (!guarded && byPattern && builds) {
+    return {
+      unknown: `a branch restriction by pattern or branching model on ${repo} may cover ${branch} — vdx reads those that name the branch`,
+    };
+  }
+  const why: string[] = [];
+  if (!guarded && !byPattern) {
+    why.push(
+      exempt.size > 0
+        ? `${branch} takes changes without a pull request from ${[...exempt].join(', ')} — they skip the build`
+        : `${branch} is not restricted — whoever may write pushes to it`,
+    );
+  }
+  if (!builds) why.push(noBuilds);
+  return why.length > 0 ? { no: why.join('; ') } : true;
 }
 
 /** A remote's repository on GitHub and the token to ask with; unknown, with the reason, when vdx cannot ask. */

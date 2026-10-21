@@ -36,13 +36,43 @@ CLI (`gh`, `glab`), не vdx (DL #12 кристалла гейтов). Без с
 
 ## Текущая модель
 
-**Bitbucket — в работе, кода нет (2026-10-20; DL #13–#15).** `git.finam.ru` —
-Bitbucket Server 5.16.1: три рабочих проекта (global-auth, kratos,
-tx-auth-widget), ось — «неизвестно: origin is on git.finam.ru». Без токена —
-401 на всё; учётных данных для него на lft нет. Ограничения веток REST отдаёт
-только REPO_ADMIN (документация 5.16). Владелец хочет токен «так же, как у
-GitHub и GitLab» — через CLI, который его держит; нашёл кандидатов на GitHub,
-ссылки — у него. Бриф nas-info `bitbucket-env` не отправлен: способ не выбран.
+**Bitbucket — код есть, не выпущен (2026-10-20; DL #13–#17).** `judgeBitbucket`
+в `src/hosting.ts`; вход — `git credential fill` для хоста `origin` (DL #16),
+правило L3 и ответы сервера — DL #17. Bitbucket узнаётся по `BITBUCKET_HOST`,
+по `bitbucket` в имени хоста или по входу, который git хранит для хоста, — и
+только если хост без входа отвечает `displayName: "Bitbucket"`. Незнакомый
+хост без входа не спрашивается (у gitolite нет https — аудит ждал бы таймаут),
+«неизвестно» называет, как vdx узнаёт Bitbucket. Живой прогон рабочим CLI
+(lft, 2026-10-20): kratos — «master is not restricted — whoever may write
+pushes to it; pull requests into master need no successful build»;
+global-auth — «master takes changes without a pull request from wt-deploy,
+dpzhuravlev — they skip the build»; tx-auth-widget — «pull requests into
+master need no successful build»; limeflow, vdx, telegram — как до правки.
+487 юнит, 6 e2e, `check` чистый. **На lft и m3 в хранилище git — пароль
+владельца, не PAT** (DL #17: Bearer — 401, Basic — 200; 15 символов; m3 —
+вход 2026-10-21, проверено через tmux). Бриф nas-info `bitbucket-env` не нужен: git и `osxkeychain` на
+станциях уже есть (DL #16).
+
+**CLI для Bitbucket Server — оценка (2026-10-20, по коду на GitHub, ничего не
+ставилось).** Мои находки, не ссылки владельца — совпадают ли, не спрошено.
+Минимальную версию сервера не называет ни один; PAT в Bitbucket Server — с 5.5.
+- `proggarapsody/bitbottle` (Go, MIT; создан 2026-04, ★3, один автор, v1.136.0
+  от 2026-10-20). `bitbottle auth token --hostname <хост>` печатает PAT этого
+  хоста, на незнакомый хост — «not logged into» (`pkg/cmd/auth/token.go`) —
+  тот же приём, что `gh auth token`. Но `BB_TOKEN`, если задан, отдаётся для
+  любого хоста (`ResolveToken`, `factory.go`); keychain — ключ `bitbottle` +
+  slug пользователя, не хост. Вход на Server — `--username` и PAT, проверка —
+  `GET /rest/api/1.0/users/{slug}` (есть в 5.16). README: «DC не проверен live».
+- `avivsinai/bitbucket-cli`, `bkt` (Go, MIT; ★246, 50 форков, v0.35.2 от
+  2026-10-20, formula в Homebrew core). Токен — в keychain по хосту, вход —
+  `GET /rest/api/1.0/users?limit=1` (есть в 5.16). Команды, отдающей токен,
+  нет: `auth` — `login`, `status`, `logout`, `doctor`. `bkt api` ходит на хост
+  активного контекста (`bkt context use`), не на тот, что назовёт vdx.
+- `nwp/bb` (TypeScript/Bun; ★0, релизов нет, сборка из исходников) — нет.
+- `git credential`: `osxkeychain` — в системном gitconfig Homebrew-git на lft
+  (`/usr/local/etc/gitconfig`) и на m3 (`/opt/homebrew/etc/gitconfig`);
+  `bitbottle` и `bkt` нет ни там, ни там. `origin` трёх проектов — ssh :7999,
+  записи для `https://git.finam.ru` в хранилище git до входа владельца не было.
 
 **Выпущено в 0.29.0 (2026-10-15, `c16f56c`); критерий выполнен
 (2026-10-18).** `cli/src/hosting.ts` и предикат `branch_requires_checks`;
@@ -477,6 +507,71 @@ nas-info; бриф `bitbucket-env` не отправлен.
 `BITBUCKET_HOST` — запасной путь при любом исходе, как у GitLab.
 **Supersedes:** #14
 
+### #16 / 2026-10-20 / Токен Bitbucket — из хранилища git (`git credential fill`)
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** на вопрос «Откуда vdx берёт токен Bitbucket для
+git.finam.ru?» владелец выбрал «git credential (Recommended)» (2026-10-20).
+Вопрос опирался на оценку CLI («Текущая модель»): `bitbottle` отдаёт токен по
+хосту, но молод, у него один автор и ежедневные релизы; `bkt` токен не отдаёт.
+На вопрос, админ ли он в трёх репо, — «Не во всех / не знаю».
+**Context:** DL #15 — сначала CLI с GitHub, не подошёл — `git credential`
+или переменные.
+**Why:** форма та же, что у `gh` и `glab`: в инструмент один раз входят, он
+держит токен по хосту, vdx спрашивает его по хосту `origin`. Инструмент уже
+стоит: `osxkeychain` настроен на lft и m3. Админский токен рабочих репо не
+попадает к стороннему инструменту, который обновляется каждый день.
+**Implication:** vdx — `git credential fill` с `protocol=https`,
+`host=<хост origin>`, без запроса в терминал (`GIT_TERMINAL_PROMPT=0`, вход из
+`/dev/null`); записи нет — «неизвестно» с подсказкой, как войти;
+`BITBUCKET_TOKEN` — только для `BITBUCKET_HOST`, запасной путь. Владелец
+заводит PAT (Repositories: Admin) и один раз на каждой станции входит по https:
+`git ls-remote https://git.finam.ru/scm/wt/kratos.git`, логин и PAT вместо
+пароля. Где он не админ, ось остаётся «неизвестно» с причиной.
+
+### #17 / 2026-10-20 / Bitbucket: что отдаёт `git.finam.ru` и когда L3 выполнен
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** запросы с lft 2026-10-20 с записью из `git credential`
+(логин владельца; секрет не печатался). Bearer с этой записью — 401, Basic —
+200: в хранилище пароль, не PAT (15 символов). Ответы:
+- `GET /rest/api/1.0/application-properties` без входа — 200, `displayName:
+  "Bitbucket"`, 5.16.1. С `Accept: application/vnd.github+json` — 406, с
+  `application/json` — 200;
+- `…/projects/{p}/repos/{r}/branches/default` — у всех трёх `master`; ключ
+  проекта и строчными (`wt`) — 200;
+- `/rest/branch-permissions/2.0/projects/{p}/repos/{r}/restrictions`: kratos —
+  пусто; global-auth — `read-only` на `master` (matcher `BRANCH`,
+  `refs/heads/master`, `scope: REPOSITORY`) с исключениями `users`:
+  `wt-deploy`, `dpzhuravlev`; tx-auth-widget — 401. Проектные
+  (`…/projects/{p}/restrictions`): WT — пусто, FTC — 401. Владелец — админ в
+  WT, не админ в FTC;
+- `…/settings/hooks?type=PRE_PULL_REQUEST_MERGE` — 200 у всех трёх, и в FTC:
+  список merge check читается без админа. `requiredBuildsMergeCheck`
+  (`com.atlassian.bitbucket.server.bitbucket-build`, «Minimum successful
+  builds») включён только у global-auth, `settings` — `{"requiredCount":"1"}`
+  (там же 3 одобрения); `settings` в FTC — 401;
+- 401 без входа, с отвергнутым Bearer и без прав админа — одно тело:
+  `AuthorisationException`, «You are not permitted to access this resource».
+  Различает заголовок `X-AUSERNAME`: есть, когда вход принят.
+Не проверено: отдаёт ли репозиторный список ограничений и проектные (у WT их
+нет); может ли «Minimum successful builds» быть включён с нулём.
+**Context:** DL #13 — сначала замер, потом код.
+**Why:** правило — как у GitLab (DL #12) и DL #3: в ветку по умолчанию никто
+не пишет мимо pull request — ограничение `pull-request-only` или `read-only`
+на эту ветку без исключений (исключённый пушит напрямую, сборку не ждёт), и
+pull request требует успешной сборки. Merge check читается без админа, поэтому
+без него — «нет» и без ограничений (tx-auth-widget). Ограничения по шаблону и
+модели ветвления vdx не разбирает: семантику шаблонов Bitbucket не проверял.
+**Implication:** kratos — «нет»: `master` не ограничен, сборка не нужна;
+global-auth — «нет»: `master` берёт прямые изменения от `wt-deploy`,
+`dpzhuravlev`; tx-auth-widget — «нет»: pull request сливается без сборки.
+Первый же 401 с учётными данными — остановка: каждый отвергнутый вход
+приближает CAPTCHA для логина владельца. `Accept` у дочернего node —
+`application/json` для всех, кроме api.github.com.
+
 ## Sidetracks
 
 ### #1. gitolite (`git.vorobyev.name`) — девять проектов владельца
@@ -611,7 +706,9 @@ merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плаги�
 сборок). Токен — HTTP access token Bitbucket; CLI вроде `gh`/`glab` у него нет.
 Что именно отдаёт этот сервер — не проверено.
 
-**Status:** open
+**Status:** resolved — 2026-10-20: `judgeBitbucket` в `src/hosting.ts`, вход из
+`git credential` (DL #16, #17). Живой прогон рабочим CLI: kratos, global-auth,
+tx-auth-widget — «нет» с причиной. Выйдет в 0.34
 
 ## Next actions
 
@@ -661,17 +758,20 @@ merge checks (`/rest/api/1.0/projects/{p}/repos/{r}/settings/hooks`, плаги�
       lft; аудит им: limeflow, ga-developer-portal, showcase — «нет» с причиной,
       kratos — «неизвестно: origin is on git.finam.ru»
 - [x] Sidetrack #10: Bitbucket Server — делаем (DL #13, #14)
-- [ ] Оценить CLI для Bitbucket Server с GitHub (DL #15): владелец нашёл
-      несколько, ссылки — у него (спросить или найти); подходит ли к 5.16.1,
-      держит ли токен по хосту и как его отдаёт; ни один — `git credential`
-      (моя рекомендация) или переменные
-- [ ] Владелец: админ ли он в wt/global-auth, wt/kratos, ftc/tx-auth-widget —
-      ограничения веток видит только REPO_ADMIN (DL #13); вопрос задан
-      2026-10-20, ответа нет
-- [ ] Владелец: personal access token Bitbucket (Repository admin) — туда, где
-      его будет держать выбранный способ
-- [ ] Замер API `git.finam.ru` с токеном: ветка по умолчанию, ограничения,
-      merge check сборок — потом расширение
+- [x] Оценить CLI для Bitbucket Server с GitHub (DL #15): `bitbottle`, `bkt`,
+      `nwp/bb` — выбран `git credential` (DL #16, 2026-10-20)
+- [x] Владелец: админ ли он в wt/global-auth, wt/kratos, ftc/tx-auth-widget —
+      «не во всех / не знаю» (DL #16): где нет, ось — «неизвестно» с причиной
+- [x] Вход по https на lft — есть (2026-10-20), но паролем, не PAT (DL #17)
+- [x] Вход по https на m3 — есть (2026-10-21), тоже паролем
+- [ ] Владелец: PAT вместо пароля на lft и m3 — `git credential reject`, затем
+      `git ls-remote https://git.finam.ru/scm/wt/kratos.git` с PAT (DL #16,
+      #17); рекомендовано 2026-10-20, ответа нет
+- [x] Замер API `git.finam.ru`: ветка по умолчанию, ограничения, merge check
+      сборок (DL #17, 2026-10-20)
+- [x] Расширение Bitbucket — `judgeBitbucket`, тесты на записанных ответах,
+      живой прогон по трём проектам (2026-10-20)
+- [ ] Выпуск 0.34 (minor) с Bitbucket; аудит им трёх проектов на lft
 - [x] Sidetrack #4: причина у «не выполнено» — `{ no }`, «Not met» (DL #11,
       2026-10-19)
 - [x] Выпуск 0.32 (minor) с Sidetrack #4 — 0.32.0 в npm (2026-10-20); push

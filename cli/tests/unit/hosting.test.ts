@@ -44,7 +44,7 @@ const CHECKS_RULE: Answer = {
 
 interface Fake {
   io: HostingIo;
-  asked: Array<{ path: string; token: string | null }>;
+  asked: Array<{ path: string; token: string | null; scheme?: 'Bearer' | 'Basic' }>;
 }
 
 function fake(opts: {
@@ -53,6 +53,8 @@ function fake(opts: {
   env?: NodeJS.ProcessEnv;
   gh?: string | null;
   glab?: string | null;
+  /** Logins git keeps, by host. */
+  logins?: Record<string, { username: string; password: string }>;
   answers?: Record<string, Answer | Error>;
 }): Fake {
   const asked: Fake['asked'] = [];
@@ -65,8 +67,9 @@ function fake(opts: {
       git: (args) => (args[0] === 'remote' ? origin : head),
       ghToken: () => opts.gh ?? null,
       glabToken: () => opts.glab ?? null,
-      get: (apiPath, token) => {
-        asked.push({ path: apiPath, token });
+      gitCredential: (host) => opts.logins?.[host] ?? null,
+      get: (apiPath, token, scheme) => {
+        asked.push({ path: apiPath, token, ...(scheme ? { scheme } : {}) });
         const a = opts.answers?.[apiPath];
         if (a instanceof Error) throw a;
         return a ?? { status: 404, body: { message: 'Not Found' } };
@@ -96,9 +99,9 @@ describe('branch_requires_checks: what vdx does not ask', () => {
     expect(reason(branchRequiresChecks(ctx(), fake({ origin: null }).io))).toMatch(/no origin remote/);
   });
   it('origin on another hosting: named by its host, without what the URL carries', () => {
-    const f = fake({ origin: 'https://ci:secret-token@bitbucket.example.com/scm/group/repo.git' });
+    const f = fake({ origin: 'https://ci:secret-token@git.example.com/scm/group/repo.git' });
     const why = reason(branchRequiresChecks(ctx(), f.io));
-    expect(why).toMatch(/bitbucket\.example\.com — vdx reads GitHub and GitLab/);
+    expect(why).toMatch(/git\.example\.com — vdx reads GitHub, GitLab and Bitbucket Server/);
     expect(why).not.toMatch(/secret/);
     expect(f.asked).toEqual([]);
   });
@@ -286,7 +289,7 @@ describe('branch_requires_checks: GitLab (DL #12)', () => {
     };
     const elsewhere = fake({ origin: 'git@code.example.org:team/app.git', env: { GITLAB_TOKEN: 'env-t' }, answers });
     expect(reason(branchRequiresChecks(ctx(), elsewhere.io))).toMatch(
-      /code\.example\.org — vdx reads GitHub and GitLab/,
+      /code\.example\.org — vdx reads GitHub, GitLab and Bitbucket Server/,
     );
     expect(elsewhere.asked).toEqual([]);
     const named = fake({
@@ -318,11 +321,192 @@ describe('branch_requires_checks: GitLab (DL #12)', () => {
     expect(env.asked[0]!.token).toBe('env-t');
     const unknownHost = fake({ origin: 'git@code.example.org:team/app.git' });
     expect(reason(branchRequiresChecks(ctx(), unknownHost.io))).toMatch(
-      /code\.example\.org — vdx reads GitHub and GitLab/,
+      /code\.example\.org — vdx reads GitHub, GitLab and Bitbucket Server/,
     );
   });
   it('no answer from the host', () => {
     const f = gl({ [BASE]: new Error('ETIMEDOUT') });
     expect(reason(branchRequiresChecks(ctx(), f.io))).toBe('gitlab.finam.ru did not answer: ETIMEDOUT');
+  });
+});
+
+describe('branch_requires_checks: Bitbucket Server (DL #16, #17)', () => {
+  // Shapes of git.finam.ru's answers (Bitbucket 5.16.1), 2026-10-20: kratos, global-auth,
+  // tx-auth-widget.
+  const ORIGIN = 'ssh://git@git.finam.ru:7999/wt/kratos.git';
+  const ABOUT = 'https://git.finam.ru/rest/api/1.0/application-properties';
+  const API = 'https://git.finam.ru/rest/api/1.0/projects/wt/repos/kratos';
+  const HOOKS = `${API}/settings/hooks?type=PRE_PULL_REQUEST_MERGE&limit=100`;
+  const RESTRICTIONS =
+    'https://git.finam.ru/rest/branch-permissions/2.0/projects/wt/repos/kratos/restrictions?limit=100';
+  const LOGIN = { 'git.finam.ru': { username: 'owner', password: 'secret' } };
+  const BASIC = Buffer.from('owner:secret').toString('base64');
+  const BITBUCKET: Answer = {
+    status: 200,
+    body: { version: '5.16.1', buildNumber: '5016001', displayName: 'Bitbucket' },
+  };
+  const DENIED: Answer = {
+    status: 401,
+    body: {
+      errors: [
+        {
+          context: null,
+          message: 'You are not permitted to access this resource',
+          exceptionName: 'com.atlassian.bitbucket.AuthorisationException',
+        },
+      ],
+    },
+  };
+  const hooks = (builds: boolean): Answer => ({
+    status: 200,
+    body: {
+      size: 2,
+      isLastPage: true,
+      values: [
+        {
+          details: { key: 'com.atlassian.bitbucket.server.bitbucket-bundled-hooks:requiredApproversMergeHook' },
+          enabled: true,
+          configured: true,
+        },
+        {
+          details: {
+            key: 'com.atlassian.bitbucket.server.bitbucket-build:requiredBuildsMergeCheck',
+            name: 'Minimum successful builds',
+          },
+          enabled: builds,
+          configured: builds,
+          scope: { type: builds ? 'REPOSITORY' : 'PROJECT' },
+        },
+      ],
+    },
+  });
+  const restriction = (type: string, users: string[] = [], matcher = 'BRANCH') => ({
+    id: 530,
+    type,
+    matcher: { id: 'refs/heads/master', displayId: 'master', type: { id: matcher, name: matcher }, active: true },
+    users: users.map((name) => ({ name, slug: name, displayName: name })),
+    groups: [],
+    accessKeys: [],
+    scope: { type: 'REPOSITORY', resourceId: 4218 },
+  });
+  const restrictions = (...values: unknown[]): Answer => ({
+    status: 200,
+    body: { size: values.length, limit: 100, isLastPage: true, values, start: 0 },
+  });
+  const bb = (answers: Record<string, Answer | Error>, more: Parameters<typeof fake>[0] = {}) =>
+    fake({
+      origin: ORIGIN,
+      head: 'origin/master',
+      logins: LOGIN,
+      answers: { [ABOUT]: BITBUCKET, ...answers },
+      ...more,
+    });
+
+  it('nothing reaches master but a pull request, and a pull request needs a build — met', () => {
+    const f = bb({ [HOOKS]: hooks(true), [RESTRICTIONS]: restrictions(restriction('pull-request-only')) });
+    expect(branchRequiresChecks(ctx(), f.io)).toBe(true);
+    expect(f.asked).toEqual([
+      { path: ABOUT, token: null },
+      { path: HOOKS, token: BASIC, scheme: 'Basic' },
+      { path: RESTRICTIONS, token: BASIC, scheme: 'Basic' },
+    ]);
+  });
+  it('master is not restricted and needs no build — not met, both named (kratos)', () => {
+    const f = bb({ [HOOKS]: hooks(false), [RESTRICTIONS]: restrictions() });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({
+      no: 'master is not restricted — whoever may write pushes to it; pull requests into master need no successful build',
+    });
+  });
+  it('read-only with exempt users — they push past the build: not met (global-auth)', () => {
+    const f = bb({
+      [HOOKS]: hooks(true),
+      [RESTRICTIONS]: restrictions(restriction('read-only', ['wt-deploy', 'dpzhuravlev'])),
+    });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({
+      no: 'master takes changes without a pull request from wt-deploy, dpzhuravlev — they skip the build',
+    });
+  });
+  it('a restriction without exemptions guards the branch even beside one with them', () => {
+    const f = bb({
+      [HOOKS]: hooks(true),
+      [RESTRICTIONS]: restrictions(restriction('read-only', ['wt-deploy']), restriction('pull-request-only')),
+    });
+    expect(branchRequiresChecks(ctx(), f.io)).toBe(true);
+  });
+  it('not a repository admin, and no build needed — not met without the restrictions (tx-auth-widget)', () => {
+    const f = bb({ [HOOKS]: hooks(false), [RESTRICTIONS]: DENIED });
+    expect(branchRequiresChecks(ctx(), f.io)).toEqual({ no: 'pull requests into master need no successful build' });
+  });
+  it('not a repository admin, and a build needed — unknown: who may change master', () => {
+    const f = bb({ [HOOKS]: hooks(true), [RESTRICTIONS]: DENIED });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'git.finam.ru shows who may change master of wt/kratos only to a repository admin',
+    );
+  });
+  it('a restriction by pattern may cover master — unknown, not a guess', () => {
+    const f = bb({
+      [HOOKS]: hooks(true),
+      [RESTRICTIONS]: restrictions(restriction('pull-request-only', [], 'PATTERN')),
+    });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toMatch(/by pattern or branching model .* may cover master/);
+  });
+  it('no login git keeps — unknown, and how vdx tells Bitbucket; nothing asked', () => {
+    const f = bb({}, { logins: {} });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'origin is on git.finam.ru — vdx reads GitHub, GitLab and Bitbucket Server, the last once git keeps a login for it or BITBUCKET_HOST names it',
+    );
+    expect(f.asked).toEqual([]);
+  });
+  it('BITBUCKET_HOST names it, but no login — unknown, and how to log in once', () => {
+    const f = bb({ [HOOKS]: DENIED }, { logins: {}, env: { BITBUCKET_HOST: 'git.finam.ru' } });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'git.finam.ru shows wt/kratos only after a login — once: git ls-remote https://git.finam.ru/scm/wt/kratos.git, a token as the password; or BITBUCKET_TOKEN with BITBUCKET_HOST',
+    );
+  });
+  it('the login refused — unknown, and no second try: a refused login nears a CAPTCHA', () => {
+    const f = bb({ [HOOKS]: DENIED, [RESTRICTIONS]: DENIED });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toMatch(/refused wt\/kratos to the login git keeps/);
+    expect(f.asked.map((a) => a.path)).toEqual([ABOUT, HOOKS]);
+  });
+  it('a host with a login that is not Bitbucket gets no login', () => {
+    const f = fake({
+      origin: 'https://git.example.com/team/app.git',
+      logins: { 'git.example.com': LOGIN['git.finam.ru'] },
+    });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toMatch(
+      /git\.example\.com — vdx reads GitHub, GitLab and Bitbucket Server/,
+    );
+    expect(f.asked).toEqual([{ path: 'https://git.example.com/rest/api/1.0/application-properties', token: null }]);
+  });
+  it('BITBUCKET_TOKEN goes to BITBUCKET_HOST only, before the login git keeps', () => {
+    const answers = { [HOOKS]: hooks(true), [RESTRICTIONS]: restrictions(restriction('pull-request-only')) };
+    const own = bb(answers, { env: { BITBUCKET_TOKEN: 'env-t', BITBUCKET_HOST: 'https://git.finam.ru' } });
+    expect(branchRequiresChecks(ctx(), own.io)).toBe(true);
+    expect(own.asked[1]).toEqual({ path: HOOKS, token: 'env-t', scheme: 'Bearer' });
+    const other = bb(answers, {
+      env: { BITBUCKET_TOKEN: 'env-t', BITBUCKET_HOST: 'bitbucket.example.org' },
+      logins: {},
+    });
+    branchRequiresChecks(ctx(), other.io);
+    expect(other.asked.every((a) => a.token === null)).toBe(true);
+  });
+  it('an https origin: /scm/ is not the project; the branch from the server when the clone does not know it', () => {
+    const f = bb(
+      {
+        [`${API}/branches/default`]: {
+          status: 200,
+          body: { id: 'refs/heads/master', displayId: 'master', isDefault: true },
+        },
+        [HOOKS]: hooks(true),
+        [RESTRICTIONS]: restrictions(restriction('pull-request-only')),
+      },
+      { origin: 'https://git.finam.ru/scm/wt/kratos.git', head: null },
+    );
+    expect(branchRequiresChecks(ctx(), f.io)).toBe(true);
+    expect(f.asked[1]!.path).toBe(`${API}/branches/default`);
+  });
+  it('no answer from the host', () => {
+    const f = bb({ [ABOUT]: new Error('ECONNREFUSED') });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe('git.finam.ru did not answer: ECONNREFUSED');
   });
 });

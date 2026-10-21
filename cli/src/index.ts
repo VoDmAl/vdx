@@ -131,7 +131,9 @@ For branch-protection it asks the hosting of origin whether its default branch
 takes changes only after a check required of everyone: GitHub, with a token from
 $GH_TOKEN, $GITHUB_TOKEN or gh when there is one; GitLab, with glab's token for that host,
 or $GITLAB_TOKEN when the host is $GITLAB_HOST (gitlab.com unless set) — no
-other host gets it. Another hosting is unknown; VDX_OFFLINE=1 does not ask, and the axis says
+other host gets it; Bitbucket Server, with the login git keeps for that host
+(git credential), or $BITBUCKET_TOKEN when the host is $BITBUCKET_HOST.
+Another hosting is unknown; VDX_OFFLINE=1 does not ask, and the axis says
 unknown.
 `,
     bools: ['json'],
