@@ -54,7 +54,7 @@ last-updated: 2026-10-22
 ## Текущая модель
 
 **Состояние на 2026-10-22: код, тесты и документация готовы, не выпущено (CLI 0.36, плагин 0.10.0).**
-Решения — DL #1–#6. 509 unit-тестов, `check` чистый; мутации «второй рядом» и «продолжить почтовый
+Решения — DL #1–#7. 509 unit-тестов, `check` чистый; мутации «второй рядом» и «продолжить почтовый
 разговор» тесты ловят. Попутно: подсказка `--restart` в строке `--check` у focused-сессии
 обещала продолжить разговор, а `--focused --restart` начинает новый (DL #35 кристалла `vdx-ai`) —
 теперь «in a new conversation», и у почтовой так же.
@@ -206,6 +206,34 @@ it does, this is the one line that knows it»; скилл intercom, раздел
 nas-info: заголовок показывает `@vdx_waiting`. Ответ ai-dev-plugins: форма числа
 подходит, его отдаёт почтовая сессия в `--waiting`.
 
+### #7 / 2026-10-22 / Живьём: первый промпт доходит, `--close` закрывает панель, транскрипт цел
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** lft, 2026-10-22, claude 2.1.308, CLI из клона на `e1d80e1`.
+Одноразовый проект `~/AI Projects/vdx-mail-probe`, профиль — копия профиля
+владельца с `intercom_args` (промпт: выполнить `echo VDX_INTERCOM=$VDX_INTERCOM`,
+ответить выводом, затем запустить `vdx ai --close` из клона). `vdx ai --intercom
+--detach` → `▶ vdx-mail-probe@lft-mail`, `✓ running`, код 0; окна доверия к папке
+не было. Через ~1 мин сессия tmux исчезла сама. В транскрипте (54 строки):
+вызов `echo` → `VDX_INTERCOM=1`, ответ агента `VDX_INTERCOM=1`, вызов `--close` →
+`✓ vdx-mail-probe@lft-mail %46: the mail session closes in 2 s`; последняя
+строка — служебная `cost-state`, обрыва JSON нет. Из дерева процессов панели
+(zsh, claude, MCP-серверы vdx-mcp, echelon, playwright, sequential-thinking,
+morph, filesystem, caffeinate — 11 процессов, записаны до закрытия) после
+закрытия не осталось ни одного. Пробник удалён: каталог, папка транскрипта; в
+intercom он не зарегистрировался. Строку почтовой сессии от `vdx ai --check` в
+транскрипте проверить нельзя: хук зовёт установленный vdx 0.35. Транскрипт не
+сохранён — 593 КБ служебного текста, нужное пересказано здесь.
+**Context:** DL #6 опирался на непроверенное: что `kill-pane` закрывает claude
+чисто, и транскрипт не портится.
+**Why:** Проверка на настоящем агенте — единственный способ увидеть порядок
+«вызов вернулся → панель закрылась» и что MCP-серверы уходят вместе с ним.
+**Implication:** DL #6 подтверждён в части закрытия. Ответа агента после
+`--close` в транскрипте нет — ход обрывается на результате вызова; поэтому строка
+`--check` просит сказать, что сделано, до `--close`. Пометку разговора как
+почтового — проверить после выпуска 0.36.
+
 ## Sidetracks
 
 ### #1. lft: диск данных заполнен, своп 10 ГБ
@@ -246,9 +274,9 @@ nas-info: заголовок показывает `@vdx_waiting`. Ответ ai-
 - [x] `vdx ai --close [--waiting <n>]` и строка `--check` в почтовой сессии; тесты
 - [x] Справка, `docs/specs/environment-format.md`, README, `cli/README.md`,
       `plugin/README.md`, скилл `plugin/skills/vdx-ai`; PROJECT_CHANGELOG
-- [ ] Сет: `agent.intercom_args: ["/vdm:intercom check"]` в
-      `vdx-rubric-vodmal/vdx-environment.yaml`, тег, зеркало, `DEFAULT_BASELINE`
-- [ ] Живьём: почтовая сессия в одноразовом проекте — первый промпт дошёл,
+- [x] Сет: `agent.intercom_args: ["/vdm:intercom check"]` в
+      `vdx-rubric-vodmal/vdx-environment.yaml`, тег, зеркало, `DEFAULT_BASELINE` — v1.6.0 (`9f2e9d1`), на GitHub 2026-10-22
+- [x] Живьём: почтовая сессия в одноразовом проекте — первый промпт дошёл,
       `--close` закрыл панель, транскрипт цел
 - [ ] Выпуск CLI (minor) — `vdx publish minor` у владельца
 - [ ] Бриф nas-info: заголовок cmux показывает `@vdx_waiting`

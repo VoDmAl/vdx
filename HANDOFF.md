@@ -10,9 +10,11 @@
 
 - **CLI** `@vodmal/vdx-cli@0.35.0` — в npm с 2026-10-22 (`d1233f3`), Node 22 и
   новее; на m3 и lft — 0.35.0 с 2026-10-22 (`npm update -g`).
-- **Сет** `vdx-rubric-vodmal@v1.5.0` (schema 0.3): рубрика и личный профиль
-  `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`, в npm с 0.28.0.
+- **Сет** `vdx-rubric-vodmal@v1.6.0` (schema 0.3): рубрика и личный профиль
+  `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
+  `agent.intercom_args`, рубрика как в v1.5.0. `DEFAULT_BASELINE` в
+  `cli/src/init.ts` и сет внутри CLI — `@v1.6.0` с 0.36 (не выпущено), в npm —
+  `@v1.5.0` с 0.28.0.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
   читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
   (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
