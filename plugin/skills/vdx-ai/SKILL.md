@@ -56,7 +56,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 |---|---|
 | `vdx ai [path]` | start the agent, or attach to the running one; several running — a list, Enter takes the newest |
 | `vdx ai --dry-run [path]` | the plan (agent, flags, matched conditions) and the project's running agents; starts nothing — safe to run |
-| `vdx ai --check [path]` | this session against the profile; what the session-start hook prints |
+| `vdx ai --check [path]` | this session against the profile, and against the installed Claude Code and plugins; what the session-start hook prints |
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |

@@ -100,8 +100,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 restarts it, q leaves it
   --detach      start without attaching; print the command that attaches
   --dry-run     print the plan and the project's running agents; start nothing
-  --check       for the agent's own session: how the agent here is launched, and
-                whether this session carries the profile's flags (the vdx plugin's
+  --check       for the agent's own session: how the agent here is launched,
+                whether this session carries the profile's flags, and whether it
+                runs the installed Claude Code and plugins (the vdx plugin's
                 SessionStart hook); prints nothing without a profile; exit 3 on drift
   -h, --help    this help
 

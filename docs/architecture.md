@@ -90,7 +90,9 @@ report.ts      markdown, ansi, json
   коммит выпуска (кристалл `hosting-extension`, DL #8–#10).
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
   с машиной и разговором; `conversations.ts` — разговоры Claude Code проекта и
-  машина, на которой каждый запускали.
+  машина, на которой каждый запускали; `session-versions.ts` — от чего отстала
+  живая сессия: Claude Code и плагины, обновлённые после её старта или
+  `/reload-plugins` (`vdx ai --check`).
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,
   `vdx_record_success_path` (`specs/mcp-api.md`).
 

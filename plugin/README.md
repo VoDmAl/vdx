@@ -81,7 +81,10 @@ that has no `mise.toml` manifest.
 At session start the plugin runs `vdx ai --check` and hands its answer to the
 agent: the machine this session runs on, the agent here is started with
 `vdx ai`, its flags come from the profile, and whether this session carries
-them — with the command that fixes it when not. Claude Code keeps that answer
+them — with the command that fixes it when not. With vdx 0.35+ it also says
+when the session runs an older Claude Code or older plugins than are installed
+— a live session keeps the ones it started with — and hands the user
+`/reload-plugins` or `vdx ai --restart`. Claude Code keeps that answer
 in the transcript, and the machine in it is how a later `vdx ai` (0.19+) tells
 whose conversation it is. Silent without a `vdx ai` profile, and with a vdx older than
 0.18 (up to 0.15 `vdx ai` took an unknown flag for a launch, so the hook asks

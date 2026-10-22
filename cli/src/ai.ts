@@ -29,6 +29,7 @@ import {
   runsInProject,
 } from './conversations.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
+import { type Lag, sessionLag } from './session-versions.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -749,6 +750,28 @@ export interface AiDeps {
   ssh?: (args: string[], capture: boolean) => { status: number; stdout: string } | null;
   /** Claude Code processes alive on this machine; read from its session files when not given. */
   liveHere?: () => LiveSession[];
+  /** What the agent process `pid` lags behind; read from Claude Code's files when not given. */
+  lag?: (pid: number, projectRoot: string, command: string) => Lag | null;
+}
+
+function machineLag(deps: AiDeps, pid: number, projectRoot: string, command: string): Lag | null {
+  return sessionLag({
+    env: deps.env,
+    home: deps.home,
+    pid,
+    projectRoot,
+    installedClaude: () => {
+      try {
+        return execFileSync(command, ['--version'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 5_000,
+        });
+      } catch {
+        return null;
+      }
+    },
+  });
 }
 
 function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
@@ -1534,22 +1557,51 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
   }
   const missing = missingArgs(own.args, plan.args);
   const why = plan.matched.length ? ` (profile conditions met here: ${plan.matched.join(', ')})` : '';
-  if (missing.length === 0) {
+  // A live session keeps the Claude Code and plugins it started with (vdx-ai, Sidetrack #24).
+  const lag = (deps.lag ?? ((pid, root, command) => machineLag(deps, pid, root, command)))(
+    own.pid,
+    projectRoot,
+    plan.command,
+  );
+  if (missing.length === 0 && !lag) {
     lines.push(`✓ this session carries the profile's flags${why}.`);
     deps.out(lines.join('\n') + '\n');
     return EXIT_OK;
   }
+  const problems: string[] = [];
+  if (missing.length > 0) problems.push(`✗ this session runs without ${missing.join(' ')}${why}.`);
+  else lines.push(`✓ this session carries the profile's flags${why}.`);
+  if (lag) problems.push(`✗ ${describeLag(lag)}.`);
+
   const root = shellQuote(projectRoot);
-  lines.push(
-    `✗ this session runs without ${missing.join(' ')}${why}. Hand the user the fix — ` +
+  const again = [
+    missing.length > 0 ? " with the profile's flags" : '',
+    lag ? `${missing.length > 0 ? ',' : ''} on the installed Claude Code and plugins` : '',
+  ].join('');
+  // Plugins alone: /reload-plugins loads them and the conversation goes on in the same process.
+  const reload =
+    missing.length === 0 && lag && !lag.claude
+      ? '`/reload-plugins`: it loads the installed plugins and keeps the conversation (Claude Code stays as it is); or '
+      : '';
+  problems.push(
+    `Hand the user the fix — ${reload}` +
       (deps.env['TMUX']
-        ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again with the profile's flags` +
+        ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again${again}` +
           (plan.resumeArgs.length ? `, resuming the conversation (${plan.resumeArgs.join(' ')})` : '') +
           `. Do not run it yourself: it ends this session.`
         : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`${vdxAi} ${root}\`.`),
   );
+  lines.push(problems.join(' '));
   deps.out(lines.join('\n') + '\n');
   return EXIT_DRIFT;
+}
+
+/** `this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0`. */
+function describeLag(lag: Lag): string {
+  const names = lag.plugins.map((p) => `${p.name} ${p.version}`).join(', ');
+  if (!lag.claude) return `plugins updated since this session loaded them: ${names} — it still runs the ones it loaded`;
+  const claude = `this session runs Claude Code ${lag.claude.runs} — ${lag.claude.installed} is installed`;
+  return lag.plugins.length > 0 ? `${claude}; plugins updated since it loaded them: ${names}` : claude;
 }
 
 export function runAi(opts: AiOptions, deps: AiDeps): number {

@@ -1042,6 +1042,31 @@ cmux показывается или там группируется — поф�
 `proj@testhost-2`, в сессии проекта одно окно.
 **Supersedes:** #35 — в части места второго агента
 
+### #37 / 2026-10-22 / Отставшая сессия — `✗` в `vdx ai --check`, когда загруженному больше суток
+
+**Source:** both
+**Basis:** observed
+**Basis-detail:** владелец — «Поехали» на предложение взять Sidetrack #24
+(2026-10-21). Замер рабочим CLI по живым сессиям lft 2026-10-22 ~01:50 UTC:
+без порога отставали 14 из 14 — среди прочего echelon 0.6.2, вышедший за
+минуты до того; с порогом в сутки — 9 из 14, все запущены 19–20.10, пять на
+Claude Code 2.1.303 и одна (ga-developer-portal, с 08.10) на 2.1.294 при
+2.1.304. Как видно `/reload-plugins` — ответ ai-dev-plugins
+(`stale-session-plugins-outcome-outcome`): строка `system`/`local_command`
+«Reloaded: …» в транскрипте; подтверждено в транскриптах echelon (25.09, 01.10).
+**Context:** Sidetrack #24, письмо ai-dev-plugins `stale-session-plugins`.
+**Why:** вред — сессия, что днями работает на старом коде (12 дней у
+ai-dev-plugins), а не обновление часовой давности. Порог — от того, что сессия
+загрузила: старт или последний `/reload-plugins`; так после перезагрузки сутки
+тишины, а не новый `✗` на следующий выпуск echelon.
+**Implication:** `session-versions.ts` (`sessionLag`): Claude Code — `version`
+из `sessions/<pid>.json` старше `<agent> --version`; плагины — включённые
+(ближайшие настройки: проекта локальные, проекта, пользователя), `lastUpdated`
+позже загрузки. Только плагины — человеку `/reload-plugins` или `--restart`;
+Claude Code — `--restart`. Код 3, как у недостающих флагов. Хук плагина зовёт
+глобальный CLI, поэтому сигнал дойдёт до живых сессий на их следующем
+SessionStart после выхода CLI, без выпуска плагина.
+
 ## Sidetracks
 
 ### #1. vdx не установлен на lft
@@ -1487,7 +1512,10 @@ vdx в кеше, удалённый через 14 дней. Набросок: Cl
 `/reload-plugins`.
 **Routed to:** vdx-ai (explicit)
 
-**Status:** open
+**Status:** resolved — 2026-10-22, DL #37: `sessionLag` в `src/session-versions.ts`,
+строка `✗` в `vdx ai --check`; порог — сутки от загрузки. Живой прогон рабочим
+CLI в этой сессии: «plugins updated since this session loaded them: vdm 2.54.0,
+echelon 0.6.2». Выйдет в 0.35
 
 ## Next actions
 
@@ -1495,7 +1523,8 @@ vdx в кеше, удалённый через 14 дней. Набросок: Cl
 
 - [x] см. Sidetrack #22 — `--focused` уводит все терминалы сессии на новое окно
 - [ ] см. Sidetrack #23 — прерванный прогон тестов оставляет сервер tmux `vdx-test-*`
-- [ ] Sidetrack #24: сигнал об отставшей сессии в `vdx ai --check`
+- [x] Sidetrack #24: сигнал об отставшей сессии в `vdx ai --check` (DL #37, 2026-10-22)
+- [ ] Выпуск 0.35 (minor) с Sidetrack #24; `vdx ai --check` выпущенным в живой сессии
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
       условия, имя сессии), юнит-тесты — 2026-09-28

@@ -1774,6 +1774,54 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     expect(text).not.toContain('--restart');
   });
 
+  it('plugins updated since the session loaded them — /reload-plugins or a restart, exit 3 (Sidetrack #24)', () => {
+    const procs = chain(
+      '--dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon --continue',
+    );
+    const d = {
+      ...deps(procs),
+      lag: (pid: number) => (pid === 20 ? { claude: null, plugins: [{ name: 'vdm', version: '2.54.0' }] } : null),
+    };
+    expect(runAiCheck(root, d, 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text).toContain("✓ this session carries the profile's flags");
+    expect(text).toContain(
+      '✗ plugins updated since this session loaded them: vdm 2.54.0 — it still runs the ones it loaded.',
+    );
+    expect(text).toContain('`/reload-plugins`: it loads the installed plugins and keeps the conversation');
+    expect(text).toContain(`\`vdx ai --restart ${root}\`: it stops this session and starts it again on the installed`);
+  });
+
+  it('an older Claude Code: a restart, not /reload-plugins — it does not update Claude Code', () => {
+    const procs = chain(
+      '--dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon --continue',
+    );
+    const d = {
+      ...deps(procs),
+      lag: () => ({ claude: { runs: '2.1.294', installed: '2.1.304' }, plugins: [{ name: 'vdm', version: '2.54.0' }] }),
+    };
+    expect(runAiCheck(root, d, 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text).toContain(
+      '✗ this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0.',
+    );
+    expect(text).not.toContain('/reload-plugins');
+    expect(text).toContain('`vdx ai --restart');
+  });
+
+  it('missing flags and an older Claude Code: one restart fixes both', () => {
+    const d = {
+      ...deps(chain('--dangerously-skip-permissions --continue')),
+      lag: () => ({ claude: { runs: '2.1.294', installed: '2.1.304' }, plugins: [] }),
+    };
+    expect(runAiCheck(root, d, 40)).toBe(EXIT_DRIFT);
+    const text = out.join('');
+    expect(text).toContain('✗ this session runs without --dangerously-load-development-channels');
+    expect(text).toContain('✗ this session runs Claude Code 2.1.294 — 2.1.304 is installed.');
+    expect(text).toContain("starts it again with the profile's flags, on the installed Claude Code and plugins");
+    expect(text).not.toContain('✓');
+  });
+
   it('without an agent among the ancestors, says so and compares nothing', () => {
     expect(runAiCheck(root, deps(chain('--x').filter((p) => p.pid !== 20)), 40)).toBe(EXIT_OK);
     const text = out.join('');

@@ -1,7 +1,8 @@
 #!/bin/sh
 # SessionStart: tells the agent how it is launched in this project — `vdx ai`
 # and the profile — and whether this session carries the profile's flags
-# (`vdx ai --check`); then which hooks are declared but do not run here — in
+# (`vdx ai --check`; with 0.35 also whether it runs the installed Claude Code
+# and plugins); then which hooks are declared but do not run here — in
 # this clone, or the profile's personal hooks on this machine
 # (`vdx doctor --check`). Silent when vdx is missing or too old, and when
 # there is nothing to say.
