@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-21, @vodmal/vdx-cli@0.34.0)
+# vdx — Handoff (2026-10-22, @vodmal/vdx-cli@0.35.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -6,10 +6,10 @@
 
 ---
 
-## Где мы (2026-10-21)
+## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.34.0` — в npm с 2026-10-21 (`d851996`), Node 22 и
-  новее; на m3 и lft — 0.34.0 с 2026-10-21 (`npm update -g`).
+- **CLI** `@vodmal/vdx-cli@0.35.0` — в npm с 2026-10-22 (`d1233f3`), Node 22 и
+  новее; на m3 и lft — 0.35.0 с 2026-10-22 (`npm update -g`).
 - **Сет** `vdx-rubric-vodmal@v1.5.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба. `DEFAULT_BASELINE` в
   `cli/src/init.ts` и сет внутри CLI — `@v1.5.0`, в npm с 0.28.0.
@@ -50,7 +50,7 @@
 |---|---|---|
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом с 2026-10-18 (DL #8): `main` защищён, общий L4; GitLab — в 0.33.0, gitolite отложен, Bitbucket (`git.finam.ru`) — в 0.34.0: вход из `git credential` (DL #16), правило и замер — DL #17, у трёх рабочих проектов — «нет» с причиной; на lft и m3 в хранилище git — PAT (DL #19); `gh` на lft — у nas-info (`gh-on-lft`); токен в `vdx doctor` (#7), `gh` из ssh на m3 (#8); gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
-| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24, 2026-10-22), выйдет в 0.35; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |
+| [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
 
 **vdx-dogfooding** — vdx по своей рубрике (DL #2–#4). До 0.29 общий выше L2

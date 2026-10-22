@@ -1515,7 +1515,7 @@ vdx в кеше, удалённый через 14 дней. Набросок: Cl
 **Status:** resolved — 2026-10-22, DL #37: `sessionLag` в `src/session-versions.ts`,
 строка `✗` в `vdx ai --check`; порог — сутки от загрузки. Живой прогон рабочим
 CLI в этой сессии: «plugins updated since this session loaded them: vdm 2.54.0,
-echelon 0.6.2». Выйдет в 0.35
+echelon 0.6.2». В 0.35.0 (2026-10-22)
 
 ## Next actions
 
@@ -1524,7 +1524,10 @@ echelon 0.6.2». Выйдет в 0.35
 - [x] см. Sidetrack #22 — `--focused` уводит все терминалы сессии на новое окно
 - [ ] см. Sidetrack #23 — прерванный прогон тестов оставляет сервер tmux `vdx-test-*`
 - [x] Sidetrack #24: сигнал об отставшей сессии в `vdx ai --check` (DL #37, 2026-10-22)
-- [ ] Выпуск 0.35 (minor) с Sidetrack #24; `vdx ai --check` выпущенным в живой сессии
+- [x] Выпуск 0.35 (minor) с Sidetrack #24 — 0.35.0 (`d1233f3`, 2026-10-22, после
+      сбоя npm 02:33–09:00 UTC и повторного `npm login`), на m3 и lft;
+      `vdx ai --check` выпущенным в этой сессии — «plugins updated since this
+      session loaded them: security-guidance 2.0.16, vdm 2.57.1, echelon 0.6.2», код 3
 
 - [x] `cli/src/ai.ts`: загрузка профиля, чистый план запуска (агент, флаги,
       условия, имя сессии), юнит-тесты — 2026-09-28
