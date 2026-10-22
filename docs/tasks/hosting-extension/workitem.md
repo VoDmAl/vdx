@@ -5,7 +5,7 @@ description: "Делает L3 оси branch-protection известным: сп�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-15
-last-updated: 2026-10-20
+last-updated: 2026-10-22
 ---
 
 # Расширение хостинга для branch-protection
@@ -50,7 +50,9 @@ dpzhuravlev — they skip the build»; tx-auth-widget — «pull requests into
 master need no successful build»; limeflow, vdx, telegram — как до правки.
 487 юнит, 6 e2e, `check` чистый. На lft и m3 в хранилище git — PAT владельца
 (с 2026-10-21, DL #19; до того — пароль, DL #17, #18). Бриф nas-info `bitbucket-env` не нужен: git и `osxkeychain` на
-станциях уже есть (DL #16).
+станциях уже есть (DL #16). Вход, который сервер отверг
+(`IncorrectPasswordAuthenticationException`), — «неизвестно» с командой, которая
+стирает запись; хранилище git vdx не трогает (DL #20, 2026-10-22, в 0.36).
 
 **CLI для Bitbucket Server — оценка (2026-10-20, по коду на GitHub, ничего не
 ставилось).** Мои находки, не ссылки владельца — совпадают ли, не спрошено.
@@ -605,6 +607,39 @@ ls-remote` пароль и что он сохранён и уходит при �
 называть, что именно сохранится и кто это прочтёт.
 **Supersedes:** #18
 
+### #20 / 2026-10-22 / Отвергнутый вход Bitbucket — аудит только называет его, хранилище git не трогает
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** на вопрос «если git.finam.ru отверг сохранённый вход…, что
+делает vdx audit?» владелец выбрал «Только сказать», а не мою рекомендацию «git
+забывает вход» (`git credential reject`, как git после 401) (2026-10-22).
+Вопрос опирался на замер с lft в тот же день (секрет не печатался): вход,
+который сервер отверг (Basic с несуществующим логином), — 401, `exceptionName:
+com.atlassian.bitbucket.auth.IncorrectPasswordAuthenticationException`,
+«Authentication failed. Please check your credentials and try again.», без
+`X-AUSERNAME`; принятый PAT владельца без прав (ограничения в FTC) — 401,
+`com.atlassian.bitbucket.AuthorisationException`, с `X-AUSERNAME`. Попутно:
+поддельный Bearer сервер принимает за анонима (у tx-auth-widget — 200, у
+kratos — 401 `AuthorisationException`); tx-auth-widget без входа отдаёт ветку
+по умолчанию и merge checks, ограничения — нет (401). `printf
+'protocol=https\nhost=<хост>\n\n' | git credential reject` стёр запись
+`osxkeychain` без логина — проверено на поддельном хосте `vdx-probe.invalid`
+(git 2.54, lft); на m3 (git 2.56) — не проверено.
+**Context:** Sidetrack #11: после отзыва токена каждый аудит шлёт его снова;
+`origin` — ssh, и git сам запись не перезапросит.
+**Why:** аудит обещает только читать («Reads only» в `vdx audit --help`), а
+запись в хранилище — PAT владельца в keychain. Различитель — тело ответа, не
+заголовок: дочернему node ничего добавлять не нужно.
+**Implication:** при `IncorrectPasswordAuthenticationException` на вход из
+`git credential` — «неизвестно»: вход отвергнут, каждый аудит шлёт его снова,
+команда, которая стирает запись, и как войти заново; хранилище не меняется.
+Другое `…AuthenticationException` — «отверг» с сообщением сервера (например
+CAPTCHA — её класс не наблюдался). `AuthorisationException` со входом git — «нет
+доступа к репозиторию». Отказы копятся, пока владелец не сотрёт запись, — цена
+выбора. Живой прогон рабочим CLI (lft): kratos с поддельным логином во временном
+`store` — эта причина, запись цела; с входом владельца — «нет», как раньше.
+
 ## Sidetracks
 
 ### #1. gitolite (`git.vorobyev.name`) — девять проектов владельца
@@ -659,7 +694,9 @@ is not protected, and no ruleset requires checks». Выйдет в 0.32
 — «неизвестно» у всех». С 0.29 это не так для GitHub. Правка canonical-файла
 — тег сета (patch); вместе со следующим выпуском сета.
 
-**Status:** open
+**Status:** resolved — 2026-10-22: v1.6.0 вышел без правки; комментарий — в
+v1.6.1 (patch), «vdx спрашивает GitHub (с CLI 0.29), GitLab (0.33) и Bitbucket
+Server (0.34)»; зеркала и `DEFAULT_BASELINE` — `@v1.6.1`, в CLI с 0.36
 
 ### #6. `vdx publish` не замечает выпуск без изменений
 
@@ -754,7 +791,9 @@ Bitbucket — и «вход неверен», и «нет прав» (DL #17): �
 только при отказе без `X-AUSERNAME` — дочернему node нужно отдать этот
 заголовок.
 
-**Status:** open
+**Status:** resolved — 2026-10-22, DL #20: различает тело (`exceptionName`), не
+заголовок; аудит запись не стирает (решение владельца), а называет команду,
+которая стирает, и как войти заново. Выйдет в 0.36
 
 ## Next actions
 
@@ -812,7 +851,10 @@ Bitbucket — и «вход неверен», и «нет прав» (DL #17): �
 - [x] Вход по https на m3 — есть (2026-10-21), тоже паролем
 - [x] PAT вместо пароля на lft и m3 — 2026-10-21 (DL #19; DL #18 снимал
       пункт, владелец передумал, узнав, что сохранён пароль)
-- [ ] Sidetrack #11: отвергнутый вход git — `git credential reject` при отказе без `X-AUSERNAME`
+- [x] Sidetrack #11: отвергнутый вход git — причина с командой, хранилище не
+      трогается (DL #20, 2026-10-22); 511 юнит, `check` чистый
+- [ ] 0.36 вышел (выпуск — у `intercom-session-mode`): аудит выпущенным —
+      kratos, global-auth, tx-auth-widget «нет», как 0.34.0; сет внутри — v1.6.1
 - [x] Замер API `git.finam.ru`: ветка по умолчанию, ограничения, merge check
       сборок (DL #17, 2026-10-20)
 - [x] Расширение Bitbucket — `judgeBitbucket`, тесты на записанных ответах,
@@ -827,7 +869,8 @@ Bitbucket — и «вход неверен», и «нет прав» (DL #17): �
 - [x] 0.32.1 (patch): ожидание переживает запрос без ответа — в npm
       (`543d937`, 2026-10-20), на m3 и lft; аудит им: vdx — L4, у
       `vdx-rubric-vodmal` — «Not met» с причиной; registry — 262 с от publish
-- [ ] Sidetrack #5: комментарий оси в сете — со следующим тегом сета
+- [x] Sidetrack #5: комментарий оси в сете — v1.6.1 (`56b4b05`, 2026-10-22),
+      `main` и тег на GitHub
 - [x] Sidetrack #6: вопрос `vdx publish` о выпуске без изменений (2026-10-19)
 - [x] Выпуск (patch) с #6, #7, #9 — 0.31.3 (`2a48c55`, 2026-10-19); на m3 и lft
       — 0.31.3

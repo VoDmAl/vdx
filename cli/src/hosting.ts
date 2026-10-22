@@ -332,7 +332,7 @@ function judgeGitlab(io: HostingIo, host: string, repo: string, token: string | 
 interface BitbucketAuth {
   token: string;
   scheme: 'Bearer' | 'Basic';
-  source: string;
+  source: 'BITBUCKET_TOKEN' | 'the login git keeps';
 }
 
 const MIN_BUILDS = 'com.atlassian.bitbucket.server.bitbucket-build:requiredBuildsMergeCheck';
@@ -340,14 +340,37 @@ const MIN_BUILDS = 'com.atlassian.bitbucket.server.bitbucket-build:requiredBuild
 /** A refusal of Bitbucket as the reason the answer is unknown; null for a 200. */
 function bitbucketRefusal(a: Answer, host: string, repo: string, auth: BitbucketAuth | null): Unknown | null {
   if (a.status === 200) return null;
-  const message = str(at(list(at(a.body, 'errors'))[0], 'message')) ?? '';
+  const error = list(at(a.body, 'errors'))[0];
+  const message = str(at(error, 'message')) ?? '';
+  const login = `git ls-remote https://${host}/scm/${repo}.git, a token as the password`;
   if (a.status === 401 && !auth) {
     return {
-      unknown: `${host} shows ${repo} only after a login — once: git ls-remote https://${host}/scm/${repo}.git, a token as the password; or BITBUCKET_TOKEN with BITBUCKET_HOST`,
+      unknown: `${host} shows ${repo} only after a login — once: ${login}; or BITBUCKET_TOKEN with BITBUCKET_HOST`,
     };
   }
-  if (a.status === 401) {
-    return { unknown: `${host} refused ${repo} to ${auth?.source} — no access, a changed password, a revoked token?` };
+  if (a.status === 401 && auth) {
+    // A login the server refused — a revoked token, a changed password — is an
+    // AuthenticationException; one it took, without access, an AuthorisationException,
+    // as is no login at all, and a Bearer token it does not know (git.finam.ru, 2026-10-22).
+    // vdx does not touch git's store: the owner erases the login (Sidetrack #11).
+    const exception = str(at(error, 'exceptionName')) ?? '';
+    if (
+      exception === 'com.atlassian.bitbucket.auth.IncorrectPasswordAuthenticationException' &&
+      auth.source !== 'BITBUCKET_TOKEN'
+    ) {
+      return {
+        unknown: `${host} refused the login git keeps for it, and every audit sends it again — each refusal brings the account nearer a CAPTCHA; erase it: printf 'protocol=https\\nhost=${host}\\n\\n' | git credential reject — and log in once more: ${login}`,
+      };
+    }
+    if (exception.endsWith('AuthenticationException')) {
+      return { unknown: `${host} refused ${auth.source}${message ? `: ${message}` : ''}` };
+    }
+    return {
+      unknown:
+        auth.source === 'BITBUCKET_TOKEN'
+          ? `${host} refused ${repo} to BITBUCKET_TOKEN — no access, or a token it does not know: it takes one for no login`
+          : `${host} refused ${repo} to the login git keeps — it has no access to the repository`,
+    };
   }
   return { unknown: `${host} answered ${a.status} for ${repo}${message ? `: ${message}` : ''}` };
 }

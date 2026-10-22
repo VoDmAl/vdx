@@ -278,7 +278,9 @@ intercom он не зарегистрировался. Строку почтов
       `vdx-rubric-vodmal/vdx-environment.yaml`, тег, зеркало, `DEFAULT_BASELINE` — v1.6.0 (`9f2e9d1`), на GitHub 2026-10-22
 - [x] Живьём: почтовая сессия в одноразовом проекте — первый промпт дошёл,
       `--close` закрыл панель, транскрипт цел
-- [ ] Выпуск CLI (minor) — `vdx publish minor` у владельца
+- [ ] Выпуск CLI (minor) — `vdx publish minor` у владельца; в нём же
+      `hosting-extension` DL #20 и сет v1.6.1 (`DEFAULT_BASELINE`, 2026-10-22):
+      тег v1.6.1 на GitHub с 2026-10-22 (`56b4b05`)
 - [ ] Бриф nas-info: заголовок cmux показывает `@vdx_waiting`
 - [ ] Outcome to `echelon`: intercom reply intercom-session-mode --done "<what was done>" --link <url> --ball "<who holds the ball — what ⏰ date>"
 - [ ] Outcome to `ai-dev-plugins`: intercom reply intercom-session-mode-intercom-side

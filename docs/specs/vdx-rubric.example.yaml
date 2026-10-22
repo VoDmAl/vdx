@@ -11,7 +11,7 @@ schema_version: "0.3"
 
 metadata:
   name: vdx-rubric-vodmal
-  version: "1.6.0"
+  version: "1.6.1"
   description: "Personal maturity rubric for multi-stack projects (vodmal)"
   owner: vodmal
   homepage: "https://github.com/vodmal/vdx-rubric"
@@ -260,8 +260,9 @@ axes:
     default_target: L4
     fact_sources: [hosting API]
     # Гейт — свойство L3 общей лестницы; ниже ось ничего не требует и уровень
-    # не ограничивает. Знает о защите только хостинг: пока расширения для него
-    # нет, L3 — «неизвестно» у всех. L4 — позже: force-push, удаление ветки,
+    # не ограничивает. Знает о защите только хостинг: vdx спрашивает GitHub
+    # (с CLI 0.29), GitLab (0.33) и Bitbucket Server (0.34), у другого хостинга
+    # L3 — «неизвестно» с причиной. L4 — позже: force-push, удаление ветки,
     # ревью (как Branch-Protection у Scorecard).
     levels:
       L1: { not_required: true }

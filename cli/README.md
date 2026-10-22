@@ -144,6 +144,9 @@ the one git keeps for that host (`git credential fill`, never a prompt — log i
 once with `git ls-remote https://<host>/scm/<project>/<repo>.git`, a personal
 access token as the password), or `BITBUCKET_TOKEN` when the host is
 `BITBUCKET_HOST`. Branch restrictions are visible to a repository admin only.
+A login the server refuses (a revoked token) is unknown with the command that
+erases it: vdx leaves git's store alone, and sends the login again each audit
+until it is gone.
 Not met comes with the reason; another hosting, no network or no token
 where one is needed leave the axis unknown, with the reason too;
 `VDX_OFFLINE=1` does not ask at all.

@@ -463,10 +463,48 @@ describe('branch_requires_checks: Bitbucket Server (DL #16, #17)', () => {
       'git.finam.ru shows wt/kratos only after a login — once: git ls-remote https://git.finam.ru/scm/wt/kratos.git, a token as the password; or BITBUCKET_TOKEN with BITBUCKET_HOST',
     );
   });
-  it('the login refused — unknown, and no second try: a refused login nears a CAPTCHA', () => {
+  it('the login taken, without access to the repository — unknown, and no second question', () => {
     const f = bb({ [HOOKS]: DENIED, [RESTRICTIONS]: DENIED });
-    expect(reason(branchRequiresChecks(ctx(), f.io))).toMatch(/refused wt\/kratos to the login git keeps/);
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'git.finam.ru refused wt/kratos to the login git keeps — it has no access to the repository',
+    );
     expect(f.asked.map((a) => a.path)).toEqual([ABOUT, HOOKS]);
+  });
+  it('the login refused — unknown, how to erase it and log in again; no second try (Sidetrack #11)', () => {
+    // A login git.finam.ru refuses, 2026-10-22: a user it does not know, Basic.
+    const REFUSED: Answer = {
+      status: 401,
+      body: {
+        errors: [
+          {
+            context: null,
+            message: 'Authentication failed. Please check your credentials and try again.',
+            exceptionName: 'com.atlassian.bitbucket.auth.IncorrectPasswordAuthenticationException',
+          },
+        ],
+      },
+    };
+    const f = bb({ [HOOKS]: REFUSED, [RESTRICTIONS]: REFUSED });
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      "git.finam.ru refused the login git keeps for it, and every audit sends it again — each refusal brings the account nearer a CAPTCHA; erase it: printf 'protocol=https\\nhost=git.finam.ru\\n\\n' | git credential reject — and log in once more: git ls-remote https://git.finam.ru/scm/wt/kratos.git, a token as the password",
+    );
+    expect(f.asked.map((a) => a.path)).toEqual([ABOUT, HOOKS]);
+    const env = bb(
+      { [HOOKS]: REFUSED },
+      { logins: {}, env: { BITBUCKET_TOKEN: 'env-t', BITBUCKET_HOST: 'git.finam.ru' } },
+    );
+    expect(reason(branchRequiresChecks(ctx(), env.io))).toBe(
+      'git.finam.ru refused BITBUCKET_TOKEN: Authentication failed. Please check your credentials and try again.',
+    );
+  });
+  it('BITBUCKET_TOKEN without access — or one the host does not know, which it takes for no login', () => {
+    const f = bb(
+      { [HOOKS]: DENIED },
+      { logins: {}, env: { BITBUCKET_TOKEN: 'env-t', BITBUCKET_HOST: 'git.finam.ru' } },
+    );
+    expect(reason(branchRequiresChecks(ctx(), f.io))).toBe(
+      'git.finam.ru refused wt/kratos to BITBUCKET_TOKEN — no access, or a token it does not know: it takes one for no login',
+    );
   });
   it('a host with a login that is not Bitbucket gets no login', () => {
     const f = fake({
