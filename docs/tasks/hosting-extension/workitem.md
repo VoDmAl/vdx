@@ -2,7 +2,7 @@
 title: "Расширение хостинга для branch-protection"
 slug: hosting-extension
 description: "Делает L3 оси branch-protection известным: спрашивает хостинг вместо «неизвестно»"
-status: in-progress
+status: dormant
 session-type: prd-prep
 created: 2026-10-15
 last-updated: 2026-10-22
@@ -35,6 +35,9 @@ CLI (`gh`, `glab`), не vdx (DL #12 кристалла гейтов). Без с
 хостинге, без сети, без нужного токена — «неизвестно» с причиной.
 
 ## Текущая модель
+
+**Спит с 2026-10-22: ждёт выпуска 0.36.** Будит выход 0.36 в npm: аудит
+выпущенным — последний пункт Next actions, потом закрыть.
 
 **Bitbucket — выпущено в 0.34.0 (2026-10-21, `d851996`; DL #13–#17).** `judgeBitbucket`
 в `src/hosting.ts`; вход — `git credential fill` для хоста `origin` (DL #16),

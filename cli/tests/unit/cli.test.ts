@@ -208,3 +208,19 @@ describe('vdx ai@host', () => {
     expect(r.stderr).not.toContain('→ zz-self');
   });
 });
+
+describe('vdx publish without a terminal', () => {
+  it('releases nothing and names the command for the person’s terminal — before any check', () => {
+    // A package in an empty directory: past the refusal the pre-flight would ask npm and git.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-cli-publish-'));
+    const pkg = '{"name":"p","version":"1.0.0"}\n';
+    fs.writeFileSync(path.join(dir, 'package.json'), pkg);
+    const r = spawnSync(process.execPath, [BIN, 'publish', 'minor'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('vdx publish: no terminal here');
+    expect(r.stderr).toContain('Run it in your own terminal: vdx publish minor.');
+    expect(r.stdout).toBe('');
+    expect(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).toBe(pkg);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

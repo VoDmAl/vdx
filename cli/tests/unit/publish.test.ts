@@ -209,6 +209,30 @@ describe('checkNpmAuth', () => {
     expect(c.message).toMatch(/not logged in/);
   });
 
+  it('a 5xx is an outage of the registry, not the login — no npm login offered (0.35.0, E503)', () => {
+    const c = checkNpmAuth(
+      null,
+      fakeNpm({
+        whoami: npmError(
+          'npm error code E503\nnpm error 503 Service Unavailable - GET https://registry.npmjs.org/-/whoami\n',
+        ),
+      }),
+    );
+    expect(c).toEqual({
+      name: 'npm-auth',
+      ok: false,
+      message:
+        'npm is not answering (E503) — trouble on its side, not the login; status: https://status.npmjs.org. Run vdx publish again once it answers',
+    });
+    const own = checkNpmAuth(
+      'https://npm.example.com/',
+      fakeNpm({ 'whoami --registry https://npm.example.com/': npmError('npm error code E502\n') }),
+    );
+    expect(own.message).toBe(
+      'https://npm.example.com/ is not answering (E502) — trouble on its side, not the login. Run vdx publish again once it answers',
+    );
+  });
+
   it('reports another failure by its first line, not as a missing login', () => {
     const c = checkNpmAuth(null, fakeNpm({ whoami: npmError('npm error code ENOTFOUND\nnpm error network\n') }));
     expect(c.ok).toBe(false);

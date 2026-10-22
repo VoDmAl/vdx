@@ -199,6 +199,17 @@ export function checkNpmAuth(registry: string | null, npm: NpmRunner): Preflight
         fix,
       };
     }
+    // A 5xx is the registry's trouble, not the login: 0.35.0 met E503 during an npm
+    // incident on 2026-10-22, and the line read as a failed login.
+    const outage = /\bE(5\d\d)\b/.exec(stderr);
+    if (outage) {
+      const npmjs = !registry || registry.includes('registry.npmjs.org');
+      return {
+        name: 'npm-auth',
+        ok: false,
+        message: `${where} is not answering (E${outage[1]}) — trouble on its side, not the login${npmjs ? '; status: https://status.npmjs.org' : ''}. Run vdx publish again once it answers`,
+      };
+    }
     return {
       name: 'npm-auth',
       ok: false,

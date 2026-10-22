@@ -2,7 +2,7 @@
 title: "Почтовая сессия проекта: `vdx ai --intercom`"
 slug: intercom-session-mode
 description: "Поднимает сессию проекта под почту по письму и закрывает её, когда ящик пуст"
-status: in-progress
+status: dormant
 session-type: prd-work
 created: 2026-10-22
 last-updated: 2026-10-22
@@ -52,6 +52,10 @@ last-updated: 2026-10-22
 - Обычный `vdx ai` владельца почтовую сессию и её разговоры не берёт.
 
 ## Текущая модель
+
+**Спит с 2026-10-22: ждёт выпуска 0.36 и ответов.** Будит выход 0.36 в npm
+(ответ echelon, пометка почтового разговора — DL #7) или ответ ai-dev-plugins
+либо nas-info.
 
 **Состояние на 2026-10-22: код, тесты и документация готовы, не выпущено (CLI 0.36, плагин 0.10.0).**
 Решения — DL #1–#7. 509 unit-тестов, `check` чистый; мутации «второй рядом» и «продолжить почтовый
@@ -242,8 +246,13 @@ intercom он не зарегистрировался. Строку почтов
 **Описание:** `/System/Volumes/Data` — 204–205 ГБ из 233, свободно от 583 МБ до
 2,3 ГБ; своп 10014M из 11264M, том VM — 13 ГБ. Машина — nas-info: бриф
 `nas-info/lft-disk-full-swap` (2026-10-22), не будили — там сидел владелец.
+Ответ nas-info (`lft-disk-full-swap-outcome`, 2026-10-22): кэши и локальный снимок
+Time Machine убраны — свободно было 6,9 ГиБ, к 14:40 EDT снова 5,8 (порог Syncthing
+— 2,3), своп 8,8 из 10 ГБ в том же контейнере APFS; каждая живая сессия со своими
+MCP добавляет к свопу, а через него — к диску. Что ещё убрать — nas-info с
+владельцем ⏰ 2026-10-23. В 16:30 EDT — 6,2 ГиБ (`df`).
 
-**Status:** open
+**Status:** open — место есть, но тает: почтовая сессия на lft живёт минуты (DL #2)
 
 ### #2. Письмо, пришедшее в закрывающуюся почтовую сессию
 
@@ -281,13 +290,17 @@ intercom он не зарегистрировался. Строку почтов
 - [ ] Выпуск CLI (minor) — `vdx publish minor` у владельца; в нём же
       `hosting-extension` DL #20 и сет v1.6.1 (`DEFAULT_BASELINE`, 2026-10-22):
       тег v1.6.1 на GitHub с 2026-10-22 (`56b4b05`)
-- [ ] Бриф nas-info: заголовок cmux показывает `@vdx_waiting`
+- [x] Бриф nas-info: заголовок cmux показывает `@vdx_waiting` —
+      `nas-info/cmux-title-vdx-waiting` (2026-10-22)
+- [ ] Ответ nas-info на `cmux-title-vdx-waiting`: что поменялось, на каких станциях
 - [ ] Outcome to `echelon`: intercom reply intercom-session-mode --done "<what was done>" --link <url> --ball "<who holds the ball — what ⏰ date>"
-- [ ] Outcome to `ai-dev-plugins`: intercom reply intercom-session-mode-intercom-side
-      — ответы на три вопроса (имя, путь запуска, форма «ждёт»)
-- [ ] Sidetrack #1: nas-info ответил, на lft есть место
+- [x] Outcome to `ai-dev-plugins`: `intercom-session-mode-intercom-side-outcome`
+      (2026-10-22) — имя, запуск отправителем через `vdx ai --intercom --detach`
+      после `vdx --version` ≥ 0.36, `--close --waiting <n>`; у vdm 2.57.1 уже есть
+      побудка живой почтовой сессии сразу, запуска и числа — нет
+- [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23)
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
-- [ ] Sidetrack #3: вопрос «каким проектам» задан ai-dev-plugins в ответе
+- [ ] Sidetrack #3: ответ ai-dev-plugins — каким проектам (спрошено 2026-10-22)
 
 ## References
 

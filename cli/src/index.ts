@@ -182,8 +182,9 @@ mise.toml is overwritten only with --force.
   Ctrl-C there stops only the wait).
 Nothing in the package's directory changed since the tag of its version: the
 same package under a new number — at a terminal a question, Enter releases nothing.
+Without a terminal it releases nothing: npm would ask for an OTP nobody sees.
 --dry-run runs the pre-flight and prints the plan; --force goes on past a failed
-pre-flight; --no-push leaves the commit and the tag local.
+pre-flight, and without a terminal; --no-push leaves the commit and the tag local.
 `,
     bools: ['dry-run', 'force', 'no-push'],
     positionals: 1,
@@ -428,6 +429,18 @@ function cmdPublish(opts: ParsedArgs): void {
   }
   const bump = bumpArg as BumpKind;
   const projectRoot = process.cwd();
+
+  // npm asks for an OTP or a confirmation in the browser, after the bump: without a
+  // terminal nobody answers. Claude Code's Bash tool has none, and `!` there moves a
+  // command past 120 s to the background (publish-npm-outage-preflight, 2026-10-22).
+  if (!opts.flags['dry-run'] && !opts.flags.force && process.stdin.isTTY !== true) {
+    process.stderr.write(
+      `vdx publish: no terminal here — npm asks for a one-time password or a confirmation in the browser, ` +
+        `and nobody could answer. Run it in your own terminal: vdx publish ${bump}. ` +
+        `--dry-run shows the plan; --force releases without a terminal (an automation token)\n`,
+    );
+    process.exit(2);
+  }
 
   const manifest = loadManifest(projectRoot);
   const overrides = loadOverrides(projectRoot);
