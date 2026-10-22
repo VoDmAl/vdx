@@ -48,6 +48,7 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
+| [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | in-progress с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — код и тесты в рабочем дереве, не выпущено (0.36, minor); дальше: ключ `agent.intercom_args` в сете, живая проверка, выпуск, ответы echelon и ai-dev-plugins, бриф nas-info про `@vdx_waiting` |
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом с 2026-10-18 (DL #8): `main` защищён, общий L4; GitLab — в 0.33.0, gitolite отложен, Bitbucket (`git.finam.ru`) — в 0.34.0: вход из `git credential` (DL #16), правило и замер — DL #17, у трёх рабочих проектов — «нет» с причиной; на lft и m3 в хранилище git — PAT (DL #19); `gh` на lft — у nas-info (`gh-on-lft`); токен в `vdx doctor` (#7), `gh` из ssh на m3 (#8); gitolite, GitLab, причина у «нет», выпуск без изменений — побеги |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |

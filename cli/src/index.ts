@@ -35,7 +35,7 @@ import {
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 import { defaultGateDeps, GATE_PREFIX, planGate, pushThroughGate } from './gate.ts';
-import { askLine, runAi, runAiCheck, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
+import { askLine, runAi, runAiCheck, runAiClose, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
 import { isConversationId } from './conversations.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
@@ -90,11 +90,27 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 rules marked \`wakes: true\` (a channel flag) are left out. Back
                 to it: --focused --conversation <id>. A running agent keeps its
                 mode: plain vdx ai attaches to it as it is
+  --intercom    the project's mail session: a new conversation in a tmux
+                session of its own (<name>-mail), one per project and machine —
+                a running one is attached to, never a second. The agent, its
+                hooks and MCP servers get VDX_INTERCOM=1: letters and wakes for
+                the project go there, and your own session stays quiet; the
+                profile's \`wakes\` rules stay. It starts with agent.intercom_args
+                (its first prompt). Every other start leaves it alone, and its
+                conversations are not continued unless named with --conversation.
+                Started by the agent that has a letter and nobody to wake:
+                vdx ai --intercom --detach <project>
+  --close [--waiting <n>]
+                inside the mail session: it ends itself — its pane closes 2 s
+                later. --waiting <n>: n questions to you still unanswered; the
+                project's other tmux sessions here get @vdx_waiting = n (without
+                it the mark is cleared). Anywhere else: refused, nothing closed
   --conversation <id>
                 continue this Claude Code conversation: attach to the agent in
                 it, or start one next to the agents running here
   --restart     restart the running agent in its pane — applies a changed profile;
-                with --new, --focused or --conversation, it is replaced by that.
+                with --new, --focused or --conversation, it is replaced by that;
+                with --intercom, the mail session gets a new conversation.
                 Without it, an agent running without the profile's flags is
                 a question in a terminal: Enter attaches to it as is, r
                 restarts it, q leaves it
@@ -218,11 +234,12 @@ Exit 2 when something is missing.
     positionals: 1,
   },
   ai: {
-    usage: 'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused] [--restart] [--detach] [--dry-run]',
+    usage:
+      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused | --intercom] [--restart] [--detach] [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'focused', 'restart', 'resume', 'detach', 'dry-run', 'check'],
-    values: ['conversation'],
+    bools: ['new', 'focused', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close'],
+    values: ['conversation', 'waiting'],
     positionals: 1,
   },
   ...Object.fromEntries(
@@ -602,6 +619,27 @@ function cmdAi(opts: ParsedArgs): void {
     }
     process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps()));
   }
+  if (opts.flags.close === true || opts.flags.waiting !== undefined) {
+    // Run inside the mail session, about that session: nothing to start, no other machine.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'close' && f !== 'waiting');
+    if (opts.flags.close !== true || others.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        opts.flags.close !== true
+          ? 'vdx ai: --waiting goes with --close\n'
+          : `vdx ai: --close takes only the project path and --waiting (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
+      );
+      process.exit(2);
+    }
+    const raw = opts.flags.waiting;
+    const waiting = raw === undefined ? 0 : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
+    if (Number.isNaN(waiting)) {
+      process.stderr.write(
+        `vdx ai: --waiting takes the number of questions to the user (0, 1, 2…), not "${String(raw)}"\n`,
+      );
+      process.exit(2);
+    }
+    process.exit(runAiClose(opts.positionals[0] ?? '.', waiting, defaultDeps()));
+  }
   const conversation = typeof opts.flags.conversation === 'string' ? opts.flags.conversation : undefined;
   if (conversation !== undefined && !isConversationId(conversation)) {
     process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${conversation}"\n`);
@@ -619,6 +657,7 @@ function cmdAi(opts: ParsedArgs): void {
     detach: opts.flags.detach === true,
     dryRun: opts.flags['dry-run'] === true,
     focused: opts.flags.focused === true,
+    intercom: opts.flags.intercom === true,
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.

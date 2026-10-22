@@ -16,8 +16,10 @@ from a personal profile, not from a command anyone types:
   project's files (`config_value`, `has_file`, …) and the `args` it adds,
   plus `confirm` for a prompt the flag causes; `wakes: true` marks a rule
   that is there to wake the agent (a channel flag);
-- `resume_args` — continue the last conversation on every start except `--new`
-  and `--focused`.
+- `resume_args` — continue the last conversation on every start except `--new`,
+  `--focused` and `--intercom`;
+- `intercom_args` — what the project's mail session starts with (its first
+  prompt), right after the command.
   For Claude Code vdx picks which one: the session-start line opens with the
   machine this session runs on (``vdx ai: this machine is `lft` ``), and that
   line, kept in the transcript, tells later starts whose conversation it is.
@@ -49,6 +51,17 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   running agent; back to it: `vdx ai --focused --conversation <id>`. When the session-start line says **this session is focused**:
   work on what the user gave you; do not read the inbox or follow a wake
   pointer unless the user asks.
+- **A letter for a project, and nobody to wake there: its mail session.**
+  `vdx ai --intercom --detach <project root>` (vdx 0.36+) starts it on this
+  machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
+  (`<name>-mail`) that opens with the profile's `agent.intercom_args`. One per
+  project and machine: when one runs, the command says so and starts nothing.
+  This one you run yourself — it touches no session anyone sits at.
+- **When the session-start line says this is the project's mail session:**
+  nobody sits at it. When a check of the inbox shows nothing left to take, end
+  it yourself — say what was done first, then `vdx ai --close` (the pane goes
+  2 s later); with questions to the user still unanswered,
+  `vdx ai --close --waiting <n>`. Anywhere else `--close` is refused.
 
 ## Commands
 
@@ -60,6 +73,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
+| `vdx ai --intercom [--detach] [path]` | the project's mail session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
+| `vdx ai --close [--waiting <n>]` | inside the mail session: it ends itself; n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |
 | `vdx ai --help` | flags and exit codes |

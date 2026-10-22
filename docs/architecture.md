@@ -89,8 +89,9 @@ report.ts      markdown, ansi, json
   состояние — у GitHub через `hosting.ts`. Тем же путём `vdx publish` пушит
   коммит выпуска (кристалл `hosting-extension`, DL #8–#10).
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
-  с машиной и разговором; `conversations.ts` — разговоры Claude Code проекта и
-  машина, на которой каждый запускали; `session-versions.ts` — от чего отстала
+  с машиной и разговором, и почтовая сессия проекта (`--intercom`, `--close`);
+  `conversations.ts` — разговоры Claude Code проекта, машина, на которой каждый
+  запускали, и был ли запуск почтовым; `session-versions.ts` — от чего отстала
   живая сессия: Claude Code и плагины, обновлённые после её старта или
   `/reload-plugins` (`vdx ai --check`).
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,

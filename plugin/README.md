@@ -101,6 +101,12 @@ In a session started with `vdx ai --focused` (vdx 0.23+) the `vdx ai --check`
 line says so: nothing wakes it, and it reads its inbox only when the user
 asks. The `vdx-ai` skill tells the agent the same.
 
+In the project's mail session, started with `vdx ai --intercom` (vdx 0.36+),
+the line says that letters and wakes for the project come there and nobody
+sits at it, and how it ends itself: `vdx ai --close`, with `--waiting <n>`
+when questions to the user are still unanswered. The line, kept in the
+transcript, is how vdx later knows the conversation is the mail session's.
+
 ## Limitations
 
 - `record-success-path.sh` only logs to `~/.cache/vdx/last-success-path.log`.

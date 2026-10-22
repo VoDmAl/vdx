@@ -31,6 +31,8 @@ import { at, dict, str } from './narrow.ts';
 /** The opening of `vdx ai --check`'s text; the label is an ssh destination from the other machines. */
 const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
 const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
+/** The opening of the line `vdx ai --check` adds in a mail session (`vdx ai --intercom`). */
+export const MAIL_LINE_PREFIX = "· this is the project's mail session";
 /** A label read from a synced file goes to ssh: it must not be able to read as an option. */
 const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -58,6 +60,8 @@ export interface Conversation {
   typedHere: boolean;
   /** Claude's title for it, else the last prompt. */
   title: string | null;
+  /** Last started as the project's mail session (`vdx ai --intercom`): not the person's to continue. */
+  mail: boolean;
 }
 
 export function claudeConfigDir(env: NodeJS.ProcessEnv, home: string): string {
@@ -78,6 +82,7 @@ export function readConversation(file: string, updated: Date): Conversation | nu
     return null;
   }
   let machine: string | null = null;
+  let mail = false;
   let aiTitle: string | null = null;
   let lastPrompt: string | null = null;
   let turns = false;
@@ -102,13 +107,17 @@ export function readConversation(file: string, updated: Date): Conversation | nu
       const content = at(entry, 'attachment', 'content');
       for (const part of Array.isArray(content) ? (content as unknown[]) : [content]) {
         const label = typeof part === 'string' ? part.match(MACHINE_LINE_RE)?.[1] : undefined;
-        if (label && LABEL_RE.test(label)) machine = label;
+        if (label && LABEL_RE.test(label)) {
+          machine = label;
+          // The same text says whether that start was a mail session's.
+          mail = (part as string).includes(MAIL_LINE_PREFIX);
+        }
       }
     }
   }
   if (!turns) return null;
   const id = path.basename(file, '.jsonl');
-  return { id, updated, machine, typedHere: false, title: aiTitle ?? lastPrompt };
+  return { id, updated, machine, typedHere: false, title: aiTitle ?? lastPrompt, mail };
 }
 
 /** Which of `ids` had a prompt typed in them on this machine. */

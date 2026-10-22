@@ -22,6 +22,7 @@ import {
   liveConversationId,
   liveSessionsHere,
   liveStartedAt,
+  MAIL_LINE_PREFIX,
   machineLine,
   type MachineReport,
   machineOf,
@@ -69,6 +70,8 @@ export interface AgentProfile {
   command: string;
   args?: string[];
   resume_args?: string[];
+  /** What a mail session (`vdx ai --intercom`) starts with, right after the command: its first prompt. */
+  intercom_args?: string[];
   when?: WhenRule[];
 }
 
@@ -131,6 +134,16 @@ const SEAT_ENV_VAR = 'VDX_AI_FROM';
  * its hooks and MCP servers: nothing wakes this session or reads its inbox for it.
  */
 const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
+/**
+ * `1` in the environment of the project's mail session (`vdx ai --intercom`): the
+ * session letters and wakes go to, so that the person's own session stays quiet.
+ * Nobody sits at it; it ends itself with `vdx ai --close`.
+ */
+const INTERCOM_ENV_VAR = 'VDX_INTERCOM';
+/** The tmux session option `vdx ai --close --waiting <n>` sets: questions to the person still unanswered. */
+const WAITING_OPTION = '@vdx_waiting';
+/** A mail session's pane closes this long after `--close`, so the call returns and the turn ends. */
+const CLOSE_DELAY_S = 2;
 const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
 /** Tried in order when no profile names an agent. Started plain, with no flags. */
 const FALLBACK_AGENTS = ['claude', 'codex'] as const;
@@ -164,7 +177,7 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (typeof agent.command !== 'string' || agent.command.trim() === '') {
       fail('agent.command', 'must be a non-empty string');
     }
-    for (const key of ['args', 'resume_args'] as const) {
+    for (const key of ['args', 'resume_args', 'intercom_args'] as const) {
       if (agent[key] !== undefined && !isStringList(agent[key])) {
         fail(`agent.${key}`, 'must be a list of strings');
       }
@@ -325,6 +338,10 @@ export interface LaunchPlan {
   focused: boolean;
   /** Matched rules a focused session leaves out (`wakes: true`). */
   skipped: string[];
+  /** `vdx ai --intercom`: the project's mail session — VDX_INTERCOM=1, a session `<name>-mail`. */
+  intercom: boolean;
+  /** agent.intercom_args: what a mail session starts with; not required of a running agent. */
+  intercomArgs: string[];
   confirm: ConfirmRule[];
   multiplexer: Multiplexer;
   sessionName: string;
@@ -342,9 +359,11 @@ export function planLaunch(input: {
   host: string;
   seat?: string;
   focused?: boolean;
+  intercom?: boolean;
 }): LaunchPlan {
   const { environment, agent, projectRoot } = input;
   const focused = input.focused === true;
+  const intercom = input.intercom === true && !focused;
   const ctx: Ctx = { projectRoot, stack: autoDetectStack(projectRoot), cache: new Map() };
   const args = [...(agent.args ?? [])];
   const matched: string[] = [];
@@ -373,12 +392,15 @@ export function planLaunch(input: {
     matched,
     focused,
     skipped,
+    intercom,
+    intercomArgs: intercom ? [...(agent.intercom_args ?? [])] : [],
     confirm,
     multiplexer: environment.session?.multiplexer ?? 'none',
-    sessionName: renderSessionName(environment.session?.name ?? DEFAULT_SESSION_NAME, {
-      project: input.project,
-      host: input.host,
-    }),
+    sessionName:
+      renderSessionName(environment.session?.name ?? DEFAULT_SESSION_NAME, {
+        project: input.project,
+        host: input.host,
+      }) + (intercom ? '-mail' : ''),
     machines: (environment.session?.machines ?? []).filter((m) => m.toLowerCase() !== input.host.toLowerCase()),
   };
 }
@@ -395,12 +417,13 @@ export function commandLine(command: string, args: string[]): string {
 /**
  * The pane runs the agent inside the user's login shell, so the agent sees what
  * `.zshrc` sets up exactly as when it is typed by hand; the tmux server's own
- * environment does not have it. When the agent exits, the pane keeps a shell.
+ * environment does not have it. When the agent exits, the pane keeps a shell —
+ * unless `keepShell` is false (a mail session: its tab goes when it is done).
  */
-export function tmuxShellCommand(line: string, shell: string | null): string {
+export function tmuxShellCommand(line: string, shell: string | null, keepShell = true): string {
   if (!shell) return line;
   const sh = shellQuote(shell);
-  return `exec ${sh} -lic ${shellQuote(`${line}; exec ${sh} -l`)}`;
+  return `exec ${sh} -lic ${shellQuote(keepShell ? `${line}; exec ${sh} -l` : line)}`;
 }
 
 export interface PaneInfo {
@@ -723,6 +746,8 @@ export interface AiOptions {
   dryRun: boolean;
   /** `--focused`: a session nothing wakes — VDX_FOCUSED=1, the profile's `wakes` rules left out. */
   focused?: boolean;
+  /** `--intercom`: the project's mail session — VDX_INTERCOM=1, one per project and machine. */
+  intercom?: boolean;
 }
 
 export interface AiDeps {
@@ -738,6 +763,8 @@ export interface AiDeps {
   processes: () => ProcInfo[];
   /** Was this agent process started focused; default: its environment (`processFocused`). */
   agentFocused?: (pid: number) => boolean;
+  /** Is this agent process a mail session; default: its environment (`processMode`). */
+  agentMail?: (pid: number) => boolean;
   /** Default `process.platform`: the folder check is for macOS. */
   platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
@@ -844,6 +871,8 @@ function renderPlan(
   focusedOf: (pid: number) => boolean,
   /** The session a start would make: next to running agents, one of its own. */
   session: string,
+  /** The project's agents this start leaves alone: the mail session for the others, the others for it. */
+  aside: AgentPane[] = [],
 ): string {
   const lines = [
     `vdx ai — ${plan.projectRoot}`,
@@ -855,6 +884,12 @@ function renderPlan(
   ];
   if (plan.focused)
     lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
+  if (plan.intercom)
+    lines.push(
+      `  mail:     the project's mail session, a new conversation; first: ${
+        plan.intercomArgs.length ? plan.intercomArgs.join(' ') : '— (no agent.intercom_args: it waits for a wake)'
+      }`,
+    );
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
     multiplexer === 'tmux'
@@ -870,6 +905,11 @@ function renderPlan(
         `  running:  ${r.pane.session} ${r.pane.paneId} — ${
           missing.length ? `missing ${missing.join(' ')}` : 'matches the profile'
         }${focused ? ', focused' : plan.focused ? ', not focused' : ''}`,
+      );
+    }
+    for (const a of aside) {
+      lines.push(
+        `  aside:    ${a.pane.session} ${a.pane.paneId} — ${plan.intercom ? 'not the mail session' : 'the mail session'}, left alone`,
       );
     }
   }
@@ -974,7 +1014,7 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
   if (result !== 'not-running' || plan.resumeArgs.length === 0) return result === 'ok';
   const line = agentLine(plan, plan.args);
   deps.log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${line}`);
-  deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell));
+  deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
   return settle(plan, paneId, deps) === 'ok';
 }
 
@@ -1019,6 +1059,7 @@ export function remoteAiArgs(input: {
   const flags = [
     opts.fresh && '--new',
     opts.focused && '--focused',
+    opts.intercom && '--intercom',
     opts.restart && '--restart',
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
@@ -1179,10 +1220,11 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
   if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const host = plan.host;
   const same = sameMachine;
+  // A mail session's conversations are its own: a start of the person's never continues one.
   const all =
     plan.resumeArgs.length === 0
       ? []
-      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot }).filter((c) => !c.mail);
   const root = shellQuote(plan.projectRoot);
   // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
   const atSeat = same(plan.seat, host);
@@ -1374,7 +1416,7 @@ interface Prepared {
 }
 
 /** The project, the profile and the launch plan for `pathArg`; an exit code when there is none. */
-function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | number {
+function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = false): Prepared | number {
   const { log } = deps;
 
   const projectRoot = resolveProjectRoot(pathArg);
@@ -1423,6 +1465,7 @@ function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | num
       host: hostLabel(deps.env),
       seat: seatLabel(deps.env),
       focused: asFocused,
+      intercom,
     });
   let plan: LaunchPlan;
   try {
@@ -1434,20 +1477,35 @@ function prepare(pathArg: string, deps: AiDeps, focused = false): Prepared | num
   return { projectRoot, environment, profilePath, profileDir, plan, replan };
 }
 
-/** Was the process started focused — VDX_FOCUSED=1 in its environment (`ps -E` on macOS, /proc on Linux)? */
-export function processFocused(pid: number): boolean {
-  const mark = `${FOCUSED_ENV_VAR}=1`;
+/** How an agent process was started: `vdx ai --focused`, `vdx ai --intercom`, or neither. */
+export type AgentMode = 'focused' | 'mail' | 'plain';
+
+/**
+ * The mode from the process's environment (`ps -E` on macOS, /proc on Linux). Both marks —
+ * focused: deaf wins, as intercom reads it.
+ */
+export function processMode(pid: number): AgentMode {
+  let words: string[];
   try {
     const environ = `/proc/${pid}/environ`;
-    if (fs.existsSync(environ)) return fs.readFileSync(environ, 'utf8').split('\0').includes(mark);
-    const out = execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return out.split(/\s+/).includes(mark);
+    if (fs.existsSync(environ)) words = fs.readFileSync(environ, 'utf8').split('\0');
+    else {
+      const out = execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      words = out.split(/\s+/);
+    }
   } catch {
-    return false;
+    return 'plain';
   }
+  if (words.includes(`${FOCUSED_ENV_VAR}=1`)) return 'focused';
+  return words.includes(`${INTERCOM_ENV_VAR}=1`) ? 'mail' : 'plain';
+}
+
+/** Was the process started focused — VDX_FOCUSED=1 in its environment? */
+export function processFocused(pid: number): boolean {
+  return processMode(pid) === 'focused';
 }
 
 /** macOS guards these folders on their own; a tmux server can hold a denial for every session under it. */
@@ -1504,9 +1562,23 @@ export function foldersWarning(denied: string[], viaTmux: boolean, fix: string |
   ];
 }
 
-/** The agent's command line; a focused one carries VDX_FOCUSED=1 in front, for the shell in its tmux pane. */
+/**
+ * The agent's argv after the command. A mail session's intercom_args go first: its first
+ * prompt after `--dangerously-load-development-channels <servers...>` would be read as a server.
+ */
+function launchArgs(plan: LaunchPlan, args: string[]): string[] {
+  return [...plan.intercomArgs, ...args];
+}
+
+/** The mark of the agent's mode in its environment, if any: `VDX_FOCUSED` or `VDX_INTERCOM`. */
+function modeEnvVar(plan: LaunchPlan): string | null {
+  return plan.focused ? FOCUSED_ENV_VAR : plan.intercom ? INTERCOM_ENV_VAR : null;
+}
+
+/** The agent's command line; its mode's mark goes in front, for the shell in its tmux pane. */
 function agentLine(plan: LaunchPlan, args: string[]): string {
-  return `${plan.focused ? `${FOCUSED_ENV_VAR}=1 ` : ''}${commandLine(plan.command, args)}`;
+  const mark = modeEnvVar(plan);
+  return `${mark ? `${mark}=1 ` : ''}${commandLine(plan.command, launchArgs(plan, args))}`;
 }
 
 /** The nearest ancestor of `pid` that is the agent: the session a hook or a shell tool runs in. */
@@ -1527,12 +1599,14 @@ export function findOwnAgent(procs: ProcInfo[], pid: number, command: string): P
  */
 export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = process.pid): number {
   if (!resolveEnvironmentPath(deps.env, deps.home)) return EXIT_OK;
-  // The hook runs in the agent's environment: a focused session's carries VDX_FOCUSED=1.
+  // The hook runs in the agent's environment: a focused session's carries VDX_FOCUSED=1,
+  // a mail session's VDX_INTERCOM=1.
   const focused = deps.env[FOCUSED_ENV_VAR] === '1';
-  const prepared = prepare(pathArg, deps, focused);
+  const intercom = !focused && deps.env[INTERCOM_ENV_VAR] === '1';
+  const prepared = prepare(pathArg, deps, focused, intercom);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, profilePath, plan } = prepared;
-  const vdxAi = `vdx ai${focused ? ' --focused' : ''}`;
+  const vdxAi = `vdx ai${focused ? ' --focused' : intercom ? ' --intercom' : ''}`;
 
   const lines = [
     `${machineLine(plan.host)}; the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
@@ -1547,6 +1621,17 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
         `and it does not read its inbox unless the user asks` +
         (plan.skipped.length ? `; the profile's ${plan.skipped.join(', ')} is left out` : '') +
         '.',
+    );
+  }
+  if (intercom) {
+    // The conversation is known by this line as a mail session's (conversations.ts): keep its opening.
+    lines.push(
+      `${MAIL_LINE_PREFIX} (\`vdx ai --intercom\`): letters and wakes for the project come here, so the user's ` +
+        `own session stays quiet, and nobody sits at this one. When nothing is left for it — right after a check ` +
+        `of its inbox shows nothing to take — it ends itself: \`vdx ai --close\` (the pane closes ${CLOSE_DELAY_S} s ` +
+        `later, so say what was done first). With questions to the user still unanswered: ` +
+        `\`vdx ai --close --waiting <n>\` — the project's other tmux sessions here show the number; a plain ` +
+        `\`--close\` clears it.`,
     );
   }
   const own = findOwnAgent(deps.processes(), selfPid, plan.command);
@@ -1587,13 +1672,72 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
     `Hand the user the fix — ${reload}` +
       (deps.env['TMUX']
         ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again${again}` +
-          (plan.resumeArgs.length ? `, resuming the conversation (${plan.resumeArgs.join(' ')})` : '') +
+          // A focused session and the mail session restart into a new conversation.
+          (focused || intercom
+            ? ', in a new conversation'
+            : plan.resumeArgs.length
+              ? `, resuming the conversation (${plan.resumeArgs.join(' ')})`
+              : '') +
           `. Do not run it yourself: it ends this session.`
         : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`${vdxAi} ${root}\`.`),
   );
   lines.push(problems.join(' '));
   deps.out(lines.join('\n') + '\n');
   return EXIT_DRIFT;
+}
+
+/**
+ * `vdx ai --close [--waiting <n>]`: the mail session ends itself — run inside it, by its
+ * agent. Only the pane whose agent is this process's own ancestor and carries VDX_INTERCOM=1
+ * is closed, a few seconds later: the command never ends the person's session. The project's
+ * other tmux sessions here get `@vdx_waiting` = n, the questions to the person still
+ * unanswered — the mail session's tab is about to go; without `--waiting`, none, and the
+ * mark is cleared: the last mail session's word holds.
+ */
+export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfPid: number = process.pid): number {
+  const { log, tmux } = deps;
+  const prepared = prepare(pathArg, deps, false, true);
+  if (typeof prepared === 'number') return prepared;
+  const { projectRoot, plan } = prepared;
+  const procs = deps.processes();
+  const own = findOwnAgent(procs, selfPid, plan.command);
+  const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
+  if (!own || !mailOf(own.pid)) {
+    log(
+      `vdx ai --close: this is not a mail session (\`vdx ai --intercom\`)` +
+        `${own ? '' : ` — no ${plan.command} among the ancestors of this process`}; nothing closed`,
+    );
+    return EXIT_USAGE;
+  }
+  const panes = tmux.panes();
+  const pane = panes.find((p) => processTree(procs, p.panePid).some((x) => x.pid === own.pid));
+  if (!pane) {
+    log('vdx ai --close: this mail session runs outside tmux — nothing to close here; it ends when its agent exits');
+    return EXIT_USAGE;
+  }
+  const others = [
+    ...new Set(findAgentPanes(panes, procs, projectRoot, plan.command).map((a) => a.pane.session)),
+  ].filter((s) => s !== pane.session);
+  for (const s of others) {
+    // `=name:` — a session option needs the session as a target, `=name` alone is not found.
+    tmux.tryRun(
+      waiting > 0
+        ? ['set-option', '-t', `=${s}:`, WAITING_OPTION, String(waiting)]
+        : ['set-option', '-u', '-t', `=${s}:`, WAITING_OPTION],
+    );
+  }
+  if (waiting > 0)
+    log(
+      others.length
+        ? `✓ ${waiting} waiting for the user — shown on ${others.join(', ')}`
+        : `note: ${waiting} waiting for the user, and no other session of this project here to show it`,
+    );
+  if (tmux.tryRun(['run-shell', '-b', '-d', String(CLOSE_DELAY_S), '-C', `kill-pane -t ${pane.paneId}`]) === null) {
+    log(`✗ ${pane.session} ${pane.paneId}: tmux did not take the close — the mail session keeps running`);
+    return EXIT_LAUNCH_FAILED;
+  }
+  log(`✓ ${pane.session} ${pane.paneId}: the mail session closes in ${CLOSE_DELAY_S} s`);
+  return EXIT_OK;
 }
 
 /** `this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0`. */
@@ -1607,14 +1751,23 @@ function describeLag(lag: Lag): string {
 export function runAi(opts: AiOptions, deps: AiDeps): number {
   const { log, tmux } = deps;
 
-  const prepared = prepare(opts.path, deps, opts.focused === true);
+  if (opts.intercom && opts.focused) {
+    log('vdx ai: --intercom and --focused are different sessions — the mail session, or one nothing wakes; pick one');
+    return EXIT_USAGE;
+  }
+  if (opts.intercom && opts.conversation) {
+    log('vdx ai: --intercom starts the mail session in a new conversation — it takes no --conversation');
+    return EXIT_USAGE;
+  }
+  const prepared = prepare(opts.path, deps, opts.focused === true, opts.intercom === true);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
   // The agent started here runs on this machine: it does not inherit where the person sat,
-  // and it is focused by this start's flag, not by the shell vdx runs in.
+  // and its mode is this start's flag, not the shell vdx runs in.
   delete deps.env[SEAT_ENV_VAR];
   delete deps.env[FOCUSED_ENV_VAR];
+  delete deps.env[INTERCOM_ENV_VAR];
   // Under `vdx ai@<host>` the person is not here: this machine goes by its name.
   const atSeat = sameMachine(plan.seat, plan.host);
   const here = atSeat ? `here, on ${plan.host}` : `on ${plan.host}`;
@@ -1623,8 +1776,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     log(`vdx ai: --conversation names a Claude Code conversation; the agent here is ${plan.command}`);
     return EXIT_USAGE;
   }
-  // A start continues the last conversation unless asked for a new one; a focused session is a new one.
-  const wantsNew = (opts.fresh || opts.focused === true) && !opts.conversation;
+  // A start continues the last conversation unless asked for a new one; a focused session and
+  // the mail session are new ones.
+  const wantsNew = (opts.fresh || opts.focused === true || plan.intercom) && !opts.conversation;
   if (wantsNew) plan = { ...plan, resumeArgs: [] };
 
   let multiplexer = plan.multiplexer;
@@ -1633,8 +1787,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     multiplexer = 'none';
   }
 
-  const running =
+  const agentsHere =
     multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command) : [];
+  // The mail session and the person's sessions do not see each other: --intercom is about the
+  // one mail session, every other start leaves it alone — nobody sits at it, and it ends itself.
+  const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
+  const running = agentsHere.filter((a) => mailOf(a.proc.pid) === plan.intercom);
+  const aside = agentsHere.filter((a) => !running.includes(a));
   const focusedOf = deps.agentFocused ?? processFocused;
   const conversationOf = (a: AgentPane) => liveConversationId(deps.env, deps.home, a.proc.pid);
   // Which running agent the start is about. A new conversation, or one no agent here is in, starts
@@ -1642,8 +1801,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   // one asked for: no second agent in it blindly.
   const inConversation = opts.conversation ? running.find((a) => conversationOf(a) === opts.conversation) : undefined;
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
+  // One mail session per project and machine: a running one is the one, never a second next to it.
   const alongside =
-    running.length > 0 && !opts.restart && !inConversation && !unreadable && (wantsNew || !!opts.conversation);
+    !plan.intercom &&
+    running.length > 0 &&
+    !opts.restart &&
+    !inConversation &&
+    !unreadable &&
+    (wantsNew || !!opts.conversation);
   let current = inConversation ?? unreadable;
   if (!current && !alongside && running.length > 0) {
     const picked = pickAgent(running, focusedOf, deps, !opts.dryRun);
@@ -1663,7 +1828,9 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   // What a start continues. A restart keeps the conversation the agent is in.
   let choice: ConversationChoice | null = null;
   if (!current || opts.restart) {
-    if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
+    // The mail session runs next to the person's agents on any machine by design: nothing to ask.
+    if (plan.intercom) choice = { args: [], lines: [] };
+    else if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
     // A restart into a new conversation replaces the agent here, and a new one next to an agent here
     // is what was asked for: the other machines are not asked.
     else if ((current || alongside) && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
@@ -1687,7 +1854,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     : [];
   if (opts.dryRun) {
     deps.out(
-      renderPlan(plan, multiplexer, running, focusedOf, freeSessionName(plan.sessionName, alongside ? running : [])),
+      renderPlan(
+        plan,
+        multiplexer,
+        running,
+        focusedOf,
+        freeSessionName(plan.sessionName, alongside ? running : []),
+        aside,
+      ),
     );
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     for (const l of folders) deps.out(`  ${l}\n`);
@@ -1738,9 +1912,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       return EXIT_USAGE;
     }
     for (const c of plan.confirm) log(`note: the agent will ask "${c.screen}" — answer it with ${c.keys.join(' ')}`);
-    const env = plan.focused ? { ...process.env, [FOCUSED_ENV_VAR]: '1' } : undefined;
+    const mark = modeEnvVar(plan);
+    const env = mark ? { ...process.env, [mark]: '1' } : undefined;
     const startedAt = Date.now();
-    let res = spawnSync(plan.command, [...plan.args, ...plan.resumeArgs], { cwd: projectRoot, stdio: 'inherit', env });
+    let res = spawnSync(plan.command, launchArgs(plan, [...plan.args, ...plan.resumeArgs]), {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      env,
+    });
     if (at(res.error, 'code') === 'ENOENT') {
       log(`vdx ai: \`${plan.command}\` not found on PATH`);
       return 127;
@@ -1748,7 +1927,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const failedAtOnce = res.status !== null && res.status !== 0 && Date.now() - startedAt < NOTHING_TO_RESUME_MS;
     if (plan.resumeArgs.length > 0 && failedAtOnce) {
       log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${agentLine(plan, plan.args)}`);
-      res = spawnSync(plan.command, plan.args, { cwd: projectRoot, stdio: 'inherit', env });
+      res = spawnSync(plan.command, launchArgs(plan, plan.args), { cwd: projectRoot, stdio: 'inherit', env });
     }
     return res.status ?? 1;
   }
@@ -1771,20 +1950,20 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const unfocused = plan.focused && !runningFocused;
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
     if (!unfocused && missing.length === 0) {
-      log(
-        `✓ ${current.pane.session}: already running with the profile${runningFocused ? ', focused' : ''} — ${current.proc.args}`,
-      );
+      const mode = runningFocused ? ', focused' : plan.intercom ? ', the mail session' : '';
+      log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
       return finish(true, current.pane.session, current.pane.paneId, opts, deps);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
     const drift = `${current.pane.session}: ${plan.command} is running${unfocused ? ', not focused' : ` without ${missing.join(' ')}`}`;
+    const modeFlag = plan.focused ? ' --focused' : plan.intercom ? ' --intercom' : '';
     const fix =
-      `vdx ai --restart${plan.focused ? ' --focused' : ''}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
+      `vdx ai --restart${modeFlag}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
       (opts.conversation ? ` --conversation ${opts.conversation}` : '');
     const effect = plan.resumeArgs.length
       ? 'stops the running agent, then resumes its conversation'
-      : opts.fresh
+      : opts.fresh || plan.intercom
         ? 'stops the running agent and starts a new conversation'
         : 'stops the running agent; the conversation is not resumed — the profile has no resume_args';
     if (!deps.interactive) {
@@ -1815,7 +1994,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (current) {
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
     log(`↻ ${current.pane.session} ${current.pane.paneId}: restarting — ${line}`);
-    tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell));
+    tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
     return finish(
       settleResumed(plan, current.pane.paneId, deps),
       current.pane.session,
@@ -1826,8 +2005,10 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   }
 
   if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);
+  if (plan.intercom && plan.intercomArgs.length === 0)
+    log('note: the profile has no agent.intercom_args — the mail session starts idle and waits for a wake');
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
-  const cmd = tmuxShellCommand(line, deps.shell);
+  const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
   const session = freeSessionName(plan.sessionName, running);
   const reuse = tmux.hasSession(session);
   const paneId = reuse ? tmux.newWindow(session, projectRoot, cmd) : tmux.newSession(session, projectRoot, cmd);
