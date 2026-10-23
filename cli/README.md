@@ -50,8 +50,11 @@ vdx push [project-path] [--dry-run]   # default: cwd
 
 # Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project; the GitHub token vdx asks with)
 vdx doctor [project-path] [--format=ansi|markdown|json]   # default: cwd
-vdx doctor --check [project-path]   # one line per hook declared but not running here — the plugin's SessionStart hook tells the agent
-vdx doctor --fix                    # write the profile's personal hooks (git.hooks) into ~/.gitconfig
+vdx doctor --check [project-path]   # one line per hook declared but not running here, and one when the memory is
+                                    # not inside — the plugin's SessionStart hook tells the agent
+vdx doctor --fix [project-path]     # write the profile's personal hooks (git.hooks) into ~/.gitconfig, and put
+                                    # the project's Claude Code memory inside it: .claude/memory/ (after a
+                                    # folder move, its path and conversations follow)
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused | --intercom] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session

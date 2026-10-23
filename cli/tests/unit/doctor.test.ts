@@ -106,7 +106,7 @@ describe('runDoctor with explicit ctx', () => {
   });
 
   it('machine-level checks are unaffected by projectRoot', () => {
-    const projectScoped = new Set(['git-hooks', 'git-author', 'github-token']);
+    const projectScoped = new Set(['git-hooks', 'git-author', 'github-token', 'claude-memory']);
     const machine = (ids: string[]) => ids.filter((id) => !projectScoped.has(id));
     const withRoot = runDoctor({ projectRoot: process.cwd() });
     const without = runDoctor({ projectRoot: null });

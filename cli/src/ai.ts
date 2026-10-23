@@ -29,6 +29,7 @@ import {
   parseMachineReport,
   runsInProject,
 } from './conversations.ts';
+import { describeMemory, fixProjectMemory, memoryNeedsFix, memoryState } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 
@@ -115,6 +116,8 @@ interface GitProfile {
   /** Directories whose repos are the neighbours an author is proposed from; default — the project's parent. */
   author_pool?: string[];
   hooks?: PersonalHook[];
+  /** Hosts whose repos are the owner's alone: Claude Code's memory goes under git there (claude-memory-in-project). */
+  personal_hosts?: string[];
 }
 
 export interface Environment {
@@ -251,6 +254,9 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (typeof gitDoc !== 'object' || gitDoc === null) fail('git', 'must be a mapping');
     if (gitDoc.author_pool !== undefined && !isStringList(gitDoc.author_pool)) {
       fail('git.author_pool', 'must be a list of directories');
+    }
+    if (gitDoc.personal_hosts !== undefined && !isStringList(gitDoc.personal_hosts)) {
+      fail('git.personal_hosts', 'must be a list of host names');
     }
     if (gitDoc.hooks !== undefined) {
       if (!Array.isArray(gitDoc.hooks)) fail('git.hooks', 'must be a list');
@@ -535,7 +541,8 @@ export function missingArgs(procArgs: string, required: string[]): string[] {
   return required.filter((a) => (/\s/.test(a) ? !procArgs.includes(a) : !tokens.has(a)));
 }
 
-function resolveProjectRoot(p: string): string | null {
+/** The git checkout `p` is in (its top), else the directory itself; null when `p` is no directory. */
+export function resolveProjectRoot(p: string): string | null {
   const abs = path.resolve(p);
   try {
     if (!fs.statSync(abs).isDirectory()) return null;
@@ -1137,6 +1144,61 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
       return;
     }
     deps.log(`  1–${top.length}, an address, or s`);
+  }
+}
+
+/**
+ * Claude Code's memory of the project lives inside it, `.claude/memory/`
+ * (claude-memory-in-project): a start says when it does not, and at a terminal asks
+ * to put it there — Enter does. With an agent of the project running it only says so:
+ * that session keeps the old place until it restarts. Without a terminal it names
+ * `vdx doctor --fix`, the same move.
+ */
+export function ensureMemory(
+  projectRoot: string,
+  command: string,
+  personalHosts: string[],
+  deps: AiDeps,
+  dryRun: boolean,
+  agentRunning: boolean,
+): void {
+  if (!isClaude(command)) return;
+  const ctx = { env: deps.env, home: deps.home };
+  const state = memoryState(projectRoot, ctx);
+  if (dryRun) {
+    deps.out(`  memory:   ${describeMemory(state, ctx)}\n`);
+    return;
+  }
+  if (!memoryNeedsFix(state)) return;
+  const fix = `vdx doctor --fix ${shellQuote(projectRoot)}`;
+  deps.log(`⚠ ${path.basename(projectRoot)}: Claude memory ${describeMemory(state, ctx)}`);
+  if (!deps.interactive || agentRunning) {
+    deps.log(`  ${agentRunning ? 'once the running agent of the project ends' : 'put it there'}: ${fix}`);
+    return;
+  }
+  const question =
+    state.kind === 'outside'
+      ? 'Move it into .claude/memory/ now?'
+      : state.kind === 'leftovers'
+        ? 'Set the old place aside?'
+        : state.kind === 'moved' && state.conversations
+          ? 'Point it here, and bring the conversations along?'
+          : 'Point it here?';
+  const answer = deps.ask(`  ${question} [Y/n] `);
+  if (answer === null || /^n(o)?$/i.test(answer.trim())) {
+    deps.log(`  skipped — later: ${fix}`);
+    return;
+  }
+  try {
+    const done = fixProjectMemory(projectRoot, state, ctx, {
+      ask: deps.ask,
+      log: deps.log,
+      today: new Date().toLocaleDateString('sv-SE'),
+      personalHosts,
+    });
+    for (const d of done) deps.log(`✓ ${d}`);
+  } catch (e) {
+    deps.log(`✗ ${errorMessage(e)} — ${fix}`);
   }
 }
 
@@ -1866,6 +1928,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
+    ensureMemory(projectRoot, plan.command, environment.git?.personal_hosts ?? [], deps, true, agentsHere.length > 0);
     return EXIT_OK;
   }
   for (const l of choice?.lines ?? []) log(l);
@@ -1901,6 +1964,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     plan = { ...plan, resumeArgs: resumeId(id) };
   }
   ensureAuthor(projectRoot, poolDirs, deps, false);
+  ensureMemory(projectRoot, plan.command, environment.git?.personal_hosts ?? [], deps, false, agentsHere.length > 0);
 
   if (multiplexer === 'none') {
     if (opts.restart) {

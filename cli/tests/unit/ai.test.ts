@@ -631,6 +631,12 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     remoteLive = [];
     remoteHome = '/Users/elsewhere';
     liveHere = [];
+    // The project's memory is inside it already: these tests are about the conversation.
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.writeFileSync(
+      path.join(root, '.claude', 'settings.local.json'),
+      JSON.stringify({ autoMemoryDirectory: `${fs.realpathSync(root)}/.claude/memory/` }),
+    );
     // A `claude` that records its args and exits: what `vdx ai` ran it with.
     fs.mkdirSync(path.join(home, 'bin'));
     fs.writeFileSync(path.join(home, 'bin', 'claude'), '#!/bin/sh\necho "$*" >> "$(dirname "$0")/../runs"\n', {

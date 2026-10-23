@@ -4,9 +4,24 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { effectiveAuthor, isGitRepo, rankAuthors, remoteParts, scanPool } from './author.ts';
-import { authorPoolDirs, loadEnvironment, resolveEnvironmentPath, shellQuote, type Environment } from './ai.ts';
+import {
+  authorPoolDirs,
+  loadEnvironment,
+  resolveEnvironmentPath,
+  resolveProjectRoot,
+  shellQuote,
+  type Environment,
+} from './ai.ts';
 import { checkRepoHooks } from './clone-checks.ts';
 import { githubToken, machineIo, type HostingIo } from './hosting.ts';
+import {
+  describeMemory,
+  fixProjectMemory,
+  memoryNeedsFix,
+  memoryState,
+  type MemoryCtx,
+  type MemoryState,
+} from './memory.ts';
 import { at, dict, errorMessage, str } from './narrow.ts';
 import {
   checkPersonalHooks,
@@ -24,6 +39,8 @@ export interface CheckResult {
   level?: number;
   message: string;
   remedy?: string;
+  /** For the agent's own session (`--check`): what the fix does not change for it. */
+  sessionNote?: string;
 }
 
 /**
@@ -473,6 +490,52 @@ export function checkGithubToken(
   };
 }
 
+/** The profile, or none: a broken one is `vdx ai`'s report, not a reason for doctor to stop. */
+function profile(): Environment {
+  const file = resolveEnvironmentPath();
+  try {
+    return file ? loadEnvironment(file) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Claude Code is the project's agent: the profile names it, or names no agent at all. */
+function claudeIsTheAgent(environment: Environment): boolean {
+  return path.basename(environment.agent?.command ?? 'claude') === 'claude';
+}
+
+function memoryCtx(): MemoryCtx {
+  return { env: process.env, home: os.homedir() };
+}
+
+/**
+ * Where Claude Code keeps the project's memory (claude-memory-in-project): inside the
+ * project, `.claude/memory/`, so a moved folder takes it along — and the path set there
+ * is the trace a move leaves.
+ */
+export function checkClaudeMemory(
+  ctx: DoctorCtx,
+  environment: Environment = profile(),
+  mctx: MemoryCtx = memoryCtx(),
+): CheckResult | null {
+  if (ctx.projectRoot === null || !claudeIsTheAgent(environment)) return null;
+  // Claude Code's slot is the folder the agent starts in — the checkout's top for vdx ai.
+  const root = resolveProjectRoot(ctx.projectRoot) ?? ctx.projectRoot;
+  const state = memoryState(root, mctx);
+  return {
+    id: 'claude-memory',
+    label: 'Claude memory',
+    status: memoryNeedsFix(state) ? 'warning' : 'ok',
+    message: describeMemory(state, mctx),
+    ...(memoryNeedsFix(state) ? { remedy: `vdx doctor --fix ${shellQuote(root)}` } : {}),
+    // A session read the place when it started: after a fix it keeps writing to the old one.
+    ...(state.kind === 'outside' || state.kind === 'moved' || state.kind === 'elsewhere'
+      ? { sessionNote: 'This session keeps the old place until it restarts (vdx ai --restart).' }
+      : {}),
+  };
+}
+
 const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   checkVdxVersion,
   checkVdx,
@@ -487,6 +550,7 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   (ctx) => checkPersonalHooks(ctx.projectRoot),
   checkGitAuthor,
   (ctx) => checkGithubToken(ctx),
+  (ctx) => checkClaudeMemory(ctx),
 ];
 
 export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {
@@ -510,13 +574,20 @@ export function runDoctor(ctx: DoctorCtx = resolveDoctorCtx()): DoctorReport {
 export function runDoctorCheck(
   ctx: DoctorCtx = resolveDoctorCtx(),
   deps: PersonalHookDeps = defaultPersonalHookDeps(),
+  environment: Environment = profile(),
+  mctx: MemoryCtx = memoryCtx(),
 ): string {
-  const rows = [checkRepoHooks(ctx.projectRoot), checkPersonalHooks(ctx.projectRoot, deps)].filter(
-    (c): c is CheckResult => c !== null && c.status !== 'ok',
-  );
+  const rows = [
+    checkRepoHooks(ctx.projectRoot),
+    checkPersonalHooks(ctx.projectRoot, deps),
+    checkClaudeMemory(ctx, environment, mctx),
+  ].filter((c): c is CheckResult => c !== null && c.status !== 'ok');
   return rows
     .map(
-      (c) => `vdx doctor: ${c.label} — ${c.message}.` + (c.remedy ? ` Fix, on the user's word: \`${c.remedy}\`.` : ''),
+      (c) =>
+        `vdx doctor: ${c.label} — ${c.message}.` +
+        (c.remedy ? ` Fix, on the user's word: \`${c.remedy}\`.` : '') +
+        (c.sessionNote ? ` ${c.sessionNote}` : ''),
     )
     .join('\n');
 }
@@ -528,6 +599,18 @@ export function runDoctorCheck(
  */
 export function runDoctorFix(deps: PersonalHookDeps = defaultPersonalHookDeps()): string[] {
   return fixPersonalHooks(deps);
+}
+
+/** `vdx doctor --fix` for the memory: the profile's personal hosts, this machine's Claude Code. */
+export function fixDoctorMemory(
+  projectRoot: string,
+  state: MemoryState,
+  io: { ask: (prompt: string) => string | null; log: (line: string) => void; today: string },
+): string[] {
+  return fixProjectMemory(projectRoot, state, memoryCtx(), {
+    ...io,
+    personalHosts: profile().git?.personal_hosts ?? [],
+  });
 }
 
 const PROJECT_MARKER_FILES = [

@@ -4,6 +4,20 @@
 
 ## 2026-10-22
 
+### Память Claude Code — внутри проекта: `vdx doctor --fix` и вопрос в `vdx ai`
+
+Claude Code держит память проекта и его разговоры по пути папки, и перенесённая
+папка их теряет. Теперь `vdx doctor` (и `--check` для сессии) говорит, где память,
+а `vdx doctor --fix` и Enter на вопросе `vdx ai` переносят её в `.claude/memory/`:
+ничего не перезаписывается и не удаляется, путь — `autoMemoryDirectory` в
+`.claude/settings.json` личного проекта (без `origin` или на хосте из нового ключа
+профиля `git.personal_hosts`), иначе в `.claude/settings.local.json`, с памятью вне
+git, пока владелец не скажет «да». После переноса папки путь следует за ней, а
+разговоры — в каталог нового пути. Сет v1.7.0 — `git.personal_hosts:
+[git.vorobyev.name]`. В CLI 0.37 (не выпущено)
+([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md);
+письмо nas-info `claude-memory-in-project`).
+
 ### `vdx publish` без терминала ничего не выпускает; 503 от npm — не вход
 
 Без терминала (Bash-инструмент Claude Code, `!` в нём) `vdx publish` отказывает

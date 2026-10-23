@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.6.1"
+  version: "1.7.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -71,6 +71,12 @@ git:
     - "~/AI Projects"
     - "~/PhpstormProjects"
     - "~/PhpstormProjects/git.vorobyev.name"
+  # Repos on these hosts are the owner's alone (vdx 0.37+): Claude Code's memory
+  # of such a project goes under git with it, and its path into
+  # .claude/settings.json. Anyone else's repo — work, someone else's, public —
+  # gets the path in .claude/settings.local.json and the memory out of git
+  # unless the owner says yes; a project without origin is personal anyway.
+  personal_hosts: [git.vorobyev.name]
   # Personal hooks: the owner's gates in every repository on the machine. They
   # live in git's user config (hook.<name>.*, Git 2.54), not in each repo, where
   # they fought the repo's own hook framework for one slot. `vdx doctor` checks

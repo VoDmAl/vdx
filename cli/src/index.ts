@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loadRubric } from './rubric.ts';
@@ -16,6 +17,8 @@ import {
   reportDoctorAnsi,
 } from './report.ts';
 import {
+  checkClaudeMemory,
+  fixDoctorMemory,
   runDoctor,
   runDoctorCheck,
   runDoctorFix,
@@ -23,6 +26,7 @@ import {
   looksLikeProject,
   readCliVersion,
 } from './doctor.ts';
+import { memoryState } from './memory.ts';
 import { planInit, writeInit, renderPlanSummary } from './init.ts';
 import {
   planPublish,
@@ -35,7 +39,17 @@ import {
 } from './publish.ts';
 import { resolveDefaultRubric } from './defaults.ts';
 import { defaultGateDeps, GATE_PREFIX, planGate, pushThroughGate } from './gate.ts';
-import { askLine, runAi, runAiCheck, runAiClose, runAiRemote, defaultDeps, hostLabel, REMOTE_HOST_RE } from './ai.ts';
+import {
+  askLine,
+  runAi,
+  runAiCheck,
+  runAiClose,
+  runAiRemote,
+  defaultDeps,
+  hostLabel,
+  REMOTE_HOST_RE,
+  resolveProjectRoot,
+} from './ai.ts';
 import { isConversationId } from './conversations.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
@@ -132,6 +146,11 @@ ones marked — Enter takes the newest; without a terminal it takes this
 machine's. A new conversation (--new, or none to continue) while an agent of
 the project runs on another machine starts only after a yes.
 
+Claude Code's memory of the project (Claude Code only): when it is not inside the
+project, .claude/memory/, or the folder was moved, a start in a terminal asks to
+put it there — Enter does, as vdx doctor --fix; with an agent of the project
+running, or no terminal, it only names that command.
+
 Exit codes: 0 the agent runs per the profile; 2 profile or usage error;
 3 the running agent lacks profile flags, or is not focused under --focused,
 and was left as is — no terminal, or q (rerun with --restart); 4 the start
@@ -221,14 +240,23 @@ Claude Code plugin) and, inside a project (default: cwd), its commit author and
 its git hooks: are the hooks the repository declares on in this clone, and do
 the personal hooks of your profile (git.hooks) run on this machine; with origin on
 GitHub, the token vdx asks GitHub with ($GH_TOKEN, $GITHUB_TOKEN or gh) and
-whether it works — without one GitHub answers 60 requests an hour. Reads only.
-Exit 2 when something is missing.
+whether it works — without one GitHub answers 60 requests an hour; and where
+Claude Code keeps the project's memory: inside it, .claude/memory/, a moved folder
+takes it along. Reads only, unless --fix. Exit 2 when something is missing.
 
   --check  for the agent's own session (the vdx plugin's SessionStart hook): one
-           line per hook that is declared but does not run here; nothing when in order
+           line per hook that is declared but does not run here, and one when the
+           memory is not inside; nothing when in order
   --fix    write the profile's personal hooks into ~/.gitconfig where they are
-           missing or differ; repository hooks are switched on by the project's
-           install step, which the report names
+           missing or differ (repository hooks are switched on by the project's
+           install step, which the report names); and put the memory inside:
+           notes from ~/.claude/projects/<path>/memory into .claude/memory/, none
+           overwritten, the old place renamed, autoMemoryDirectory written —
+           into .claude/settings.json in a personal project (no origin, or origin
+           on a host of git.personal_hosts), else into .claude/settings.local.json,
+           with the memory kept out of git (.git/info/exclude) unless you say
+           yes. After a folder is moved: the path follows it, and the project's
+           conversations move to the new path
 `,
     bools: ['json', 'check', 'fix'],
     values: ['format'],
@@ -597,6 +625,22 @@ function cmdDoctor(opts: ParsedArgs): void {
     } catch (e) {
       process.stderr.write(`vdx doctor --fix: ${errorMessage(e)}\n`);
       process.exit(2);
+    }
+    const root = ctx.projectRoot ? resolveProjectRoot(ctx.projectRoot) : null;
+    const memory = root ? checkClaudeMemory({ projectRoot: root }) : null;
+    if (root && memory?.remedy) {
+      try {
+        const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+        const done = fixDoctorMemory(root, memoryState(root, { env: process.env, home: os.homedir() }), {
+          ask: (prompt) => (interactive ? askLine(prompt) : null),
+          log: (line) => process.stderr.write(line + '\n'),
+          today: new Date().toLocaleDateString('sv-SE'),
+        });
+        process.stderr.write(done.map((d) => `✓ ${d}`).join('\n') + (done.length ? '\n' : ''));
+      } catch (e) {
+        process.stderr.write(`vdx doctor --fix: Claude memory — ${errorMessage(e)}\n`);
+        process.exit(2);
+      }
     }
   }
   const report = runDoctor(ctx);
