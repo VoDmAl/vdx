@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.7.0"
+  version: "1.8.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -71,12 +71,17 @@ git:
     - "~/AI Projects"
     - "~/PhpstormProjects"
     - "~/PhpstormProjects/git.vorobyev.name"
-  # Repos on these hosts are the owner's alone (vdx 0.37+): Claude Code's memory
-  # of such a project goes under git with it, and its path into
-  # .claude/settings.json. Anyone else's repo — work, someone else's, public —
-  # gets the path in .claude/settings.local.json and the memory out of git
-  # unless the owner says yes; a project without origin is personal anyway.
-  personal_hosts: [git.vorobyev.name]
+  # Repos on these hosts are the owner's alone, and gitolite mirrors some of them
+  # to GitHub (its post-update hook: `git push --mirror` to VoDmAl/<repo> or
+  # FriendsOfVoDmAl/<repo>). Claude Code's memory goes under git only where nobody
+  # but the owner reads every place a commit reaches (vdx 0.38+): the host here,
+  # and each mirror — absent, or private with nobody else. Anyone else's repo —
+  # work, someone else's, public, a public mirror — keeps the path in
+  # .claude/settings.local.json and the memory out of git; a project without
+  # origin is personal anyway.
+  personal_hosts:
+    - host: git.vorobyev.name
+      mirrors: ["github.com/VoDmAl/{repo}", "github.com/FriendsOfVoDmAl/{repo}"]
   # Personal hooks: the owner's gates in every repository on the machine. They
   # live in git's user config (hook.<name>.*, Git 2.54), not in each repo, where
   # they fought the repo's own hook framework for one slot. `vdx doctor` checks
@@ -101,3 +106,11 @@ git:
       event: pre-commit
       command: '"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"'
       when_exists: "~/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"
+    # vdx's guard of Claude Code's memory: a commit that stages .claude/memory/
+    # goes only where nobody but the owner reads every place it reaches (origin,
+    # the mirrors above; GitHub asked with gh's token, no answer — refused). The
+    # notes are not read. Other commits do not start vdx.
+    - name: vdx-memory
+      description: "vdx: Claude Code's memory goes into a commit only where nobody but you reads"
+      event: pre-commit
+      command: 'if git diff --cached --name-only -- .claude/memory | grep -q .; then vdx doctor --staged; fi'

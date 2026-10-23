@@ -14,7 +14,9 @@ GitHub без других участников, и каждое зеркало,
 `vdx doctor --staged` — для личного хука `pre-commit`; та же проверка решает, личный
 ли проект, при переносе памяти. Поводом стало зеркало gitolite: cc-vdm-plugins
 посчитан личным по хосту, а его зеркало `VoDmAl/ai-dev-plugins` публичное — память
-выведена из git до первого коммита. В CLI 0.38 (не выпущено)
+выведена из git до первого коммита. В CLI 0.38.0 (2026-10-23); сет v1.8.0 — зеркала
+gitolite в `git.personal_hosts` и личный хук `vdx-memory`, на lft и m3 он в
+`~/.gitconfig`.
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md), DL
 #9–#12).
 
@@ -24,7 +26,7 @@ GitHub без других участников, и каждое зеркало,
 `package.json`: у папок с заметками и с чужими репо (avatar, l10inc, space-team,
 steven-maslavets) своя память Claude Code, а скрипт миграции их пропустил. Домашний
 каталог, всё выше него и `~/.claude` — не проект: их `.claude/settings.json` —
-настройки пользователя, общие для всех проектов. В CLI 0.38 (не выпущено)
+настройки пользователя, общие для всех проектов. В CLI 0.38.0 (2026-10-23)
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md)).
 
 ### 0.37.1: вопрос «под git?» и при отчёте в файл; почтовые разговоры названы

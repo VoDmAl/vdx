@@ -419,8 +419,8 @@ project's .gitignore — out of git».
       строке — проект; домашний каталог и `~/.claude` — нет), эти 4 перенесены им.
       Сверка: у всех 34 путь — своя `.claude/memory/`, старых каталогов нет. mediko —
       `.claude/` в `.gitignore` проекта: память вне git по его правилу
-- [ ] Выпуск 0.38 (minor): сторож `--staged`, «личный» — кто читает; названная папка —
-      проект, дом и `~/.claude` — нет (было задумано патчем 0.37.2)
+- [x] Выпуск 0.38 (minor): сторож `--staged`, «личный» — кто читает; названная папка —
+      проект, дом и `~/.claude` — нет — 0.38.0 (`f1d338d`, 2026-10-23), на lft и m3
 - [ ] Владелец: перезапустить идущие сессии перенесённых проектов (на lft 2026-10-23 —
       echelon, ga-developer-portal, global-auth, global-auth-risk-model, kratos,
       limeflow, tx-auth-widget, cc-vdm-plugins, vdx): до перезапуска они пишут в
@@ -433,11 +433,12 @@ project's .gitignore — out of git».
       — «VoDmAl/ai-dev-plugins is public», vdx — public, kratos — не личный хост,
       global-auth-gap, telegram, echelon, space-hq — только владелец), строка хука на
       временном репо (2026-10-23)
-- [ ] Сет v1.8.0 — только после 0.38 на обеих станциях (0.37.1 не разбирает хост-объект
-      в `personal_hosts` и сломал бы `vdx ai`): `personal_hosts: [{host:
-      git.vorobyev.name, mirrors: [github.com/VoDmAl/{repo}, github.com/FriendsOfVoDmAl/{repo}]}]`,
-      хук `vdx-memory` в `git.hooks`; зеркало; `DEFAULT_BASELINE` — со следующим CLI
-- [ ] Хук `vdx-memory` в `~/.gitconfig` lft и m3 (`vdx doctor --fix`)
+- [x] Сет v1.8.0 (после 0.38 на обеих станциях): `personal_hosts` — git.vorobyev.name с
+      `mirrors: [github.com/VoDmAl/{repo}, github.com/FriendsOfVoDmAl/{repo}]`, хук
+      `vdx-memory` в `git.hooks`; зеркала в vdx, `DEFAULT_BASELINE` — `@v1.8.0` (в CLI со
+      следующим выпуском); тег и push сета — у владельца (2026-10-23)
+- [x] Хук `vdx-memory` в `~/.gitconfig` lft и m3 — `vdx doctor --fix` (2026-10-23);
+      `git hook run pre-commit` на временном репо с публичным `origin` — отказ, код 1
 - [ ] Коммит `.claude/memory/` и `.claude/settings.json` в личных репо — ждёт ответа о
       защите (DL #10); cc-vdm-plugins выведен из git (публичное зеркало)
 - [ ] Sidetrack #1: intercom знает о переносе папки
