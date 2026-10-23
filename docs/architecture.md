@@ -82,8 +82,10 @@ report.ts      markdown, ansi, json
   общие для `doctor` и пометки ⚑ в `audit` (`clone_check` оси).
   `personal-hooks.ts` — личные хуки владельца в `~/.gitconfig`
   (`hook.<имя>.*`, Git 2.54+). `author.ts` — автор коммитов в `.git/config`.
-  `memory.ts` — где Claude Code держит память проекта (`autoMemoryDirectory`) и
-  её перенос в `.claude/memory/` — для `doctor` и вопроса в `vdx ai`.
+  `memory.ts` — где Claude Code держит память проекта (`autoMemoryDirectory`),
+  её перенос в `.claude/memory/` — для `doctor` и вопроса в `vdx ai` — и кто читает
+  места, куда уходят коммиты (`memoryReaders`: `origin`, зеркала, GitHub через
+  `hosting.ts`) — для сторожа `vdx doctor --staged`.
 - `publish.ts` — выпуск одной командой: pre-flight, bump, `npm publish`, тег,
   push, ожидание реестра.
 - `gate.ts` — `vdx push`: ветка, которая требует проверок, получает коммит

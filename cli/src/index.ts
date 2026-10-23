@@ -19,6 +19,7 @@ import {
 import {
   checkClaudeMemory,
   fixDoctorMemory,
+  runDoctorStaged,
   runDoctor,
   runDoctorCheck,
   runDoctorFix,
@@ -234,9 +235,10 @@ or GitHub stopped answering; a plain git push exits with git's own code.
     positionals: 1,
   },
   doctor: {
-    usage: 'vdx doctor [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]',
+    usage: 'vdx doctor [project_path] [--check | --fix | --staged] [--format=ansi|markdown|json] [--json]',
     help: `Checks this machine for what vdx needs (Node, git, mise, npm auth, docker, the
-Claude Code plugin) and, inside a project (default: cwd), its commit author and
+Claude Code plugin) and, inside a project (default: cwd, when it looks like one; a
+folder named here is one, git or not — the home directory never), its commit author and
 its git hooks: are the hooks the repository declares on in this clone, and do
 the personal hooks of your profile (git.hooks) run on this machine; with origin on
 GitHub, the token vdx asks GitHub with ($GH_TOKEN, $GITHUB_TOKEN or gh) and
@@ -252,13 +254,18 @@ takes it along. Reads only, unless --fix. Exit 2 when something is missing.
            install step, which the report names); and put the memory inside:
            notes from ~/.claude/projects/<path>/memory into .claude/memory/, none
            overwritten, the old place renamed, autoMemoryDirectory written —
-           into .claude/settings.json in a personal project (no origin, or origin
-           on a host of git.personal_hosts), else into .claude/settings.local.json,
+           into .claude/settings.json in a personal project (only you read where
+           its commits go — see --staged), else into .claude/settings.local.json,
            with the memory kept out of git (.git/info/exclude) unless you say
            yes. After a folder is moved: the path follows it, and the project's
            conversations move to the new path
+  --staged the profile's pre-commit hook: refuses a commit that stages
+           .claude/memory/ unless only you read every place the commit reaches —
+           origin on a host of git.personal_hosts or a private GitHub repo with
+           nobody else, and each mirror the profile names (GitHub asked with gh's
+           token); no answer, no token — refused. Silent otherwise
 `,
-    bools: ['json', 'check', 'fix'],
+    bools: ['json', 'check', 'fix', 'staged'],
     values: ['format'],
     positionals: 1,
   },
@@ -606,10 +613,19 @@ function cmdRun(verb: LifecycleVerb): void {
 }
 
 function cmdDoctor(opts: ParsedArgs): void {
-  const ctx = resolveDoctorCtx(path.resolve(opts.positionals[0] ?? '.'));
-  if (opts.flags.check === true && opts.flags.fix === true) {
-    process.stderr.write('vdx doctor: --check reports and --fix writes — pick one\n');
+  const ctx = resolveDoctorCtx(path.resolve(opts.positionals[0] ?? '.'), opts.positionals[0] !== undefined);
+  if ([opts.flags.check, opts.flags.fix, opts.flags.staged].filter((f) => f === true).length > 1) {
+    process.stderr.write('vdx doctor: --check reports, --fix writes, --staged guards a commit — pick one\n');
     process.exit(2);
+  }
+  if (opts.flags.staged === true) {
+    const root = resolveProjectRoot(ctx.projectRoot ?? '.') ?? process.cwd();
+    const refusal = runDoctorStaged(root);
+    if (refusal) {
+      process.stderr.write(refusal + '\n');
+      process.exit(1);
+    }
+    return;
   }
   if (opts.flags.check === true) {
     const text = runDoctorCheck(ctx);

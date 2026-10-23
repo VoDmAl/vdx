@@ -4,6 +4,29 @@
 
 ## 2026-10-23
 
+### Сторож коммита памяти: `vdx doctor --staged`; «личный» — кто читает, а не хост
+
+Память Claude Code уходит в коммит, только если каждое место, куда тот попадёт,
+читает лишь владелец: `origin` на хосте из `git.personal_hosts` или закрытый репо
+GitHub без других участников, и каждое зеркало, которое профиль называет шаблоном
+(`mirrors: [github.com/VoDmAl/{repo}]`), — нет его, или оно закрыто и без других.
+Содержимое не читается; нет токена gh или ответа GitHub — память не проходит.
+`vdx doctor --staged` — для личного хука `pre-commit`; та же проверка решает, личный
+ли проект, при переносе памяти. Поводом стало зеркало gitolite: cc-vdm-plugins
+посчитан личным по хосту, а его зеркало `VoDmAl/ai-dev-plugins` публичное — память
+выведена из git до первого коммита. В CLI 0.38 (не выпущено)
+([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md), DL
+#9–#12).
+
+### `vdx doctor` видит папку без git; домашний каталог — не проект
+
+Папка, названная `vdx doctor [--fix] <путь>`, — проект, даже без `.git` и
+`package.json`: у папок с заметками и с чужими репо (avatar, l10inc, space-team,
+steven-maslavets) своя память Claude Code, а скрипт миграции их пропустил. Домашний
+каталог, всё выше него и `~/.claude` — не проект: их `.claude/settings.json` —
+настройки пользователя, общие для всех проектов. В CLI 0.38 (не выпущено)
+([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md)).
+
 ### 0.37.1: вопрос «под git?» и при отчёте в файл; почтовые разговоры названы
 
 `vdx doctor --fix` спрашивает «Keep .claude/memory/ under git?», когда терминал —
@@ -12,7 +35,7 @@ stdin и stderr, куда идёт вопрос; в 0.37.0 нужен был и 
 разговоры почтовой сессии, говорит о них, а не «no conversation yet»
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md),
 [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) Sidetrack #5).
-В CLI 0.37.1 (не выпущено).
+В CLI 0.37.1 (2026-10-23).
 
 ## 2026-10-22
 

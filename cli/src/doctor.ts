@@ -17,7 +17,10 @@ import { githubToken, machineIo, type HostingIo } from './hosting.ts';
 import {
   describeMemory,
   fixProjectMemory,
+  memoryApplies,
   memoryNeedsFix,
+  memoryReaders,
+  personalHosts,
   memoryState,
   type MemoryCtx,
   type MemoryState,
@@ -522,6 +525,7 @@ export function checkClaudeMemory(
   if (ctx.projectRoot === null || !claudeIsTheAgent(environment)) return null;
   // Claude Code's slot is the folder the agent starts in — the checkout's top for vdx ai.
   const root = resolveProjectRoot(ctx.projectRoot) ?? ctx.projectRoot;
+  if (!memoryApplies(root, mctx)) return null;
   const state = memoryState(root, mctx);
   return {
     id: 'claude-memory',
@@ -553,7 +557,19 @@ const CHECKS: Array<(ctx: DoctorCtx) => CheckResult | null> = [
   (ctx) => checkClaudeMemory(ctx),
 ];
 
-export function resolveDoctorCtx(cwd: string = process.cwd()): DoctorCtx {
+/**
+ * The project doctor looks at: a directory named on the command line is one, whatever it
+ * holds — a folder of notes or of other repos has Claude Code memory too (avatar,
+ * l10inc, 2026-10-23); the working directory only with a project's marker file.
+ */
+export function resolveDoctorCtx(cwd: string = process.cwd(), named = false): DoctorCtx {
+  if (named) {
+    try {
+      if (fs.statSync(cwd).isDirectory()) return { projectRoot: cwd };
+    } catch {
+      /* no such directory: no project */
+    }
+  }
   return { projectRoot: looksLikeProject(cwd) ? cwd : null };
 }
 
@@ -609,8 +625,31 @@ export function fixDoctorMemory(
 ): string[] {
   return fixProjectMemory(projectRoot, state, memoryCtx(), {
     ...io,
-    personalHosts: profile().git?.personal_hosts ?? [],
+    personalHosts: personalHosts(profile().git?.personal_hosts),
   });
+}
+
+/**
+ * `vdx doctor --staged`, the profile's pre-commit hook: Claude Code's memory goes into a
+ * commit only where nobody but the owner reads every place the commit reaches
+ * (claude-memory-in-project DL #11, #12). Nothing staged under `.claude/memory/` — no word.
+ * Returns the refusal, or null to let the commit go.
+ */
+export function runDoctorStaged(
+  projectRoot: string,
+  io: HostingIo = machineIo(projectRoot),
+  environment: Environment = profile(),
+): string | null {
+  const staged = io.git(['diff', '--cached', '--name-only', '--', '.claude/memory']);
+  if (!staged) return null;
+  const readers = memoryReaders(io, personalHosts(environment.git?.personal_hosts));
+  if (readers.only) return null;
+  const n = staged.split('\n').length;
+  return (
+    `vdx doctor: Claude memory stays out of this commit (${n} file(s)) — ${readers.why}.\n` +
+    `  commit the rest: git restore --staged .claude/memory, and commit again\n` +
+    `  keep it out of git here: echo /.claude/memory/ >> "$(git rev-parse --git-path info/exclude)"`
+  );
 }
 
 const PROJECT_MARKER_FILES = [

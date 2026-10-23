@@ -3,7 +3,8 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { remoteParts } from './author.ts';
 import { claudeConfigDir, projectDirName } from './conversations.ts';
-import { dict, str } from './narrow.ts';
+import { githubToken, machineIo, type HostingIo } from './hosting.ts';
+import { at, dict, errorMessage, list, str } from './narrow.ts';
 
 /**
  * Where Claude Code keeps a project's memory (docs/tasks/claude-memory-in-project).
@@ -51,6 +52,19 @@ function realRoot(root: string): string {
   } catch {
     return path.resolve(root);
   }
+}
+
+/**
+ * A folder whose memory vdx may move: not the home directory or above it — its
+ * `.claude/settings.json` is the user's own, read by every project — and not inside
+ * Claude Code's configuration.
+ */
+export function memoryApplies(projectRoot: string, ctx: MemoryCtx): boolean {
+  const root = realRoot(projectRoot);
+  const home = realRoot(ctx.home);
+  const config = realRoot(claudeConfigDir(ctx.env, ctx.home));
+  const within = (a: string, b: string) => a === b || a.startsWith(b + path.sep);
+  return !within(home, root) && !within(root, config);
 }
 
 /** Where the setting is read, in Claude Code's order: local settings, the project's, the user's. */
@@ -145,16 +159,83 @@ function git(root: string, args: string[]): string | null {
   }
 }
 
+/** A host of `git.personal_hosts`: its repos are the owner's alone; `mirrors` — where its repos may be copied. */
+export interface PersonalHost {
+  host: string;
+  /** `github.com/<owner>/{repo}`: a repo of the host may be mirrored there (gitolite's post-update hook). */
+  mirrors: string[];
+}
+
+/** The profile's `git.personal_hosts`: a host name, or `{host, mirrors}`. */
+export function personalHosts(
+  listed: Array<string | { host: string; mirrors?: string[] }> | undefined,
+): PersonalHost[] {
+  return (listed ?? []).map((h) =>
+    typeof h === 'string'
+      ? { host: h.toLowerCase(), mirrors: [] }
+      : { host: h.host.toLowerCase(), mirrors: h.mirrors ?? [] },
+  );
+}
+
+/** Who may read where the repo's commits go: only its owner, or — why not. */
+export type Readers = { only: true } | { only: false; why: string };
+
 /**
- * A personal project's memory goes under git with it; anyone else's would reach
- * whoever clones it (DL #3, #4). Personal: no origin, or origin on a host the
- * profile names in `git.personal_hosts`.
+ * Whether only the owner reads every place a commit of this repo reaches (DL #12 of
+ * docs/tasks/claude-memory-in-project): origin on a host the profile names as the
+ * owner's (`git.personal_hosts`), or a private GitHub repo with no other collaborator;
+ * and every mirror the profile names for that host — absent, or private and nobody
+ * else's. No origin: nothing leaves the machine. GitHub is asked with the token gh
+ * keeps; no token, no answer, `VDX_OFFLINE` — not known, so not only.
  */
-export function isPersonalProject(projectRoot: string, personalHosts: string[]): boolean {
-  const url = git(projectRoot, ['remote', 'get-url', 'origin']);
-  if (!url) return true;
-  const host = remoteParts(url).host.toLowerCase();
-  return personalHosts.some((h) => h.toLowerCase() === host);
+export function memoryReaders(io: HostingIo, hosts: PersonalHost[]): Readers {
+  const url = io.git(['remote', 'get-url', 'origin']);
+  if (!url) return { only: true };
+  const { host, path: repo } = remoteParts(url);
+  const lower = host.toLowerCase();
+  const own = hosts.find((h) => h.host === lower);
+  const places: string[] = [];
+  if (lower === 'github.com') places.push(repo);
+  else if (!own)
+    return { only: false, why: `origin is on ${host} — not a host the profile names as yours (git.personal_hosts)` };
+  for (const m of own?.mirrors ?? []) {
+    const at = m.replace(/^https?:\/\//, '').replace('{repo}', repo);
+    if (!at.startsWith('github.com/'))
+      return { only: false, why: `the mirror ${m} is not on GitHub — vdx cannot tell who reads it` };
+    places.push(at.slice('github.com/'.length));
+  }
+  if (places.length === 0) return { only: true };
+  if (io.env.VDX_OFFLINE) return { only: false, why: 'VDX_OFFLINE is set — GitHub was not asked who reads' };
+  const token = githubToken(io)?.token ?? null;
+  if (!token) return { only: false, why: 'no GitHub token to ask who reads — gh auth login' };
+  try {
+    const me = str(at(io.get('/user', token).body, 'login'));
+    if (!me) return { only: false, why: 'GitHub named no user for the token' };
+    for (const p of places) {
+      const r = io.get(`/repos/${p}`, token);
+      if (r.status === 404 && p !== repo) continue; // that mirror does not exist
+      if (r.status !== 200) return { only: false, why: `GitHub answered ${r.status} for ${p}` };
+      if (at(r.body, 'private') !== true) return { only: false, why: `github.com/${p} is public` };
+      const c = io.get(`/repos/${p}/collaborators?per_page=100`, token);
+      if (c.status !== 200) return { only: false, why: `GitHub does not show who reads github.com/${p} (${c.status})` };
+      const others = list(c.body)
+        .map((x) => str(at(x, 'login')))
+        .filter((l) => l && l !== me);
+      if (others.length) return { only: false, why: `github.com/${p} is read by ${others.length} more besides ${me}` };
+    }
+    return { only: true };
+  } catch (e) {
+    return { only: false, why: `GitHub did not answer: ${errorMessage(e)}` };
+  }
+}
+
+/** A personal project: its memory may go under git (DL #3, #4, #12). */
+export function isPersonalProject(
+  projectRoot: string,
+  hosts: PersonalHost[],
+  io: HostingIo = machineIo(projectRoot),
+): boolean {
+  return memoryReaders(io, hosts).only;
 }
 
 /** Needs `vdx doctor --fix`: anything but inside, or a path of the owner's own. */
@@ -283,6 +364,8 @@ function moveConversations(from: string, to: string, today: string): string {
  * already has stays, the old place is renamed. Returns what was done, one line each.
  */
 export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCtx, opts: MemoryFixOptions): string[] {
+  if (!memoryApplies(projectRoot, ctx))
+    throw new Error(`${projectRoot} is no project folder — its settings are the user's own`);
   const root = realRoot(projectRoot);
   const target = path.join(root, MEMORY);
   const done: string[] = [];
@@ -310,7 +393,13 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
       if (!opts.personal && !opts.underGit && excludeMemory(root)) done.push('.claude/memory/ → .git/info/exclude');
       setAside(state.old);
       if (opts.personal && git(root, ['rev-parse', '--git-dir']) !== null) {
-        done.push('commit .claude/memory/ and .claude/settings.json with the project');
+        // The project's own .gitignore may keep .claude/ out (mediko, 2026-10-23).
+        const ignored = git(root, ['check-ignore', '-q', '.claude/memory/MEMORY.md']) !== null;
+        done.push(
+          ignored
+            ? ".claude/memory/ stays out of git by the project's own .gitignore"
+            : 'commit .claude/memory/ and .claude/settings.json with the project',
+        );
       }
       return done;
     }
@@ -339,7 +428,9 @@ export interface ProjectMemoryDeps {
   log: (line: string) => void;
   today: string;
   /** The profile's `git.personal_hosts`. */
-  personalHosts: string[];
+  personalHosts: PersonalHost[];
+  /** Asks GitHub who reads the repo; the machine's own by default. */
+  io?: HostingIo;
 }
 
 /**
@@ -353,7 +444,7 @@ export function fixProjectMemory(
   ctx: MemoryCtx,
   deps: ProjectMemoryDeps,
 ): string[] {
-  const personal = isPersonalProject(projectRoot, deps.personalHosts);
+  const personal = isPersonalProject(projectRoot, deps.personalHosts, deps.io);
   let underGit = false;
   if (state.kind === 'outside' && !personal && git(projectRoot, ['rev-parse', '--git-dir']) !== null) {
     deps.log(`  ${path.basename(projectRoot)} is not a personal repo: memory under git reaches whoever clones it`);

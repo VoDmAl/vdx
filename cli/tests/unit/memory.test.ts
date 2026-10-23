@@ -4,15 +4,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ensureMemory, shellQuote, Tmux, type AiDeps } from '../../src/ai.ts';
-import { checkClaudeMemory } from '../../src/doctor.ts';
+import { checkClaudeMemory, resolveDoctorCtx, runDoctorStaged } from '../../src/doctor.ts';
+import type { Answer, HostingIo } from '../../src/hosting.ts';
 import {
   defaultMemoryDir,
+  memoryApplies,
   describeMemory,
   fixMemory,
   fixProjectMemory,
   isPersonalProject,
   memoryNeedsFix,
+  memoryReaders,
   memoryState,
+  personalHosts,
   type MemoryCtx,
 } from '../../src/memory.ts';
 
@@ -156,14 +160,123 @@ describe('memoryState', () => {
   });
 });
 
-describe('isPersonalProject', () => {
-  it('no origin, or origin on a host the profile names', () => {
+// GitHub's answers as they came 2026-10-23 (claude-memory-in-project DL #12): the token's user,
+// a repo's `private`, its collaborators; a repo that is not there — 404.
+const ME: Answer = { status: 200, body: { login: 'owner' } };
+const repoAnswer = (priv: boolean): Answer => ({ status: 200, body: { private: priv, owner: { type: 'User' } } });
+const readers = (...logins: string[]): Answer => ({ status: 200, body: logins.map((login) => ({ login })) });
+const NOT_FOUND: Answer = { status: 404, body: { message: 'Not Found' } };
+function hostingIo(origin: string | null, answers: Record<string, Answer | Error> = {}, env: NodeJS.ProcessEnv = {}) {
+  const asked: string[] = [];
+  const io: HostingIo = {
+    env,
+    git: (args) => (args[0] === 'remote' ? origin : null),
+    ghToken: () => 'gh-t',
+    glabToken: () => null,
+    gitCredential: () => null,
+    get: (p) => {
+      asked.push(p);
+      const a = answers[p];
+      if (a instanceof Error) throw a;
+      return a ?? NOT_FOUND;
+    },
+  };
+  return { io, asked };
+}
+
+describe('memoryReaders: only the owner reads where the commits go', () => {
+  const home = personalHosts([
+    { host: 'git.home.example', mirrors: ['github.com/me/{repo}', 'github.com/Friends/{repo}'] },
+  ]);
+  it('no origin: nothing leaves the machine; nothing asked', () => {
+    const { io, asked } = hostingIo(null);
+    expect(memoryReaders(io, home)).toEqual({ only: true });
+    expect(asked).toEqual([]);
+  });
+  it("a personal host whose mirrors are absent, or private and the owner's alone", () => {
+    const none = hostingIo('git@git.home.example:notes.git', { '/user': ME });
+    expect(memoryReaders(none.io, home)).toEqual({ only: true });
+    expect(none.asked).toEqual(['/user', '/repos/me/notes', '/repos/Friends/notes']);
+    const priv = hostingIo('git@git.home.example:notes.git', {
+      '/user': ME,
+      '/repos/me/notes': repoAnswer(true),
+      '/repos/me/notes/collaborators?per_page=100': readers('owner'),
+    });
+    expect(memoryReaders(priv.io, home)).toEqual({ only: true });
+  });
+  it('a public mirror — the ai-dev-plugins case', () => {
+    const { io } = hostingIo('git@git.home.example:plugins.git', {
+      '/user': ME,
+      '/repos/me/plugins': repoAnswer(false),
+    });
+    expect(memoryReaders(io, home)).toEqual({ only: false, why: 'github.com/me/plugins is public' });
+  });
+  it('a private mirror somebody else reads', () => {
+    const { io } = hostingIo('git@git.home.example:site.git', {
+      '/user': ME,
+      '/repos/Friends/site': repoAnswer(true),
+      '/repos/Friends/site/collaborators?per_page=100': readers('owner', 'friend'),
+    });
+    expect(memoryReaders(io, home)).toEqual({
+      only: false,
+      why: 'github.com/Friends/site is read by 1 more besides owner',
+    });
+  });
+  it("origin on GitHub: private and the owner's alone, or not; public — no", () => {
+    const own = hostingIo('git@github.com:owner/diary.git', {
+      '/user': ME,
+      '/repos/owner/diary': repoAnswer(true),
+      '/repos/owner/diary/collaborators?per_page=100': readers('owner'),
+    });
+    expect(memoryReaders(own.io, [])).toEqual({ only: true });
+    const pub = hostingIo('git@github.com:owner/vdx.git', { '/user': ME, '/repos/owner/vdx': repoAnswer(false) });
+    expect(memoryReaders(pub.io, [])).toEqual({ only: false, why: 'github.com/owner/vdx is public' });
+    const gone = hostingIo('git@github.com:owner/gone.git', { '/user': ME });
+    expect(memoryReaders(gone.io, [])).toEqual({ only: false, why: 'GitHub answered 404 for owner/gone' });
+  });
+  it('another host, no token, no answer, VDX_OFFLINE — not known, so not only', () => {
+    expect(memoryReaders(hostingIo('ssh://git@git.work.example:7999/team/w.git').io, home)).toEqual({
+      only: false,
+      why: 'origin is on git.work.example — not a host the profile names as yours (git.personal_hosts)',
+    });
+    const noToken = hostingIo('git@github.com:owner/x.git');
+    noToken.io.ghToken = () => null;
+    expect(memoryReaders(noToken.io, []).only).toBe(false);
+    const down = hostingIo('git@github.com:owner/x.git', { '/user': new Error('ETIMEDOUT') });
+    expect(memoryReaders(down.io, [])).toEqual({ only: false, why: 'GitHub did not answer: ETIMEDOUT' });
+    const off = hostingIo('git@github.com:owner/x.git', {}, { VDX_OFFLINE: '1' });
+    expect(memoryReaders(off.io, []).only).toBe(false);
+    expect(off.asked).toEqual([]);
+  });
+  it('isPersonalProject: the same answer, a plain host name in the profile too', () => {
     expect(isPersonalProject(root, [])).toBe(true);
     const work = project('work', 'ssh://git@git.work.example:7999/team/work.git');
-    expect(isPersonalProject(work, [])).toBe(false);
-    expect(isPersonalProject(work, ['GIT.work.example'])).toBe(true);
-    const lib = project('lib', 'git@github.com:me/lib.git');
-    expect(isPersonalProject(lib, ['git.work.example'])).toBe(false);
+    expect(isPersonalProject(work, personalHosts([]))).toBe(false);
+    expect(isPersonalProject(work, personalHosts(['GIT.work.example']))).toBe(true);
+  });
+});
+
+describe('runDoctorStaged: the pre-commit guard', () => {
+  it('a commit without memory: no word, nothing asked', () => {
+    const { io, asked } = hostingIo('git@github.com:owner/vdx.git');
+    io.git = (args) => (args[0] === 'diff' ? '' : 'git@github.com:owner/vdx.git');
+    expect(runDoctorStaged(root, io, {})).toBeNull();
+    expect(asked).toEqual([]);
+  });
+  it('memory staged where somebody else reads: refused, with the reason and what to do', () => {
+    const { io } = hostingIo('git@github.com:owner/vdx.git', { '/user': ME, '/repos/owner/vdx': repoAnswer(false) });
+    io.git = (args) =>
+      args[0] === 'diff' ? '.claude/memory/a.md\n.claude/memory/MEMORY.md' : 'git@github.com:owner/vdx.git';
+    expect(runDoctorStaged(root, io, {})).toBe(
+      'vdx doctor: Claude memory stays out of this commit (2 file(s)) — github.com/owner/vdx is public.\n' +
+        '  commit the rest: git restore --staged .claude/memory, and commit again\n' +
+        '  keep it out of git here: echo /.claude/memory/ >> "$(git rev-parse --git-path info/exclude)"',
+    );
+  });
+  it('memory staged where only the owner reads: the commit goes', () => {
+    const { io } = hostingIo(null);
+    io.git = (args) => (args[0] === 'diff' ? '.claude/memory/a.md' : null);
+    expect(runDoctorStaged(root, io, {})).toBeNull();
   });
 });
 
@@ -292,7 +405,7 @@ describe('fixProjectMemory: the question outside a personal project', () => {
       ask: () => (answers.length ? answers.shift()! : null),
       log: (l) => logs.push(l),
       today: TODAY,
-      personalHosts: ['git.home.example'],
+      personalHosts: personalHosts(['git.home.example']),
     });
     return { done, logs };
   };
@@ -396,5 +509,36 @@ describe('checkClaudeMemory: the doctor line', () => {
     expect(checkClaudeMemory({ projectRoot: path.join(root, 'src') }, {}, ctx)!.remedy).toBe(
       `vdx doctor --fix ${shellQuote(root)}`,
     );
+  });
+});
+
+describe('memoryApplies: the home directory is no project', () => {
+  it("home, above it, or inside Claude Code's config: not a folder whose memory vdx moves", () => {
+    fs.mkdirSync(ctx.home, { recursive: true });
+    expect(memoryApplies(ctx.home, ctx)).toBe(false);
+    expect(memoryApplies(dir, ctx)).toBe(false); // above home
+    expect(memoryApplies(path.join(dir, 'claude'), ctx)).toBe(false);
+    expect(memoryApplies(root, ctx)).toBe(true);
+    const sub = path.join(ctx.home, 'notes');
+    fs.mkdirSync(sub);
+    expect(memoryApplies(sub, ctx)).toBe(true);
+  });
+  it("doctor says nothing there, and a fix refuses — it would write the user's own settings", () => {
+    fs.mkdirSync(ctx.home, { recursive: true });
+    expect(checkClaudeMemory({ projectRoot: ctx.home }, {}, ctx)).toBeNull();
+    expect(() =>
+      fixMemory(ctx.home, memoryState(ctx.home, ctx), ctx, { personal: true, underGit: false, today: TODAY }),
+    ).toThrow(/no project folder/);
+    expect(fs.existsSync(path.join(ctx.home, '.claude', 'settings.json'))).toBe(false);
+  });
+});
+
+describe('resolveDoctorCtx: a named folder is the project', () => {
+  it('a folder of notes, without a marker file: the project when named, not as the working directory', () => {
+    const notes = path.join(dir, 'notes');
+    fs.mkdirSync(notes);
+    expect(resolveDoctorCtx(notes, true).projectRoot).toBe(notes);
+    expect(resolveDoctorCtx(notes).projectRoot).toBeNull();
+    expect(resolveDoctorCtx(path.join(dir, 'nowhere'), true).projectRoot).toBeNull();
   });
 });

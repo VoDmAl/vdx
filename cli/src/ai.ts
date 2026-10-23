@@ -29,7 +29,15 @@ import {
   parseMachineReport,
   runsInProject,
 } from './conversations.ts';
-import { describeMemory, fixProjectMemory, memoryNeedsFix, memoryState } from './memory.ts';
+import {
+  describeMemory,
+  fixProjectMemory,
+  memoryApplies,
+  memoryNeedsFix,
+  memoryState,
+  personalHosts,
+  type PersonalHost,
+} from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 
@@ -116,8 +124,11 @@ interface GitProfile {
   /** Directories whose repos are the neighbours an author is proposed from; default — the project's parent. */
   author_pool?: string[];
   hooks?: PersonalHook[];
-  /** Hosts whose repos are the owner's alone: Claude Code's memory goes under git there (claude-memory-in-project). */
-  personal_hosts?: string[];
+  /**
+   * Hosts whose repos are the owner's alone, and where their repos are mirrored: Claude Code's
+   * memory goes under git only where nobody else reads (claude-memory-in-project).
+   */
+  personal_hosts?: Array<string | { host: string; mirrors?: string[] }>;
 }
 
 export interface Environment {
@@ -255,8 +266,21 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (gitDoc.author_pool !== undefined && !isStringList(gitDoc.author_pool)) {
       fail('git.author_pool', 'must be a list of directories');
     }
-    if (gitDoc.personal_hosts !== undefined && !isStringList(gitDoc.personal_hosts)) {
-      fail('git.personal_hosts', 'must be a list of host names');
+    if (gitDoc.personal_hosts !== undefined) {
+      if (!Array.isArray(gitDoc.personal_hosts)) fail('git.personal_hosts', 'must be a list');
+      gitDoc.personal_hosts.forEach((h, i) => {
+        const at = `git.personal_hosts[${i}]`;
+        if (typeof h === 'string') {
+          if (h.trim() === '') fail(at, 'must be a host name');
+          return;
+        }
+        if (typeof h !== 'object' || h === null || typeof h.host !== 'string' || h.host.trim() === '') {
+          fail(at, 'must be a host name, or a mapping with host');
+        }
+        if (h.mirrors !== undefined && (!isStringList(h.mirrors) || !h.mirrors.every((m) => m.includes('{repo}')))) {
+          fail(`${at}.mirrors`, 'must be a list of places like github.com/<owner>/{repo}');
+        }
+      });
     }
     if (gitDoc.hooks !== undefined) {
       if (!Array.isArray(gitDoc.hooks)) fail('git.hooks', 'must be a list');
@@ -1157,13 +1181,13 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
 export function ensureMemory(
   projectRoot: string,
   command: string,
-  personalHosts: string[],
+  hosts: PersonalHost[],
   deps: AiDeps,
   dryRun: boolean,
   agentRunning: boolean,
 ): void {
-  if (!isClaude(command)) return;
   const ctx = { env: deps.env, home: deps.home };
+  if (!isClaude(command) || !memoryApplies(projectRoot, ctx)) return;
   const state = memoryState(projectRoot, ctx);
   if (dryRun) {
     deps.out(`  memory:   ${describeMemory(state, ctx)}\n`);
@@ -1194,7 +1218,7 @@ export function ensureMemory(
       ask: deps.ask,
       log: deps.log,
       today: new Date().toLocaleDateString('sv-SE'),
-      personalHosts,
+      personalHosts: hosts,
     });
     for (const d of done) deps.log(`✓ ${d}`);
   } catch (e) {
@@ -1937,7 +1961,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
-    ensureMemory(projectRoot, plan.command, environment.git?.personal_hosts ?? [], deps, true, agentsHere.length > 0);
+    ensureMemory(
+      projectRoot,
+      plan.command,
+      personalHosts(environment.git?.personal_hosts),
+      deps,
+      true,
+      agentsHere.length > 0,
+    );
     return EXIT_OK;
   }
   for (const l of choice?.lines ?? []) log(l);
@@ -1973,7 +2004,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     plan = { ...plan, resumeArgs: resumeId(id) };
   }
   ensureAuthor(projectRoot, poolDirs, deps, false);
-  ensureMemory(projectRoot, plan.command, environment.git?.personal_hosts ?? [], deps, false, agentsHere.length > 0);
+  ensureMemory(
+    projectRoot,
+    plan.command,
+    personalHosts(environment.git?.personal_hosts),
+    deps,
+    false,
+    agentsHere.length > 0,
+  );
 
   if (multiplexer === 'none') {
     if (opts.restart) {

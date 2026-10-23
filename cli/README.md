@@ -50,6 +50,8 @@ vdx push [project-path] [--dry-run]   # default: cwd
 
 # Environment self-check (Node / git / mise / npm auth / docker / Claude Code plugin; git hooks of the project; the GitHub token vdx asks with)
 vdx doctor [project-path] [--format=ansi|markdown|json]   # default: cwd
+vdx doctor --staged                 # pre-commit guard: Claude Code memory goes into a commit only where nobody but
+                                    # you reads every place it reaches (origin, mirrors; GitHub asked with gh's token)
 vdx doctor --check [project-path]   # one line per hook declared but not running here, and one when the memory is
                                     # not inside — the plugin's SessionStart hook tells the agent
 vdx doctor --fix [project-path]     # write the profile's personal hooks (git.hooks) into ~/.gitconfig, and put
