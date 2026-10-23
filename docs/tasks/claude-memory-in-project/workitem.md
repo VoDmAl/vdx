@@ -439,8 +439,15 @@ project's .gitignore — out of git».
       следующим выпуском); тег и push сета — у владельца (2026-10-23)
 - [x] Хук `vdx-memory` в `~/.gitconfig` lft и m3 — `vdx doctor --fix` (2026-10-23);
       `git hook run pre-commit` на временном репо с публичным `origin` — отказ, код 1
-- [ ] Коммит `.claude/memory/` и `.claude/settings.json` в личных репо — ждёт ответа о
-      защите (DL #10); cc-vdm-plugins выведен из git (публичное зеркало)
+- [x] Письма агентам личных репо закоммитить память на слово владельца —
+      `claude-memory-commit` (2026-10-23): obsidianvault, global-auth-risk-model,
+      lime-analytics, ga-demo, gitolite-admin, nas-info, telegram.vorobyev.name,
+      www.t23b.org; echelon закоммитил сам (`c7d77f7`); ga-board не в реестре intercom —
+      письмо некому; cc-vdm-plugins — вне git (DL #10)
+- [ ] Ответы восьми агентов: коммит или причина
+- [ ] Владелец — ga-board (`~/AI Projects/GA/ga-board`): агента в реестре intercom нет,
+      письмо некому; `.claude/memory/` (1 заметка) и путь в `settings.json` не закоммичены —
+      закоммитить самому или оставить
 - [ ] Sidetrack #1: intercom знает о переносе папки
 - [ ] Sidetrack #2: строка переноса говорит об окне доверия к новой папке
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
