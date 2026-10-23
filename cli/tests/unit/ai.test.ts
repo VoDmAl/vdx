@@ -720,6 +720,16 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(runs()).toEqual([`--base --resume ${ID.a}`, `--base --resume ${ID.b}`]);
   });
 
+  it("only the mail session's conversations: a new one, and the line says they are there", () => {
+    const mailStart = hookLine(`${machineLine('lft')}; …\n${MAIL_LINE_PREFIX} (\`vdx ai --intercom\`): …`);
+    writeConversation(path.join(home, 'cc'), root, ID.b, [mailStart, userLine('/vdm:intercom check')], 5);
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual(['--base']);
+    expect(text()).toContain(
+      "only the mail session's conversations here (1; vdx ai --conversation <id> opens one) — starting a new one",
+    );
+  });
+
   it("continues this machine's newest conversation and asks nothing when no other machine has one", () => {
     conv(ID.a, 'lft', 30);
     conv(ID.b, null, 60);

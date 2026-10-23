@@ -2,6 +2,18 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-10-23
+
+### 0.37.1: вопрос «под git?» и при отчёте в файл; почтовые разговоры названы
+
+`vdx doctor --fix` спрашивает «Keep .claude/memory/ under git?», когда терминал —
+stdin и stderr, куда идёт вопрос; в 0.37.0 нужен был и stdout, и скрипт с отчётом в
+`/dev/null` молча оставлял память вне git. `vdx ai`, у проекта которого есть только
+разговоры почтовой сессии, говорит о них, а не «no conversation yet»
+([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md),
+[intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) Sidetrack #5).
+В CLI 0.37.1 (не выпущено).
+
 ## 2026-10-22
 
 ### Память Claude Code — внутри проекта: `vdx doctor --fix` и вопрос в `vdx ai`
@@ -14,7 +26,7 @@ Claude Code держит память проекта и его разговор�
 профиля `git.personal_hosts`), иначе в `.claude/settings.local.json`, с памятью вне
 git, пока владелец не скажет «да». После переноса папки путь следует за ней, а
 разговоры — в каталог нового пути. Сет v1.7.0 — `git.personal_hosts:
-[git.vorobyev.name]`. В CLI 0.37 (не выпущено)
+[git.vorobyev.name]`. В CLI 0.37.0 (2026-10-23)
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md);
 письмо nas-info `claude-memory-in-project`).
 

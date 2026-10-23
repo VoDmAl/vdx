@@ -1283,10 +1283,12 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
   const host = plan.host;
   const same = sameMachine;
   // A mail session's conversations are its own: a start of the person's never continues one.
-  const all =
+  const listed =
     plan.resumeArgs.length === 0
       ? []
-      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot }).filter((c) => !c.mail);
+      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+  const all = listed.filter((c) => !c.mail);
+  const mailOnly = listed.length - all.length;
   const root = shellQuote(plan.projectRoot);
   // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
   const atSeat = same(plan.seat, host);
@@ -1320,7 +1322,14 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
     return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
   };
   if (plan.resumeArgs.length === 0) return fresh(silent);
-  if (all.length === 0) return fresh(['no conversation of this project yet — starting a new one', ...silent]);
+  if (all.length === 0) {
+    return fresh([
+      mailOnly
+        ? `only the mail session's conversations here (${mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+        : 'no conversation of this project yet — starting a new one',
+      ...silent,
+    ]);
+  }
 
   const live = new Map<string, { machine: string; session: LiveSession; here: boolean }[]>();
   const addLive = (machine: string, session: LiveSession, here: boolean) =>

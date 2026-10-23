@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-22, @vodmal/vdx-cli@0.36.0)
+# vdx — Handoff (2026-10-23, @vodmal/vdx-cli@0.37.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -8,14 +8,14 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.36.0` — в npm с 2026-10-22 (`a766140`), Node 22 и
-  новее; на m3 и lft — 0.36.0 с 2026-10-22 (`npm update -g --prefer-online`).
+- **CLI** `@vodmal/vdx-cli@0.37.0` — в npm с 2026-10-23 (`6b28794`), Node 22 и
+  новее; на m3 и lft — 0.37.0 с 2026-10-23 (`npm update -g --prefer-online`).
 - **Сет** `vdx-rubric-vodmal@v1.7.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
   `branch-protection`; v1.7.0 (2026-10-22) — ключ `git.personal_hosts`.
   `DEFAULT_BASELINE` в `cli/src/init.ts` и сет внутри CLI — `@v1.6.1` в 0.36.0,
-  `@v1.7.0` с 0.37 (не выпущено).
+  `@v1.7.0` с 0.37.0.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
   читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
   (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
@@ -52,7 +52,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
-| [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-22 | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в `main`, проверено живьём, не выпущено (0.37); сет v1.7.0 (`git.personal_hosts`) — тег у владельца; дальше: выпуск, список команд владельцу, ответ nas-info |
+| [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-22 | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); вопрос «под git?» при отчёте в файл — 0.37.1 (не выпущено); дальше: выпуск 0.37.1, прогон скрипта владельцем (34 проекта), ответ nas-info |
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | done 2026-10-22 | `branch-protection` L3 — GitHub (0.29.0), GitLab (0.33.0), Bitbucket Server (0.34.0); vdx под гейтом, общий L4; отвергнутый вход Bitbucket — причина с командой (0.36.0); отложен gitolite (Sidetrack #1) |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |
@@ -85,8 +85,10 @@
 
 ### Следующий выпуск CLI
 
-0.37 (minor) — память Claude Code в проекте (`claude-memory-in-project`), сет
-v1.7.0 внутри; ждёт тега сета и `vdx publish minor` у владельца. 0.36.0 (2026-10-22, `a766140`) — почтовая сессия `vdx ai
+0.37.1 (patch) ждёт `vdx publish patch` у владельца: вопрос «под git?» в `vdx doctor
+--fix` при отчёте не в терминал, строка о почтовых разговорах. 0.37.0 (2026-10-23,
+`6b28794`) — память Claude Code в проекте (`claude-memory-in-project`), сет v1.7.0
+внутри. 0.36.0 (2026-10-22, `a766140`) — почтовая сессия `vdx ai
 --intercom` и `vdx ai --close` (`intercom-session-mode`), отвергнутый вход
 Bitbucket (`hosting-extension` DL #20), сет v1.6.1 внутри, `vdx publish` без
 терминала — отказ до bump, 5xx npm — сбой npm, не вход; registry показал её через

@@ -630,7 +630,8 @@ function cmdDoctor(opts: ParsedArgs): void {
     const memory = root ? checkClaudeMemory({ projectRoot: root }) : null;
     if (root && memory?.remedy) {
       try {
-        const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+        // The question goes to stderr: the report on stdout may be redirected.
+        const interactive = process.stdin.isTTY === true && process.stderr.isTTY === true;
         const done = fixDoctorMemory(root, memoryState(root, { env: process.env, home: os.homedir() }), {
           ask: (prompt) => (interactive ? askLine(prompt) : null),
           log: (line) => process.stderr.write(line + '\n'),

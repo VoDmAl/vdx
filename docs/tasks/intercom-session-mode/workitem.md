@@ -328,7 +328,8 @@ claude 2.1.308) вернул `✓ running`, а сессия встала на о
 знает, что разговор был, решит, что он пропал. Точнее — «only the mail session's
 (vdx ai --conversation <id> opens it) — starting a new one».
 
-**Status:** open
+**Status:** resolved — 2026-10-23: «only the mail session's conversations here (N;
+vdx ai --conversation <id> opens one) — starting a new one»; тест. Выйдет в 0.37.1
 
 ## Next actions
 
@@ -361,9 +362,13 @@ claude 2.1.308) вернул `✓ running`, а сессия встала на о
 - [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23)
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
-      (2026-10-22)
+      (2026-10-22); запуск из `send` и `intercom close` — у них сделано
+      (`intercom-mail-start-shipped`, vdm 2.58.0, коммит `a448c72` ждёт push владельца;
+      ключ ещё нигде не включён); им — справка об окне доверия
+      (`mail-session-trust-window`, 2026-10-23)
 - [ ] Sidetrack #4: `--detach` называет окно доверия, на котором ждёт сессия
-- [ ] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
+- [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
+      (2026-10-23, выйдет в 0.37.1)
 
 ## References
 
