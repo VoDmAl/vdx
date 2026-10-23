@@ -10,8 +10,8 @@
 до pre-flight и bump: npm спросил бы OTP или подтверждение в браузере, и
 ответить было бы некому; `--force` идёт дальше. Ответ npm 5xx в pre-flight
 `npm-auth` — «registry не отвечает», со ссылкой на status.npmjs.org, а не
-вход: при выпуске 0.35.0 E503 читался как отказ во входе. В CLI 0.36 (не
-выпущено; письмо самому себе `publish-npm-outage-preflight`).
+вход: при выпуске 0.35.0 E503 читался как отказ во входе. В CLI 0.36.0
+(2026-10-22; письмо самому себе `publish-npm-outage-preflight`).
 
 ### Отвергнутый вход Bitbucket — причина с командой; сет v1.6.1
 
@@ -20,8 +20,8 @@
 причина называет команду, которая стирает запись, и как войти заново. Хранилище
 git vdx не трогает — так решил владелец. Принятый вход без прав — «нет доступа к
 репозиторию». Сет v1.6.1 исправил комментарий оси: хостинг спрашивают GitHub,
-GitLab и Bitbucket Server; он внутри CLI и `DEFAULT_BASELINE`. В CLI 0.36 (не
-выпущено) ([hosting-extension](docs/tasks/hosting-extension/workitem.md),
+GitLab и Bitbucket Server; он внутри CLI и `DEFAULT_BASELINE`. В CLI 0.36.0
+(2026-10-22) ([hosting-extension](docs/tasks/hosting-extension/workitem.md),
 DL #20, Sidetracks #5, #11).
 
 ### Почтовая сессия проекта: `vdx ai --intercom` и `vdx ai --close`
@@ -33,7 +33,7 @@ DL #20, Sidetracks #5, #11).
 число вопросов владельцу без ответа видно на других сессиях проекта
 (`@vdx_waiting`). Остальные запуски её и её разговоры не берут. Попутно: подсказка
 `--restart` в строке focused-сессии больше не обещает продолжить разговор. В CLI
-0.36 (не выпущено), плагин 0.10.0
+0.36.0 (2026-10-22), плагин 0.10.0
 ([intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md); письма
 echelon и ai-dev-plugins `intercom-session-mode`).
 

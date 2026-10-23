@@ -2,7 +2,7 @@
 title: "Расширение хостинга для branch-protection"
 slug: hosting-extension
 description: "Делает L3 оси branch-protection известным: спрашивает хостинг вместо «неизвестно»"
-status: dormant
+status: done
 session-type: prd-prep
 created: 2026-10-15
 last-updated: 2026-10-22
@@ -36,8 +36,14 @@ CLI (`gh`, `glab`), не vdx (DL #12 кристалла гейтов). Без с
 
 ## Текущая модель
 
-**Спит с 2026-10-22: ждёт выпуска 0.36.** Будит выход 0.36 в npm: аудит
-выпущенным — последний пункт Next actions, потом закрыть.
+**Закрыт 2026-10-22 после выпуска 0.36.0** (`a766140`). Аудит выпущенным (lft,
+`vdx` 0.36.0 из npm, на m3 — тоже 0.36.0): kratos — «master is not restricted —
+whoever may write pushes to it; pull requests into master need no successful
+build»; global-auth — «master takes changes without a pull request from
+wt-deploy, dpzhuravlev — they skip the build»; tx-auth-widget — «pull requests
+into master need no successful build» — как 0.34.0; vdx — общий L4. Сет внутри
+пакета — v1.6.1, `DEFAULT_BASELINE` — `@v1.6.1`. Остался отложенный побег — #1
+(gitolite).
 
 **Bitbucket — выпущено в 0.34.0 (2026-10-21, `d851996`; DL #13–#17).** `judgeBitbucket`
 в `src/hosting.ts`; вход — `git credential fill` для хоста `origin` (DL #16),
@@ -55,7 +61,7 @@ master need no successful build»; limeflow, vdx, telegram — как до пр�
 (с 2026-10-21, DL #19; до того — пароль, DL #17, #18). Бриф nas-info `bitbucket-env` не нужен: git и `osxkeychain` на
 станциях уже есть (DL #16). Вход, который сервер отверг
 (`IncorrectPasswordAuthenticationException`), — «неизвестно» с командой, которая
-стирает запись; хранилище git vdx не трогает (DL #20, 2026-10-22, в 0.36).
+стирает запись; хранилище git vdx не трогает (DL #20, 2026-10-22, в 0.36.0).
 
 **CLI для Bitbucket Server — оценка (2026-10-20, по коду на GitHub, ничего не
 ставилось).** Мои находки, не ссылки владельца — совпадают ли, не спрошено.
@@ -699,7 +705,7 @@ is not protected, and no ruleset requires checks». Выйдет в 0.32
 
 **Status:** resolved — 2026-10-22: v1.6.0 вышел без правки; комментарий — в
 v1.6.1 (patch), «vdx спрашивает GitHub (с CLI 0.29), GitLab (0.33) и Bitbucket
-Server (0.34)»; зеркала и `DEFAULT_BASELINE` — `@v1.6.1`, в CLI с 0.36
+Server (0.34)»; зеркала и `DEFAULT_BASELINE` — `@v1.6.1`, в CLI с 0.36.0
 
 ### #6. `vdx publish` не замечает выпуск без изменений
 
@@ -796,7 +802,7 @@ Bitbucket — и «вход неверен», и «нет прав» (DL #17): �
 
 **Status:** resolved — 2026-10-22, DL #20: различает тело (`exceptionName`), не
 заголовок; аудит запись не стирает (решение владельца), а называет команду,
-которая стирает, и как войти заново. Выйдет в 0.36
+которая стирает, и как войти заново. В 0.36.0 (2026-10-22)
 
 ## Next actions
 
@@ -856,8 +862,9 @@ Bitbucket — и «вход неверен», и «нет прав» (DL #17): �
       пункт, владелец передумал, узнав, что сохранён пароль)
 - [x] Sidetrack #11: отвергнутый вход git — причина с командой, хранилище не
       трогается (DL #20, 2026-10-22); 511 юнит, `check` чистый
-- [ ] 0.36 вышел (выпуск — у `intercom-session-mode`): аудит выпущенным —
+- [x] 0.36 вышел (выпуск — у `intercom-session-mode`): аудит выпущенным —
       kratos, global-auth, tx-auth-widget «нет», как 0.34.0; сет внутри — v1.6.1
+      (0.36.0, `a766140`, 2026-10-22)
 - [x] Замер API `git.finam.ru`: ветка по умолчанию, ограничения, merge check
       сборок (DL #17, 2026-10-20)
 - [x] Расширение Bitbucket — `judgeBitbucket`, тесты на записанных ответах,

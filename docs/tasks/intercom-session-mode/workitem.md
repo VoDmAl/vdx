@@ -53,11 +53,11 @@ last-updated: 2026-10-22
 
 ## Текущая модель
 
-**Спит с 2026-10-22: ждёт выпуска 0.36 и ответов.** Будит выход 0.36 в npm
-(ответ echelon, пометка почтового разговора — DL #7) или ответ ai-dev-plugins
-либо nas-info.
+**Выпущено в 0.36.0 (2026-10-22), спит с 2026-10-22.** Проверено на выпущенном
+(DL #8); ai-dev-plugins и nas-info ответили. Ответ echelon отправлен. Открыто: побеги #1, #2,
+#4, #5. Будит ответ ai-dev-plugins о запуске из `send` или повод для #4, #5.
 
-**Состояние на 2026-10-22: код, тесты и документация готовы, не выпущено (CLI 0.36, плагин 0.10.0).**
+**Состояние на 2026-10-22: выпущено — CLI 0.36.0 (`a766140`), плагин 0.10.0 (`e1d80e1`).**
 Решения — DL #1–#7. 509 unit-тестов, `check` чистый; мутации «второй рядом» и «продолжить почтовый
 разговор» тесты ловят. Попутно: подсказка `--restart` в строке `--check` у focused-сессии
 обещала продолжить разговор, а `--focused --restart` начинает новый (DL #35 кристалла `vdx-ai`) —
@@ -238,6 +238,32 @@ intercom он не зарегистрировался. Строку почтов
 `--check` просит сказать, что сделано, до `--close`. Пометку разговора как
 почтового — проверить после выпуска 0.36.
 
+### #8 / 2026-10-22 / После выпуска: разговор почтовой сессии помечен, обычный `vdx ai` его не берёт
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** lft, 2026-10-22, vdx 0.36.0 из npm, claude 2.1.308. Одноразовый
+проект `~/AI Projects/vdx-mail-probe-2` (git без remote), профиль — копия профиля
+владельца с `intercom_args` «выполнить `echo VDX_INTERCOM=$VDX_INTERCOM`, ответить
+одной строкой, затем `vdx ai --close`». `vdx ai --intercom --detach` → `✓ running`,
+код 0, но сессия ждала на окне доверия к папке (Sidetrack #4); после «Yes, I trust
+this folder» — закрылась сама через ~12 с. В транскрипте (60 строк):
+`VDX_INTERCOM=1`, строка хука `vdx ai --check` 0.36 о почтовой сессии («mail session
+(`vdx ai --intercom`): letters and wakes for the project come here…»), ответ
+`--close` — «closes in 2 s». Затем `vdx ai --dry-run` в том же проекте —
+«conversation: no conversation of this project yet — starting a new one»: почтовый
+разговор пропущен. Убрано: каталог проекта, папка транскрипта, запись в реестре
+intercom (`unregister`; SessionStart-хук intercom её завёл — в DL #7 не заводил);
+доверие к пути осталось в `~/.claude.json` — правка файла, который пишут живые
+сессии, рискованнее пустой записи. Транскрипт не сохранён: нужное пересказано.
+**Context:** DL #7 оставил на после выпуска: пометку разговора как почтового —
+хук зовёт установленный vdx, а он был 0.35.
+**Why:** пометка и пропуск — то, на чём держится DL #5 «запуски владельца почтовую
+сессию не видят».
+**Implication:** DL #5 подтверждён на выпущенном CLI. Строка «no conversation of
+this project yet» неточна, когда разговор есть, но почтовый, — побег #5; окно
+доверия — побег #4.
+
 ## Sidetracks
 
 ### #1. lft: диск данных заполнен, своп 10 ГБ
@@ -272,6 +298,36 @@ MCP добавляет к свопу, а через него — к диску. 
 для проектов, где владелец её хочет, — политика intercom (кого будить). Если нужен
 ключ — профиль или настройка intercom проекта; спросить в ответе ai-dev-plugins.
 
+**Status:** resolved — 2026-10-22, ответ ai-dev-plugins `intercom-session-mode-policy`:
+владелец решил — только там, где её включили, ключом intercom
+`intercom.mail-session: true` в `.claude/vdm-plugins.json` проекта-адресата; со
+стороны vdx ничего не меняется. Запуск из `send` и `--close --waiting` у них —
+после выхода 0.36; n — письма, взятые почтовой сессией и оставленные ждать
+владельца (из отметки `taken:`). Причина — 508 писем 20 адресатам за 15–22.10 и
+своп lft
+
+### #4. Почтовая сессия в недоверенной папке ждёт окна доверия
+
+**Возникло в:** проверка после выпуска 0.36.0 (2026-10-22)
+**Описание:** `vdx ai --intercom --detach` в новой папке (`~/AI Projects/vdx-mail-probe-2`,
+claude 2.1.308) вернул `✓ running`, а сессия встала на окне доверия Claude Code
+(«Quick safety check: Is this a project you created or one you trust?», курсор на
+«No, exit») и ждала: первый промпт не пошёл, `--close` никто не вызвал. В DL #7
+окна не было. Так встанет почтовая сессия любого проекта, которому на этой машине
+не доверяли, — и после переноса папки (`claude-memory-in-project`). Отвечать за
+владельца vdx не должен; сказать — может: окно видно в панели, как экраны
+`confirm` профиля.
+
+**Status:** open
+
+### #5. «No conversation yet», когда разговор есть, но почтовый
+
+**Возникло в:** DL #8
+**Описание:** `vdx ai --dry-run` в проекте, где был только разговор почтовой сессии,
+пишет «no conversation of this project yet — starting a new one». Владелец, который
+знает, что разговор был, решит, что он пропал. Точнее — «only the mail session's
+(vdx ai --conversation <id> opens it) — starting a new one».
+
 **Status:** open
 
 ## Next actions
@@ -287,20 +343,27 @@ MCP добавляет к свопу, а через него — к диску. 
       `vdx-rubric-vodmal/vdx-environment.yaml`, тег, зеркало, `DEFAULT_BASELINE` — v1.6.0 (`9f2e9d1`), на GitHub 2026-10-22
 - [x] Живьём: почтовая сессия в одноразовом проекте — первый промпт дошёл,
       `--close` закрыл панель, транскрипт цел
-- [ ] Выпуск CLI (minor) — `vdx publish minor` у владельца; в нём же
+- [x] Выпуск CLI (minor) — 0.36.0 (`a766140`, 2026-10-22), на lft и m3; в нём же
       `hosting-extension` DL #20 и сет v1.6.1 (`DEFAULT_BASELINE`, 2026-10-22):
       тег v1.6.1 на GitHub с 2026-10-22 (`56b4b05`)
 - [x] Бриф nas-info: заголовок cmux показывает `@vdx_waiting` —
       `nas-info/cmux-title-vdx-waiting` (2026-10-22)
-- [ ] Ответ nas-info на `cmux-title-vdx-waiting`: что поменялось, на каких станциях
-- [ ] Outcome to `echelon`: intercom reply intercom-session-mode --done "<what was done>" --link <url> --ball "<who holds the ball — what ⏰ date>"
+- [x] Ответ nas-info на `cmux-title-vdx-waiting` (2026-10-22): заголовок —
+      «❓N» перед именем сессии при `@vdx_waiting`=N, в общем `tmux.conf` и на
+      живых серверах tmux lft и m3; 0 и снятая опция не видны
+- [x] Outcome to `echelon`: `intercom-session-mode-outcome` (2026-10-22) — три пункта
+      по их порядку, ограничение окна доверия; мяч — echelon (события в почтовую
+      сессию), ai-dev-plugins (запуск из `send`)
 - [x] Outcome to `ai-dev-plugins`: `intercom-session-mode-intercom-side-outcome`
       (2026-10-22) — имя, запуск отправителем через `vdx ai --intercom --detach`
       после `vdx --version` ≥ 0.36, `--close --waiting <n>`; у vdm 2.57.1 уже есть
       побудка живой почтовой сессии сразу, запуска и числа — нет
 - [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23)
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
-- [ ] Sidetrack #3: ответ ai-dev-plugins — каким проектам (спрошено 2026-10-22)
+- [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
+      (2026-10-22)
+- [ ] Sidetrack #4: `--detach` называет окно доверия, на котором ждёт сессия
+- [ ] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
 
 ## References
 

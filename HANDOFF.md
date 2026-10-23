@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-22, @vodmal/vdx-cli@0.35.0)
+# vdx — Handoff (2026-10-22, @vodmal/vdx-cli@0.36.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -8,18 +8,17 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.35.0` — в npm с 2026-10-22 (`d1233f3`), Node 22 и
-  новее; на m3 и lft — 0.35.0 с 2026-10-22 (`npm update -g`).
+- **CLI** `@vodmal/vdx-cli@0.36.0` — в npm с 2026-10-22 (`a766140`), Node 22 и
+  новее; на m3 и lft — 0.36.0 с 2026-10-22 (`npm update -g --prefer-online`).
 - **Сет** `vdx-rubric-vodmal@v1.6.1` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 (2026-10-22) — только
   комментарий оси `branch-protection`. `DEFAULT_BASELINE` в
-  `cli/src/init.ts` и сет внутри CLI — `@v1.6.1` с 0.36 (не выпущено), в npm —
-  `@v1.5.0` с 0.28.0.
+  `cli/src/init.ts` и сет внутри CLI — `@v1.6.1` с 0.36.0.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
   читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
   (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
-- **Плагин** vdx 0.9.3 (`plugin/`), едет через маркетплейс vodmal.
+- **Плагин** vdx 0.10.0 (`plugin/`, с `e1d80e1`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
 - **vdx по своей рубрике — L4** (аудит 2026-10-21, CLI 0.34.0, сет v1.5.0):
@@ -51,8 +50,9 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | in-progress с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — в `main`, проверено живьём, не выпущено (0.36, minor); ai-dev-plugins ответили (2026-10-22), бриф nas-info `cmux-title-vdx-waiting` отправлен; дальше: выпуск, ответ echelon, ответы ai-dev-plugins и nas-info |
-| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | in-progress с 2026-10-15 | `branch-protection` L3 через GitHub — в 0.29.0, критерий проверен 2026-10-18; vdx под гейтом с 2026-10-18 (DL #8): `main` защищён, общий L4; GitLab — в 0.33.0, gitolite отложен, Bitbucket (`git.finam.ru`) — в 0.34.0: вход из `git credential` (DL #16), правило и замер — DL #17, у трёх рабочих проектов — «нет» с причиной; на lft и m3 в хранилище git — PAT (DL #19); отвергнутый вход — причина с командой, хранилище vdx не трогает (DL #20, в 0.36); остался один пункт — аудит выпущенным 0.36, потом закрыть |
+| [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
+| [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-22 | память агента в `.claude/memory/` проекта (письмо nas-info): решено, где память и путь (DL #3, #4); дальше — дизайн проверки в `vdx ai`, миграции и переноса папки, код, список команд владельцу |
+| [hosting-extension](docs/tasks/hosting-extension/workitem.md) | done 2026-10-22 | `branch-protection` L3 — GitHub (0.29.0), GitLab (0.33.0), Bitbucket Server (0.34.0); vdx под гейтом, общий L4; отвергнутый вход Bitbucket — причина с командой (0.36.0); отложен gitolite (Sidetrack #1) |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |
 | [vdm-gates-wiring-axis](docs/tasks/vdm-gates-wiring-axis/workitem.md) | done 2026-10-13 | — |
@@ -84,10 +84,11 @@
 
 ### Следующий выпуск CLI
 
-0.36 (minor) ждёт `vdx publish minor` у владельца, в его терминале: почтовая
-сессия (`intercom-session-mode`), отвергнутый вход Bitbucket (`hosting-extension`
-DL #20), сет v1.6.1 внутри, `vdx publish` без терминала — отказ до bump, 5xx
-npm — сбой npm, не вход. 0.33.0 (2026-10-20, `6587434`) — `branch-protection` на GitLab
+Ничего не ждёт. 0.36.0 (2026-10-22, `a766140`) — почтовая сессия `vdx ai
+--intercom` и `vdx ai --close` (`intercom-session-mode`), отвергнутый вход
+Bitbucket (`hosting-extension` DL #20), сет v1.6.1 внутри, `vdx publish` без
+терминала — отказ до bump, 5xx npm — сбой npm, не вход; registry показал её через
+112 с после `npm publish`. 0.33.0 (2026-10-20, `6587434`) — `branch-protection` на GitLab
 (`hosting-extension` DL #12); токен — только своему хосту.
 0.32.1 (2026-10-20, `543d937`) — ожидание `vdx push` спрашивает
 снова, если GitHub не ответил (0.32.0 остановился на одном `ETIMEDOUT`); registry
