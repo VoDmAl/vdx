@@ -321,7 +321,7 @@ claude 2.1.308) вернул `✓ running`, а сессия встала на о
 **Status:** resolved — 2026-10-23: `vdx ai --detach` в папке, которой Claude Code не
 доверяет, не запускает агента — exit 4 и команда без `--detach`; как Claude Code помнит
 доверие — `claude-memory-in-project` DL #13. ai-dev-plugins со своей стороны пишет об окне
-рядом с командой запуска (`mail-session-trust-window-outcome`, vdm 2.59.1). Выйдет в 0.39
+рядом с командой запуска (`mail-session-trust-window-outcome`, vdm 2.59.1). В 0.39.0 (2026-10-24)
 
 ### #5. «No conversation yet», когда разговор есть, но почтовый
 

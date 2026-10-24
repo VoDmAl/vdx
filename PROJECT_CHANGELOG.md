@@ -14,7 +14,7 @@ doctor --fix` теперь переносит внутрь — со строка
 (`~/.claude.json`): после переноса папки vdx говорит, что первый запуск встанет на
 окне доверия, а `vdx ai --detach` — и почтовая сессия — в недоверенной папке не
 запускается (exit 4, команда без `--detach`). Строка `vdx ai --check` о перезапуске
-в новый разговор просит сначала wrap (письмо ai-dev-plugins). Выйдет в 0.39
+в новый разговор просит сначала wrap (письмо ai-dev-plugins). В CLI 0.39.0 (2026-10-24)
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md),
 Sidetracks #2, #4, #5, DL #13; `intercom-session-mode` Sidetrack #4).
 

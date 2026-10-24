@@ -102,7 +102,7 @@ github.com/FriendsOfVoDmAl/{repo}]` у хоста), vdx спрашивает Git
 ответа или токена — память не проходит. Та же проверка — «личный ли проект» при
 переносе.
 
-**В рабочем дереве, к 0.39 (2026-10-23).** Заметки, написанные по старому пути после
+**Выпущено в 0.39.0 (`024f4d1`, 2026-10-24), на lft и m3.** Заметки, написанные по старому пути после
 переноса vdx (`memory.moved-*` рядом), — внутрь со строками индекса (Sidetrack #5);
 второй клон пишет путь в свой `settings.local.json` (#4); доверие Claude Code к папке
 (DL #13) — строка после переноса папки и отказ `vdx ai --detach` (#2). Сверка всех 26
@@ -402,7 +402,7 @@ www.t23b.org (и у проектов вне списка). Хук `local/hooks/r
 переноса — может.
 
 **Status:** resolved — 2026-10-23: строка после переноса папки называет окно, когда
-Claude Code папке не доверяет (DL #13); `vdx ai --detach` там не запускает. Выйдет в 0.39
+Claude Code папке не доверяет (DL #13); `vdx ai --detach` там не запускает. В 0.39.0 (2026-10-24)
 
 ### #3. «Commit .claude/memory/…», когда проект их игнорирует
 
@@ -432,7 +432,7 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 путь клона в его `settings.local.json` — он читается раньше, общий файл не меняется.
 
 **Status:** resolved — 2026-10-23: так и сделано; путь из пользовательских настроек —
-тоже в `settings.local.json` проекта (раньше `--fix` переписал бы их). Выйдет в 0.39.
+тоже в `settings.local.json` проекта (раньше `--fix` переписал бы их). В 0.39.0 (2026-10-24).
 Самому `~/nas-info` (не задан, 0 заметок) `--fix` не делался — это клон nas-info
 
 ### #5. Заметки старой сессии по старому пути после переноса не возвращаются
@@ -449,7 +449,7 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 **Status:** resolved — 2026-10-23: `leftovers` с `afterMove`; заметки — внутрь без
 перезаписи, их строки из `MEMORY.md` старого места — в `MEMORY.md` проекта (только для
 внесённых: иначе агент заметку не найдёт), разные — названы и остаются в отложенном; то
-же у `stray`. Живьём на пробнике в scratchpad (рабочий CLI, 2026-10-23). Выйдет в 0.39
+же у `stray`. Живьём на пробнике в scratchpad (рабочий CLI, 2026-10-23). В 0.39.0 (2026-10-24)
 
 ## Next actions
 
@@ -516,11 +516,12 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       lime-analytics, ga-demo, gitolite-admin, nas-info, telegram.vorobyev.name,
       www.t23b.org; echelon закоммитил сам (`c7d77f7`); ga-board не в реестре intercom —
       письмо некому; cc-vdm-plugins — вне git (DL #10)
-- [ ] Ответы восьми агентов: коммит или причина. 1 из 8 на 2026-10-23: gitolite-admin —
+- [ ] Ответы восьми агентов: коммит или причина. 3 из 8 на 2026-10-24: gitolite-admin —
       `3c83710` (`.claude/settings.json` с путём; `.claude/memory/` пуста, придёт с первой
-      заметкой; `vdx doctor --staged` пропустил). Семь писем не взяты (`intercom sent`):
-      ga-demo, global-auth-risk-model, lime-analytics, nas-info, obsidianvault,
-      telegram.vorobyev.name, www.t23b.org
+      заметкой; `vdx doctor --staged` пропустил); ga-demo — `bd20624` (память и путь, хук
+      пропустил); nas-info — `ed984a1`, в `origin/master`. Пять писем не взяты (`intercom
+      sent`): global-auth-risk-model, lime-analytics, obsidianvault, telegram.vorobyev.name,
+      www.t23b.org
 - [ ] Владелец — ga-board (`~/AI Projects/GA/ga-board`): агента в реестре intercom нет,
       письмо некому; `.claude/memory/` (1 заметка) и путь в `settings.json` не закоммичены —
       закоммитить самому или оставить
@@ -534,9 +535,14 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       (`claudeTrusts`), `ai.ts`; 561 юнит, `check` чистый; живьём рабочим CLI на пробнике в
       scratchpad — отказ `--detach` (exit 4, новой сессии tmux нет), заметка после
       переноса со строкой индекса, строка о доверии после `mv` (2026-10-23)
-- [ ] Выпуск 0.39 (minor): то, что выше, и строка «сначала wrap» в `vdx ai --check`
-- [ ] Ответ ai-dev-plugins после выпуска: `mail-session-trust-window-outcome` (что vdx делает
-      с окном) и `restart-hint-wrap-first` (строка дописана)
+- [x] Выпуск 0.39 (minor): то, что выше, и строка «сначала wrap» в `vdx ai --check` — 0.39.0
+      (`024f4d1`, 2026-10-24), на lft и m3; на выпущенном (lft): `--detach` в новой папке —
+      exit 4, сессии нет; память vdx и nas-info — «in .claude/memory/»
+- [x] Ответ ai-dev-plugins: `mail-session-trust-window-outcome-outcome` (код 4 — окно доверия;
+      мяч у них — что `send` делает с кодом) и `restart-hint-wrap-first-outcome` (2026-10-24)
+- [ ] Sidetrack #4 живьём: после `ed984a1` клон `~/nas-info` — `elsewhere` (путь клона из
+      PhpstormProjects). Письмо nas-info `second-clone-memory-path` (2026-10-24): своя память
+      клона (`vdx doctor --fix ~/nas-info`) или общая — решают они; ответ — только если общая
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
 - [x] Outcome to `nas-info`: `claude-memory-in-project-outcome` (2026-10-23) — по
       четырём пунктам, список; мяч — владелец (0.37.1, скрипт, перенос папок)
