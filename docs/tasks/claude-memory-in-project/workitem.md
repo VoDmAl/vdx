@@ -5,7 +5,7 @@ description: "Держит память агента в папке проект�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-22
-last-updated: 2026-10-23
+last-updated: 2026-10-24
 ---
 
 # Память Claude внутри проекта
@@ -104,8 +104,9 @@ github.com/FriendsOfVoDmAl/{repo}]` у хоста), vdx спрашивает Git
 
 **2026-10-24: дальше — только ждать.** Подготовка к переносу папок закончена: память
 внутри у всех проектов с разговорами, идущие сессии перезапущены, 0.39.1 на lft и m3. Открыты
-ответы трёх агентов о коммите памяти; когда придут — `/vdm:crystal-cut`. Сам перенос папок —
-владелец с nas-info (Next actions).
+ответы трёх агентов о коммите памяти — владелец решил ждать их (2026-10-24); когда придут —
+`/vdm:crystal-cut`. Сам перенос папок — владелец с nas-info; порядок переноса одного проекта у
+nas-info — письмо `folder-move-one-project` (Next actions).
 
 **Выпущено в 0.39.0 (`024f4d1`, 2026-10-24), на lft и m3.** Заметки, написанные по старому пути после
 переноса vdx (`memory.moved-*` рядом), — внутрь со строками индекса (Sidetrack #5);
@@ -555,7 +556,11 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       пропустил); nas-info — `ed984a1`, в `origin/master`; lime-analytics — `67528ef` (8 файлов
       и путь; `origin` нет); global-auth-risk-model — `30855c7` (31 файл и путь, `--staged`
       пропустил). Три письма не взяты (`intercom sent`): obsidianvault,
-      telegram.vorobyev.name, www.t23b.org
+      telegram.vorobyev.name, www.t23b.org. Сверка 2026-10-24 ~18:05 EDT (lft, `git ls-files`
+      по `.claude/memory`): у всех трёх памяти под git нет — 236, 7 и 101 файл не отслеживаются;
+      у telegram.vorobyev.name `.claude/settings.json` в индексе, не закоммичен. Сессии всех
+      трёх — на m3; obsidianvault — focused, почту читает по просьбе. Владелец: ждать (2026-10-24);
+      его ход — `/vdm:intercom check` в сессиях этих трёх проектов на m3
 - [x] ga-board (`~/AI Projects/GA/ga-board`) — ничего не делать (владелец, 2026-10-24):
       «мелкий эксперимент… разовая история», своего агента нет и не будет; память и путь
       остаются не закоммиченными
@@ -591,7 +596,8 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 - [ ] Владелец — перенос папок (`GA/`, `SPACE`, потом `/Volumes/Working/…`) с nas-info (их
       Syncthing). Я предложил отдать nas-info инструкцию «перенос одного проекта»: остановить
       агента, `mv`, `vdx doctor --fix '<новый путь>'`, один раз `vdx ai` там и ответить на окно
-      доверия (2026-10-24) — ответа не было; отправить по слову владельца. Перенос — не
+      доверия (2026-10-24). Владелец: «Отправить» — письмо `folder-move-one-project`
+      (2026-10-24, `--reply-to vdx/claude-memory-in-project`, ответ не нужен). Перенос — не
       критерий кристалла: при закрытии пункт переезжает в HANDOFF («Ждём извне»), здесь — [x]
 - [x] Выпуск 0.39.1 (patch) — DL #14: `287cae3`, 2026-10-24, на lft и m3; `vdx doctor
       ~/nas-info` на обеих — «ok — in the memory of another clone of this repo»; nas-info —
