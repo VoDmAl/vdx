@@ -544,12 +544,13 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       lime-analytics, ga-demo, gitolite-admin, nas-info, telegram.vorobyev.name,
       www.t23b.org; echelon закоммитил сам (`c7d77f7`); ga-board не в реестре intercom —
       письмо некому; cc-vdm-plugins — вне git (DL #10)
-- [ ] Ответы восьми агентов: коммит или причина. 4 из 8 на 2026-10-24: gitolite-admin —
+- [ ] Ответы восьми агентов: коммит или причина. 5 из 8 на 2026-10-24: gitolite-admin —
       `3c83710` (`.claude/settings.json` с путём; `.claude/memory/` пуста, придёт с первой
       заметкой; `vdx doctor --staged` пропустил); ga-demo — `bd20624` (память и путь, хук
       пропустил); nas-info — `ed984a1`, в `origin/master`; lime-analytics — `67528ef` (8 файлов
-      и путь; `origin` нет). Четыре письма не взяты (`intercom sent`): global-auth-risk-model,
-      obsidianvault, telegram.vorobyev.name, www.t23b.org
+      и путь; `origin` нет); global-auth-risk-model — `30855c7` (31 файл и путь, `--staged`
+      пропустил). Три письма не взяты (`intercom sent`): obsidianvault,
+      telegram.vorobyev.name, www.t23b.org
 - [x] ga-board (`~/AI Projects/GA/ga-board`) — ничего не делать (владелец, 2026-10-24):
       «мелкий эксперимент… разовая история», своего агента нет и не будет; память и путь
       остаются не закоммиченными
