@@ -10,7 +10,7 @@
 (тот же `origin`), `vdx doctor` теперь считает выбором репо: «in the memory of another
 clone of this repo», без команды. Так у nas-info: клон выкладки `~/nas-info` каждые 15
 мин сбрасывается на `origin/master`, своя память там терялась бы. Папка, скопированная со
-своими настройками, — по-прежнему предупреждение. В CLI 0.39.1
+своими настройками, — по-прежнему предупреждение. В CLI 0.39.1 (2026-10-24)
 ([claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md), DL #14).
 
 ## 2026-10-23

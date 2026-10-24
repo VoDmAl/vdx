@@ -575,7 +575,7 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       `second-clone-memory-path-outcome`: общая память — `~/nas-info` деплойный клон (gather
       каждые 15 мин — `git reset --hard` на `origin/master`, коммитов и сессий там нет), своя
       `.claude/memory/` терялась бы при сбросе; `--fix` там не запускают
-- [ ] vdx (обещано nas-info 2026-10-24): `doctor` отличает намеренно общую память от следа
+- [x] vdx (обещано nas-info 2026-10-24): `doctor` отличает намеренно общую память от следа
       копии папки. Набросок: путь из отслеживаемого `.claude/settings.json`, а X — клон того же
       репо (тот же `origin`) → не предупреждение, а «в памяти клона X — путь из общего
       settings.json»; копия папки (файл не под git или другой `origin`) — `elsewhere`, как
@@ -583,7 +583,9 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       руками. Сделать к следующему выпуску; nas-info — сказать, что вышло. Код и тест —
       DL #14 (2026-10-24), 562 юнит; рабочим CLI: `~/nas-info` — «ok — in the memory of another
       clone of this repo»
-- [ ] Выпуск 0.39.1 (patch) — DL #14; потом nas-info: что вышло
+- [x] Выпуск 0.39.1 (patch) — DL #14: `287cae3`, 2026-10-24, на lft и m3; `vdx doctor
+      ~/nas-info` на обеих — «ok — in the memory of another clone of this repo»; nas-info —
+      письмо `second-clone-memory-shared-shipped`, ответ не нужен
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
 - [x] Outcome to `nas-info`: `claude-memory-in-project-outcome` (2026-10-23) — по
       четырём пунктам, список; мяч — владелец (0.37.1, скрипт, перенос папок)
