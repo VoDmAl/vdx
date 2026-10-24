@@ -381,6 +381,23 @@ www.t23b.org (и у проектов вне списка). Хук `local/hooks/r
 папке — отказ, exit 4, команда без `--detach`; после переноса папки `vdx doctor --fix`
 называет окно. Нет конфига — не знаем, не мешаем.
 
+### #14 / 2026-10-24 / Общая память клонов одного репо — выбор репо, не след копии
+
+**Source:** both
+**Basis:** user-stated
+**Basis-detail:** ответ nas-info `second-clone-memory-path-outcome` (intercom, 2026-10-24):
+«Выбор — второе, общая память. ~/nas-info … деплойный клон: gather каждые 15 мин делает в нём
+git reset --hard на origin/master … своя .claude/memory/ там под git теряла бы правки». Мой
+совет в письме был обратный («своя память у клона»). Владелец: «делай» на предложение отличать
+общую память от следа копии (2026-10-24).
+**Context:** 0.39.0 называл `elsewhere` и путь, пришедший в клон из общего `settings.json`, и
+предлагал `--fix`.
+**Why:** абсолютный путь в отслеживаемом `settings.json` — решение репо, и клон, который его
+получил с pull, ему следует; след копии папки — файл не под git или другой `origin`.
+**Implication:** состояние `shared`: путь из `.claude/settings.json` под git, папка — клон того
+же репо (`origin` сравнивается через `remoteParts`, `.git` в конце не важен) — «ok», `--fix` не
+трогает; своя память — `settings.local.json` руками. Остальное — `elsewhere`, как в 0.39.0.
+
 ## Sidetracks
 
 ### #1. Перенос папки и реестр intercom
@@ -391,7 +408,11 @@ www.t23b.org (и у проектов вне списка). Хук `local/hooks/r
 сессий и побудку — у intercom (ai-dev-plugins); сказать им, когда будет понятно,
 как vdx переносит.
 
-**Status:** open
+**Status:** resolved — 2026-10-24: у intercom (vdm 2.60.0) `role --path` и поиск почтового
+клона берут только существующие пути, `_intercom_owner_of` сопоставляет живой cwd, новый путь
+регистрируется при первом старте сессии там — старый путь только остаток. Крайний случай
+(на старом месте потом другая папка) — письмо ai-dev-plugins `folder-move-registry-paths`,
+ответ не нужен
 
 ### #2. После переноса папки Claude Code снова спросит о доверии к ней
 
@@ -523,16 +544,17 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       lime-analytics, ga-demo, gitolite-admin, nas-info, telegram.vorobyev.name,
       www.t23b.org; echelon закоммитил сам (`c7d77f7`); ga-board не в реестре intercom —
       письмо некому; cc-vdm-plugins — вне git (DL #10)
-- [ ] Ответы восьми агентов: коммит или причина. 3 из 8 на 2026-10-24: gitolite-admin —
+- [ ] Ответы восьми агентов: коммит или причина. 4 из 8 на 2026-10-24: gitolite-admin —
       `3c83710` (`.claude/settings.json` с путём; `.claude/memory/` пуста, придёт с первой
       заметкой; `vdx doctor --staged` пропустил); ga-demo — `bd20624` (память и путь, хук
-      пропустил); nas-info — `ed984a1`, в `origin/master`. Пять писем не взяты (`intercom
-      sent`): global-auth-risk-model, lime-analytics, obsidianvault, telegram.vorobyev.name,
-      www.t23b.org
+      пропустил); nas-info — `ed984a1`, в `origin/master`; lime-analytics — `67528ef` (8 файлов
+      и путь; `origin` нет). Четыре письма не взяты (`intercom sent`): global-auth-risk-model,
+      obsidianvault, telegram.vorobyev.name, www.t23b.org
 - [x] ga-board (`~/AI Projects/GA/ga-board`) — ничего не делать (владелец, 2026-10-24):
       «мелкий эксперимент… разовая история», своего агента нет и не будет; память и путь
       остаются не закоммиченными
-- [ ] Sidetrack #1: intercom знает о переносе папки
+- [x] Sidetrack #1: intercom знает о переносе папки — письмо `folder-move-registry-paths`
+      (2026-10-24)
 - [x] Sidetrack #2: строка переноса говорит об окне доверия к новой папке (DL #13, 2026-10-23)
 - [x] Sidetrack #4: второй клон пишет свой путь в `settings.local.json`, общий файл не трогает
       (2026-10-23)
@@ -547,9 +569,20 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       exit 4, сессии нет; память vdx и nas-info — «in .claude/memory/»
 - [x] Ответ ai-dev-plugins: `mail-session-trust-window-outcome-outcome` (код 4 — окно доверия;
       мяч у них — что `send` делает с кодом) и `restart-hint-wrap-first-outcome` (2026-10-24)
-- [ ] Sidetrack #4 живьём: после `ed984a1` клон `~/nas-info` — `elsewhere` (путь клона из
-      PhpstormProjects). Письмо nas-info `second-clone-memory-path` (2026-10-24): своя память
-      клона (`vdx doctor --fix ~/nas-info`) или общая — решают они; ответ — только если общая
+- [x] Sidetrack #4 живьём: после `ed984a1` клон `~/nas-info` — `elsewhere` (путь клона из
+      PhpstormProjects). Письмо nas-info `second-clone-memory-path` (2026-10-24); ответ
+      `second-clone-memory-path-outcome`: общая память — `~/nas-info` деплойный клон (gather
+      каждые 15 мин — `git reset --hard` на `origin/master`, коммитов и сессий там нет), своя
+      `.claude/memory/` терялась бы при сбросе; `--fix` там не запускают
+- [ ] vdx (обещано nas-info 2026-10-24): `doctor` отличает намеренно общую память от следа
+      копии папки. Набросок: путь из отслеживаемого `.claude/settings.json`, а X — клон того же
+      репо (тот же `origin`) → не предупреждение, а «в памяти клона X — путь из общего
+      settings.json»; копия папки (файл не под git или другой `origin`) — `elsewhere`, как
+      сейчас. Тогда `--fix` в таком клоне ничего не делает, своя память — `settings.local.json`
+      руками. Сделать к следующему выпуску; nas-info — сказать, что вышло. Код и тест —
+      DL #14 (2026-10-24), 562 юнит; рабочим CLI: `~/nas-info` — «ok — in the memory of another
+      clone of this repo»
+- [ ] Выпуск 0.39.1 (patch) — DL #14; потом nas-info: что вышло
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
 - [x] Outcome to `nas-info`: `claude-memory-in-project-outcome` (2026-10-23) — по
       четырём пунктам, список; мяч — владелец (0.37.1, скрипт, перенос папок)

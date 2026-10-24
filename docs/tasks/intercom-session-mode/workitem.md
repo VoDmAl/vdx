@@ -369,7 +369,7 @@ vdx ai --conversation <id> opens one) — starting a new one»; тест. Вый
       (`intercom-mail-start-shipped`, vdm 2.58.0, коммит `a448c72` ждёт push владельца;
       ключ ещё нигде не включён); им — справка об окне доверия
       (`mail-session-trust-window`, 2026-10-23)
-- [ ] Sidetrack #4: `--detach` называет окно доверия, на котором ждёт сессия
+- [x] Sidetrack #4: `--detach` называет окно доверия, на котором ждёт сессия — отказ, exit 4 (0.39.0, 2026-10-24)
 - [ ] Владелец — push `a448c72` в cc-vdm-plugins и ключ `intercom.mail-session: true` в
       проектах, где нужна почтовая сессия (мяч из `intercom-mail-start-shipped`,
       ai-dev-plugins, 2026-10-23, без срока)

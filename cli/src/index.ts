@@ -263,9 +263,10 @@ takes it along. Reads only, unless --fix. Exit 2 when something is missing.
            yes. After a folder is moved: the path follows it, and the project's
            conversations move to the new path; a folder Claude Code has not
            trusted yet is named. Notes a session that started before the move
-           wrote at the old place come in, with their MEMORY.md lines; a path
-           another clone left in the shared settings.json goes, for this clone,
-           into its .claude/settings.local.json
+           wrote at the old place come in, with their MEMORY.md lines. A path
+           the repo's settings.json gives to another clone of the same repo is
+           the repo's choice and stays; one to another folder goes, for this
+           clone, into its .claude/settings.local.json
   --staged the profile's pre-commit hook: refuses a commit that stages
            .claude/memory/ unless only you read every place the commit reaches —
            origin on a host of git.personal_hosts or a private GitHub repo with

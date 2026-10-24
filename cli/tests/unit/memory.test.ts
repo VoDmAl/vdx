@@ -469,6 +469,26 @@ describe('fixMemory', () => {
     expect(memoryState(root, ctx)).toEqual({ kind: 'inside' });
   });
 
+  it("another clone of the same repo, by the repo's own settings.json: shared — nothing to fix", () => {
+    const main = project('main', 'git@git.home.example:tools.git');
+    const deploy = project('deploy', 'git@git.home.example:tools');
+    write(path.join(main, 'README.md'), 'x');
+    const shared = path.join(deploy, '.claude', 'settings.json');
+    write(shared, JSON.stringify({ autoMemoryDirectory: `${main}/.claude/memory/` }));
+    // Not under git yet: a folder copied with its settings, not the repo's choice.
+    expect(memoryState(deploy, ctx).kind).toBe('elsewhere');
+    git(deploy, 'add', '.claude/settings.json');
+    const s = memoryState(deploy, ctx);
+    expect(s).toMatchObject({ kind: 'shared', from: main });
+    expect(memoryNeedsFix(s)).toBe(false);
+    expect(describeMemory(s, ctx)).toMatch(/^in the memory of another clone of this repo, .*main\/\.claude\/memory\//);
+    expect(fixMemory(deploy, s, ctx, { personal: true, underGit: false, today: TODAY })).toEqual([]);
+    expect(fs.existsSync(path.join(deploy, '.claude', 'settings.local.json'))).toBe(false);
+    // Another repo's clone is not this repo's choice.
+    git(main, 'remote', 'set-url', 'origin', 'git@git.home.example:other.git');
+    expect(memoryState(deploy, ctx).kind).toBe('elsewhere');
+  });
+
   it("elsewhere, from the user's settings: not rewritten there — every project reads them", () => {
     const other = project('other');
     write(path.join(other, 'README.md'), 'x');

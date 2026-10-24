@@ -32,6 +32,11 @@ export type MemoryState =
   | { kind: 'moved'; setting: MemorySetting; from: string; conversations: string | null; stray: string | null }
   /** Set to `<X>/.claude/memory/` of another folder that exists. */
   | { kind: 'elsewhere'; setting: MemorySetting; from: string }
+  /**
+   * Set, in the repo's own `.claude/settings.json`, to the memory of another clone of the same
+   * repo: the repo's choice — a deploy clone keeps no memory of its own (nas-info, 2026-10-24).
+   */
+  | { kind: 'shared'; setting: MemorySetting; from: string }
   /** Set to a path of the owner's own choosing. */
   | { kind: 'custom'; setting: MemorySetting };
 
@@ -150,7 +155,10 @@ export function memoryState(projectRoot: string, ctx: MemoryCtx): MemoryState {
   if (path.basename(setting.dir) === 'memory' && path.basename(path.dirname(setting.dir)) === '.claude') {
     const from = path.dirname(path.dirname(setting.dir));
     const stub = entries(from).join() === '.claude' && entries(path.join(from, '.claude')).join() === 'memory';
-    if (fs.existsSync(from) && !stub) return { kind: 'elsewhere', setting, from };
+    if (fs.existsSync(from) && !stub)
+      return sameRepo(root, from) && tracked(root, setting.file)
+        ? { kind: 'shared', setting, from }
+        : { kind: 'elsewhere', setting, from };
     const conversations = path.join(claudeConfigDir(ctx.env, ctx.home), 'projects', projectDirName(from));
     return {
       kind: 'moved',
@@ -161,6 +169,23 @@ export function memoryState(projectRoot: string, ctx: MemoryCtx): MemoryState {
     };
   }
   return { kind: 'custom', setting };
+}
+
+/** Both folders are clones of one repo: the same `origin`, however it is spelled. */
+function sameRepo(a: string, b: string): boolean {
+  const origin = (dir: string) => {
+    const url = git(dir, ['remote', 'get-url', 'origin']);
+    if (!url) return null;
+    const { host, path: repo } = remoteParts(url);
+    return host ? `${host.toLowerCase()}:${repo.toLowerCase()}` : null;
+  };
+  const here = origin(a);
+  return here !== null && here === origin(b);
+}
+
+/** A file of the repo, under git — every clone has it. */
+function tracked(root: string, file: string): boolean {
+  return git(root, ['ls-files', '--error-unmatch', '--', path.relative(root, file)]) !== null;
 }
 
 function git(root: string, args: string[]): string | null {
@@ -253,9 +278,9 @@ export function isPersonalProject(
   return memoryReaders(io, hosts).only;
 }
 
-/** Needs `vdx doctor --fix`: anything but inside, or a path of the owner's own. */
+/** Needs `vdx doctor --fix`: anything but inside, a path of the owner's own, or the repo's shared one. */
 export function memoryNeedsFix(state: MemoryState): boolean {
-  return state.kind !== 'inside' && state.kind !== 'custom';
+  return state.kind !== 'inside' && state.kind !== 'custom' && state.kind !== 'shared';
 }
 
 function tilde(p: string, home: string): string {
@@ -283,6 +308,8 @@ export function describeMemory(state: MemoryState, ctx: MemoryCtx): string {
       return `autoMemoryDirectory points to ${tilde(state.setting.dir, ctx.home)}/, ${state.stray ? 'in a folder that holds nothing else' : 'a folder that is gone'} — the project moved from ${tilde(state.from, ctx.home)}${state.conversations ? ', and its conversations stay under the old path' : ''}`;
     case 'elsewhere':
       return `autoMemoryDirectory points to the memory of another folder, ${tilde(state.from, ctx.home)} (set in ${tilde(state.setting.file, ctx.home)})`;
+    case 'shared':
+      return `in the memory of another clone of this repo, ${tilde(state.from, ctx.home)}/.claude/memory/ — the path comes from the repo's .claude/settings.json; a memory of its own: autoMemoryDirectory in .claude/settings.local.json`;
     case 'custom':
       return `in ${tilde(state.setting.dir, ctx.home)}/ (autoMemoryDirectory, set in ${tilde(state.setting.file, ctx.home)})`;
   }
@@ -426,6 +453,7 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
   switch (state.kind) {
     case 'inside':
     case 'custom':
+    case 'shared':
       return done;
     case 'leftovers':
       // Written after vdx's move by a session that started before it: newer than anything inside.
@@ -464,14 +492,11 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
     case 'moved':
     case 'elsewhere': {
       // The path is rewritten where it was read — unless that file is the user's, read by every
-      // project, or another clone's path in the repo's shared settings.json: then this clone's
-      // own local settings, read first (Sidetrack #4).
+      // project, or the repo's shared settings.json naming another folder: then this clone's own
+      // local settings, read first (Sidetrack #4).
       const local = path.join(root, '.claude', 'settings.local.json');
       const inProject = path.dirname(state.setting.file) === path.join(root, '.claude');
-      const shared =
-        state.kind === 'elsewhere' &&
-        state.setting.file !== local &&
-        git(root, ['ls-files', '--error-unmatch', '--', path.relative(root, state.setting.file)]) !== null;
+      const shared = state.kind === 'elsewhere' && state.setting.file !== local && tracked(root, state.setting.file);
       const file = inProject && !shared ? state.setting.file : local;
       writeSetting(file, target);
       done.push(`autoMemoryDirectory → ${target}/ (${path.relative(root, file)})`);
