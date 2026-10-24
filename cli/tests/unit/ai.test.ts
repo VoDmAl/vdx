@@ -1365,6 +1365,38 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     }
   }, 30_000); // two starts, each answering the prompt and seeing the agent twice a second apart
 
+  it('--detach in a folder Claude Code does not trust: refused — the agent would wait on the window unseen', () => {
+    tmux.tryRun(['kill-server']);
+    const claude = path.join(base, 'bin', 'claude');
+    fs.mkdirSync(path.dirname(claude), { recursive: true });
+    fs.copyFileSync(path.join(base, 'fake-agent'), claude);
+    fs.chmodSync(claude, 0o755);
+    fs.writeFileSync(
+      profile,
+      [
+        'agent:',
+        `  command: ${claude}`,
+        '  args: [--base]',
+        'session: {multiplexer: tmux, name: "{project}@{host}"}',
+        '',
+      ].join('\n'),
+    );
+    const cc = path.join(base, 'cc-trust');
+    fs.mkdirSync(cc, { recursive: true });
+    fs.writeFileSync(path.join(cc, '.claude.json'), JSON.stringify({ projects: {} }));
+    const d = (): AiDeps => ({ ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } });
+    try {
+      expect(runAi({ ...opts, path: root, detach: true }, d())).toBe(EXIT_LAUNCH_FAILED);
+      expect(logs.join('\n')).toContain(`✗ Claude Code has not trusted ${root} yet`);
+      expect(logs.join('\n')).toContain(
+        `start it once at a terminal and answer the window: vdx ai ${shellQuote(root)}`,
+      );
+      expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toEqual([]);
+    } finally {
+      tmux.tryRun(['kill-server']);
+    }
+  });
+
   it('--conversation attaches to the agent in it, or starts one next to the agents here', () => {
     tmux.tryRun(['kill-server']);
     const claude = path.join(base, 'bin', 'claude');
@@ -1936,9 +1968,15 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
       out = [];
       expect(runAiCheck(root, deps(chain('--x'), { [mode]: '1' }), 40)).toBe(EXIT_DRIFT);
       expect(out.join('')).toContain(`\`vdx ai ${flag} --restart ${root}\`: it stops this session and starts it again`);
-      expect(out.join('')).toContain(', in a new conversation.');
+      expect(out.join('')).toContain(
+        ", in a new conversation — before handing it over, run the project's wrap check (`/vdm:wrap` where vdm is installed)",
+      );
       expect(out.join('')).not.toContain('resuming the conversation');
     }
+    // A restart that resumes keeps the chat: no wrap first.
+    out = [];
+    expect(runAiCheck(root, deps(chain('--x')), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).not.toContain('wrap check');
   });
 
   it('a plain session is not a mail one in the transcript', () => {

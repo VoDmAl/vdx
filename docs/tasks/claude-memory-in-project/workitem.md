@@ -5,7 +5,7 @@ description: "Держит память агента в папке проект�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-22
-last-updated: 2026-10-22
+last-updated: 2026-10-23
 ---
 
 # Память Claude внутри проекта
@@ -101,6 +101,13 @@ github.com/FriendsOfVoDmAl/{repo}]` у хоста), vdx спрашивает Git
 репо нет — зеркала нет; есть — закрыт и без других. Содержимое не читается. Нет
 ответа или токена — память не проходит. Та же проверка — «личный ли проект» при
 переносе.
+
+**В рабочем дереве, к 0.39 (2026-10-23).** Заметки, написанные по старому пути после
+переноса vdx (`memory.moved-*` рядом), — внутрь со строками индекса (Sidetrack #5);
+второй клон пишет путь в свой `settings.local.json` (#4); доверие Claude Code к папке
+(DL #13) — строка после переноса папки и отказ `vdx ai --detach` (#2). Сверка всех 26
+папок с разговорами в общем `~/.claude/projects`: память внутри у 24 проектов, кроме
+`~/nas-info`.
 
 ## Decision Log
 
@@ -349,6 +356,31 @@ www.t23b.org (и у проектов вне списка). Хук `local/hooks/r
 не пускать. Та же проверка решает «личный ли проект» при переносе (DL #4, #10):
 без сети — не личный.
 
+### #13 / 2026-10-23 / Доверие к папке — по пути, в `~/.claude.json`; vdx его читает, но не отвечает
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** код в бинаре `/usr/local/Caskroom/claude-code@latest/2.1.308/claude`
+(lft, 2026-10-23; поиск по `hasTrustDialogAccepted`, копия не сохранялась): папке
+доверяют, если `projects[<путь>].hasTrustDialogAccepted` в глобальном конфиге —
+`<CLAUDE_CONFIG_DIR или домашний каталог>/.claude.json` — у неё самой или у папки выше;
+в клоне git подъём кончается его верхом (граница — `U_()`; есть и случай «только верх» —
+`f6r`/`p6r`, не разбирался). Ещё: переменная `CLAUDE_CODE_IGNORE_PERSISTED_TRUST`
+(раннер с `--trust-workspace false`) и флаги сессии. Сверка на lft: в `~/.claude.json`
+87 записей; `/Users/vdm/AI Projects` — `true`, а `GA/ga-board` (клон git) — без записи,
+и `claudeTrusts` отвечает за него `false`; `~/.claude.json` и `~/.claude` на lft и m3 —
+симлинки в один Dropbox, доверие у станций общее.
+**Context:** Sidetrack #2 и `intercom-session-mode` Sidetrack #4: почтовая сессия в
+недоверенной папке встала на окне и ждала молча; ai-dev-plugins доверие не читает
+(«собственная запись харнесса», ответ `mail-session-trust-window-outcome`) и оставил
+мяч у vdx.
+**Why:** vdx уже читает файлы Claude Code (разговоры, `sessions/`, настройки), а ответ
+«доверяет ли» — единственный способ не запускать то, что встанет молча. Отвечать на окно
+за владельца vdx не должен.
+**Implication:** `claudeTrusts` в `conversations.ts`; `vdx ai --detach` в недоверенной
+папке — отказ, exit 4, команда без `--detach`; после переноса папки `vdx doctor --fix`
+называет окно. Нет конфига — не знаем, не мешаем.
+
 ## Sidetracks
 
 ### #1. Перенос папки и реестр intercom
@@ -369,7 +401,8 @@ www.t23b.org (и у проектов вне списка). Хук `local/hooks/r
 будет ждать на нём молча. vdx за владельца не отвечает; сказать в строке
 переноса — может.
 
-**Status:** open
+**Status:** resolved — 2026-10-23: строка после переноса папки называет окно, когда
+Claude Code папке не доверяет (DL #13); `vdx ai --detach` там не запускает. Выйдет в 0.39
 
 ### #3. «Commit .claude/memory/…», когда проект их игнорирует
 
@@ -381,6 +414,42 @@ project's .gitignore — out of git».
 
 **Status:** resolved — 2026-10-23: строка — «stays out of git by the project's own
 .gitignore», когда `git check-ignore` говорит так; выйдет в 0.38
+
+### #4. Второй клон личного репо на той же машине
+
+**Возникло в:** сверка 2026-10-23 вечером — все папки с разговорами
+**Описание:** `~/.claude` на lft и m3 — один каталог в Dropbox
+(`/Users/vdm/Dropbox/settings/claude/.claude`), `~/.claude.json` — тоже; в
+`~/.claude/projects` 26 папок с разговорами. Из них проекты — 24, у всех память внутри,
+кроме `/Users/vdm/nas-info`: второй клон nas-info (есть на обеих станциях, `origin` тот
+же, последний коммит 2026-10-23 18:44), 2 разговора от сентября, заметок 0. В обзор из
+34 он не попал: корни были `~/AI Projects`, `~/PhpstormProjects`, ObsidianVault. Путь
+nas-info лежит в `.claude/settings.json` под git (абсолютный, к клону в
+PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info` получит после pull чужой
+путь — состояние `elsewhere`, и `vdx doctor --fix` там перепишет отслеживаемый файл:
+клоны будут перетягивать путь друг у друга.
+**Что сделать:** у `elsewhere`, где путь пришёл из отслеживаемого `settings.json`, писать
+путь клона в его `settings.local.json` — он читается раньше, общий файл не меняется.
+
+**Status:** resolved — 2026-10-23: так и сделано; путь из пользовательских настроек —
+тоже в `settings.local.json` проекта (раньше `--fix` переписал бы их). Выйдет в 0.39.
+Самому `~/nas-info` (не задан, 0 заметок) `--fix` не делался — это клон nas-info
+
+### #5. Заметки старой сессии по старому пути после переноса не возвращаются
+
+**Возникло в:** та же сверка
+**Описание:** сессия, начатая до переноса, пишет по старому пути, пока не перезапущена
+(ga-developer-portal идёт с 2026-10-08). Её новая заметка — в `projects/<путь>/memory/`
+рядом с `memory.moved-<дата>`, и это состояние `leftovers`: vdx назовёт и отложит, но не
+скопирует (DL #5). DL #5 про остатки ручного переноса, где копия в старом месте старее;
+здесь — наоборот, заметка новее всего внутри.
+**Что сделать:** `memory.moved-*` рядом — след переноса vdx; что лежит в старом месте
+после него, копировать внутрь без перезаписи, как `stray` у перенесённой папки.
+
+**Status:** resolved — 2026-10-23: `leftovers` с `afterMove`; заметки — внутрь без
+перезаписи, их строки из `MEMORY.md` старого места — в `MEMORY.md` проекта (только для
+внесённых: иначе агент заметку не найдёт), разные — названы и остаются в отложенном; то
+же у `stray`. Живьём на пробнике в scratchpad (рабочий CLI, 2026-10-23). Выйдет в 0.39
 
 ## Next actions
 
@@ -421,10 +490,13 @@ project's .gitignore — out of git».
       `.claude/` в `.gitignore` проекта: память вне git по его правилу
 - [x] Выпуск 0.38 (minor): сторож `--staged`, «личный» — кто читает; названная папка —
       проект, дом и `~/.claude` — нет — 0.38.0 (`f1d338d`, 2026-10-23), на lft и m3
-- [ ] Владелец: перезапустить идущие сессии перенесённых проектов (на lft 2026-10-23 —
-      echelon, ga-developer-portal, global-auth, global-auth-risk-model, kratos,
-      limeflow, tx-auth-widget, cc-vdm-plugins, vdx): до перезапуска они пишут в
-      старое место, `vdx doctor` покажет остатки
+- [ ] Владелец: перезапустить идущие сессии перенесённых проектов: до перезапуска они пишут в
+      старое место. Сверка 2026-10-23 ~19:10 EDT (старт процесса `claude` раньше
+      времени файла с `autoMemoryDirectory`): lft — limeflow, ga-developer-portal (идёт с
+      10-08), cc-vdm-plugins, vdx, global-auth-risk-model; m3 — nas-info, ObsidianVault.
+      echelon перезапущен; global-auth, kratos, tx-auth-widget не идут. Новых заметок в
+      старых местах нет: у vdx, cc-vdm-plugins, www.t23b.org, ObsidianVault там пустой
+      `memory/` — его создаёт старая сессия (у vdx — `/clear` в 19:04)
 - [x] Не личные: ни один — под git (DL #9, 2026-10-23); `.git/info/exclude` уже у всех 15
 - [x] Владелец: защита от заметки, которая переходит границу — под git + сторож (DL #11)
 - [x] Владелец: что проверяет сторож и что делать без ответа — DL #12 (2026-10-23)
@@ -444,12 +516,27 @@ project's .gitignore — out of git».
       lime-analytics, ga-demo, gitolite-admin, nas-info, telegram.vorobyev.name,
       www.t23b.org; echelon закоммитил сам (`c7d77f7`); ga-board не в реестре intercom —
       письмо некому; cc-vdm-plugins — вне git (DL #10)
-- [ ] Ответы восьми агентов: коммит или причина
+- [ ] Ответы восьми агентов: коммит или причина. 1 из 8 на 2026-10-23: gitolite-admin —
+      `3c83710` (`.claude/settings.json` с путём; `.claude/memory/` пуста, придёт с первой
+      заметкой; `vdx doctor --staged` пропустил). Семь писем не взяты (`intercom sent`):
+      ga-demo, global-auth-risk-model, lime-analytics, nas-info, obsidianvault,
+      telegram.vorobyev.name, www.t23b.org
 - [ ] Владелец — ga-board (`~/AI Projects/GA/ga-board`): агента в реестре intercom нет,
       письмо некому; `.claude/memory/` (1 заметка) и путь в `settings.json` не закоммичены —
       закоммитить самому или оставить
 - [ ] Sidetrack #1: intercom знает о переносе папки
-- [ ] Sidetrack #2: строка переноса говорит об окне доверия к новой папке
+- [x] Sidetrack #2: строка переноса говорит об окне доверия к новой папке (DL #13, 2026-10-23)
+- [x] Sidetrack #4: второй клон пишет свой путь в `settings.local.json`, общий файл не трогает
+      (2026-10-23)
+- [x] Sidetrack #5: заметки, написанные по старому пути после переноса vdx, копируются внутрь
+      (2026-10-23)
+- [x] Код и тесты к #2, #4, #5 и отказу `--detach`: `memory.ts`, `conversations.ts`
+      (`claudeTrusts`), `ai.ts`; 561 юнит, `check` чистый; живьём рабочим CLI на пробнике в
+      scratchpad — отказ `--detach` (exit 4, новой сессии tmux нет), заметка после
+      переноса со строкой индекса, строка о доверии после `mv` (2026-10-23)
+- [ ] Выпуск 0.39 (minor): то, что выше, и строка «сначала wrap» в `vdx ai --check`
+- [ ] Ответ ai-dev-plugins после выпуска: `mail-session-trust-window-outcome` (что vdx делает
+      с окном) и `restart-hint-wrap-first` (строка дописана)
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
 - [x] Outcome to `nas-info`: `claude-memory-in-project-outcome` (2026-10-23) — по
       четырём пунктам, список; мяч — владелец (0.37.1, скрипт, перенос папок)

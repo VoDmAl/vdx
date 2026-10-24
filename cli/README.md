@@ -56,7 +56,8 @@ vdx doctor --check [project-path]   # one line per hook declared but not running
                                     # not inside — the plugin's SessionStart hook tells the agent
 vdx doctor --fix [project-path]     # write the profile's personal hooks (git.hooks) into ~/.gitconfig, and put
                                     # the project's Claude Code memory inside it: .claude/memory/ (after a
-                                    # folder move, its path and conversations follow)
+                                    # folder move, its path and conversations follow; notes a session that
+                                    # started before the move wrote at the old place come in)
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused | --intercom] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
@@ -116,7 +117,8 @@ The session's `{project}` is `[_.vdx] name` (or the older `[vdx]`) from the proj
 first file in the profile's `session.project_names` that has one, else the repo
 name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
 profile and tmux, the path taken under its home directory; `--detach` only
-starts it. The machine's own label (`$VDX_HOST`) runs here. Where git knows no
+starts it, and not in a folder Claude Code does not trust yet: nobody would answer
+its trust window (exit 4; start once without `--detach`). The machine's own label (`$VDX_HOST`) runs here. Where git knows no
 commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
 For Claude Code `vdx ai` picks the conversation: each one is marked with the
 machine it was last started on (`vdx ai --check`, run by the plugin's hook, writes

@@ -69,6 +69,41 @@ export function claudeConfigDir(env: NodeJS.ProcessEnv, home: string): string {
   return dir ? path.resolve(dir.replace(/^~(?=$|\/)/, home)) : path.join(home, '.claude');
 }
 
+/**
+ * Whether Claude Code trusts a folder (2.1.308, claude-memory-in-project DL #13): its global
+ * config, `.claude.json` in `CLAUDE_CONFIG_DIR` or the home directory, marks
+ * `projects[<folder>].hasTrustDialogAccepted` for the folder or one above it — inside a git
+ * checkout only up to the checkout's top. A start in a folder it does not trust stops on the
+ * trust window until somebody answers. Null: the config cannot be read, nobody knows.
+ */
+export function claudeTrusts(folder: string, env: NodeJS.ProcessEnv, home: string): boolean | null {
+  const dir = env['CLAUDE_CONFIG_DIR']?.trim();
+  let projects: Record<string, unknown> | undefined;
+  try {
+    const file = path.join(dir ? path.resolve(dir.replace(/^~(?=$|\/)/, home)) : home, '.claude.json');
+    projects = dict(at(JSON.parse(fs.readFileSync(file, 'utf8')), 'projects'));
+  } catch {
+    return null;
+  }
+  let d = path.resolve(folder);
+  try {
+    d = fs.realpathSync(d);
+  } catch {
+    // A folder that is not there is trusted by nothing but its own record.
+  }
+  let top: string | null = null;
+  for (let p = d; top === null; p = path.dirname(p)) {
+    if (fs.existsSync(path.join(p, '.git'))) top = p;
+    if (path.dirname(p) === p) break;
+  }
+  for (;;) {
+    if (at(projects?.[d.normalize('NFC')], 'hasTrustDialogAccepted') === true) return true;
+    const up = path.dirname(d);
+    if (d === top || up === d) return false;
+    d = up;
+  }
+}
+
 export function projectDirName(projectRoot: string): string {
   return projectRoot.replace(/[^A-Za-z0-9]/g, '-');
 }

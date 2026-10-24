@@ -117,10 +117,23 @@ describe('memoryState', () => {
     write(path.join(root, '.claude', 'memory', 'same.md'), 's');
     write(path.join(root, '.claude', 'memory', 'differ.md'), 'new');
     const s = memoryState(root, ctx);
-    expect(s).toEqual({ kind: 'leftovers', old, notes: 3, differ: 1, onlyOld: 1 });
+    expect(s).toEqual({ kind: 'leftovers', old, notes: 3, differ: 1, onlyOld: 1, afterMove: false });
     expect(describeMemory(s, ctx)).toMatch(
       /3 note\(s\) still in the old place.*\(1 differ, 1 only there\).*copies nothing back/,
     );
+  });
+
+  it('notes in the old place vdx set aside once: written after the move (Sidetrack #5)', () => {
+    write(
+      path.join(root, '.claude', 'settings.json'),
+      JSON.stringify({ autoMemoryDirectory: `${root}/.claude/memory/` }),
+    );
+    const old = defaultMemoryDir(root, ctx);
+    write(path.join(`${old}.moved-2026-10-20`, 'a.md'), 'a');
+    write(path.join(old, 'late.md'), 'late');
+    const s = memoryState(root, ctx);
+    expect(s).toMatchObject({ kind: 'leftovers', notes: 1, afterMove: true });
+    expect(describeMemory(s, ctx)).toMatch(/1 note\(s\) written in the old place after the move.*brings them in/);
   });
 
   it('pointing into a folder that is gone: moved, with its conversations', () => {
@@ -361,6 +374,27 @@ describe('fixMemory', () => {
     expect(done.join('\n')).toMatch(/conversations .* → /);
   });
 
+  it('moved: Claude Code trusts the folder by its path — the line says when the new one is not trusted yet', () => {
+    const from = path.join(dir, 'old-place');
+    const settings = path.join(root, '.claude', 'settings.json');
+    const trust = (dirs: string[]) =>
+      write(
+        path.join(dir, 'claude', '.claude.json'),
+        JSON.stringify({ projects: Object.fromEntries(dirs.map((d) => [d, { hasTrustDialogAccepted: true }])) }),
+      );
+    const moveLine = /^Claude Code has not trusted this folder yet: .*a detached start \(the mail session\) is refused/;
+    trust([from]);
+    write(settings, JSON.stringify({ autoMemoryDirectory: `${from}/.claude/memory/` }));
+    expect(
+      fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY }),
+    ).toContainEqual(expect.stringMatching(moveLine));
+    trust([from, root]);
+    write(settings, JSON.stringify({ autoMemoryDirectory: `${from}/.claude/memory/` }));
+    expect(
+      fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY }),
+    ).not.toContainEqual(expect.stringMatching(moveLine));
+  });
+
   it('moved, and the new path already has conversations: those stay, the rest is brought, nothing lost', () => {
     const from = path.join(dir, 'old-place');
     write(
@@ -386,7 +420,65 @@ describe('fixMemory', () => {
     );
     const done = fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY });
     expect(read(path.join(root, '.claude', 'memory', 'late.md'))).toBe('late');
-    expect(done.join('\n')).toMatch(/1 note\(s\) written at the old path after the move.*remove it/);
+    expect(done).toContain('1 note(s) written at the old path after the move → .claude/memory/');
+    expect(done).toContain(`${from} holds only them — remove it`);
+  });
+
+  it('leftovers written after the move: brought in with their index lines, nothing overwritten', () => {
+    write(
+      path.join(root, '.claude', 'settings.json'),
+      JSON.stringify({ autoMemoryDirectory: `${root}/.claude/memory/` }),
+    );
+    const inside = path.join(root, '.claude', 'memory');
+    write(path.join(inside, 'MEMORY.md'), '- [Kept](kept.md) — inside\n');
+    write(path.join(inside, 'kept.md'), 'inside');
+    const old = defaultMemoryDir(root, ctx);
+    write(path.join(`${old}.moved-2026-10-20`, 'kept.md'), 'before');
+    // What a session that started before the move writes: the old place anew, its own index.
+    write(path.join(old, 'MEMORY.md'), '- [Late](late.md) — after the move\n- [Kept](kept.md) — rewritten\n');
+    write(path.join(old, 'late.md'), 'late');
+    write(path.join(old, 'kept.md'), 'rewritten');
+    const done = fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY });
+    expect(read(path.join(inside, 'late.md'))).toBe('late');
+    expect(read(path.join(inside, 'kept.md'))).toBe('inside');
+    expect(read(path.join(inside, 'MEMORY.md'))).toBe(
+      '- [Kept](kept.md) — inside\n- [Late](late.md) — after the move\n',
+    );
+    expect(done).toEqual([
+      '1 note(s) written in the old place after the move → .claude/memory/',
+      '1 line(s) of its MEMORY.md → .claude/memory/MEMORY.md, for the notes brought in',
+      `kept .claude/memory/ as it is for kept.md — the later copy differs, it stays in ${old}.moved-${TODAY}`,
+      `the old place set aside: ${old}.moved-${TODAY}`,
+    ]);
+    expect(read(path.join(`${old}.moved-${TODAY}`, 'kept.md'))).toBe('rewritten');
+    expect(memoryState(root, ctx)).toEqual({ kind: 'inside' });
+  });
+
+  it("elsewhere, from the repo's shared settings.json: this clone's path goes into its local settings (Sidetrack #4)", () => {
+    const other = project('other');
+    write(path.join(other, 'README.md'), 'x');
+    const shared = path.join(root, '.claude', 'settings.json');
+    write(shared, JSON.stringify({ autoMemoryDirectory: `${other}/.claude/memory/` }));
+    git(root, 'add', '.claude/settings.json');
+    const done = fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY });
+    expect(json(shared)['autoMemoryDirectory']).toBe(`${other}/.claude/memory/`);
+    expect(json(path.join(root, '.claude', 'settings.local.json'))['autoMemoryDirectory']).toBe(
+      `${root}/.claude/memory/`,
+    );
+    expect(done).toContain(".claude/settings.json keeps the other clone's path — it is shared");
+    expect(memoryState(root, ctx)).toEqual({ kind: 'inside' });
+  });
+
+  it("elsewhere, from the user's settings: not rewritten there — every project reads them", () => {
+    const other = project('other');
+    write(path.join(other, 'README.md'), 'x');
+    const user = path.join(dir, 'claude', 'settings.json');
+    write(user, JSON.stringify({ autoMemoryDirectory: `${other}/.claude/memory/` }));
+    fixMemory(root, memoryState(root, ctx), ctx, { personal: true, underGit: false, today: TODAY });
+    expect(json(user)['autoMemoryDirectory']).toBe(`${other}/.claude/memory/`);
+    expect(json(path.join(root, '.claude', 'settings.local.json'))['autoMemoryDirectory']).toBe(
+      `${root}/.claude/memory/`,
+    );
   });
 
   it('a settings file that is not JSON: nothing written, the reason named', () => {

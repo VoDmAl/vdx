@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { remoteParts } from './author.ts';
-import { claudeConfigDir, projectDirName } from './conversations.ts';
+import { claudeConfigDir, claudeTrusts, projectDirName } from './conversations.ts';
 import { githubToken, machineIo, type HostingIo } from './hosting.ts';
 import { at, dict, errorMessage, list, str } from './narrow.ts';
 
@@ -18,8 +18,11 @@ import { at, dict, errorMessage, list, str } from './narrow.ts';
 export type MemoryState =
   /** In `.claude/memory/`, nothing left in the old place. */
   | { kind: 'inside' }
-  /** In `.claude/memory/`, and notes still lie in the old place — a move made by hand. */
-  | { kind: 'leftovers'; old: string; notes: number; differ: number; onlyOld: number }
+  /**
+   * In `.claude/memory/`, and notes still lie in the old place — a move made by hand. `afterMove`:
+   * vdx set the old place aside before, so a session that started before the move wrote them.
+   */
+  | { kind: 'leftovers'; old: string; notes: number; differ: number; onlyOld: number; afterMove: boolean }
   /** Not set: memory goes to the old place. */
   | { kind: 'outside'; old: string; notes: number }
   /**
@@ -109,6 +112,11 @@ function entries(dir: string): string[] {
   }
 }
 
+/** vdx set this place aside once already (`asideName`): what lies there now came after (Sidetrack #5). */
+function setAsideBefore(dir: string): boolean {
+  return entries(path.dirname(dir)).some((n) => n.startsWith(`${path.basename(dir)}.moved-`));
+}
+
 function sameFile(a: string, b: string): boolean {
   try {
     return fs.readFileSync(a).equals(fs.readFileSync(b));
@@ -130,7 +138,14 @@ export function memoryState(projectRoot: string, ctx: MemoryCtx): MemoryState {
       (n) => fs.existsSync(path.join(target, n)) && !sameFile(path.join(old, n), path.join(target, n)),
     );
     const onlyOld = notes.filter((n) => !fs.existsSync(path.join(target, n)));
-    return { kind: 'leftovers', old, notes: notes.length, differ: differ.length, onlyOld: onlyOld.length };
+    return {
+      kind: 'leftovers',
+      old,
+      notes: notes.length,
+      differ: differ.length,
+      onlyOld: onlyOld.length,
+      afterMove: setAsideBefore(old),
+    };
   }
   if (path.basename(setting.dir) === 'memory' && path.basename(path.dirname(setting.dir)) === '.claude') {
     const from = path.dirname(path.dirname(setting.dir));
@@ -253,6 +268,8 @@ export function describeMemory(state: MemoryState, ctx: MemoryCtx): string {
     case 'inside':
       return 'in .claude/memory/';
     case 'leftovers': {
+      if (state.afterMove)
+        return `in .claude/memory/, and ${state.notes} note(s) written in the old place after the move, ${tilde(state.old, ctx.home)} — by a session that started before it; the fix brings them in`;
       const parts = [state.differ ? `${state.differ} differ` : '', state.onlyOld ? `${state.onlyOld} only there` : '']
         .filter(Boolean)
         .join(', ');
@@ -288,10 +305,10 @@ function asideName(dir: string, today: string): string {
   return name;
 }
 
-/** Copies what `to` lacks; a name `to` already has stays as it is there. Returns the names kept. */
-function copyMissing(from: string, to: string): { copied: number; kept: string[] } {
+/** Copies what `to` lacks; a name `to` already has stays as it is there. Returns the names copied and kept. */
+function copyMissing(from: string, to: string): { copied: string[]; kept: string[] } {
   fs.mkdirSync(to, { recursive: true });
-  let copied = 0;
+  const copied: string[] = [];
   const kept: string[] = [];
   for (const name of entries(from)) {
     const src = path.join(from, name);
@@ -301,9 +318,40 @@ function copyMissing(from: string, to: string): { copied: number; kept: string[]
       continue;
     }
     fs.cpSync(src, dst, { recursive: true, errorOnExist: true, force: false });
-    copied++;
+    copied.push(name);
   }
   return { copied, kept };
+}
+
+const INDEX = 'MEMORY.md';
+
+/**
+ * Notes a session wrote at the old place after the move, brought into `to`: the agent finds a
+ * note by its line in MEMORY.md, so the lines of the old index that point at the notes
+ * brought in join `to`'s — those alone. A line about a note `to` already has is the
+ * project's agent's to judge (DL #8). Returns what was done, one line each, and the names kept.
+ */
+function bringIn(from: string, to: string, what: string, aside: string): { done: string[]; differ: string[] } {
+  const { copied, kept } = copyMissing(from, to);
+  const done = [`${copied.length} note(s) ${what} → .claude/memory/`];
+  const notes = copied.filter((n) => n !== INDEX);
+  const src = path.join(from, INDEX);
+  const dst = path.join(to, INDEX);
+  if (notes.length && !copied.includes(INDEX) && fs.existsSync(src)) {
+    const have = fs.existsSync(dst) ? fs.readFileSync(dst, 'utf8') : '';
+    const lines = fs
+      .readFileSync(src, 'utf8')
+      .split('\n')
+      .filter((l) => notes.some((n) => l.includes(`](${n})`) && !have.includes(`(${n})`)));
+    if (lines.length) {
+      fs.writeFileSync(dst, have + (have && !have.endsWith('\n') ? '\n' : '') + lines.join('\n') + '\n');
+      done.push(`${lines.length} line(s) of its MEMORY.md → .claude/memory/MEMORY.md, for the notes brought in`);
+    }
+  }
+  const differ = kept.filter((n) => n !== INDEX);
+  if (differ.length)
+    done.push(`kept .claude/memory/ as it is for ${differ.join(', ')} — the later copy differs, it stays in ${aside}`);
+  return { done, differ };
 }
 
 /** Sets `autoMemoryDirectory` in a settings file, keeping its other keys. */
@@ -380,12 +428,22 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
     case 'custom':
       return done;
     case 'leftovers':
+      // Written after vdx's move by a session that started before it: newer than anything inside.
+      if (state.afterMove)
+        done.push(
+          ...bringIn(
+            state.old,
+            target,
+            'written in the old place after the move',
+            tilde(asideName(state.old, opts.today), ctx.home),
+          ).done,
+        );
       setAside(state.old);
       return done;
     case 'outside': {
-      const { copied, kept } = fs.existsSync(state.old) ? copyMissing(state.old, target) : { copied: 0, kept: [] };
+      const { copied, kept } = fs.existsSync(state.old) ? copyMissing(state.old, target) : { copied: [], kept: [] };
       if (!fs.existsSync(target)) fs.mkdirSync(target, { recursive: true });
-      done.push(`${copied} note(s) → .claude/memory/`);
+      done.push(`${copied.length} note(s) → .claude/memory/`);
       if (kept.length) done.push(`kept .claude/memory/ as it is for ${kept.join(', ')} — the old copy differs`);
       const file = path.join(root, '.claude', opts.personal ? 'settings.json' : 'settings.local.json');
       writeSetting(file, target);
@@ -405,18 +463,40 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
     }
     case 'moved':
     case 'elsewhere': {
-      writeSetting(state.setting.file, target);
-      done.push(`autoMemoryDirectory → ${target}/ (${path.relative(root, state.setting.file)})`);
+      // The path is rewritten where it was read — unless that file is the user's, read by every
+      // project, or another clone's path in the repo's shared settings.json: then this clone's
+      // own local settings, read first (Sidetrack #4).
+      const local = path.join(root, '.claude', 'settings.local.json');
+      const inProject = path.dirname(state.setting.file) === path.join(root, '.claude');
+      const shared =
+        state.kind === 'elsewhere' &&
+        state.setting.file !== local &&
+        git(root, ['ls-files', '--error-unmatch', '--', path.relative(root, state.setting.file)]) !== null;
+      const file = inProject && !shared ? state.setting.file : local;
+      writeSetting(file, target);
+      done.push(`autoMemoryDirectory → ${target}/ (${path.relative(root, file)})`);
+      if (shared) done.push(`${path.relative(root, state.setting.file)} keeps the other clone's path — it is shared`);
       if (state.kind === 'moved' && state.stray) {
-        const { copied, kept } = copyMissing(state.stray, target);
+        const brought = bringIn(
+          state.stray,
+          target,
+          'written at the old path after the move',
+          tilde(state.stray, ctx.home),
+        );
         done.push(
-          `${copied} note(s) written at the old path after the move → .claude/memory/${kept.length ? `; kept .claude/memory/ as it is for ${kept.join(', ')}` : ''} — ${tilde(state.from, ctx.home)} holds only them, remove it`,
+          ...brought.done,
+          `${tilde(state.from, ctx.home)} holds only them — remove it${brought.differ.length ? ` once ${brought.differ.join(', ')} is settled` : ''}`,
         );
       }
       if (state.kind === 'moved' && state.conversations) {
         const here = path.join(claudeConfigDir(ctx.env, ctx.home), 'projects', projectDirName(root));
         done.push(moveConversations(state.conversations, here, opts.today));
       }
+      // Claude Code trusts a folder by its path: the moved one is new to it (Sidetrack #2).
+      if (state.kind === 'moved' && claudeTrusts(root, ctx.env, ctx.home) === false)
+        done.push(
+          'Claude Code has not trusted this folder yet: its first start here stops on the trust window — start vdx ai here once and answer it; a detached start (the mail session) is refused until then',
+        );
       return done;
     }
   }
@@ -451,7 +531,10 @@ export function fixProjectMemory(
     underGit = /^y(es)?$/i.test(deps.ask('  Keep .claude/memory/ under git? [y/N] ')?.trim() ?? '');
   }
   const done = fixMemory(projectRoot, state, ctx, { personal, underGit, today: deps.today });
-  if (done.length && (state.kind === 'outside' || state.kind === 'moved')) {
+  if (
+    done.length &&
+    (state.kind === 'outside' || state.kind === 'moved' || (state.kind === 'leftovers' && state.afterMove))
+  ) {
     done.push('sessions of this project running now keep the old place until they restart');
   }
   return done;

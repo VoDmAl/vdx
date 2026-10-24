@@ -95,7 +95,8 @@ report.ts      markdown, ansi, json
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
   с машиной и разговором, и почтовая сессия проекта (`--intercom`, `--close`);
   `conversations.ts` — разговоры Claude Code проекта, машина, на которой каждый
-  запускали, и был ли запуск почтовым; `session-versions.ts` — от чего отстала
+  запускали, и был ли запуск почтовым, доверяет ли Claude Code папке
+  (`claudeTrusts`: отказ `--detach`, строка после переноса папки); `session-versions.ts` — от чего отстала
   живая сессия: Claude Code и плагины, обновлённые после её старта или
   `/reload-plugins` (`vdx ai --check`).
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,

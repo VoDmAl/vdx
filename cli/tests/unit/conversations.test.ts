@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { ID, startedOn, userLine, promptLine, titleLine, writeConversation, writeHistory } from './transcripts.ts';
 import {
   claudeConfigDir,
+  claudeTrusts,
   describeAge,
   latestPerMachine,
   listConversations,
@@ -34,6 +35,45 @@ describe('where Claude Code keeps conversations', () => {
   it('takes $CLAUDE_CONFIG_DIR over ~/.claude', () => {
     expect(claudeConfigDir({}, '/h')).toBe('/h/.claude');
     expect(claudeConfigDir({ CLAUDE_CONFIG_DIR: '~/cc' }, '/h')).toBe('/h/cc');
+  });
+});
+
+// Claude Code 2.1.308 (claude-memory-in-project DL #13): the folder's record or one above it,
+// inside a git checkout up to its top; no config — nobody knows.
+describe('claudeTrusts', () => {
+  let home: string;
+  beforeEach(() => {
+    home = tmpDir('vdx-trust-');
+  });
+  afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+  const trusted = (dirs: string[], file = path.join(home, '.claude.json')) =>
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ projects: Object.fromEntries(dirs.map((d) => [d, { hasTrustDialogAccepted: true }])) }),
+    );
+
+  it('the folder or one above it; inside a git checkout, up to its top only', () => {
+    const projects = path.join(home, 'Projects');
+    const plain = path.join(projects, 'notes');
+    const repo = path.join(projects, 'repo');
+    fs.mkdirSync(plain, { recursive: true });
+    fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'src'));
+    expect(claudeTrusts(plain, {}, home)).toBeNull();
+    trusted([projects]);
+    expect(claudeTrusts(plain, {}, home)).toBe(true);
+    expect(claudeTrusts(repo, {}, home)).toBe(false);
+    trusted([repo]);
+    expect(claudeTrusts(path.join(repo, 'src'), {}, home)).toBe(true);
+    expect(claudeTrusts(plain, {}, home)).toBe(false);
+  });
+
+  it('reads .claude.json in $CLAUDE_CONFIG_DIR when it is set', () => {
+    const cc = path.join(home, 'cc');
+    fs.mkdirSync(cc);
+    trusted([home], path.join(cc, '.claude.json'));
+    expect(claudeTrusts(home, { CLAUDE_CONFIG_DIR: cc }, home)).toBe(true);
+    expect(claudeTrusts(home, {}, home)).toBeNull();
   });
 });
 

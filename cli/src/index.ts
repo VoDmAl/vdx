@@ -129,7 +129,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 Without it, an agent running without the profile's flags is
                 a question in a terminal: Enter attaches to it as is, r
                 restarts it, q leaves it
-  --detach      start without attaching; print the command that attaches
+  --detach      start without attaching; print the command that attaches. In a
+                folder Claude Code does not trust yet, nothing starts (exit 4):
+                its trust window would wait with nobody at it — start once
+                without --detach and answer it
   --dry-run     print the plan and the project's running agents; start nothing
   --check       for the agent's own session: how the agent here is launched,
                 whether this session carries the profile's flags, and whether it
@@ -258,7 +261,11 @@ takes it along. Reads only, unless --fix. Exit 2 when something is missing.
            its commits go — see --staged), else into .claude/settings.local.json,
            with the memory kept out of git (.git/info/exclude) unless you say
            yes. After a folder is moved: the path follows it, and the project's
-           conversations move to the new path
+           conversations move to the new path; a folder Claude Code has not
+           trusted yet is named. Notes a session that started before the move
+           wrote at the old place come in, with their MEMORY.md lines; a path
+           another clone left in the shared settings.json goes, for this clone,
+           into its .claude/settings.local.json
   --staged the profile's pre-commit hook: refuses a commit that stages
            .claude/memory/ unless only you read every place the commit reaches —
            origin on a host of git.personal_hosts or a private GitHub repo with

@@ -10,6 +10,7 @@ import { loadManifestAt } from './manifest.ts';
 import { type Author, effectiveAuthor, isGitRepo, rankAuthors, scanPool, writeAuthor } from './author.ts';
 import type { Predicate } from './rubric.ts';
 import {
+  claudeTrusts,
   type Conversation,
   describeConversation,
   describeAge,
@@ -1767,9 +1768,10 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
     `Hand the user the fix — ${reload}` +
       (deps.env['TMUX']
         ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again${again}` +
-          // A focused session and the mail session restart into a new conversation.
+          // A focused session and the mail session restart into a new conversation, and what lives
+          // only in this one ends with it (ai-dev-plugins, restart-hint-wrap-first).
           (focused || intercom
-            ? ', in a new conversation'
+            ? ", in a new conversation — before handing it over, run the project's wrap check (`/vdm:wrap` where vdm is installed): what lives only in this chat ends with it"
             : plan.resumeArgs.length
               ? `, resuming the conversation (${plan.resumeArgs.join(' ')})`
               : '') +
@@ -2100,6 +2102,14 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     // As --restart: the conversation the agent is in, not the folder's newest — another agent's, maybe.
     const live = isClaude(plan.command) && plan.resumeArgs.length > 0 ? conversationOf(current) : null;
     if (live) plan = { ...plan, resumeArgs: resumeId(live) };
+  }
+
+  // Nobody sits at a detached start, and Claude Code holds one in a folder it does not trust on
+  // its trust window, unseen (intercom-session-mode Sidetrack #4). The answer is the person's.
+  if (opts.detach && isClaude(plan.command) && claudeTrusts(projectRoot, deps.env, deps.home) === false) {
+    log(`✗ Claude Code has not trusted ${projectRoot} yet: a detached agent would wait on its trust window, unseen`);
+    log(`  start it once at a terminal and answer the window: ${vdxAiHere} ${shellQuote(projectRoot)}`);
+    return EXIT_LAUNCH_FAILED;
   }
 
   if (current) {
