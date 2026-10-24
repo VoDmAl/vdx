@@ -490,13 +490,20 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       `.claude/` в `.gitignore` проекта: память вне git по его правилу
 - [x] Выпуск 0.38 (minor): сторож `--staged`, «личный» — кто читает; названная папка —
       проект, дом и `~/.claude` — нет — 0.38.0 (`f1d338d`, 2026-10-23), на lft и m3
-- [ ] Владелец: перезапустить идущие сессии перенесённых проектов: до перезапуска они пишут в
+- [x] Владелец: перезапустить идущие сессии перенесённых проектов: до перезапуска они пишут в
       старое место. Сверка 2026-10-23 ~19:10 EDT (старт процесса `claude` раньше
       времени файла с `autoMemoryDirectory`): lft — limeflow, ga-developer-portal (идёт с
       10-08), cc-vdm-plugins, vdx, global-auth-risk-model; m3 — nas-info, ObsidianVault.
       echelon перезапущен; global-auth, kratos, tx-auth-widget не идут. Новых заметок в
       старых местах нет: у vdx, cc-vdm-plugins, www.t23b.org, ObsidianVault там пустой
-      `memory/` — его создаёт старая сессия (у vdx — `/clear` в 19:04)
+      `memory/` — его создаёт старая сессия (у vdx — `/clear` в 19:04). Сверка 2026-10-24 ~13:35
+      EDT: на lft все пять перезапущены; на m3 остались nas-info (pid 62903, с 10-22 22:30) и
+      старая ObsidianVault (pid 39239, с 10-22 22:26, сессия tmux `ObsidianVault@m3`; рядом
+      новая `ObsidianVault@m3-2` с 10-24 09:02). vorobyev.name и vorobyev.org — файл настроек
+      тронут 10-24 13:25 после старта, путь тот же, старого места нет: не устарели. В старых
+      местах nas-info и ObsidianVault — 0 заметок. Сверка 2026-10-24 ~13:50 EDT: владелец
+      перезапустил и эти; все 21 процесс `claude` на lft и m3 начаты после записи пути
+      (vorobyev.name и vorobyev.org — как выше), pid 62903 и 39239 ушли, в старых местах 0 заметок
 - [x] Не личные: ни один — под git (DL #9, 2026-10-23); `.git/info/exclude` уже у всех 15
 - [x] Владелец: защита от заметки, которая переходит границу — под git + сторож (DL #11)
 - [x] Владелец: что проверяет сторож и что делать без ответа — DL #12 (2026-10-23)
@@ -522,9 +529,9 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       пропустил); nas-info — `ed984a1`, в `origin/master`. Пять писем не взяты (`intercom
       sent`): global-auth-risk-model, lime-analytics, obsidianvault, telegram.vorobyev.name,
       www.t23b.org
-- [ ] Владелец — ga-board (`~/AI Projects/GA/ga-board`): агента в реестре intercom нет,
-      письмо некому; `.claude/memory/` (1 заметка) и путь в `settings.json` не закоммичены —
-      закоммитить самому или оставить
+- [x] ga-board (`~/AI Projects/GA/ga-board`) — ничего не делать (владелец, 2026-10-24):
+      «мелкий эксперимент… разовая история», своего агента нет и не будет; память и путь
+      остаются не закоммиченными
 - [ ] Sidetrack #1: intercom знает о переносе папки
 - [x] Sidetrack #2: строка переноса говорит об окне доверия к новой папке (DL #13, 2026-10-23)
 - [x] Sidetrack #4: второй клон пишет свой путь в `settings.local.json`, общий файл не трогает
