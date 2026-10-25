@@ -411,6 +411,32 @@ describe('fixMemory', () => {
     expect(read(path.join(`${conversations}.moved-${TODAY}`, 'same.jsonl'))).toBe('old\n');
   });
 
+  it('moved, with a link left at the old path: the path rewritten, the conversations brought to the real path', () => {
+    // A root moved whole, `~/Projects` left as a link to `/Volumes/Working/Projects`: the old path
+    // still opens the folder, but Claude Code files conversations by the real one.
+    const newRoot = path.join(dir, 'Working');
+    fs.mkdirSync(newRoot);
+    const app = path.join(newRoot, 'app');
+    fs.renameSync(root, app);
+    const oldRoot = path.join(dir, 'Projects');
+    fs.symlinkSync(newRoot, oldRoot);
+    const from = path.join(oldRoot, 'app');
+    git(app, 'remote', 'add', 'origin', 'git@git.home.example:app.git');
+    const settings = path.join(app, '.claude', 'settings.json');
+    write(settings, JSON.stringify({ autoMemoryDirectory: `${from}/.claude/memory/` }));
+    git(app, 'add', '.claude/settings.json');
+    const conversations = path.join(dir, 'claude', 'projects', from.replace(/[^A-Za-z0-9]/g, '-'));
+    write(path.join(conversations, 'c1.jsonl'), '{}\n');
+    const s = memoryState(app, ctx);
+    expect(s).toMatchObject({ kind: 'moved', from, linked: true, conversations, stray: null });
+    expect(memoryNeedsFix(s)).toBe(true);
+    expect(describeMemory(s, ctx)).toMatch(/the old path, which leads here through a link/);
+    fixMemory(app, s, ctx, { personal: true, underGit: false, today: TODAY });
+    expect(json(settings)['autoMemoryDirectory']).toBe(`${app}/.claude/memory/`);
+    expect(read(path.join(conversationsOf(app), 'c1.jsonl'))).toBe('{}\n');
+    expect(memoryState(app, ctx)).toEqual({ kind: 'inside' });
+  });
+
   it('moved, with notes a session wrote at the old path after the move: they join .claude/memory/', () => {
     const from = path.join(dir, 'old-place');
     write(path.join(from, '.claude', 'memory', 'late.md'), 'late');

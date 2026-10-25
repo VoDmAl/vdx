@@ -28,8 +28,17 @@ export type MemoryState =
   /**
    * Set to `<X>/.claude/memory/` of a folder that is gone: the project moved from X. `stray`: X
    * holds nothing but that memory — a session that read the old path wrote there after the move.
+   * `linked`: X is not gone but leads here through a link left in its place — Claude Code still
+   * files conversations by the folder's real path.
    */
-  | { kind: 'moved'; setting: MemorySetting; from: string; conversations: string | null; stray: string | null }
+  | {
+      kind: 'moved';
+      setting: MemorySetting;
+      from: string;
+      conversations: string | null;
+      stray: string | null;
+      linked: boolean;
+    }
   /** Set to `<X>/.claude/memory/` of another folder that exists. */
   | { kind: 'elsewhere'; setting: MemorySetting; from: string }
   /**
@@ -154,8 +163,9 @@ export function memoryState(projectRoot: string, ctx: MemoryCtx): MemoryState {
   }
   if (path.basename(setting.dir) === 'memory' && path.basename(path.dirname(setting.dir)) === '.claude') {
     const from = path.dirname(path.dirname(setting.dir));
+    const linked = fs.existsSync(from) && realRoot(from) === root;
     const stub = entries(from).join() === '.claude' && entries(path.join(from, '.claude')).join() === 'memory';
-    if (fs.existsSync(from) && !stub)
+    if (fs.existsSync(from) && !stub && !linked)
       return sameRepo(root, from) && tracked(root, setting.file)
         ? { kind: 'shared', setting, from }
         : { kind: 'elsewhere', setting, from };
@@ -166,6 +176,7 @@ export function memoryState(projectRoot: string, ctx: MemoryCtx): MemoryState {
       from,
       conversations: fs.existsSync(conversations) ? conversations : null,
       stray: stub ? setting.dir : null,
+      linked,
     };
   }
   return { kind: 'custom', setting };
@@ -305,7 +316,7 @@ export function describeMemory(state: MemoryState, ctx: MemoryCtx): string {
         ? `outside the project: ${state.notes} note(s) in ${tilde(state.old, ctx.home)} — a moved folder loses them, and its conversations`
         : `not set: notes would go to ${tilde(state.old, ctx.home)}, by the folder's path — a moved folder loses them, and its conversations`;
     case 'moved':
-      return `autoMemoryDirectory points to ${tilde(state.setting.dir, ctx.home)}/, ${state.stray ? 'in a folder that holds nothing else' : 'a folder that is gone'} — the project moved from ${tilde(state.from, ctx.home)}${state.conversations ? ', and its conversations stay under the old path' : ''}`;
+      return `autoMemoryDirectory points to ${tilde(state.setting.dir, ctx.home)}/, ${state.linked ? 'the old path, which leads here through a link' : state.stray ? 'in a folder that holds nothing else' : 'a folder that is gone'} — the project moved from ${tilde(state.from, ctx.home)}${state.conversations ? ', and its conversations stay under the old path' : ''}`;
     case 'elsewhere':
       return `autoMemoryDirectory points to the memory of another folder, ${tilde(state.from, ctx.home)} (set in ${tilde(state.setting.file, ctx.home)})`;
     case 'shared':
