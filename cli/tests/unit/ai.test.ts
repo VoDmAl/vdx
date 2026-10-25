@@ -60,6 +60,35 @@ afterAll(() => {
   if (runnerFocused !== undefined) process.env['VDX_FOCUSED'] = runnerFocused;
 });
 
+// The tests' own tmux servers, `vdx-test[-<what>]-<pid>`. kill-server leaves the socket file behind.
+const tmuxSocketDir = path.join(process.env['TMUX_TMPDIR'] || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
+function dropServer(tmux: Tmux, socket: string): void {
+  tmux.tryRun(['kill-server']);
+  fs.rmSync(path.join(tmuxSocketDir, socket), { force: true });
+}
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+};
+// A run cut short (Ctrl-C, a timeout, a worker gone) never reaches its kill-server, and its server
+// keeps a fake agent alive (vdx-ai Sidetrack #23): those of runs that are gone go first.
+beforeAll(() => {
+  let names: string[];
+  try {
+    names = fs.readdirSync(tmuxSocketDir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const pid = /^vdx-test-(?:[a-z]+-)?(\d+)$/.exec(name)?.[1];
+    if (pid && !alive(Number(pid))) dropServer(new Tmux(name), name);
+  }
+});
+
 const OWNER_LIKE = `
 schema_version: "0.1"
 agent:
@@ -119,13 +148,14 @@ describe.skipIf(process.getuid?.() === 0)('guarded folders (macOS)', () => {
   it.skipIf(!new Tmux().available())(
     'asks the tmux server — its sessions have its rights — and falls back without one',
     () => {
-      const tmux = new Tmux(`vdx-test-folders-${process.pid}`);
+      const socket = `vdx-test-folders-${process.pid}`;
+      const tmux = new Tmux(socket);
       try {
         expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // no server yet: this process
         tmux.run(['new-session', '-d', '-s', 'f', 'sleep 30']);
         expect(unreadableFolders(tmux, home)).toEqual([path.join(home, 'Downloads')]); // the server's own ls
       } finally {
-        tmux.tryRun(['kill-server']);
+        dropServer(tmux, socket);
       }
     },
   );
@@ -1158,10 +1188,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   });
 
   afterAll(() => {
-    tmux.tryRun(['kill-server']);
-    // kill-server leaves the socket file behind.
-    const dir = path.join(process.env['TMUX_TMPDIR'] || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
-    fs.rmSync(path.join(dir, socket), { force: true });
+    dropServer(tmux, socket);
     fs.rmSync(base, { recursive: true, force: true });
   });
 
