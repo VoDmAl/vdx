@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-24, @vodmal/vdx-cli@0.39.1)
+# vdx — Handoff (2026-10-24, @vodmal/vdx-cli@0.39.2)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.39.1` — в npm с 2026-10-24 (`287cae3`), Node 22 и
-  новее; на m3 и lft — 0.39.1 с 2026-10-24 (`npm update -g --prefer-online`).
+- **CLI** `@vodmal/vdx-cli@0.39.2` — в npm с 2026-10-24 (`aaecf94`), Node 22 и
+  новее; на m3 и lft — 0.39.2 с 2026-10-24 (`npm update -g --prefer-online`).
 - **Сет** `vdx-rubric-vodmal@v1.8.0` (schema 0.3): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -53,7 +53,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
-| [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-22 | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); 0.37.1; память 34 проектов перенесена (2026-10-23); сторож коммита памяти (DL #11, #12) — в 0.38.0, хук `vdx-memory` на lft и m3 (сет v1.8.0); в 0.39.0: заметки старых сессий после переноса, второй клон, доверие к папке (DL #13, Sidetracks #2, #4, #5); идущие сессии перезапущены (2026-10-24); в 0.39.1: общая память клонов одного репо — не предупреждение (DL #14); дальше: 0.39.2 — старый путь по ссылке тоже перенос (DL #15), ответ www.t23b.org о коммите памяти (7 из 8), ответ nas-info о ссылках при смене корня (Sidetrack #6); потом перенос папок — у владельца с nas-info |
+| [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-22 | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); 0.37.1; память 34 проектов перенесена (2026-10-23); сторож коммита памяти (DL #11, #12) — в 0.38.0, хук `vdx-memory` на lft и m3 (сет v1.8.0); в 0.39.0: заметки старых сессий после переноса, второй клон, доверие к папке (DL #13, Sidetracks #2, #4, #5); идущие сессии перезапущены (2026-10-24); в 0.39.1: общая память клонов одного репо — не предупреждение (DL #14); в 0.39.2: старый путь по ссылке — тоже перенос (DL #15); дальше: ответ www.t23b.org о коммите памяти (7 из 8), ответ nas-info о ссылках при смене корня (Sidetrack #6); потом перенос папок — у владельца с nas-info |
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | done 2026-10-22 | `branch-protection` L3 — GitHub (0.29.0), GitLab (0.33.0), Bitbucket Server (0.34.0); vdx под гейтом, общий L4; отвергнутый вход Bitbucket — причина с командой (0.36.0); отложен gitolite (Sidetrack #1) |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; открыт Sidetrack #23 (сервер tmux после прерванных тестов) |
@@ -86,7 +86,9 @@
 
 ### Следующий выпуск CLI
 
-Ничего срочного. 0.39.1 (2026-10-24, `287cae3`) — общая память клонов одного репо
+Ничего срочного. 0.39.2 (2026-10-24, `aaecf94`) — старый путь памяти, который ведёт в папку
+по ссылке на её прежнем месте, — перенос: `--fix` переносит и разговоры (`claude-memory-in-project`
+DL #15); registry показал её через ~105 с. 0.39.1 (2026-10-24, `287cae3`) — общая память клонов одного репо
 (`claude-memory-in-project` DL #14): `vdx doctor` не предупреждает о пути из
 `.claude/settings.json` под git в другой клон того же репо; registry показал её через 112 с.
 0.39.0 (2026-10-24, `024f4d1`) — `DEFAULT_BASELINE` `@v1.8.0`; память после переноса —
