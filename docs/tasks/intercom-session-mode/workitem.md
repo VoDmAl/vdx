@@ -383,7 +383,15 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
       (whisper и кэши браузеров, `i:disk` — да); ответ nas-info на `lft-disk-owner-decision-2710` — свободно
       после чистки и версия `i:disk`. 2026-10-27 ~20:25 UTC: 2,2 ГиБ, своп 13,6 из 14,3 ГБ, Syncthing «AI
       Projects» в ошибке (< 1 % под базу); nas-info молчал 5 ч — модели whisper (4,4 ГБ) убрал vdx по тому
-      же решению, стало 5,6 ГиБ; кэши браузеров и `i:disk` — у nas-info (письмо `lft-whisper-removed-2710`)
+      же решению, стало 5,6 ГиБ; кэши браузеров и `i:disk` — у nas-info (письмо `lft-whisper-removed-2710`).
+      Тот же день, по «Давай» владельца на разбор диска: кэш yarn berry (1,9 ГБ; проектов PnP нет), JetBrains
+      (1,0; PhpStorm не шёл — переиндексирует), puccinialin, bitwarden-updater, go-build, pkgx, node-gyp — 4,9 ГБ
+      файлов, но `df` не сдвинулся: держал локальный снимок TM 16:23; `tmutil thinlocalsnapshots` — 11 ГиБ.
+      Не тронуто: `limeflow/.next` (идёт `next-server`), кэши браузеров (открыты — после закрытия),
+      `vendor/` vorobyev.name 6,0 ГБ на обеих станциях (109 пакетов клонами git) — письмо
+      `vendor-git-clones-6gb`. Своп 16 ГБ (том VM) — главный потребитель, у nas-info. Владельцу на выбор,
+      руками (не решено): кэш Telegram 6,3 ГБ (`Group Containers/…Telegram`), вложения iMessage 6,8 ГБ
+      (echelon читает iMessage — сначала спросить его), профиль Chrome 6,2 ГБ
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано
@@ -401,6 +409,9 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
       `mail-session-on-nas-info` (деплойный клон `~/nas-info` с `git reset --hard`)
 - [ ] Ответы ai-dev-plugins (`mail-session-on-ai-dev-plugins`) и nas-info (`mail-session-on-nas-info`):
       где стоит ключ; потом — первая почтовая сессия живьём
+- [ ] Владелец — закрыть Chrome и Firefox; тогда vdx чистит их кэши (3,8 ГБ, решение владельца) и пишет
+      nas-info, что за ними остались `i:disk` и память lft (2026-10-27: оба браузера открыты)
+- [ ] Ответ vorobyev.name (`vendor-git-clones-6gb`): `vendor/` 6 ГБ — 109 пакетов клонами git, из dist
 - [ ] Sidetrack #6: intercom предлагает ключ, когда почта копится — ответ ai-dev-plugins
       (`mail-session-suggest-on-backlog`)
 - [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
