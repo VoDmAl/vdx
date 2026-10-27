@@ -381,7 +381,9 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
       побудка живой почтовой сессии сразу, запуска и числа — нет
 - [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23). Владелец решил 2026-10-27
       (whisper и кэши браузеров, `i:disk` — да); ответ nas-info на `lft-disk-owner-decision-2710` — свободно
-      после чистки и версия `i:disk`
+      после чистки и версия `i:disk`. 2026-10-27 ~20:25 UTC: 2,2 ГиБ, своп 13,6 из 14,3 ГБ, Syncthing «AI
+      Projects» в ошибке (< 1 % под базу); nas-info молчал 5 ч — модели whisper (4,4 ГБ) убрал vdx по тому
+      же решению, стало 5,6 ГиБ; кэши браузеров и `i:disk` — у nas-info (письмо `lft-whisper-removed-2710`)
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано

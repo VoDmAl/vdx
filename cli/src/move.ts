@@ -150,7 +150,9 @@ function probeScript(moves: Planned[], home: string): string {
     const d = remotePathWord(m.to, home);
     return (
       `if [ -d ${o} ]; then echo "old ${i}"; ` +
-      `if [ -x "$c" ]; then "$c" --fast ${o} >/dev/null 2>&1; echo "caught ${i} $?"; else echo "caught ${i} none"; fi; fi; ` +
+      // Not --fast: with files needed anywhere in the Syncthing folder it cannot tell whether
+      // they lie in this one, and a busy folder always needs some (exit 3, 2026-10-27).
+      `if [ -x "$c" ]; then "$c" ${o} >/dev/null 2>&1; echo "caught ${i} $?"; else echo "caught ${i} none"; fi; fi; ` +
       `if [ -e ${d} ]; then echo "dest ${i}"; fi`
     );
   });
