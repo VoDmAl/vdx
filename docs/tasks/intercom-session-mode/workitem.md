@@ -5,7 +5,7 @@ description: "Поднимает сессию проекта под почту �
 status: dormant
 session-type: prd-work
 created: 2026-10-22
-last-updated: 2026-10-22
+last-updated: 2026-10-27
 ---
 
 # Почтовая сессия проекта: `vdx ai --intercom`
@@ -278,7 +278,10 @@ Time Machine убраны — свободно было 6,9 ГиБ, к 14:40 EDT
 MCP добавляет к свопу, а через него — к диску. Что ещё убрать — nas-info с
 владельцем ⏰ 2026-10-23. В 16:30 EDT — 6,2 ГиБ (`df`).
 
-**Status:** open — место есть, но тает: почтовая сессия на lft живёт минуты (DL #2)
+**Status:** open — место есть, но тает: почтовая сессия на lft живёт минуты (DL #2). 26.10 — снова 2,0 ГиБ,
+Syncthing «AI Projects» в ошибке (письмо echelon `lft-disk-full-again-2610`, nas-info почистил). 2026-10-27 —
+6,2 ГиБ, своп 11,5 из 12 ГБ; владелец: убрать модели whisper (4,4 ГБ) и кэши браузеров (3,8 ГБ), `~/.npm/_npx`
+не трогать, красный `i:disk` присылать — письмо nas-info `lft-disk-owner-decision-2710`
 
 ### #2. Письмо, пришедшее в закрывающуюся почтовую сессию
 
@@ -334,6 +337,20 @@ claude 2.1.308) вернул `✓ running`, а сессия встала на о
 **Status:** resolved — 2026-10-23: «only the mail session's conversations here (N;
 vdx ai --conversation <id> opens one) — starting a new one»; тест. Выйдет в 0.37.1
 
+### #6. О ключе почтовой сессии агент узнаёт сам, когда почта копится
+
+**Возникло в:** Next actions, ключ `intercom.mail-session` (2026-10-27)
+**Описание:** владелец: «важно чтобы про этот флаг проактивно знали и предлагали его включить если видно
+накопление. Кто это должен делать? vdm skill?» (2026-10-27). Ключ ставится руками, и с vdm 2.58.0 его не
+поставили ни в одном проекте; накопление видит intercom (счёт при старте, `sent`). Чьё — intercom
+(ai-dev-plugins): строка о ключе у получателя и у отправителя, когда письма от других лежат 3+ дня. Замер
+для письма (lft, 14 дней по `created:`): echelon 211, space-hq 139, t23b-program 135 (ждут 23),
+global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26 (19, с 29.07); состав
+скопившегося не разбирался. Письмо `mail-session-suggest-on-backlog` (2026-10-27), сессию
+`cc-vdm-plugins-05` разбудил.
+
+**Status:** open
+
 ## Next actions
 
 - [x] `vdx ai --intercom`: метка, сессия `<имя>-mail`, одна на проект и машину,
@@ -362,7 +379,9 @@ vdx ai --conversation <id> opens one) — starting a new one»; тест. Вый
       (2026-10-22) — имя, запуск отправителем через `vdx ai --intercom --detach`
       после `vdx --version` ≥ 0.36, `--close --waiting <n>`; у vdm 2.57.1 уже есть
       побудка живой почтовой сессии сразу, запуска и числа — нет
-- [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23)
+- [ ] Sidetrack #1: nas-info с владельцем освободили место на lft (⏰ 2026-10-23). Владелец решил 2026-10-27
+      (whisper и кэши браузеров, `i:disk` — да); ответ nas-info на `lft-disk-owner-decision-2710` — свободно
+      после чистки и версия `i:disk`
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано
@@ -370,9 +389,18 @@ vdx ai --conversation <id> opens one) — starting a new one»; тест. Вый
       ключ ещё нигде не включён); им — справка об окне доверия
       (`mail-session-trust-window`, 2026-10-23)
 - [x] Sidetrack #4: `--detach` называет окно доверия, на котором ждёт сессия — отказ, exit 4 (0.39.0, 2026-10-24)
-- [ ] Владелец — push `a448c72` в cc-vdm-plugins и ключ `intercom.mail-session: true` в
+- [x] Владелец — push `a448c72` в cc-vdm-plugins и ключ `intercom.mail-session: true` в
       проектах, где нужна почтовая сессия (мяч из `intercom-mail-start-shipped`,
-      ai-dev-plugins, 2026-10-23, без срока)
+      ai-dev-plugins, 2026-10-23, без срока). 2026-10-25: `a448c72` — в `origin/master`
+      cc-vdm-plugins (lft); ключа нет ни в одном `.claude/vdm-plugins.json` под
+      `~/AI Projects` и `~/PhpstormProjects` (до 4 уровней). 2026-10-27 владелец выбрал
+      ai-dev-plugins и nas-info (из восьми по почте за 14 дней — Sidetrack #6); письма
+      `mail-session-on-ai-dev-plugins` (клон маркетплейса без доверия, файл под git) и
+      `mail-session-on-nas-info` (деплойный клон `~/nas-info` с `git reset --hard`)
+- [ ] Ответы ai-dev-plugins (`mail-session-on-ai-dev-plugins`) и nas-info (`mail-session-on-nas-info`):
+      где стоит ключ; потом — первая почтовая сессия живьём
+- [ ] Sidetrack #6: intercom предлагает ключ, когда почта копится — ответ ai-dev-plugins
+      (`mail-session-suggest-on-backlog`)
 - [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
       (2026-10-23, выйдет в 0.37.1)
 

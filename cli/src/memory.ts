@@ -425,7 +425,7 @@ function excludeMemory(root: string): string | null {
  * by the path, and a moved folder starts with none. What the new place already has
  * stays; the rest of the old place is set aside, never deleted.
  */
-function moveConversations(from: string, to: string, today: string): string {
+export function moveConversations(from: string, to: string, today: string): string {
   if (!fs.existsSync(to)) {
     fs.renameSync(from, to);
     return `conversations ${path.basename(from)} → ${path.basename(to)}`;

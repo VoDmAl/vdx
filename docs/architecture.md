@@ -30,6 +30,7 @@ vdx запускает. Такого `node` нет — ошибка называ
 | `vdx publish` | `publish.ts` |
 | `vdx push` | `gate.ts` |
 | `vdx ai[@host]` | `ai.ts` |
+| `vdx move` | `move.ts` |
 
 Свой раннер vdx не держит: глаголы исполняет mise (D3).
 
@@ -99,6 +100,13 @@ report.ts      markdown, ansi, json
   (`claudeTrusts`: отказ `--detach`, строка после переноса папки); `session-versions.ts` — от чего отстала
   живая сессия: Claude Code и плагины, обновлённые после её старта или
   `/reload-plugins` (`vdx ai --check`).
+- `move.ts` — `vdx move`: перенос проектов в папку на каждой машине профиля
+  (`session.machines`). Одна проверка на каждой — `sh` здесь, ssh там: живые сессии
+  Claude Code (`LIVE_SESSIONS_SCRIPT`), есть ли папка и занято ли новое место,
+  `syncthing-caught-up`. Потом закрытие простаивающих сессий, `mv` на каждой машине,
+  разговоры (`moveConversations`), доверие (`.claude.json`), путь памяти
+  (`fixProjectMemory`), `move.after` профиля, сессии — снова, в том же разговоре
+  (`runAi`, `runAiRemote`).
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,
   `vdx_record_success_path` (`specs/mcp-api.md`).
 

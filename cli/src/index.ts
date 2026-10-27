@@ -50,8 +50,10 @@ import {
   hostLabel,
   REMOTE_HOST_RE,
   resolveProjectRoot,
+  sleepSync,
 } from './ai.ts';
 import { isConversationId } from './conversations.ts';
+import { defaultMoveDeps, runMove } from './move.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -63,6 +65,7 @@ const USAGE = `Usage:
   vdx push    [project_path] [--dry-run]                     (default: cwd; through the branch's required checks)
   vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
   vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
+  vdx move    <project_path>... <folder> [--dry-run]       (on every machine of the profile, with its Claude Code memory and conversations)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
 `;
@@ -276,6 +279,35 @@ takes it along. Reads only, unless --fix. Exit 2 when something is missing.
     bools: ['json', 'check', 'fix', 'staged'],
     values: ['format'],
     positionals: 1,
+  },
+  move: {
+    usage: 'vdx move <project_path>... <folder> [--dry-run]',
+    help: `Moves the projects into <folder> (made if missing; a project keeps its own name) on
+this machine and on every other machine of your profile (session.machines) that has
+them, and takes along what Claude Code keeps by the folder's path: the memory path
+(autoMemoryDirectory), the conversations, the trust in the folder.
+
+Nothing changes until every check passed: the new place is free on every machine,
+every machine answers over ssh, Syncthing has caught up with the folder there
+(syncthing-caught-up; changes on the way are waited for a minute), and no Claude
+Code session of a project is in a turn or waiting for an answer. An idle session
+is a question at a terminal — Enter closes it and starts it again in the new
+place, in the same conversation (a mail session: the next letter starts it);
+without a terminal the move is refused.
+
+The mv runs on every machine that has the folder, so what Syncthing does not
+carry (node_modules, builds, a container's database) moves with it and no old
+folder is left behind. A machine whose mv fails puts the others back. Then, on
+this machine, the profile's move.after commands run with VDX_MOVE_FROM and
+VDX_MOVE_TO — for tools that keep the project's path in their own files.
+
+  --dry-run     print what would move, where the folder is, the sessions found; move nothing
+
+Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing moved;
+4 a step failed — what was moved is put back where it could be, and named.
+`,
+    bools: ['dry-run'],
+    positionals: 64,
   },
   ai: {
     usage:
@@ -756,6 +788,47 @@ function cmdAi(opts: ParsedArgs): void {
   process.exit(runAi(options, deps));
 }
 
+function cmdMove(opts: ParsedArgs): void {
+  if (opts.positionals.length < 2) {
+    process.stderr.write(
+      `vdx move: name the project(s) and the folder to move them into\nUsage: ${COMMANDS['move']!.usage}\n`,
+    );
+    process.exit(2);
+  }
+  const ai = { ...defaultDeps(), version: readCliVersion() };
+  const restart = (input: { host: string | null; path: string; conversation: string; focused: boolean }): number => {
+    const options = {
+      path: input.path,
+      conversation: input.conversation,
+      focused: input.focused,
+      detach: true,
+      restart: false,
+      fresh: false,
+      dryRun: false,
+    };
+    return input.host === null ? runAi(options, ai) : runAiRemote(options, input.host, ai);
+  };
+  const deps = defaultMoveDeps({
+    env: process.env,
+    home: os.homedir(),
+    interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
+    log: (line) => process.stderr.write(line + '\n'),
+    ask: askLine,
+    sleep: sleepSync,
+    restart,
+  });
+  process.exit(
+    runMove(
+      {
+        sources: opts.positionals.slice(0, -1),
+        folder: opts.positionals[opts.positionals.length - 1]!,
+        dryRun: opts.flags['dry-run'] === true,
+      },
+      deps,
+    ),
+  );
+}
+
 const parsed = parseArgs(process.argv);
 if (parsed.cmd === '--version') process.stdout.write(readCliVersion() + '\n');
 else if (['--help', '-h', 'help'].includes(parsed.cmd)) process.stdout.write(USAGE);
@@ -765,6 +838,7 @@ else if (parsed.cmd === 'publish') cmdPublish(checkArgs('publish', parsed));
 else if (parsed.cmd === 'push') cmdPush(checkArgs('push', parsed));
 else if (parsed.cmd === 'doctor') cmdDoctor(checkArgs('doctor', parsed));
 else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(checkArgs('ai', parsed));
+else if (parsed.cmd === 'move') cmdMove(checkArgs('move', parsed));
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd)) {
   checkArgs(parsed.cmd, parsed);
   cmdRun(parsed.cmd as LifecycleVerb);

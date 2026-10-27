@@ -132,12 +132,30 @@ interface GitProfile {
   personal_hosts?: Array<string | { host: string; mirrors?: string[] }>;
 }
 
+/**
+ * A command `vdx move` runs here once a project's folder has moved, for a tool that
+ * keeps the project's path in its own files (claude-memory-in-project DL #17).
+ */
+export interface MoveHook {
+  name: string;
+  /** Run through the shell, with VDX_MOVE_FROM and VDX_MOVE_TO set to the old and new path. */
+  command: string;
+  /** Runs on a machine where this path exists (the tool is installed); `~` is home. */
+  when_exists?: string;
+  description?: string;
+}
+
+interface MoveProfile {
+  after?: MoveHook[];
+}
+
 export interface Environment {
   schema_version?: string;
   metadata?: Record<string, unknown>;
   agent?: AgentProfile;
   session?: SessionProfile;
   git?: GitProfile;
+  move?: MoveProfile;
 }
 
 const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
@@ -298,6 +316,24 @@ export function parseEnvironment(text: string, source: string): Environment {
         if (events.length === 0 || !events.every((e) => typeof e === 'string' && GIT_HOOK_EVENTS.has(e))) {
           fail(`${at}.event`, 'must be a git hook event (pre-commit, pre-push, …) or a list of them');
         }
+        if (typeof h.command !== 'string' || h.command.trim() === '')
+          fail(`${at}.command`, 'must be a non-empty string');
+        if (h.when_exists !== undefined && (typeof h.when_exists !== 'string' || h.when_exists === '')) {
+          fail(`${at}.when_exists`, 'must be a path');
+        }
+      });
+    }
+  }
+
+  const moveDoc = envDoc.move;
+  if (moveDoc !== undefined) {
+    if (typeof moveDoc !== 'object' || moveDoc === null || Array.isArray(moveDoc)) fail('move', 'must be a mapping');
+    if (moveDoc.after !== undefined) {
+      if (!Array.isArray(moveDoc.after)) fail('move.after', 'must be a list');
+      moveDoc.after.forEach((h, i) => {
+        const at = `move.after[${i}]`;
+        if (typeof h !== 'object' || h === null) fail(at, 'must be a mapping');
+        if (typeof h.name !== 'string' || h.name.trim() === '') fail(`${at}.name`, 'must be a non-empty string');
         if (typeof h.command !== 'string' || h.command.trim() === '')
           fail(`${at}.command`, 'must be a non-empty string');
         if (h.when_exists !== undefined && (typeof h.when_exists !== 'string' || h.when_exists === '')) {

@@ -1,8 +1,8 @@
 # vdx-environment.yaml — personal environment profile (vodmal)
 #
 # The person-and-machine half of the vodmal set; vdx-rubric.yaml is the
-# project half. Read by `vdx ai` to start an agent in a project, and by
-# `vdx doctor` for the personal hooks (git.hooks).
+# project half. Read by `vdx ai` to start an agent in a project, by
+# `vdx doctor` for the personal hooks (git.hooks), and by `vdx move` (move.after).
 #
 # Never bundled into vdx — which agent runs, and with which permissions, is
 # a personal choice. Point vdx at this file with $VDX_ENVIRONMENT or a
@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.8.0"
+  version: "1.9.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -114,3 +114,16 @@ git:
       description: "vdx: Claude Code's memory goes into a commit only where nobody but you reads"
       event: pre-commit
       command: 'if git diff --cached --name-only -- .claude/memory | grep -q .; then vdx doctor --staged; fi'
+
+# What `vdx move` (vdx 0.40+) runs on this machine once a project's folder has
+# moved, with VDX_MOVE_FROM and VDX_MOVE_TO set: tools that keep the project's
+# path in their own files. Without the path, the entry is skipped.
+move:
+  after:
+    # echelon's consumers.yaml and mcp.yaml name projects by path (`echelon
+    # moved`: only `path:` lines, safe to repeat). Its checkout comes from the
+    # intercom directory, not from here: echelon may move too.
+    - name: echelon
+      description: "echelon: the project's path: lines in consumers.yaml and mcp.yaml follow the folder"
+      command: '"$("$HOME/.claude/plugins/marketplaces/vodmal/plugins/vdm/scripts/intercom.sh" role access-layer --path)/bin/echelon" moved "$VDX_MOVE_FROM" "$VDX_MOVE_TO"'
+      when_exists: "~/.claude/plugins/marketplaces/vodmal/plugins/vdm/scripts/intercom.sh"

@@ -99,7 +99,10 @@ vdx doctor
 # 6. Start your agent in a project, the way your profile says (see below)
 vdx ai
 
-# 7. What a command does, before running it; an unknown option is refused (exit 2)
+# 7. Move projects into a folder on all your machines, Claude Code memory and conversations along
+vdx move ~/work/app ~/work/clients/
+
+# 8. What a command does, before running it; an unknown option is refused (exit 2)
 vdx init --help
 ```
 
