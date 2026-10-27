@@ -349,7 +349,10 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
 скопившегося не разбирался. Письмо `mail-session-suggest-on-backlog` (2026-10-27), сессию
 `cc-vdm-plugins-05` разбудил.
 
-**Status:** open
+**Status:** resolved — 2026-10-27, ответ ai-dev-plugins `mail-session-suggest-on-backlog-outcome`: vdm 2.64.0
+(`1c5d065`, в `origin/master` cc-vdm-plugins — `ls-remote` 2026-10-27): от 5 писем других агентов и 3 дней —
+строка 📨 при старте получателя (предложить владельцу один раз; не в focused и не в почтовой) и строка в
+`sent` отправителя. Где включать — решает владелец по этим строкам, после автообновления до 2.64.0
 
 ## Next actions
 
@@ -408,12 +411,16 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
       `mail-session-on-ai-dev-plugins` (клон маркетплейса без доверия, файл под git) и
       `mail-session-on-nas-info` (деплойный клон `~/nas-info` с `git reset --hard`)
 - [ ] Ответы ai-dev-plugins (`mail-session-on-ai-dev-plugins`) и nas-info (`mail-session-on-nas-info`):
-      где стоит ключ; потом — первая почтовая сессия живьём
+      где стоит ключ; потом — первая почтовая сессия живьём. ai-dev-plugins ответил 2026-10-27: ключ в
+      `.claude/vdm-plugins.json` рабочего клона (`09936f8`), с vdm 2.63.1 (`9a0925c`) почтовая сессия берёт
+      рабочий клон, не копию плагина; оба коммита в `origin/master`. Тот же день: `send` брифа
+      `focused-topic-letters` назвал запуск, `vdx ai --intercom --detach` поднял `vdm@lft-mail` в рабочем
+      клоне, сессия сама взяла три письма (в панели — «Mail session: 3 letters»). Ждём nas-info
 - [ ] Владелец — закрыть Chrome и Firefox; тогда vdx чистит их кэши (3,8 ГБ, решение владельца) и пишет
       nas-info, что за ними остались `i:disk` и память lft (2026-10-27: оба браузера открыты)
 - [ ] Ответ vorobyev.name (`vendor-git-clones-6gb`): `vendor/` 6 ГБ — 109 пакетов клонами git, из dist
-- [ ] Sidetrack #6: intercom предлагает ключ, когда почта копится — ответ ai-dev-plugins
-      (`mail-session-suggest-on-backlog`)
+- [x] Sidetrack #6: intercom предлагает ключ, когда почта копится — ответ ai-dev-plugins
+      (`mail-session-suggest-on-backlog`): vdm 2.64.0, 2026-10-27
 - [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
       (2026-10-23, выйдет в 0.37.1)
 

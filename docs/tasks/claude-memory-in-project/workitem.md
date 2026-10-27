@@ -741,7 +741,11 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       checkout — из `role access-layer --path`; им — что ключ в профиле и вызов в `vdx move` готовы
 - [ ] Ответ nas-info: `vdx-move-two-stations` (пауза Syncthing на время `mv`, коды `syncthing-caught-up`)
       и `vdx-move-scanning-caught-up` (ждать ли при `scanning`). 0.40.0 уже вышел без них: ответ может
-      поменять `move.ts` (patch). Сессия nas-info на m3 молчала с ~14:30 EDT 2026-10-27
+      поменять `move.ts` (patch). Сессия nas-info на m3 молчала с ~14:30 EDT 2026-10-27; в 19:45 EDT у
+      nas-info 6 непрочитанных писем vdx, живой сессии на lft нет. Почтовую сессию nas-info vdx не поднимал:
+      `~/nas-info` — деплойный клон с `git reset --hard`, незакоммиченный кристалл почтовой сессии там пропал
+      бы (вопрос о месте ключа — в письме `mail-session-on-nas-info`). Владельцу предложено открыть сессию
+      nas-info на m3
 - [x] Выпуск 0.39.1 (patch) — DL #14: `287cae3`, 2026-10-24, на lft и m3; `vdx doctor
       ~/nas-info` на обеих — «ok — in the memory of another clone of this repo»; nas-info —
       письмо `second-clone-memory-shared-shipped`, ответ не нужен
