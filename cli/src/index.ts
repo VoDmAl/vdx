@@ -48,6 +48,7 @@ import {
   runAiRemote,
   defaultDeps,
   hostLabel,
+  normalizeTopic,
   REMOTE_HOST_RE,
   resolveProjectRoot,
   sleepSync,
@@ -64,7 +65,7 @@ const USAGE = `Usage:
   vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
   vdx push    [project_path] [--dry-run]                     (default: cwd; through the branch's required checks)
   vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
-  vdx ai[@host] [project_path] [--new | --conversation <id>] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
+  vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx move    <project_path>... <folder> [--dry-run]       (on every machine of the profile, with its Claude Code memory and conversations)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
@@ -84,6 +85,8 @@ interface CommandSpec {
   bools?: string[];
   /** Flags that take one (`--stack node`, `--format=json`). */
   values?: string[];
+  /** Flags that stand alone or take one (`--focused`, `--focused "<topic>"`). */
+  optional?: string[];
   /** How many positional arguments the command takes. */
   positionals: number;
 }
@@ -102,12 +105,22 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --new         a new conversation instead of continuing the last one; an agent
                 already running here keeps running, the new one starts next to
                 it, in a tmux session of its own (<name>-2, -3, …)
-  --focused     a new conversation, as --new, in a session nothing wakes: the
+  --focused [<topic>]
+                a new conversation, as --new, in a session nothing wakes: the
                 agent, its hooks and MCP servers get VDX_FOCUSED=1 — for the
                 plugins that wake sessions to leave it alone — and the profile's
                 rules marked \`wakes: true\` (a channel flag) are left out. Back
                 to it: --focused --conversation <id>. A running agent keeps its
-                mode: plain vdx ai attaches to it as it is
+                mode: plain vdx ai attaches to it as it is.
+                <topic> — what the session is about: the option @vdx_topic of
+                its tmux session (the terminal's title can show it), and the vdx
+                plugin keeps the conversation in it. Without one a terminal
+                asks — Enter leaves it to the agent, which takes it from your
+                first message; a restart keeps the session's topic, and
+                --conversation brings back the conversation's. Run by the
+                session's own agent, it changes the topic and starts nothing.
+                A word that is a folder, with no path named, is the path. Needs
+                tmux
   --intercom    the project's mail session: a new conversation in a tmux
                 session of its own (<name>-mail), one per project and machine —
                 a running one is attached to, never a second. The agent, its
@@ -311,11 +324,12 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused | --intercom] [--restart] [--detach] [--dry-run]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'focused', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close'],
+    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close'],
     values: ['conversation', 'waiting'],
+    optional: ['focused'],
     positionals: 1,
   },
   ...Object.fromEntries(
@@ -374,7 +388,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 function checkArgs(name: string, opts: ParsedArgs): ParsedArgs {
   const spec = COMMANDS[name]!;
   const bools = [...(spec.bools ?? []), 'help'];
-  const values = spec.values ?? [];
+  const values = [...(spec.values ?? []), ...(spec.optional ?? [])];
   // parseArgs hands the token after a bare flag to that flag as its value; a
   // flag that takes none gives it back — it is the path (or `-h`).
   const positionals = [...opts.positionals];
@@ -402,7 +416,7 @@ function checkArgs(name: string, opts: ParsedArgs): ParsedArgs {
     ...positionals.filter((p) => p.startsWith('-')),
   ];
   if (unknown.length > 0) fail(`unknown option ${unknown.join(', ')}`);
-  const bare = values.filter((f) => flags[f] === true).map((f) => `--${f}`);
+  const bare = (spec.values ?? []).filter((f) => flags[f] === true).map((f) => `--${f}`);
   if (bare.length > 0) fail(`${bare.join(', ')} needs a value`);
   if (positionals.length > spec.positionals) {
     fail(`unexpected argument ${positionals.slice(spec.positionals).join(' ')}`);
@@ -763,14 +777,24 @@ function cmdAi(opts: ParsedArgs): void {
     process.stderr.write('vdx ai: --new and --conversation ask for different conversations — pick one\n');
     process.exit(2);
   }
+  // `--focused <word>`: the session's topic — or, with no path named, a folder that exists: the
+  // project's path, as before the topic (focused-topic DL #3).
+  const focusedWord = typeof opts.flags.focused === 'string' ? opts.flags.focused : undefined;
+  let projectPath = opts.positionals[0];
+  let topic: string | undefined;
+  if (focusedWord !== undefined) {
+    if (projectPath === undefined && resolveProjectRoot(focusedWord) !== null) projectPath = focusedWord;
+    else topic = normalizeTopic(focusedWord) || undefined;
+  }
   const options = {
-    path: opts.positionals[0] ?? '.',
+    path: projectPath ?? '.',
     restart: opts.flags.restart === true,
     fresh: opts.flags.new === true,
     conversation,
     detach: opts.flags.detach === true,
     dryRun: opts.flags['dry-run'] === true,
-    focused: opts.flags.focused === true,
+    focused: opts.flags.focused !== undefined,
+    topic,
     intercom: opts.flags.intercom === true,
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };

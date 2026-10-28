@@ -51,6 +51,19 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   running agent; back to it: `vdx ai --focused --conversation <id>`. When the session-start line says **this session is focused**:
   work on what the user gave you; do not read the inbox or follow a wake
   pointer unless the user asks.
+- **A focused session's topic** (vdx 0.41+, plugin 0.11+): `vdx ai --focused
+  "<topic>"`; without one, a terminal asks, and Enter leaves it to you. It
+  lives in the agent's tmux session (`@vdx_topic`), and the plugin brings it
+  with every message of the user's (`vdx ai: the topic of this focused
+  session is «…»`). A message off it: the first line of your answer says so
+  (`🎯 off topic «…»`, in the user's language) and offers where to put it
+  aside; a short answer goes at once, edits, commits and letters off the
+  topic wait for the user's "here". No topic yet: take it from the user's
+  first message — or the active crystal's name, if the message is about its
+  work — and set it yourself: `vdx ai '<root>' --focused "<topic>"` run in
+  your own focused session changes its topic and starts nothing (in a
+  session that is not focused it is refused). The same when the user names
+  another topic.
 - **A letter for a project, and nobody to wake there: its mail session.**
   `vdx ai --intercom --detach <project root>` (vdx 0.36+) starts it on this
   machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
@@ -73,6 +86,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
+| `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+); run inside the focused session by its agent — a new topic, nothing started |
 | `vdx ai --intercom [--detach] [path]` | the project's mail session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
 | `vdx ai --close [--waiting <n>]` | inside the mail session: it ends itself; n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |

@@ -13,8 +13,9 @@ plugin/
 ├── .mcp.json                        # vdx-mcp stdio server (installed, else via npx)
 ├── skills/vdx-discover/SKILL.md     # discover-and-record workflow
 ├── skills/vdx-ai/SKILL.md           # how the agent is launched: vdx ai + profile
-├── hooks/hooks.json                 # SessionStart; PostToolUse on vdx_up
+├── hooks/hooks.json                 # SessionStart; UserPromptSubmit; PostToolUse on vdx_up
 ├── scripts/session-start.sh         # SessionStart: `vdx ai --check` → agent context
+├── scripts/focused-topic.sh         # UserPromptSubmit: a focused session's topic with every message
 └── scripts/record-success-path.sh   # PostToolUse hook script
 ```
 
@@ -103,6 +104,17 @@ place until it restarts. Silent when all is in order.
 In a session started with `vdx ai --focused` (vdx 0.23+) the `vdx ai --check`
 line says so: nothing wakes it, and it reads its inbox only when the user
 asks. The `vdx-ai` skill tells the agent the same.
+
+A focused session has a topic (vdx 0.41+): `vdx ai --focused "<topic>"`, kept
+as the option `@vdx_topic` of the agent's tmux session. The `vdx ai --check`
+line names it on a line of its own — kept in the transcript, it brings the
+topic back with `--focused --conversation <id>` — or asks the agent to set
+one from the user's first message. The plugin's `UserPromptSubmit` hook
+(0.11.0, `scripts/focused-topic.sh`) brings the topic with every message of
+the user's in a focused session, with what to do with a message off it: a
+first line `🎯 off topic «…»` and where to put it aside; edits, commits and
+letters off the topic wait for the user's word. The model judges; the hook
+only reads the option. In any other session it exits at once.
 
 In the project's mail session, started with `vdx ai --intercom` (vdx 0.36+),
 the line says that letters and wakes for the project come there and nobody

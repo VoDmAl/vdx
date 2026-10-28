@@ -45,7 +45,13 @@ import {
   tmuxShellCommand,
   unreadableFolders,
 } from '../../src/ai.ts';
-import { type LiveSession, MAIL_LINE_PREFIX, machineLine, readConversation } from '../../src/conversations.ts';
+import {
+  type LiveSession,
+  MAIL_LINE_PREFIX,
+  machineLine,
+  readConversation,
+  topicLine,
+} from '../../src/conversations.ts';
 import { ID, hookLine, promptLine, startedOn, userLine, writeConversation, writeHistory } from './transcripts.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -543,6 +549,16 @@ describe('runAi without tmux', () => {
     expect(out).toContain('profile:  none');
     expect(out).toContain('agent:    codex\n');
     expect(out).toContain('this terminal');
+  });
+
+  it('a topic needs tmux: refused before anything starts; a focused start without one goes on', () => {
+    const claude = deps({ onPath: (b) => b === 'claude' });
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'release', dryRun: true }, claude)).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain("a topic lives in the agent's tmux session (@vdx_topic)");
+    expect(logs.join('\n')).toContain(`without a topic: vdx ai --focused ${root}`);
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, dryRun: true }, claude)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('topic:    — none: a topic lives in the tmux session, and this start has none');
   });
 
   describe('in this terminal', () => {
@@ -1567,6 +1583,109 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(deps().agentFocused!(replaced.proc.pid)).toBe(true);
   }, 30_000);
 
+  it('--focused <topic>: its tmux session carries it, a restart keeps it, its own agent changes it (focused-topic)', () => {
+    writeProfile(['--base'], true);
+    tmux.tryRun(['kill-server']);
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const topicOf = (session: string) =>
+      tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim() ?? '';
+    // A shell tool of the agent `pid` — the agent's environment, VDX_FOCUSED=1 when it is focused.
+    const inside = (pid: number, focused: boolean): AiDeps => ({
+      ...deps(),
+      env: { ...deps().env, ...(focused ? { VDX_FOCUSED: '1' } : {}) },
+      processes: () => [...listProcesses(), { pid: 9_999_991, ppid: pid, args: 'node vdx ai' }],
+      lag: () => null,
+    });
+
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'release 0.41', dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('topic:    «release 0.41» (from --focused)');
+    expect(agents()).toHaveLength(0);
+
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'release 0.41' }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('🎯 topic «release 0.41» (from --focused)');
+    const session = agents()[0]!.pane.session;
+    expect(topicOf(session)).toBe('release 0.41');
+
+    // A restart keeps its session's topic, and its session-start check gives it on a line of its own.
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, restart: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('🎯 topic «release 0.41» (kept from its tmux session)');
+    const focused = agents()[0]!;
+    logs = [];
+    expect(runAiCheck(root, inside(focused.proc.pid, true), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain(`\n${topicLine('release 0.41')}\n· keep the conversation in it`);
+
+    // Its own agent names another topic: the session's changes, nothing starts.
+    logs = [];
+    const change = { ...opts, path: root, focused: true, topic: 'docs for 0.41' };
+    expect(runAi({ ...change, dryRun: true }, inside(focused.proc.pid, true), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain(`${session}: the topic would be «docs for 0.41», was «release 0.41»`);
+    expect(topicOf(session)).toBe('release 0.41');
+    expect(runAi(change, inside(focused.proc.pid, true), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`✓ ${session}: the topic is «docs for 0.41», was «release 0.41»`);
+    expect(topicOf(session)).toBe('docs for 0.41');
+    expect(agents().map((a) => a.proc.pid)).toEqual([focused.proc.pid]);
+
+    // A plain restart makes it a plain session: the topic goes with the mode.
+    expect(runAi({ ...opts, path: root, restart: true }, deps())).toBe(EXIT_OK);
+    expect(topicOf(session)).toBe('');
+    const plain = agents()[0]!;
+    logs = [];
+    expect(runAi(change, inside(plain.proc.pid, false), 9_999_991)).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('this session is not focused');
+    expect(logs.join('\n')).toContain(`vdx ai ${shellQuote(root)} --focused 'docs for 0.41' --detach`);
+    expect(agents()).toHaveLength(1);
+    // Focused with no topic: its check asks the agent to set one.
+    logs = [];
+    expect(runAiCheck(root, inside(plain.proc.pid, true), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain('· this focused session has no topic yet: take it from the user');
+
+    // At a terminal a start asks; Ctrl-D starts nothing, Enter leaves it to the agent.
+    const asked: string[] = [];
+    const answering = (answer: string | null) => ({
+      ...deps(),
+      interactive: true,
+      ask: (p: string) => (asked.push(p), answer),
+    });
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, detach: true }, answering(null))).toBe(EXIT_LAUNCH_FAILED);
+    expect(logs.join('\n')).toContain('no answer — nothing started');
+    expect(agents()).toHaveLength(1);
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, detach: true }, answering(''))).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain("🎯 no topic yet — the agent takes it from the user's first message");
+    expect(runAi({ ...opts, path: root, focused: true, detach: true }, answering('  the  typed\ttopic '))).toBe(
+      EXIT_OK,
+    );
+    expect(logs.join('\n')).toContain('🎯 topic «the typed topic» (typed)');
+    expect(asked).toEqual(
+      Array(3).fill('Topic of this focused session [Enter: the agent takes it from your first message]: '),
+    );
+    const sessions = agents().map((a) => a.pane.session);
+    expect(sessions.map(topicOf)).toEqual(['', '', 'the typed topic']);
+  }, 60_000);
+
+  it('--focused --conversation <id> brings back the topic the conversation last had', () => {
+    tmux.tryRun(['kill-server']);
+    const claude = path.join(base, 'bin', 'claude');
+    fs.mkdirSync(path.dirname(claude), { recursive: true });
+    fs.copyFileSync(path.join(base, 'fake-agent'), claude);
+    fs.chmodSync(claude, 0o755);
+    fs.writeFileSync(
+      profile,
+      `agent: {command: ${claude}, resume_args: [--continue]}\nsession: {multiplexer: tmux, name: "{project}@{host}"}\n`,
+    );
+    const cc = path.join(base, 'cc-topic');
+    writeConversation(cc, root, ID.c, [startedOn('testhost'), userLine('hi'), hookLine(topicLine('the old one'))], 5);
+    const d = { ...deps(), env: { ...deps().env, CLAUDE_CONFIG_DIR: cc } };
+    expect(runAi({ ...opts, path: root, focused: true, conversation: ID.c, dryRun: true }, d)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('topic:    «the old one» (from the conversation)');
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, conversation: ID.d, dryRun: true }, d)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain("topic:    — the agent takes it from the user's first message");
+  });
+
   it('--intercom: the mail session in a session of its own, one per project; the other starts leave it alone', () => {
     writeProfile(['--base'], true, ['/first prompt']);
     tmux.tryRun(['kill-server']);
@@ -1726,6 +1845,15 @@ describe('vdx ai@host', () => {
         'ai',
         path.join(dir, 'home', 'AI Projects', 'vdx'),
         '--focused',
+      ]);
+    });
+
+    it('…with its topic as one word, after the path: there it is the topic, never the path', () => {
+      expect(run('0.14.0', { ...opts, focused: true, topic: "release 0.41 — it's due" }).args).toEqual([
+        'ai',
+        path.join(dir, 'home', 'AI Projects', 'vdx'),
+        '--focused',
+        "release 0.41 — it's due",
       ]);
     });
   });
@@ -1970,7 +2098,30 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     const text = out.join('');
     expect(text).toContain('· this session is focused (`vdx ai --focused`)');
     expect(text).toContain("the profile's echelon-channel is left out");
+    // No tmux pane holds this agent: it has nowhere to keep a topic.
+    expect(text).toContain("· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux session.");
     expect(text).toContain("✓ this session carries the profile's flags");
+  });
+
+  it("a topic line in the transcript: the last one is the conversation's topic", () => {
+    const file = path.join(home, `${ID.a}.jsonl`);
+    const prompt = (text: string) =>
+      JSON.stringify({ type: 'attachment', attachment: { type: 'hook_additional_context', content: [text] } });
+    fs.writeFileSync(
+      file,
+      [
+        startedOn('lft'),
+        userLine('hi'),
+        prompt(`${topicLine('first')}\n· keep the conversation in it`),
+        prompt(`${topicLine('the «second» one')}\n· keep the conversation in it`),
+        userLine('more'),
+      ].join('\n') + '\n',
+    );
+    expect(readConversation(file, new Date())?.topic).toBe('the «second» one');
+    expect(readConversation(file, new Date())?.machine).toBe('lft');
+    const plain = path.join(home, `${ID.b}.jsonl`);
+    fs.writeFileSync(plain, [startedOn('lft'), userLine('hi')].join('\n') + '\n');
+    expect(readConversation(plain, new Date())?.topic).toBeNull();
   });
 
   it('the mail session: says what it is and how it ends; the transcript keeps it as a mail one', () => {

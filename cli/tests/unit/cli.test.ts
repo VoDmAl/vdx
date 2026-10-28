@@ -95,6 +95,26 @@ describe('vdx ai --help and unknown options', () => {
     }
   }, 20_000); // 3 starts of the CLI
 
+  it('--focused <word>: a folder, with no path named, is the path; any other word is the topic', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-cli-focused-')));
+    const asPath = vdxEnv(env(), 'ai', '--focused', dir, '--dry-run');
+    expect(asPath.status).toBe(0);
+    expect(asPath.stdout).toContain(`vdx ai — ${dir}\n`);
+    expect(asPath.stdout).toContain('topic:    — none');
+    // --detach: a start, never a change of the topic of the session these tests may run in.
+    // The profile has no tmux, and a topic lives in the tmux session: refused, the topic named as such.
+    for (const args of [
+      [dir, '--focused', 'release 0.41'],
+      [dir, '--focused', dir],
+      ['--focused=release 0.41', dir],
+    ]) {
+      const r = vdxEnv(env(), 'ai', ...args, '--detach', '--dry-run');
+      expect(r.status, args.join(' ')).toBe(2);
+      expect(r.stderr).toContain("a topic lives in the agent's tmux session");
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 20_000); // 4 starts of the CLI
+
   it('still accepts --resume, a no-op since 0.13', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, '--resume', '--dry-run');
     expect(r.status).toBe(0);

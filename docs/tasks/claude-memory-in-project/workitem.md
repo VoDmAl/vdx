@@ -2,7 +2,7 @@
 title: "Память Claude внутри проекта"
 slug: claude-memory-in-project
 description: "Держит память агента в папке проекта: проверка в vdx ai, миграция, перенос папки"
-status: in-progress
+status: dormant
 session-type: prd-prep
 created: 2026-10-22
 last-updated: 2026-10-27

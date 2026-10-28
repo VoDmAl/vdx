@@ -12,6 +12,7 @@ import type { Predicate } from './rubric.ts';
 import {
   claudeTrusts,
   type Conversation,
+  conversationTopic,
   describeConversation,
   describeAge,
   describeLive,
@@ -29,6 +30,7 @@ import {
   machineOf,
   parseMachineReport,
   runsInProject,
+  topicLine,
 } from './conversations.ts';
 import {
   describeMemory,
@@ -175,6 +177,12 @@ const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
 const INTERCOM_ENV_VAR = 'VDX_INTERCOM';
 /** The tmux session option `vdx ai --close --waiting <n>` sets: questions to the person still unanswered. */
 const WAITING_OPTION = '@vdx_waiting';
+/**
+ * The tmux session option with a focused session's topic (focused-topic DL #2): set by `vdx ai`
+ * at a start and by the session's own agent; read by the terminal's title, the vdx plugin's
+ * prompt hook and intercom. Every agent has a tmux session of its own (vdx-ai DL #36).
+ */
+const TOPIC_OPTION = '@vdx_topic';
 /** A mail session's pane closes this long after `--close`, so the call returns and the turn ends. */
 const CLOSE_DELAY_S = 2;
 const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
@@ -814,8 +822,37 @@ export interface AiOptions {
   dryRun: boolean;
   /** `--focused`: a session nothing wakes — VDX_FOCUSED=1, the profile's `wakes` rules left out. */
   focused?: boolean;
+  /** `--focused <topic>`: what the focused session is about; inside it, a new topic for it. */
+  topic?: string;
   /** `--intercom`: the project's mail session — VDX_INTERCOM=1, one per project and machine. */
   intercom?: boolean;
+}
+
+/** A topic is one line: it goes into a tmux option, a terminal's title and a transcript line. */
+export function normalizeTopic(raw: string): string {
+  return raw.replace(/\s+/g, ' ').trim();
+}
+
+/** A tmux session's topic; null — it has none, or there is no such session. */
+function sessionTopic(tmux: Tmux, session: string): string | null {
+  // `=name:` — a session option needs the session as a target, `=name` alone is not found.
+  return tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, TOPIC_OPTION])?.trim() || null;
+}
+
+/** Set the session's topic, or clear it: a session left by a focused agent keeps no stale one. */
+function setSessionTopic(tmux: Tmux, session: string, topic: string | null): boolean {
+  return (
+    tmux.tryRun(
+      topic
+        ? ['set-option', '-t', `=${session}:`, TOPIC_OPTION, topic]
+        : ['set-option', '-u', '-t', `=${session}:`, TOPIC_OPTION],
+    ) !== null
+  );
+}
+
+/** The pane whose processes hold the agent `pid`; none outside tmux. */
+function paneOfAgent(tmux: Tmux, procs: ProcInfo[], pid: number): PaneInfo | undefined {
+  return tmux.panes().find((p) => processTree(procs, p.panePid).some((x) => x.pid === pid));
 }
 
 export interface AiDeps {
@@ -941,6 +978,7 @@ function renderPlan(
   session: string,
   /** The project's agents this start leaves alone: the mail session for the others, the others for it. */
   aside: AgentPane[] = [],
+  topic: Topic | null = null,
 ): string {
   const lines = [
     `vdx ai — ${plan.projectRoot}`,
@@ -952,6 +990,7 @@ function renderPlan(
   ];
   if (plan.focused)
     lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
+  if (topic) lines.push(`  topic:    ${topic.text ? `«${topic.text}» (${topic.from})` : `— ${topic.from}`}`);
   if (plan.intercom)
     lines.push(
       `  mail:     the project's mail session, a new conversation; first: ${
@@ -1126,7 +1165,8 @@ export function remoteAiArgs(input: {
   const { host, opts, version } = input;
   const flags = [
     opts.fresh && '--new',
-    opts.focused && '--focused',
+    // After the path: the word after --focused is then the topic there, never the path.
+    opts.focused && (opts.topic ? `--focused ${shellQuote(opts.topic)}` : '--focused'),
     opts.intercom && '--intercom',
     opts.restart && '--restart',
     opts.detach && '--detach',
@@ -1509,9 +1549,10 @@ function pickAgent(
   const show = (a: AgentPane) => {
     const id = liveConversationId(deps.env, deps.home, a.proc.pid);
     const at = startedAt(a);
+    const topic = focusedOf(a.proc.pid) ? sessionTopic(deps.tmux, a.pane.session) : null;
     const marks = [
       id && `conversation ${id.slice(0, 8)}`,
-      focusedOf(a.proc.pid) && 'focused',
+      focusedOf(a.proc.pid) && `focused${topic ? ` «${topic}»` : ''}`,
       at !== null && `started ${describeAge(new Date(at))}`,
     ].filter(Boolean);
     return `${a.pane.session} ${a.pane.paneId}${marks.length ? ` — ${marks.join(', ')}` : ''}`;
@@ -1725,6 +1766,29 @@ export function findOwnAgent(procs: ProcInfo[], pid: number, command: string): P
 }
 
 /**
+ * What `vdx ai --check` tells a focused session about its topic: the topic on a line of its own —
+ * the transcript keeps it for `--focused --conversation` — or that the agent sets it.
+ */
+function focusedTopicLines(projectRoot: string, tmux: Tmux, procs: ProcInfo[], agentPid: number): string[] {
+  const pane = paneOfAgent(tmux, procs, agentPid);
+  if (!pane) return ["· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux session."];
+  const set =
+    `\`vdx ai ${shellQuote(projectRoot)} --focused "<topic>"\` ` +
+    "(run here, it changes this session's topic and nothing else)";
+  const topic = sessionTopic(tmux, pane.session);
+  if (topic)
+    return [
+      topicLine(topic),
+      "· keep the conversation in it: the vdx plugin (0.11+) repeats the topic with every message of the user's, " +
+        `and says what to do with a message off it. When the user names another topic: ${set}.`,
+    ];
+  return [
+    "· this focused session has no topic yet: take it from the user's first message — or the active crystal's " +
+      `name, if the message is about its work — set it with ${set}, and say it to the user in one line.`,
+  ];
+}
+
+/**
  * `vdx ai --check`: what an agent should know about how it is launched here,
  * and whether the session it runs in carries the profile's flags. Prints
  * nothing without a profile — on such a machine `vdx ai` decides nothing.
@@ -1747,6 +1811,8 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
       `condition in the profile, not an instruction to type. A project's agent on another machine: ` +
       `\`vdx ai@<machine>\`. More: \`vdx ai --help\`.`,
   ];
+  const procs = deps.processes();
+  const own = findOwnAgent(procs, selfPid, plan.command);
   if (focused) {
     lines.push(
       `· this session is focused (\`vdx ai --focused\`): it works on what the user gave it — nothing should wake it, ` +
@@ -1754,6 +1820,7 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
         (plan.skipped.length ? `; the profile's ${plan.skipped.join(', ')} is left out` : '') +
         '.',
     );
+    if (own) lines.push(...focusedTopicLines(projectRoot, deps.tmux, procs, own.pid));
   }
   if (intercom) {
     // The conversation is known by this line as a mail session's (conversations.ts): keep its opening.
@@ -1766,7 +1833,6 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
         `\`--close\` clears it.`,
     );
   }
-  const own = findOwnAgent(deps.processes(), selfPid, plan.command);
   if (!own) {
     lines.push(`· no ${plan.command} among the ancestors of this process — no session to compare with the profile.`);
     deps.out(lines.join('\n') + '\n');
@@ -1873,6 +1939,84 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
   return EXIT_OK;
 }
 
+/** A focused session's topic for a start, and where it came from — as `--dry-run` and the start say. */
+interface Topic {
+  text: string | null;
+  from: string;
+}
+
+const AGENT_TAKES_TOPIC = "the agent takes it from the user's first message";
+
+/**
+ * The topic of the focused session a start makes (focused-topic DL #3): the one named with
+ * `--focused`; a restart keeps its session's; a conversation brings back its last; at a terminal
+ * a question — Enter leaves it to the agent, which takes it from the first message (and knows the
+ * active crystal, which vdx does not). Null — Ctrl-D at the question: nothing starts.
+ */
+function chooseTopic(
+  opts: AiOptions,
+  plan: LaunchPlan,
+  deps: AiDeps,
+  restarted: AgentPane | undefined,
+  canAsk: boolean,
+): Topic | null {
+  if (opts.topic) return { text: opts.topic, from: 'from --focused' };
+  const kept = restarted ? sessionTopic(deps.tmux, restarted.pane.session) : null;
+  if (kept) return { text: kept, from: 'kept from its tmux session' };
+  const back = opts.conversation
+    ? conversationTopic({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, id: opts.conversation })
+    : null;
+  if (back) return { text: back, from: 'from the conversation' };
+  if (!deps.interactive) return { text: null, from: AGENT_TAKES_TOPIC };
+  if (!canAsk) return { text: null, from: `asked at the start; Enter — ${AGENT_TAKES_TOPIC}` };
+  const answer = deps.ask(`Topic of this focused session [Enter: the agent takes it from your first message]: `);
+  if (answer === null) return null;
+  const typed = normalizeTopic(answer);
+  return typed ? { text: typed, from: 'typed' } : { text: null, from: AGENT_TAKES_TOPIC };
+}
+
+/**
+ * `vdx ai <path> --focused <topic>` run by the agent of a focused session of the project, about
+ * itself: its tmux session gets the new topic, and nothing starts (focused-topic DL #3). In the
+ * project's session that is not focused it is refused, with the command that starts a focused one
+ * next to it: a topic is a focused session's. Null — not such a call: a start.
+ */
+function changeTopic(opts: AiOptions, plan: LaunchPlan, deps: AiDeps, selfPid: number): number | null {
+  const topic = opts.topic;
+  if (!topic || opts.fresh || opts.restart || opts.detach || opts.conversation) return null;
+  const procs = deps.processes();
+  const own = findOwnAgent(procs, selfPid, plan.command);
+  if (!own) return null;
+  const pane = paneOfAgent(deps.tmux, procs, own.pid);
+  // An agent may start a focused session of another project: that is a start.
+  if (pane && !isInside(realpathOr(pane.cwd), realpathOr(plan.projectRoot))) return null;
+  const root = shellQuote(plan.projectRoot);
+  if (deps.env[FOCUSED_ENV_VAR] !== '1') {
+    deps.log("vdx ai --focused: this session is not focused, and a topic is a focused session's — nothing changed");
+    deps.log(`  a focused session next to this one: vdx ai ${root} --focused ${shellQuote(topic)} --detach`);
+    return EXIT_USAGE;
+  }
+  if (!pane) {
+    deps.log(
+      `vdx ai --focused: this focused session runs outside tmux, and its topic lives in the agent's tmux session ` +
+        `(${TOPIC_OPTION}) — nothing changed`,
+    );
+    return EXIT_USAGE;
+  }
+  const before = sessionTopic(deps.tmux, pane.session);
+  const was = before ? `, was «${before}»` : '';
+  if (opts.dryRun) {
+    deps.out(`vdx ai — ${pane.session}: the topic would be «${topic}»${was}\n`);
+    return EXIT_OK;
+  }
+  if (!setSessionTopic(deps.tmux, pane.session, topic)) {
+    deps.log(`✗ ${pane.session}: tmux did not take the topic — it stays ${before ? `«${before}»` : 'unset'}`);
+    return EXIT_LAUNCH_FAILED;
+  }
+  deps.log(`✓ ${pane.session}: the topic is «${topic}»${was}`);
+  return EXIT_OK;
+}
+
 /** `this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0`. */
 function describeLag(lag: Lag): string {
   const names = lag.plugins.map((p) => `${p.name} ${p.version}`).join(', ');
@@ -1881,7 +2025,7 @@ function describeLag(lag: Lag): string {
   return lag.plugins.length > 0 ? `${claude}; plugins updated since it loaded them: ${names}` : claude;
 }
 
-export function runAi(opts: AiOptions, deps: AiDeps): number {
+export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.pid): number {
   const { log, tmux } = deps;
 
   if (opts.intercom && opts.focused) {
@@ -1896,6 +2040,10 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
+  // Run by a focused session's agent about itself: a new topic, nothing started. Read before the
+  // marks below go: VDX_FOCUSED here is the agent's.
+  const changed = changeTopic(opts, plan, deps, selfPid);
+  if (changed !== null) return changed;
   // The agent started here runs on this machine: it does not inherit where the person sat,
   // and its mode is this start's flag, not the shell vdx runs in.
   delete deps.env[SEAT_ENV_VAR];
@@ -1918,6 +2066,13 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   if (multiplexer === 'tmux' && !tmux.available()) {
     log('vdx ai: tmux is not installed — starting the agent in this terminal');
     multiplexer = 'none';
+  }
+  if (opts.topic && multiplexer !== 'tmux') {
+    log(
+      `vdx ai: a topic lives in the agent's tmux session (${TOPIC_OPTION}), and this start has no tmux ` +
+        `(session.multiplexer: tmux in the profile, and tmux installed) — nothing started; without a topic: vdx ai --focused ${shellQuote(projectRoot)}`,
+    );
+    return EXIT_USAGE;
   }
 
   const agentsHere =
@@ -1986,6 +2141,11 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home)
     : [];
   if (opts.dryRun) {
+    const topic = !plan.focused
+      ? null
+      : multiplexer === 'tmux'
+        ? chooseTopic(opts, plan, deps, current, false)
+        : { text: null, from: 'none: a topic lives in the tmux session, and this start has none' };
     deps.out(
       renderPlan(
         plan,
@@ -1994,6 +2154,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
         focusedOf,
         freeSessionName(plan.sessionName, alongside ? running : []),
         aside,
+        topic,
       ),
     );
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
@@ -2097,10 +2258,18 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
       );
     }
     const unfocused = plan.focused && !runningFocused;
+    // A topic named for the focused agent attached to is its topic from now on.
+    const { session } = current.pane;
+    const attachTopic = () => {
+      if (!opts.topic || !runningFocused) return;
+      if (setSessionTopic(tmux, session, opts.topic)) log(`🎯 ${session}: the topic is «${opts.topic}»`);
+      else log(`✗ ${session}: tmux did not take the topic`);
+    };
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
     if (!unfocused && missing.length === 0) {
       const mode = runningFocused ? ', focused' : plan.intercom ? ', the mail session' : '';
       log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
+      attachTopic();
       return finish(true, current.pane.session, current.pane.paneId, opts, deps);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
@@ -2129,6 +2298,7 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     const answer = deps.ask(`${opts.detach ? 'Leave it as is' : 'Attach as is'}? [Enter/r/q]: `);
     if (answer === '') {
       log(`→ ${current.pane.session}: as is — ${current.proc.args}`);
+      attachTopic();
       return finish(true, current.pane.session, current.pane.paneId, opts, deps);
     }
     if (answer?.toLowerCase() !== 'r') {
@@ -2148,9 +2318,24 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
     return EXIT_LAUNCH_FAILED;
   }
 
+  // The topic goes into the tmux session before the agent starts: its session-start hook reads it.
+  let topic: Topic | null = null;
+  if (plan.focused) {
+    topic = chooseTopic(opts, plan, deps, current, true);
+    if (!topic) {
+      log('no answer — nothing started');
+      return EXIT_LAUNCH_FAILED;
+    }
+  }
+  const topicSaid = () => {
+    if (topic) log(topic.text ? `🎯 topic «${topic.text}» (${topic.from})` : `🎯 no topic yet — ${topic.from}`);
+  };
+
   if (current) {
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
     log(`↻ ${current.pane.session} ${current.pane.paneId}: restarting — ${line}`);
+    setSessionTopic(tmux, current.pane.session, topic?.text ?? null);
+    topicSaid();
     tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
     return finish(
       settleResumed(plan, current.pane.paneId, deps),
@@ -2168,7 +2353,10 @@ export function runAi(opts: AiOptions, deps: AiDeps): number {
   const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
   const session = freeSessionName(plan.sessionName, running);
   const reuse = tmux.hasSession(session);
+  if (reuse) setSessionTopic(tmux, session, topic?.text ?? null);
   const paneId = reuse ? tmux.newWindow(session, projectRoot, cmd) : tmux.newSession(session, projectRoot, cmd);
+  if (!reuse && topic?.text) setSessionTopic(tmux, session, topic.text);
   log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
+  topicSaid();
   return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps);
 }

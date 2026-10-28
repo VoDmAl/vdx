@@ -60,7 +60,8 @@ vdx doctor --fix [project-path]     # write the profile's personal hooks (git.ho
                                     # started before the move wrote at the old place come in)
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused | --intercom] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
+vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
+vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic); run by that session's agent: a new topic, nothing started
 vdx ai --close [--waiting <n>]   # inside the mail session: it ends itself; n questions to you still unanswered show on the project's other tmux sessions
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
 

@@ -3,6 +3,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { readConversation, topicLine } from '../../src/conversations.ts';
+import { ID, hookLine, userLine } from './transcripts.ts';
 
 // The vdx plugin's SessionStart hook, run against a stub `vdx`.
 const HOOK = path.resolve(__dirname, '..', '..', '..', 'plugin', 'scripts', 'session-start.sh');
@@ -102,5 +104,74 @@ describe('plugin SessionStart hook', () => {
     expect(run({ STUB_VERSION: '0.18.0' }, false).stdout).toBe('');
     expect(run({ STUB_VERSION: '0.18.0', STUB_SILENT: '1' }).stdout).toBe('');
     expect(run({ STUB_VERSION: '0.22.0', STUB_SILENT: '1' }).stdout).toBe('');
+  });
+});
+
+// The vdx plugin's UserPromptSubmit hook: a focused session's topic with every message.
+const TOPIC_HOOK = path.resolve(__dirname, '..', '..', '..', 'plugin', 'scripts', 'focused-topic.sh');
+
+describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
+  let dir: string;
+  let bin: string;
+  let log: string;
+  const run = (env: Record<string, string>) =>
+    spawnSync('/bin/sh', [TOPIC_HOOK], {
+      encoding: 'utf8',
+      env: {
+        PATH: [bin, path.dirname(process.execPath), '/usr/bin', '/bin'].join(':'),
+        STUB_LOG: log,
+        CLAUDE_PROJECT_DIR: "/projects/it's mine",
+        VDX_FOCUSED: '1',
+        TMUX_PANE: '%7',
+        ...env,
+      },
+    });
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '');
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-topic-hook-'));
+    bin = path.join(dir, 'bin');
+    log = path.join(dir, 'calls.log');
+    fs.mkdirSync(bin);
+    // tmux answers the session's option; vdx only its version.
+    fs.writeFileSync(
+      path.join(bin, 'tmux'),
+      '#!/bin/sh\necho "tmux $*" >> "$STUB_LOG"\nprintf \'%s\\n\' "$STUB_TOPIC"\n',
+      {
+        mode: 0o755,
+      },
+    );
+    fs.writeFileSync(path.join(bin, 'vdx'), '#!/bin/sh\necho "vdx $*" >> "$STUB_LOG"\necho "$STUB_VERSION"\n', {
+      mode: 0o755,
+    });
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('outside a focused session, or outside tmux, it runs nothing and says nothing', () => {
+    expect(run({ VDX_FOCUSED: '', STUB_TOPIC: 'x' }).stdout).toBe('');
+    expect(run({ TMUX_PANE: '', STUB_TOPIC: 'x' }).stdout).toBe('');
+    expect(calls()).toBe('');
+  });
+
+  it('brings the topic on a line of its own — the one vdx reads back from the transcript — and what to do off it', () => {
+    const r = run({ STUB_TOPIC: 'релиз 0.41 «тема» $HOME `x`' });
+    expect(r.status).toBe(0);
+    const text = contextOf(r.stdout);
+    expect(text.split('\n')[0]).toBe(topicLine('релиз 0.41 «тема» $HOME `x`'));
+    expect(text).toContain('«🎯 off topic «релиз 0.41 «тема» $HOME `x`»»');
+    expect(text).toContain(`run \`vdx ai '/projects/it'\\''s mine' --focused "<topic>"\``);
+    expect(r.stdout).toContain('"hookEventName":"UserPromptSubmit"');
+    expect(calls()).toBe('tmux -u display-message -p -t %7 #{@vdx_topic}\n');
+    const file = path.join(dir, `${ID.a}.jsonl`);
+    fs.writeFileSync(file, [hookLine(text), userLine('hi')].join('\n') + '\n');
+    expect(readConversation(file, new Date())?.topic).toBe('релиз 0.41 «тема» $HOME `x`');
+  });
+
+  it('no topic yet: asks the agent to set one — only of a vdx that takes it', () => {
+    expect(contextOf(run({ STUB_TOPIC: '', STUB_VERSION: '0.41.0' }).stdout)).toContain(
+      '· This focused session has no topic yet',
+    );
+    for (const version of ['0.40.0', ''])
+      expect(run({ STUB_TOPIC: '', STUB_VERSION: version }).stdout, version).toBe('');
   });
 });

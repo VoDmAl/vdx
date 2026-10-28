@@ -33,12 +33,23 @@ const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
 const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
 /** The opening of the line `vdx ai --check` adds in a mail session (`vdx ai --intercom`). */
 export const MAIL_LINE_PREFIX = "· this is the project's mail session";
+/**
+ * A focused session's topic, on a line of its own: `vdx ai --check` and the vdx plugin's
+ * prompt hook give it, and `--focused --conversation <id>` reads the last one back
+ * (focused-topic DL #2). The topic is one line: `normalizeTopic` in ai.ts.
+ */
+const TOPIC_LINE_PREFIX = 'vdx ai: the topic of this focused session is';
+const TOPIC_LINE_RE = /^vdx ai: the topic of this focused session is «(.+)»$/m;
 /** A label read from a synced file goes to ssh: it must not be able to read as an option. */
 const LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function machineLine(label: string): string {
   return `${MACHINE_LINE_PREFIX} \`${label}\``;
+}
+
+export function topicLine(topic: string): string {
+  return `${TOPIC_LINE_PREFIX} «${topic}»`;
 }
 
 /** A machine label vdx may hand to ssh as the destination. */
@@ -62,6 +73,8 @@ export interface Conversation {
   title: string | null;
   /** Last started as the project's mail session (`vdx ai --intercom`): not the person's to continue. */
   mail: boolean;
+  /** A focused conversation's last topic; null — it never had one. */
+  topic: string | null;
 }
 
 export function claudeConfigDir(env: NodeJS.ProcessEnv, home: string): string {
@@ -118,12 +131,15 @@ export function readConversation(file: string, updated: Date): Conversation | nu
   }
   let machine: string | null = null;
   let mail = false;
+  let topic: string | null = null;
   let aiTitle: string | null = null;
   let lastPrompt: string | null = null;
   let turns = false;
   for (const line of text.split('\n')) {
     // Cheap filters first: transcripts run to megabytes, and only these lines matter.
-    const isHook = line.includes('"hook_additional_context"') && line.includes(MACHINE_LINE_PREFIX);
+    const isHook =
+      line.includes('"hook_additional_context"') &&
+      (line.includes(MACHINE_LINE_PREFIX) || line.includes(TOPIC_LINE_PREFIX));
     const isTitle = line.includes('"ai-title"') || line.includes('"last-prompt"');
     if (!turns && line.includes('"type":"user"')) turns = true;
     if (!isHook && !isTitle) continue;
@@ -141,18 +157,46 @@ export function readConversation(file: string, updated: Date): Conversation | nu
     else if (type === 'attachment' && at(entry, 'attachment', 'type') === 'hook_additional_context') {
       const content = at(entry, 'attachment', 'content');
       for (const part of Array.isArray(content) ? (content as unknown[]) : [content]) {
-        const label = typeof part === 'string' ? part.match(MACHINE_LINE_RE)?.[1] : undefined;
+        if (typeof part !== 'string') continue;
+        const label = part.match(MACHINE_LINE_RE)?.[1];
         if (label && LABEL_RE.test(label)) {
           machine = label;
           // The same text says whether that start was a mail session's.
-          mail = (part as string).includes(MAIL_LINE_PREFIX);
+          mail = part.includes(MAIL_LINE_PREFIX);
         }
+        topic = part.match(TOPIC_LINE_RE)?.[1] ?? topic;
       }
     }
   }
   if (!turns) return null;
   const id = path.basename(file, '.jsonl');
-  return { id, updated, machine, typedHere: false, title: aiTitle ?? lastPrompt, mail };
+  return { id, updated, machine, typedHere: false, title: aiTitle ?? lastPrompt, mail, topic };
+}
+
+/** The last topic of the project's conversation `id`; null — none, or no such conversation here. */
+export function conversationTopic(input: {
+  env: NodeJS.ProcessEnv;
+  home: string;
+  projectRoot: string;
+  id: string;
+}): string | null {
+  const roots = new Set([input.projectRoot]);
+  try {
+    roots.add(fs.realpathSync(input.projectRoot));
+  } catch {
+    /* the plain path is enough */
+  }
+  for (const root of roots) {
+    const file = path.join(
+      claudeConfigDir(input.env, input.home),
+      'projects',
+      projectDirName(root),
+      `${input.id}.jsonl`,
+    );
+    const topic = readConversation(file, new Date())?.topic;
+    if (topic) return topic;
+  }
+  return null;
 }
 
 /** Which of `ids` had a prompt typed in them on this machine. */
