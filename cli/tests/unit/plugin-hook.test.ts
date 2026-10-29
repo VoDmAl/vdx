@@ -154,6 +154,11 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
   });
 
   it('brings the topic on a line of its own — the one vdx reads back from the transcript — and what to do off it', () => {
+    // Claude Code runs hooks under the user's UTF-8 locale; macOS /bin/sh (bash 3.2) then read the first byte
+    // of » as part of $topic, and the topic came out as «U+FFFD (focused-topic Sidetrack #1).
+    const utf8 = run({ STUB_TOPIC: 'релиз 0.41 «тема» $HOME `x`', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' });
+    expect(contextOf(utf8.stdout).split('\n')[0]).toBe(topicLine('релиз 0.41 «тема» $HOME `x`'));
+    fs.rmSync(log, { force: true });
     const r = run({ STUB_TOPIC: 'релиз 0.41 «тема» $HOME `x`' });
     expect(r.status).toBe(0);
     const text = contextOf(r.stdout);

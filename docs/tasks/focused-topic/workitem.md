@@ -177,7 +177,35 @@ ai-dev-plugins (письма по теме).
 (tmux: старт, `--restart`, смена изнутри, отказ в обычной, вопрос; транскрипт; без tmux),
 `plugin-hook.test.ts`, `cli.test.ts`. Для nas-info и intercom ничего не меняется: опция та же.
 
+### #6 / 2026-10-29 / Тема в cmux — описание workspace; ставит и снимает `vdx ai`, держащий `tmux attach`
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** письмо nas-info `focused-topic-cmux-line-outcome` (2026-10-29): владелец после пробы на lft —
+«Годится, так и делаем» про описание workspace cmux; вторую строку заголовка tmux (U+2028) он отверг: «Чуть чуть
+неаккуратно смотрится а можно шрифт меньше сделать и цвет приглушить?». Факты nas-info: описание меняется только
+через сокет cmux, а он пускает лишь процессы, запущенные cmux (`automation.socketControlMode` = `cmuxOnly`, из
+tmux — `Access denied`); у `vdx ai`, родителя `tmux attach`, в окружении `CMUX_WORKSPACE_ID`, `CMUX_SOCKET_PATH`,
+`CMUX_BUNDLED_CLI_PATH`; `workspace-action --workspace <id> --action set-description|clear-description
+--description <текст>` есть в cmux 0.64.25 (lft) и 0.65.0 (m3); описание — Markdown; поставленное руками —
+`customDescription` в снимке `~/Library/Application Support/cmux/session-com.cmuxterm.app.json`.
+**Context:** DL #2 рассчитывал на заголовок от tmux; у заголовка один шрифт и цвет на весь текст.
+**Why:** решение владельца; ставить может только процесс из cmux — это `vdx ai`, и для `vdx ai@<станция>` он
+работает на машине с cmux.
+**Implication:** `vdx ai` при подключении (локально и `@<станция>`), только с `CMUX_WORKSPACE_ID`: тема есть —
+`set-description` (Markdown экранирован), нет — `clear-description`, если описание его; пока держит `tmux attach`
+— замечает смену `@vdx_topic` (для `@<станция>` — по ssh) и повторяет, задержки ~15 с хватит; при выходе —
+`clear-description`, если описание всё ещё его; описание, поставленное руками, не трогает. Заголовок и
+`~/.tmux.conf` nas-info не меняет, 🎯 остаётся.
+
 ## Sidetracks
+
+- [x] #1 / 2026-10-29 / Хук 0.11.0 отдал тему в контекст как «U+FFFD» (наблюдение nas-info, письмо
+      `focused-topic-cmux-line-outcome`; у меня — живой прогон 2026-10-29, вложение `UserPromptSubmit` в
+      транскрипте). Причина: Claude Code запускает хук под UTF-8-локалью владельца, а `/bin/sh` на macOS —
+      bash 3.2: он читает первый байт `»` после `$topic` как часть имени переменной — подставляется пустая
+      `topic\xC2`, от `»` остаётся одинокий байт. При `LC_ALL=C` (ручные прогоны nas-info и мои тесты) — верно.
+      Исправление — `«${topic}»`; тест хука под `en_US.UTF-8` (падает на 0.11.0); плагин 0.11.1 (2026-10-29)
 
 ## Next actions
 
@@ -186,7 +214,12 @@ ai-dev-plugins (письма по теме).
 - [x] Бриф nas-info: `@vdx_topic` — строкой под именем сессии в cmux, на обеих станциях и для
       `vdx ai@<станция>` — `nas-info/focused-topic-cmux-line` (2026-10-27; их сессии на lft нет, на m3
       была 9 ч назад — дойдёт строкой при следующем сообщении там)
-- [ ] Ответ nas-info на `focused-topic-cmux-line`: как показывают тему и нужно ли что-то от `vdx ai`
+- [x] Ответ nas-info на `focused-topic-cmux-line`: `focused-topic-cmux-line-outcome` (2026-10-29) — описание
+      workspace, ставит `vdx ai` (DL #6), и наблюдение «U+FFFD» (Sidetrack #1)
+- [ ] `vdx ai`: описание workspace cmux по теме — при подключении, при смене темы, пока подключён, при выходе;
+      Markdown экранировать, чужое описание не трогать (DL #6); тесты; выпуск
+- [ ] nas-info — сказать о выпуске описания workspace (их мяч после: документация и приёмка на m3, lft,
+      `vdx ai@lft` с m3)
 - [x] Бриф ai-dev-plugins: письма по теме — focused-сессии (читать, будить), остальным — нет; счёт
       ложных срабатываний — `ai-dev-plugins/focused-topic-letters` (2026-10-27); их почтовая сессия
       запущена на lft (`vdm@lft-mail`)
@@ -201,10 +234,18 @@ ai-dev-plugins (письма по теме).
       PROJECT_CHANGELOG, `environment-format.md`, `architecture.md` (2026-10-27)
 - [x] Коммит и `vdx push` — `fbc5cfc` в `main` 2026-10-27, CI 119 с; это и выпуск плагина 0.11.0
       (хук молчит при vdx < 0.41, пока темы нет)
-- [ ] `vdx publish minor` (CLI 0.41.0) — у владельца, в отдельном окне терминала
+- [x] `vdx publish minor` — 0.41.0 в npm, тег `v0.41.0`, `main` на `6fd166d` (2026-10-29); первая попытка —
+      отказ pre-flight: незакоммиченная правка кристалла (моя, после push) и вход в npm; на lft и m3 — 0.41.0
+      (`npm update -g --prefer-online`; на m3 — обычным `ssh m3`, через `zsh -lc` первым стоит npm Homebrew)
 - [ ] После выпуска CLI 0.41: строка nas-info (`focused-topic-cmux-line`) и ai-dev-plugins
       (`focused-topic-letters`) — `@vdx_topic` ставит выпущенный vdx, можно проверять у себя
-- [ ] Живьём: focused-сессия с темой — сообщение не по теме, строка в cmux, письмо по теме
+- [ ] Живьём: focused-сессия с темой — сообщение не по теме, строка в cmux, письмо по теме. 2026-10-29 на
+      выпущенных CLI 0.41.0 и плагине 0.11.0 (lft, пробная `vdx@lft-2` в vdx, сообщения через `tmux send-keys`):
+      тема `проверка темы: релиз 0.41 и «кавычки» 50% #{x}` — в `@vdx_topic` целой; строка темы от `--check` в
+      транскрипте, `readConversation` её читает; «Какая столица Австралии?» — ответ «🎯 вне темы «…»» и
+      «Канберра.»; «Тема теперь: …» — агент сам запустил `vdx ai '<корень>' --focused "…"`, опция сменилась.
+      Найден сбой хука (Sidetrack #1). Сессия закрыта. Осталось: строка в cmux (DL #6), письмо по теме
+      (ai-dev-plugins), хук 0.11.1 живьём
 - [ ] Выпуск CLI и плагина
 - [ ] Разбор ложных срабатываний через две недели после выпуска: строки агента «вне темы» и ответы
       владельца в транскриптах focused-сессий; отметки intercom о письмах

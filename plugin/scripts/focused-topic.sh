@@ -23,10 +23,12 @@ project="${CLAUDE_PROJECT_DIR:-$PWD}"
 root="'$(printf '%s' "$project" | sed "s/'/'\\\\''/g")'"
 set_it="\`vdx ai $root --focused \"<topic>\"\` (it changes this session's topic and nothing else)"
 
+# Braces before a non-ASCII character: under a UTF-8 locale bash 3.2 (/bin/sh on macOS) reads the
+# character's first byte as part of the name, and «$topic» came out as «U+FFFD (focused-topic Sidetrack #1).
 if [ -n "$topic" ]; then
   text=$(cat <<EOF
-vdx ai: the topic of this focused session is «$topic»
-· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «$topic»» in the user's language (Russian: «🎯 вне темы «$topic»»), and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's mail session, a session of its own (\`vdx ai --new\`). A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it. The user names another topic («тема теперь Y»): run $set_it.
+vdx ai: the topic of this focused session is «${topic}»
+· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «${topic}»» in the user's language (Russian: «🎯 вне темы «${topic}»»), and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's mail session, a session of its own (\`vdx ai --new\`). A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it. The user names another topic («тема теперь Y»): run $set_it.
 EOF
 )
 else

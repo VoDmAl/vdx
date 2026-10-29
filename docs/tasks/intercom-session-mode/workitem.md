@@ -410,12 +410,15 @@ global-auth-gap 118 (15, с 03.09), obsidianvault 95 (38, с 23.08), limeflow 26
       ai-dev-plugins и nas-info (из восьми по почте за 14 дней — Sidetrack #6); письма
       `mail-session-on-ai-dev-plugins` (клон маркетплейса без доверия, файл под git) и
       `mail-session-on-nas-info` (деплойный клон `~/nas-info` с `git reset --hard`)
-- [ ] Ответы ai-dev-plugins (`mail-session-on-ai-dev-plugins`) и nas-info (`mail-session-on-nas-info`):
+- [x] Ответы ai-dev-plugins (`mail-session-on-ai-dev-plugins`) и nas-info (`mail-session-on-nas-info`):
       где стоит ключ; потом — первая почтовая сессия живьём. ai-dev-plugins ответил 2026-10-27: ключ в
       `.claude/vdm-plugins.json` рабочего клона (`09936f8`), с vdm 2.63.1 (`9a0925c`) почтовая сессия берёт
       рабочий клон, не копию плагина; оба коммита в `origin/master`. Тот же день: `send` брифа
       `focused-topic-letters` назвал запуск, `vdx ai --intercom --detach` поднял `vdm@lft-mail` в рабочем
-      клоне, сессия сама взяла три письма (в панели — «Mail session: 3 letters»). Ждём nas-info
+      клоне, сессия сама взяла три письма (в панели — «Mail session: 3 letters»). nas-info ответил 2026-10-29
+      (`mail-session-on-nas-info-outcome`): ключ в `.claude/vdm-plugins.json` рабочего клона
+      `~/PhpstormProjects/git.vorobyev.name/nas-info`, файл в `.gitignore` nas-info — в деплойный `~/nas-info`
+      не попадает; на m3 его привёз Syncthing; решение владельца «Включай», мяч — ни у кого
 - [ ] Владелец — закрыть Chrome и Firefox; тогда vdx чистит их кэши (3,8 ГБ, решение владельца) и пишет
       nas-info, что за ними остались `i:disk` и память lft (2026-10-27: оба браузера открыты)
 - [ ] Ответ vorobyev.name (`vendor-git-clones-6gb`): `vendor/` 6 ГБ — 109 пакетов клонами git, из dist
