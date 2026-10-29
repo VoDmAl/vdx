@@ -237,8 +237,10 @@ tmux — `Access denied`); у `vdx ai`, родителя `tmux attach`, в ок�
 - [x] `vdx publish minor` — 0.41.0 в npm, тег `v0.41.0`, `main` на `6fd166d` (2026-10-29); первая попытка —
       отказ pre-flight: незакоммиченная правка кристалла (моя, после push) и вход в npm; на lft и m3 — 0.41.0
       (`npm update -g --prefer-online`; на m3 — обычным `ssh m3`, через `zsh -lc` первым стоит npm Homebrew)
-- [ ] После выпуска CLI 0.41: строка nas-info (`focused-topic-cmux-line`) и ai-dev-plugins
-      (`focused-topic-letters`) — `@vdx_topic` ставит выпущенный vdx, можно проверять у себя
+- [x] После выпуска CLI 0.41: nas-info — ответ `focused-topic-cmux-line-outcome-outcome` (0.41.0, причина «U+FFFD»
+      и 0.11.1, описание workspace — у vdx); ai-dev-plugins — `focused-topic-shipped` (`--reply-to
+      focused-topic-letters`): как читать `@vdx_topic`, ответ на бриф ждём (2026-10-29). Плагин 0.11.1 —
+      `518cff4` в `main`
 - [ ] Живьём: focused-сессия с темой — сообщение не по теме, строка в cmux, письмо по теме. 2026-10-29 на
       выпущенных CLI 0.41.0 и плагине 0.11.0 (lft, пробная `vdx@lft-2` в vdx, сообщения через `tmux send-keys`):
       тема `проверка темы: релиз 0.41 и «кавычки» 50% #{x}` — в `@vdx_topic` целой; строка темы от `--check` в

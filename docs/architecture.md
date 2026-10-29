@@ -103,9 +103,12 @@ report.ts      markdown, ansi, json
   `/reload-plugins` (`vdx ai --check`).
 - `move.ts` — `vdx move`: перенос проектов в папку на каждой машине профиля
   (`session.machines`). Одна проверка на каждой — `sh` здесь, ssh там: живые сессии
-  Claude Code (`LIVE_SESSIONS_SCRIPT`), есть ли папка и занято ли новое место,
-  `syncthing-caught-up`. Потом закрытие простаивающих сессий, `mv` на каждой машине,
-  разговоры (`moveConversations`), доверие (`.claude.json`), путь памяти
+  Claude Code (`LIVE_SESSIONS_SCRIPT`), id устройства Syncthing, есть ли папка и занято ли
+  новое место, `syncthing-caught-up --json` по обоим путям (папка, вердикт, пиры), сетевой
+  диск, другой том, git копии, контейнеры, процессы в папке. Из ответов — копии
+  (`copiesOf`), какая уходит и что на паузе (`planProject`, `planChosen`), потом вопросы,
+  закрытие простаивающих сессий, пауза папок Syncthing, `mv` на каждой машине копии, снятие
+  паузы, разговоры (`moveConversations`), доверие (`.claude.json`), путь памяти
   (`fixProjectMemory`), `move.after` профиля, сессии — снова, в том же разговоре
   (`runAi`, `runAiRemote`).
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,

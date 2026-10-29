@@ -66,7 +66,8 @@ vdx ai --close [--waiting <n>]   # inside the mail session: it ends itself; n qu
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
 
 # Move projects into a folder on every machine of the profile (session.machines), with what Claude Code keeps by
-# the folder's path: memory path, conversations, trust; idle sessions are closed and started again there
+# the folder's path: memory path, conversations, trust; idle sessions are closed and started again there.
+# Within, into, out of or beside Syncthing: its folders pause while it moves; copies Syncthing would merge — one goes
 vdx move <project-path>... <folder> [--dry-run]
 
 # What a command does and takes; nothing runs (ai: also where launch flags live)
@@ -193,7 +194,7 @@ npm run typecheck
 - `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
 - `src/publish.ts`    — `planPublish` (pre-flight) + `executePublish` (bump → npm → git)
 - `src/ai.ts`         — `vdx ai`: profile loader, launch plan, tmux session handling
-- `src/move.ts`       — `vdx move`: checks on every machine, mv on each, memory path, conversations and trust follow
+- `src/move.ts`       — `vdx move`: checks on every machine (Syncthing folders and peers, copies, containers, processes), Syncthing paused for the mv on each, memory path, conversations and trust follow
 - `src/report.ts`     — markdown / JSON output
 - `src/index.ts`      — CLI entry
 - `src/mcp-server.ts` — MCP stdio server (9 tools)

@@ -300,21 +300,37 @@ this machine and on every other machine of your profile (session.machines) that 
 them, and takes along what Claude Code keeps by the folder's path: the memory path
 (autoMemoryDirectory), the conversations, the trust in the folder.
 
+Any move works: within a Syncthing folder, from one into another, out of Syncthing,
+into it, or beside it. Each machine says where the old and the new path lie in
+Syncthing (syncthing-caught-up --json), and the plan names the case.
+
 Nothing changes until every check passed: the new place is free on every machine,
-every machine answers over ssh, Syncthing has caught up with the folder there
-(syncthing-caught-up; changes on the way are waited for a minute), and no Claude
-Code session of a project is in a turn or waiting for an answer. An idle session
-is a question at a terminal — Enter closes it and starts it again in the new
-place, in the same conversation (a mail session: the next letter starts it);
-without a terminal the move is refused.
+every machine answers over ssh, Syncthing has caught up with both paths there
+(changes on the way are waited for a minute), no container mounts the folder, and
+no Claude Code session of a project is in a turn or waiting for an answer. An idle
+session is a question at a terminal — Enter closes it and starts it again in the
+new place, in the same conversation (a mail session: the next letter starts it);
+without a terminal the move is refused. A process working in the folder is named;
+when the new place is on another volume (mv copies, then deletes), it refuses the
+move until it stops — a shell does not.
 
-The mv runs on every machine that has the folder, so what Syncthing does not
-carry (node_modules, builds, a container's database) moves with it and no old
-folder is left behind. A machine whose mv fails puts the others back. Then, on
-this machine, the profile's move.after commands run with VDX_MOVE_FROM and
-VDX_MOVE_TO — for tools that keep the project's path in their own files.
+The Syncthing folders of both paths are paused on every machine that has them while
+the mv runs on each, and resumed whatever happens, Ctrl-C too: else one machine
+gets the other's deletion of the old path before its own mv. The mv runs on every
+machine of a synced folder, so what Syncthing does not carry (node_modules, builds,
+a container's database) moves with it and no old folder is left behind; a folder
+on a network disk or in a cloud folder is one copy, moved once. Copies Syncthing
+would merge at the new place — the project kept apart on two machines, going into
+a synced folder — cannot all go: a terminal asks which one (commit and uncommitted
+files shown, Enter takes the one where you are), the others stay. Peers of the
+folders outside the profile are named with what they get; when Syncthing would
+delete the project there, a terminal asks first ([y/N]). A machine whose mv fails
+puts the others back. Then, on this machine, the profile's move.after commands run
+with VDX_MOVE_FROM and VDX_MOVE_TO — for tools that keep the project's path in
+their own files.
 
-  --dry-run     print what would move, where the folder is, the sessions found; move nothing
+  --dry-run     print the plan — what moves where, the Syncthing case and pauses, peers, copies,
+                sessions, processes; move nothing
 
 Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing moved;
 4 a step failed — what was moved is put back where it could be, and named.
