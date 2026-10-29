@@ -199,8 +199,9 @@ ai-dev-plugins (письма по теме).
       (2026-10-27; не закоммичено)
 - [x] Справка, README, `cli/README.md`, `plugin/README.md`, скилл `plugin/skills/vdx-ai`,
       PROJECT_CHANGELOG, `environment-format.md`, `architecture.md` (2026-10-27)
-- [ ] Коммит и `vdx push` — у владельца, строка готова в сессии 2026-10-27; push выпускает и плагин
-      0.11.0 (хук молчит при vdx < 0.41, пока темы нет)
+- [x] Коммит и `vdx push` — `fbc5cfc` в `main` 2026-10-27, CI 119 с; это и выпуск плагина 0.11.0
+      (хук молчит при vdx < 0.41, пока темы нет)
+- [ ] `vdx publish minor` (CLI 0.41.0) — у владельца, в отдельном окне терминала
 - [ ] После выпуска CLI 0.41: строка nas-info (`focused-topic-cmux-line`) и ai-dev-plugins
       (`focused-topic-letters`) — `@vdx_topic` ставит выпущенный vdx, можно проверять у себя
 - [ ] Живьём: focused-сессия с темой — сообщение не по теме, строка в cmux, письмо по теме
