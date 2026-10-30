@@ -99,7 +99,10 @@ report.ts      markdown, ansi, json
   `focused-topic`); `cmux.ts` — тема описанием workspace cmux, пока `vdx ai` держит `tmux attach`
   (наблюдатель — `bin/vdx-cmux-topic.cjs`, DL #6); `conversations.ts` — разговоры Claude Code проекта, машина,
   на которой каждый запускали, был ли запуск почтовым, последняя тема, доверяет ли Claude Code папке
-  (`claudeTrusts`: отказ `--detach`, строка после переноса папки); `session-versions.ts` — от чего отстала
+  (`claudeTrusts`: отказ `--detach`, строка после переноса папки), рождён ли разговор `/clear`, сколько в нём
+  набрано и закончен ли он wrap-скиллом профиля; `board.ts` — один список голого `vdx ai` (кристалл
+  `vdx-ai-predictable`): состояние агента, черновик в строке ввода, какая строка Enter; факты собирает
+  `ai.ts` — здесь из tmux и файлов сессий, у другой машины — её `vdx ai --report` по ssh; `session-versions.ts` — от чего отстала
   живая сессия: Claude Code и плагины, обновлённые после её старта или
   `/reload-plugins` (`vdx ai --check`).
 - `move.ts` — `vdx move`: перенос проектов в папку на каждой машине профиля

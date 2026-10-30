@@ -15,6 +15,23 @@ export const hookLine = (text: string) =>
   });
 export const userLine = (text: string) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
 export const promptLine = (text: string) => JSON.stringify({ type: 'last-prompt', lastPrompt: text });
+/** A slash command the person typed: `/clear`, `/vdm:wrap`. */
+export const commandLine = (name: string) =>
+  userLine(`<command-name>/${name}</command-name>\n<command-message>${name}</command-message>`);
+/** A `!` command the person ran in the input line. */
+export const bashLine = (command: string) => userLine(`<bash-input>${command}</bash-input>`);
+/** The agent running a skill. */
+export const skillLine = (skill: string) =>
+  JSON.stringify({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Skill', input: { skill } }] },
+  });
+/** A tool's result, which Claude Code files as a user entry. */
+export const toolResultLine = (text: string) =>
+  JSON.stringify({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: text }] },
+  });
 export const titleLine = (text: string) => JSON.stringify({ type: 'ai-title', aiTitle: text });
 export const startedOn = (machine: string) =>
   hookLine(`${machineLine(machine)}; the agent in this project is started with \`vdx ai\``);

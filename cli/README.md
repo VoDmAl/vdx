@@ -60,7 +60,7 @@ vdx doctor --fix [project-path]     # write the profile's personal hooks (git.ho
                                     # started before the move wrote at the old place come in)
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
-vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
+vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
 vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic); run by that session's agent: a new topic, nothing started
 vdx ai --close [--waiting <n>]   # inside the mail session: it ends itself; n questions to you still unanswered show on the project's other tmux sessions
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
@@ -129,8 +129,12 @@ commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
 For Claude Code `vdx ai` picks the conversation: each one is marked with the
 machine it was last started on (`vdx ai --check`, run by the plugin's hook, writes
 the label in), the running ones are asked of the other machines over ssh, and
-another machine's conversation is continued there. When the choice is not plain
-it lists them — Enter takes the newest; without a terminal, this machine's.
+another machine's conversation is continued there. Unless the choice is plain
+(0.44+: one agent on all the machines that no terminal at your seat shows; or
+none running and this machine's newest conversation not finished) it shows one
+list of the agents on every machine and the conversations nobody runs, with
+their state; Enter never takes one your seat already shows; without a terminal,
+this machine's. `vdx ai --list` prints the list and starts nothing.
 
 Every command takes `--help` (`-h`) and runs nothing with it. An unknown option,
 a stray argument or a value flag without its value is refused with exit 2

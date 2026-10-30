@@ -3,11 +3,24 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ID, startedOn, userLine, promptLine, titleLine, writeConversation, writeHistory } from './transcripts.ts';
+import {
+  bashLine,
+  commandLine,
+  ID,
+  skillLine,
+  startedOn,
+  toolResultLine,
+  userLine,
+  promptLine,
+  titleLine,
+  writeConversation,
+  writeHistory,
+} from './transcripts.ts';
 import {
   claudeConfigDir,
   claudeTrusts,
   describeAge,
+  isEmpty,
   latestPerMachine,
   listConversations,
   LIVE_SESSIONS_SCRIPT,
@@ -111,6 +124,48 @@ describe('readConversation', () => {
 
   it('skips a conversation nobody wrote in — only the hook ran', () => {
     expect(read([startedOn('lft')])).toBeNull();
+  });
+
+  describe('how it began and how it ended (vdx-ai-predictable DL #3)', () => {
+    const readWith = (lines: string[], wraps = ['vdm:wrap']) => {
+      const file = path.join(dir, `${ID.a}.jsonl`);
+      fs.writeFileSync(file, lines.join('\n') + '\n');
+      return readConversation(file, new Date(), wraps)!;
+    };
+
+    it('begun by /clear with nothing typed is empty; the first prompt makes it a conversation', () => {
+      const cleared = readWith([commandLine('clear'), startedOn('lft')]);
+      expect([cleared.bornClear, cleared.typed, isEmpty(cleared)]).toEqual([true, 0, true]);
+      const begun = readWith([commandLine('clear'), startedOn('lft'), userLine('go on with the crystal')]);
+      expect([begun.bornClear, begun.typed, isEmpty(begun)]).toEqual([true, 1, false]);
+      expect(isEmpty(readWith([startedOn('lft'), userLine('hi')]))).toBe(false);
+    });
+
+    it("counts what the person typed — not a `!` command, a tool's result or a tagged text", () => {
+      const c = readWith([
+        startedOn('lft'),
+        userLine('first'),
+        toolResultLine('ok'),
+        bashLine('git status'),
+        userLine('<task-notification>done</task-notification>'),
+        userLine('<channel source="echelon" kind="jira">new task</channel>'),
+        userLine('second'),
+      ]);
+      expect(c.typed).toBe(2);
+    });
+
+    it('finished: a wrap ran and nothing was typed after it — the `!` commit line does not count', () => {
+      expect(
+        readWith([startedOn('lft'), userLine('work'), skillLine('vdm:wrap'), bashLine('sh /tmp/c.sh')]).finished,
+      ).toBe(true);
+      expect(readWith([startedOn('lft'), userLine('work'), commandLine('vdm:wrap')]).finished).toBe(true);
+      expect(readWith([startedOn('lft'), skillLine('vdm:wrap'), userLine('one more thing')]).finished).toBe(false);
+      expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:intercom')]).finished).toBe(false);
+    });
+
+    it('nothing is a wrap unless the profile names it', () => {
+      expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:wrap')], []).finished).toBe(false);
+    });
   });
 });
 

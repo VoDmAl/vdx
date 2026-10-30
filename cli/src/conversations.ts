@@ -75,6 +75,20 @@ export interface Conversation {
   mail: boolean;
   /** A focused conversation's last topic; null — it never had one. */
   topic: string | null;
+  /** Begun by `/clear` in a running agent: the pane stayed, the conversation is a new one. */
+  bornClear: boolean;
+  /** Prompts the person typed: not a `!` command, a hook's text or a channel event. */
+  typed: number;
+  /**
+   * A wrap skill (`session.wrap_skills` of the profile) ran, and nothing was typed after it —
+   * at most the `!` command it handed over: the conversation is done (vdx-ai-predictable DL #3).
+   */
+  finished: boolean;
+}
+
+/** Nothing typed in it since `/clear`: a pane waiting for a first prompt, with nothing to continue. */
+export function isEmpty(c: Conversation): boolean {
+  return c.bornClear && c.typed === 0;
 }
 
 export function claudeConfigDir(env: NodeJS.ProcessEnv, home: string): string {
@@ -121,8 +135,38 @@ export function projectDirName(projectRoot: string): string {
   return projectRoot.replace(/[^A-Za-z0-9]/g, '-');
 }
 
-/** Read one transcript; null when nobody ever wrote in it — there is nothing to continue. */
-export function readConversation(file: string, updated: Date): Conversation | null {
+/** The text of a user entry the person wrote, or a command; null — a tool's result or nothing. */
+function userText(entry: unknown): string | null {
+  if (at(entry, 'isMeta') === true) return null;
+  const content = at(entry, 'message', 'content');
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  const parts = content as unknown[];
+  if (parts.some((p) => at(p, 'type') === 'tool_result')) return null;
+  return parts
+    .map((p) => (at(p, 'type') === 'text' ? (str(at(p, 'text')) ?? '') : ''))
+    .join(' ')
+    .trim();
+}
+
+/** The skill an assistant entry ran, one per entry as Claude Code writes them; null — none. */
+function skillRun(entry: unknown): string | null {
+  const content = at(entry, 'message', 'content');
+  if (!Array.isArray(content)) return null;
+  for (const p of content as unknown[]) {
+    if (at(p, 'type') === 'tool_use' && at(p, 'name') === 'Skill') return str(at(p, 'input', 'skill')) ?? null;
+  }
+  return null;
+}
+
+const COMMAND_RE = /<command-name>\/?([^<\s]+)<\/command-name>/;
+
+/**
+ * Read one transcript; null when nobody ever wrote in it — there is nothing to continue.
+ * `wrapSkills` — the skills that end a conversation (`session.wrap_skills`), run by the agent
+ * or typed as a command.
+ */
+export function readConversation(file: string, updated: Date, wrapSkills: readonly string[] = []): Conversation | null {
   let text: string;
   try {
     text = fs.readFileSync(file, 'utf8');
@@ -135,14 +179,25 @@ export function readConversation(file: string, updated: Date): Conversation | nu
   let aiTitle: string | null = null;
   let lastPrompt: string | null = null;
   let turns = false;
+  let bornClear = false;
+  let typed = 0;
+  // Where the last wrap ran and the last prompt was typed: an order of entries, not of clocks.
+  let wrapAt = -1;
+  let typedAt = -1;
+  const wraps = new Set(wrapSkills);
+  let n = 0;
   for (const line of text.split('\n')) {
+    n++;
     // Cheap filters first: transcripts run to megabytes, and only these lines matter.
     const isHook =
       line.includes('"hook_additional_context"') &&
       (line.includes(MACHINE_LINE_PREFIX) || line.includes(TOPIC_LINE_PREFIX));
     const isTitle = line.includes('"ai-title"') || line.includes('"last-prompt"');
-    if (!turns && line.includes('"type":"user"')) turns = true;
-    if (!isHook && !isTitle) continue;
+    const isUser = line.includes('"type":"user"');
+    if (!turns && isUser) turns = true;
+    const isTurn = isUser && !line.includes('"tool_result"');
+    const isSkill = wraps.size > 0 && line.includes('"name":"Skill"');
+    if (!isHook && !isTitle && !isTurn && !isSkill) continue;
     let entry: unknown;
     try {
       entry = JSON.parse(line);
@@ -152,7 +207,21 @@ export function readConversation(file: string, updated: Date): Conversation | nu
     const type = at(entry, 'type');
     const title = str(at(entry, 'aiTitle'));
     const prompt = str(at(entry, 'lastPrompt'));
-    if (type === 'ai-title' && title !== undefined) aiTitle = title;
+    if (type === 'user') {
+      const said = userText(entry);
+      if (!said) continue;
+      const command = said.match(COMMAND_RE)?.[1];
+      if (command === 'clear' && typed === 0) bornClear = true;
+      else if (command && wraps.has(command)) wrapAt = n;
+      // `!` commands, hooks' and channels' texts come tagged; a prompt the person typed does not.
+      else if (!command && !said.startsWith('<')) {
+        typed++;
+        typedAt = n;
+      }
+    } else if (type === 'assistant') {
+      const skill = skillRun(entry);
+      if (skill && wraps.has(skill)) wrapAt = n;
+    } else if (type === 'ai-title' && title !== undefined) aiTitle = title;
     else if (type === 'last-prompt' && prompt !== undefined) lastPrompt = prompt;
     else if (type === 'attachment' && at(entry, 'attachment', 'type') === 'hook_additional_context') {
       const content = at(entry, 'attachment', 'content');
@@ -170,7 +239,18 @@ export function readConversation(file: string, updated: Date): Conversation | nu
   }
   if (!turns) return null;
   const id = path.basename(file, '.jsonl');
-  return { id, updated, machine, typedHere: false, title: aiTitle ?? lastPrompt, mail, topic };
+  return {
+    id,
+    updated,
+    machine,
+    typedHere: false,
+    title: aiTitle ?? lastPrompt,
+    mail,
+    topic,
+    bornClear,
+    typed,
+    finished: wrapAt > typedAt,
+  };
 }
 
 /** The last topic of the project's conversation `id`; null — none, or no such conversation here. */
@@ -200,7 +280,7 @@ export function conversationTopic(input: {
 }
 
 /** Which of `ids` had a prompt typed in them on this machine. */
-function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Set<string> {
+export function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Set<string> {
   const found = new Set<string>();
   let text: string;
   try {
@@ -214,20 +294,21 @@ function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Set<
   return found;
 }
 
-/** The project's conversations, newest first; at most `limit` files are read. */
-export function listConversations(input: {
+interface ProjectInput {
   env: NodeJS.ProcessEnv;
   home: string;
   projectRoot: string;
-  limit?: number;
-}): Conversation[] {
+}
+
+/** The project's transcript files, newest first — Syncthing's conflict copies left out. */
+export function conversationFiles(input: ProjectInput): { file: string; updated: Date; size: number }[] {
   const roots = new Set([input.projectRoot]);
   try {
     roots.add(fs.realpathSync(input.projectRoot));
   } catch {
     /* the plain path is enough */
   }
-  const files: { file: string; updated: Date }[] = [];
+  const files: { file: string; updated: Date; size: number }[] = [];
   for (const root of roots) {
     const dir = path.join(claudeConfigDir(input.env, input.home), 'projects', projectDirName(root));
     let names: string[];
@@ -241,17 +322,28 @@ export function listConversations(input: {
       if (!name.endsWith('.jsonl') || !isConversationId(name.slice(0, -'.jsonl'.length))) continue;
       const file = path.join(dir, name);
       try {
-        files.push({ file, updated: fs.statSync(file).mtime });
+        const st = fs.statSync(file);
+        files.push({ file, updated: st.mtime, size: st.size });
       } catch {
         /* gone since the listing */
       }
     }
   }
-  files.sort((a, b) => b.updated.getTime() - a.updated.getTime());
+  return files.sort((a, b) => b.updated.getTime() - a.updated.getTime());
+}
+
+/**
+ * The project's conversations, newest first; at most `limit` files are read — the rest stay
+ * unread, `conversationFiles` counts them. `wrapSkills` as in readConversation.
+ */
+export function listConversations(
+  input: ProjectInput & { limit?: number; wrapSkills?: readonly string[] },
+): Conversation[] {
+  const files = conversationFiles(input);
   const seen = new Set<string>();
   const out: Conversation[] = [];
   for (const f of files.slice(0, input.limit ?? 30)) {
-    const c = readConversation(f.file, f.updated);
+    const c = readConversation(f.file, f.updated, input.wrapSkills);
     if (c && !seen.has(c.id)) {
       seen.add(c.id);
       out.push(c);
@@ -297,6 +389,59 @@ export function liveConversationId(env: NodeJS.ProcessEnv, home: string, pid: nu
   } catch {
     return null;
   }
+}
+
+/** A running Claude Code process as its session file has it; null — no file, or not one of its. */
+export function liveSessionFile(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  pid: number,
+): { conversation: string; status: string | null; activeAt: number | null; startedAt: number | null } | null {
+  try {
+    const data: unknown = JSON.parse(
+      fs.readFileSync(path.join(claudeConfigDir(env, home), 'sessions', `${pid}.json`), 'utf8'),
+    );
+    const id = str(at(data, 'sessionId'));
+    if (id === undefined || !isConversationId(id)) return null;
+    const num = (v: unknown) => (typeof v === 'number' ? v : null);
+    return {
+      conversation: id,
+      status: str(at(data, 'status')) ?? null,
+      activeAt: num(at(data, 'statusUpdatedAt')) ?? num(at(data, 'updatedAt')),
+      startedAt: num(at(data, 'startedAt')),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The project's conversation `id` as read here; null — no such transcript here. */
+export function conversationById(
+  input: ProjectInput & { id: string; wrapSkills?: readonly string[] },
+): Conversation | null {
+  const roots = new Set([input.projectRoot]);
+  try {
+    roots.add(fs.realpathSync(input.projectRoot));
+  } catch {
+    /* the plain path is enough */
+  }
+  for (const root of roots) {
+    const file = path.join(
+      claudeConfigDir(input.env, input.home),
+      'projects',
+      projectDirName(root),
+      `${input.id}.jsonl`,
+    );
+    let updated: Date;
+    try {
+      updated = fs.statSync(file).mtime;
+    } catch {
+      continue;
+    }
+    const c = readConversation(file, updated, input.wrapSkills);
+    if (c) return { ...c, typedHere: typedHere(input.env, input.home, new Set([c.id])).has(c.id) };
+  }
+  return null;
 }
 
 /** When a running Claude Code process started (ms), from the same session file; null — not known. */

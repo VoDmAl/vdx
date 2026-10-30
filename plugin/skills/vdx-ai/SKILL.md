@@ -80,7 +80,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 
 | Command | What it does |
 |---|---|
-| `vdx ai [path]` | start the agent, or attach to the running one; several running — a list, Enter takes the newest |
+| `vdx ai [path]` | start the agent, or attach to the running one; when the choice is not plain (vdx 0.44+) — one list of the agents on every machine and the conversations nobody runs, with their state; Enter never takes one a terminal at the user's seat shows |
+| `vdx ai --list [path]` | that list, printed: what runs on every machine and what can be continued; asks nothing, starts nothing (vdx 0.44+) — the answer to «what runs of this project?» |
 | `vdx ai --dry-run [path]` | the plan (agent, flags, matched conditions) and the project's running agents; starts nothing — safe to run |
 | `vdx ai --check [path]` | this session against the profile, and against the installed Claude Code and plugins; what the session-start hook prints |
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |

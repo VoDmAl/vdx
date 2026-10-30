@@ -28,6 +28,11 @@ import {
   machineLine,
   type MachineReport,
   machineOf,
+  conversationById,
+  conversationFiles,
+  isEmpty,
+  liveSessionFile,
+  typedHere,
   parseMachineReport,
   runsInProject,
   topicLine,
@@ -44,6 +49,16 @@ import {
 import { at, errorMessage, isStringList, str } from './narrow.ts';
 import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, watchTopic } from './cmux.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
+import {
+  type AgentFact,
+  type Board,
+  buildBoard,
+  freeWork,
+  inputDraft,
+  openAtSeat,
+  type Pick,
+  readAnswer,
+} from './board.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -106,6 +121,11 @@ interface SessionProfile {
   machines?: string[];
   /** What to do when a session cannot read ~/Downloads, ~/Desktop or ~/Documents (macOS): shown after the warning. */
   folders_fix?: string;
+  /**
+   * Skills that end a conversation (`vdm:wrap`): run, and nothing typed after, the list calls it
+   * finished, and Enter passes it by (vdx-ai-predictable DL #3).
+   */
+  wrap_skills?: string[];
 }
 
 /**
@@ -176,6 +196,12 @@ const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
  * Nobody sits at it; it ends itself with `vdx ai --close`.
  */
 const INTERCOM_ENV_VAR = 'VDX_INTERCOM';
+/**
+ * In the environment of the tmux client `vdx ai` attaches: the seat — the machine the person
+ * sits at — so that another start can tell a terminal at the same seat from one at another
+ * (vdx-ai-predictable DL #2). tmux does not copy it into the session's environment.
+ */
+const SEAT_MARK_ENV_VAR = 'VDX_AI_SEAT';
 /** The tmux session option `vdx ai --close --waiting <n>` sets: questions to the person still unanswered. */
 const WAITING_OPTION = '@vdx_waiting';
 /**
@@ -285,6 +311,9 @@ export function parseEnvironment(text: string, source: string): Environment {
       (typeof session.folders_fix !== 'string' || session.folders_fix.trim() === '')
     ) {
       fail('session.folders_fix', 'must be a non-empty string');
+    }
+    if (session.wrap_skills !== undefined && !isStringList(session.wrap_skills)) {
+      fail('session.wrap_skills', 'must be a list of skill names');
     }
   }
 
@@ -790,6 +819,20 @@ export class Tmux {
     return this.tryRun(['capture-pane', '-p', '-J', '-t', paneId]);
   }
 
+  /** The visible screen with its escapes: what is dim on it can be told apart (board.ts, inputDraft). */
+  screen(paneId: string): string | null {
+    return this.tryRun(['capture-pane', '-p', '-e', '-t', paneId]);
+  }
+
+  /** The terminals attached to the server: each one's session and its tmux client process. */
+  clients(): { session: string; pid: number }[] {
+    const out = this.tryRun(['list-clients', '-F', '#{client_session}\t#{client_pid}']);
+    return (out ?? '').split('\n').flatMap((line) => {
+      const [session, pid] = line.split('\t');
+      return session && pid && /^\d+$/.test(pid) ? [{ session, pid: Number(pid) }] : [];
+    });
+  }
+
   sendKey(paneId: string, key: string): void {
     this.run(['send-keys', '-t', paneId, key]);
   }
@@ -806,9 +849,10 @@ export class Tmux {
     this.tryRun(['select-pane', '-t', paneId]);
   }
 
-  attach(session: string, insideTmux: boolean): number {
+  /** `env` — the client's own: SEAT_MARK_ENV_VAR in it says which seat the terminal is at. */
+  attach(session: string, insideTmux: boolean, env?: NodeJS.ProcessEnv): number {
     const args = insideTmux ? ['switch-client', '-t', `=${session}`] : ['attach-session', '-t', `=${session}`];
-    return spawnSync('tmux', this.argv(args), { stdio: 'inherit' }).status ?? 1;
+    return spawnSync('tmux', this.argv(args), { stdio: 'inherit', env }).status ?? 1;
   }
 
   /** How a person reaches the session from another terminal. */
@@ -832,6 +876,8 @@ export interface AiOptions {
   topic?: string;
   /** `--intercom`: the project's mail session — VDX_INTERCOM=1, one per project and machine. */
   intercom?: boolean;
+  /** `--list`: the list of a plain start, printed; nothing is asked or started. */
+  list?: boolean;
 }
 
 /** A topic is one line: it goes into a tmux option, a terminal's title and a transcript line. */
@@ -1136,7 +1182,15 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
  * its topic while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
  * the mark the vdx there watches it by.
  */
-function finish(ok: boolean, session: string, paneId: string, opts: AiOptions, deps: AiDeps, focused = false): number {
+function finish(
+  ok: boolean,
+  session: string,
+  paneId: string,
+  opts: AiOptions,
+  deps: AiDeps,
+  focused = false,
+  seat: string = hostLabel(deps.env),
+): number {
   if (deps.interactive && !opts.detach) {
     if (!ok) deps.log('attaching so you can see the pane');
     deps.tmux.focus(paneId);
@@ -1146,7 +1200,7 @@ function finish(ok: boolean, session: string, paneId: string, opts: AiOptions, d
       deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
     const watch =
       focused && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
-    const status = deps.tmux.attach(session, insideTmux);
+    const status = deps.tmux.attach(session, insideTmux, { ...process.env, [SEAT_MARK_ENV_VAR]: seat });
     watch?.stop();
     return status;
   }
@@ -1192,6 +1246,7 @@ export function remoteAiArgs(input: {
     opts.restart && '--restart',
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
+    opts.list && '--list',
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
   ].filter((f): f is string => Boolean(f));
   const v = shellQuote(version);
@@ -1358,15 +1413,122 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: s
 }
 
 /**
- * The Claude Code sessions alive on `host` right now; null when it does not
- * answer over ssh (BatchMode: a password prompt counts as no answer).
+ * What `vdx ai --report <project>` prints on a machine — the vdx of another one asks for it over
+ * ssh (vdx-ai-predictable): the Claude Code sessions alive there (as LIVE_SESSIONS_SCRIPT), the
+ * project's agents with what only that machine sees (its terminals, the input line), which of
+ * the project's conversations were typed in there, and its copies of their transcripts — the
+ * asking machine finds where its own copies are behind.
  */
-function askMachine(host: string, deps: AiDeps): MachineReport | null {
-  const res = (deps.ssh ?? runSsh)(
-    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, `sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`],
-    true,
-  );
-  return res && res.status === 0 ? parseMachineReport(res.stdout) : null;
+export interface RemoteReport {
+  vdx: string;
+  machine: string;
+  home: string;
+  sessions: LiveSession[];
+  agents: AgentFact[];
+  typed: string[];
+  transcripts: { id: string; mtime: number; size: number }[];
+}
+
+/** What another machine answered: always the live sessions; the report when its vdx gives one. */
+interface Reach extends MachineReport {
+  report: RemoteReport | null;
+}
+
+function parseReach(stdout: string): Reach {
+  const text = stdout.trim();
+  if (text.startsWith('{')) {
+    try {
+      const r = JSON.parse(text) as RemoteReport;
+      if (Array.isArray(r.sessions) && Array.isArray(r.agents))
+        return { home: r.home ?? null, sessions: r.sessions, report: r };
+    } catch {
+      /* not a report: read it as the script's lines */
+    }
+  }
+  return { ...parseMachineReport(stdout), report: null };
+}
+
+/**
+ * What runs on `host` right now; null when it does not answer over ssh (BatchMode: a password
+ * prompt counts as no answer). Its vdx reports on the project; a vdx there older than the
+ * report, or none, — the script prints the live sessions alone.
+ */
+function askMachine(host: string, deps: AiDeps, projectRoot: string): Reach | null {
+  const script = `vdx ai ${remotePathWord(projectRoot, deps.home)} --report 2>/dev/null || sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`;
+  const res = (deps.ssh ?? runSsh)(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, script], true);
+  return res && res.status === 0 ? parseReach(res.stdout) : null;
+}
+
+/**
+ * The facts of the project's agents running here (board.ts): its session file, its transcript,
+ * the terminals on its tmux session and its input line.
+ */
+function agentFacts(
+  agents: AgentPane[],
+  plan: LaunchPlan,
+  deps: AiDeps,
+  procs: ProcInfo[],
+  wrapSkills: readonly string[],
+  modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
+): AgentFact[] {
+  if (agents.length === 0) return [];
+  const clients = deps.tmux.clients();
+  return agents.map((a) => {
+    const live = liveSessionFile(deps.env, deps.home, a.proc.pid);
+    const c = live
+      ? conversationById({
+          env: deps.env,
+          home: deps.home,
+          projectRoot: plan.projectRoot,
+          id: live.conversation,
+          wrapSkills,
+        })
+      : null;
+    const focused = modeOf.focused(a.proc.pid);
+    return {
+      machine: plan.host,
+      session: a.pane.session,
+      pid: a.proc.pid,
+      conversation: live?.conversation ?? null,
+      status: live?.status ?? null,
+      activeAt: live?.activeAt ?? null,
+      draft: inputDraft(deps.tmux.screen(a.pane.paneId)),
+      focused,
+      topic: focused ? sessionTopic(deps.tmux, a.pane.session) : null,
+      mail: modeOf.mail(a.proc.pid),
+      openAt: clients.filter((k) => k.session === a.pane.session).map((k) => clientSeat(k.pid, procs, plan.host)),
+      title: c?.title ?? null,
+      // No transcript of the conversation it is in: nothing was written there yet.
+      empty: c ? isEmpty(c) : live !== null,
+      finished: c?.finished ?? false,
+    };
+  });
+}
+
+/** `vdx ai --report <path>`: this machine's RemoteReport on the project, as JSON on stdout. */
+export function runAiReport(pathArg: string, deps: AiDeps): number {
+  const prepared = prepare(pathArg, deps);
+  if (typeof prepared === 'number') return prepared;
+  const { plan, environment } = prepared;
+  const wrapSkills = environment.session?.wrap_skills ?? [];
+  const procs = deps.processes();
+  const agents = deps.tmux.available() ? findAgentPanes(deps.tmux.panes(), procs, plan.projectRoot, plan.command) : [];
+  const files = conversationFiles({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+  const ids = new Set(files.map((f) => path.basename(f.file, '.jsonl')));
+  const report: RemoteReport = {
+    vdx: deps.version ?? '',
+    machine: plan.host,
+    home: deps.home,
+    sessions: (deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))(),
+    agents: agentFacts(agents, plan, deps, procs, wrapSkills, {
+      focused: deps.agentFocused ?? processFocused,
+      mail: deps.agentMail ?? ((pid) => processMode(pid) === 'mail'),
+    }),
+    typed: [...typedHere(deps.env, deps.home, ids)],
+    transcripts: files.map((f) => ({ id: path.basename(f.file, '.jsonl'), mtime: f.updated.getTime(), size: f.size })),
+  };
+  deps.out(JSON.stringify(report) + '\n');
+  return EXIT_OK;
 }
 
 /** What a start continues: resume args here, or a conversation on another machine. */
@@ -1391,38 +1553,19 @@ function isClaude(command: string): boolean {
 const resumeId = (id: string) => ['--resume', id];
 
 /**
- * Which conversation a start continues. Other agents keep the profile's
- * resume_args. For Claude Code vdx reads the project's conversations and the
- * machine each belongs to (conversations.ts): `--continue` would take the
- * newest one in the folder, and with the folder synced between machines that
- * can be a conversation another machine is still writing to.
- *
- * The profile's other machines, and every other machine this project's
- * conversations name, are asked over ssh what runs there right now; this
- * machine's running ones come from its own session files. A running
- * conversation is listed even when it is not its machine's newest.
- *
- * A new conversation the person did not pick from the list — `--new`, a
- * project with none yet, none of this machine's idle — while an agent of this
- * project runs on another machine (by the directory it runs in) is started
- * only after a yes: two agents would work in one repository from two machines.
- *
- * Another machine's conversation is continued on that machine, so two
- * machines never write to one conversation; one whose machine is unknown, or
- * cannot be reached, or that already runs here, is continued here only after a
- * yes. When the choice is not plain, a person at a terminal picks — Enter
- * takes the newest overall; without a terminal it is this machine's newest
- * idle one, never another's.
+ * What a choice of conversation stands on: what runs on every machine (this one from its
+ * session files, the others over ssh), each conversation's machine, and how one is continued —
+ * on its own machine (vdx-ai DL #27). chooseConversation and the list of a plain start
+ * (vdx-ai-predictable) both decide from it.
  */
-function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
-  if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
+function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonly string[] = []) {
   const host = plan.host;
   const same = sameMachine;
   // A mail session's conversations are its own: a start of the person's never continues one.
   const listed =
     plan.resumeArgs.length === 0
       ? []
-      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot });
+      : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, wrapSkills });
   const all = listed.filter((c) => !c.mail);
   const mailOnly = listed.length - all.length;
   const root = shellQuote(plan.projectRoot);
@@ -1431,9 +1574,10 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
   const on = (m: string) => (same(m, plan.seat) ? (atSeat ? 'here' : `on ${m}, where you are,`) : `on ${m}`);
 
   // Who runs what right now: this machine from its session files, the others over ssh.
-  const reach = new Map<string, MachineReport | null>();
+  const reach = new Map<string, Reach | null>();
   for (const m of [...plan.machines, ...all.map((c) => c.machine)]) {
-    if (m && !same(m, host) && ![...reach.keys()].some((k) => same(k, m))) reach.set(m, askMachine(m, deps));
+    if (m && !same(m, host) && ![...reach.keys()].some((k) => same(k, m)))
+      reach.set(m, askMachine(m, deps, plan.projectRoot));
   }
   const silent = [...reach]
     .filter(([, r]) => r === null)
@@ -1457,15 +1601,6 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
     );
     return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
   };
-  if (plan.resumeArgs.length === 0) return fresh(silent);
-  if (all.length === 0) {
-    return fresh([
-      mailOnly
-        ? `only the mail session's conversations here (${mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
-        : 'no conversation of this project yet — starting a new one',
-      ...silent,
-    ]);
-  }
 
   const live = new Map<string, { machine: string; session: LiveSession; here: boolean }[]>();
   const addLive = (machine: string, session: LiveSession, here: boolean) =>
@@ -1512,6 +1647,85 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
       lines: [`chosen: ${show(c)}`],
     };
   };
+  return {
+    host,
+    same,
+    all,
+    mailOnly,
+    root,
+    atSeat,
+    on,
+    reach,
+    silent,
+    elsewhere,
+    rootOn,
+    fresh,
+    live,
+    machine,
+    runsHere,
+    isOurs,
+    idleHere,
+    found,
+    show,
+    running,
+    take,
+  };
+}
+
+/**
+ * Which conversation a start continues. Other agents keep the profile's
+ * resume_args. For Claude Code vdx reads the project's conversations and the
+ * machine each belongs to (conversations.ts): `--continue` would take the
+ * newest one in the folder, and with the folder synced between machines that
+ * can be a conversation another machine is still writing to.
+ *
+ * The profile's other machines, and every other machine this project's
+ * conversations name, are asked over ssh what runs there right now; this
+ * machine's running ones come from its own session files. A running
+ * conversation is listed even when it is not its machine's newest.
+ *
+ * A new conversation the person did not pick from the list — `--new`, a
+ * project with none yet, none of this machine's idle — while an agent of this
+ * project runs on another machine (by the directory it runs in) is started
+ * only after a yes: two agents would work in one repository from two machines.
+ *
+ * Another machine's conversation is continued on that machine, so two
+ * machines never write to one conversation; one whose machine is unknown, or
+ * cannot be reached, or that already runs here, is continued here only after a
+ * yes. When the choice is not plain, a person at a terminal picks — Enter
+ * takes the newest overall; without a terminal it is this machine's newest
+ * idle one, never another's.
+ */
+function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
+  if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
+  const {
+    host,
+    same,
+    all,
+    mailOnly,
+    root,
+    atSeat,
+    on,
+    silent,
+    rootOn,
+    fresh,
+    machine,
+    runsHere,
+    idleHere,
+    found,
+    show,
+    running,
+    take,
+  } = conversationContext(plan, deps);
+  if (plan.resumeArgs.length === 0) return fresh(silent);
+  if (all.length === 0) {
+    return fresh([
+      mailOnly
+        ? `only the mail session's conversations here (${mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+        : 'no conversation of this project yet — starting a new one',
+      ...silent,
+    ]);
+  }
   if (found.every(idleHere)) {
     const chosen = take(found[0]!);
     return { ...chosen, lines: [...chosen.lines, ...silent] };
@@ -1565,6 +1779,294 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
     return { ...chosen, lines: [...chosen.lines, ...notes] };
   }
   return fresh([`no idle conversation ${atSeat ? 'of this machine' : `on ${host}`} — starting a new one`, ...notes]);
+}
+
+/** What a plain start of Claude Code comes to, after the list or without it. */
+type BoardOutcome =
+  | { kind: 'attach'; agent: AgentPane; open: boolean; lines: string[] }
+  | { kind: 'remote'; host: string; conversation: string | null; lines: string[] }
+  | { kind: 'continue'; choice: ConversationChoice }
+  | { kind: 'new'; focused: boolean; lines: string[] }
+  | { kind: 'abort'; lines: string[] }
+  | { kind: 'listed' };
+
+/**
+ * A plain start of Claude Code (vdx-ai-predictable): the project's agents on every machine and
+ * its conversations nobody runs, in one list (board.ts). Silent in three cases only — one agent
+ * runs on all the machines and no terminal at this seat shows it: attach; none runs, and the
+ * newest conversation is this machine's and not finished: continue it; the project has no
+ * conversation: a new one. `print` (`--list`, `--dry-run`) shows the list and decides nothing;
+ * `auto` (no terminal) takes the marked row if it is this machine's.
+ */
+function boardStart(
+  plan: LaunchPlan,
+  deps: AiDeps,
+  local: AgentPane[],
+  procs: ProcInfo[],
+  wrapSkills: readonly string[],
+  modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
+  mode: 'ask' | 'print' | 'auto',
+): BoardOutcome {
+  const k = conversationContext(plan, deps, wrapSkills);
+  const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
+  const paneOf = new Map(local.map((a) => [a.proc.pid, a]));
+  const copy = (id: string | null) =>
+    id ? conversationById({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, id, wrapSkills }) : null;
+  const there: AgentFact[] = [];
+  const typedOn = new Map<string, string>();
+  const behind = new Map<string, string>();
+  const files = new Map(
+    conversationFiles({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot }).map((f) => [
+      path.basename(f.file, '.jsonl'),
+      f,
+    ]),
+  );
+  for (const [m, r] of k.reach) {
+    if (!r) continue;
+    if (r.report) {
+      there.push(...r.report.agents.map((a) => ({ ...a, machine: m })));
+      for (const id of r.report.typed) if (!typedOn.has(id)) typedOn.set(id, m);
+      // Their copy newer or longer than ours: ours is behind, and that machine writes it.
+      for (const t of r.report.transcripts) {
+        const ours = files.get(t.id);
+        if (!ours || t.mtime > ours.updated.getTime() + 2_000 || t.size > ours.size) behind.set(t.id, m);
+      }
+      continue;
+    }
+    // An older vdx there, or none: what its session files say, the rest from our copy.
+    // The project's by the directory it runs in, or by its conversation being one of the project's.
+    const ofProject = (l: LiveSession) =>
+      runsInProject(l, r.home, plan.projectRoot, deps.home) || files.has(l.conversation);
+    for (const l of r.sessions.filter(ofProject)) {
+      const c = copy(l.conversation);
+      there.push({
+        machine: m,
+        session: l.tmux?.replace(/:.*$/, '') ?? null,
+        pid: l.pid,
+        conversation: l.conversation,
+        status: l.status,
+        activeAt: null,
+        draft: 0,
+        focused: false,
+        topic: c?.topic ?? null,
+        mail: c?.mail ?? false,
+        openAt: [],
+        title: c?.title ?? null,
+        empty: c ? isEmpty(c) : false,
+        finished: c?.finished ?? false,
+      });
+    }
+  }
+  const machineOf = (c: Conversation) => behind.get(c.id) ?? k.machine(c) ?? typedOn.get(c.id) ?? null;
+  // Claude Code running here outside tmux: no pane to attach to, and a second session in its
+  // conversation would write to it — continued only after a yes (take).
+  const outside: AgentFact[] = (deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))()
+    .filter((l) => !paneOf.has(l.pid) && !local.some((a) => a.proc.pid === l.pid))
+    .filter((l) => files.has(l.conversation) || runsInProject(l, deps.home, plan.projectRoot, deps.home))
+    .filter((l) => !l.tmux)
+    .map((l) => {
+      const c = copy(l.conversation);
+      const live = liveSessionFile(deps.env, deps.home, l.pid);
+      return {
+        machine: plan.host,
+        session: null,
+        pid: l.pid,
+        conversation: l.conversation,
+        status: l.status,
+        activeAt: live?.activeAt ?? null,
+        draft: 0,
+        focused: modeOf.focused(l.pid),
+        topic: c?.topic ?? null,
+        mail: c?.mail ?? false,
+        openAt: [plan.host],
+        title: c?.title ?? null,
+        empty: c ? isEmpty(c) : false,
+        finished: c?.finished ?? false,
+      };
+    });
+  const agents = [...here, ...outside, ...there];
+  const working = agents.filter((a) => !a.mail);
+  const busy = new Set(working.map((a) => a.conversation));
+  const continuable = k.all.filter((c) => !isEmpty(c) && !busy.has(c.id));
+  const conversationOf = (a: AgentFact) => k.all.find((c) => c.id === a.conversation) ?? copy(a.conversation);
+  const outcomeOf = (pick: Pick, why: string[]): BoardOutcome => {
+    if (pick.kind === 'agent') {
+      const a = pick.agent;
+      const pane = paneOf.get(a.pid);
+      if (pane) return { kind: 'attach', agent: pane, open: openAtSeat(a, plan.seat), lines: why };
+      if (sameMachine(a.machine, plan.host)) {
+        const c = conversationOf(a);
+        if (!c) return { kind: 'abort', lines: [...why, `vdx cannot read the conversation of pid ${a.pid}`] };
+        const chosen = k.take(c);
+        return { kind: 'continue', choice: { ...chosen, lines: [...why, ...chosen.lines] } };
+      }
+      return { kind: 'remote', host: a.machine, conversation: a.conversation, lines: why };
+    }
+    if (pick.kind === 'conversation') {
+      const m = pick.machine;
+      if (m && !sameMachine(m, plan.host)) {
+        return {
+          kind: 'continue',
+          choice: {
+            args: [],
+            remote: { host: m, id: pick.conversation.id, reachable: k.reach.get(m) != null },
+            lines: [...why, `continuing on ${m}: ${describeConversation(pick.conversation, m)}`],
+          },
+        };
+      }
+      const chosen = k.take(pick.conversation);
+      return { kind: 'continue', choice: { ...chosen, lines: [...why, ...chosen.lines] } };
+    }
+    if (pick.kind === 'new') return { kind: 'new', focused: pick.focused, lines: why };
+    return { kind: 'abort', lines: why };
+  };
+
+  // `a`: every conversation of the project, not only the newest the start read.
+  const everyOne = () =>
+    listConversations({
+      env: deps.env,
+      home: deps.home,
+      projectRoot: plan.projectRoot,
+      limit: Infinity,
+      wrapSkills,
+    }).filter((c) => !c.mail);
+  const make = (limit: number | 'all') =>
+    buildBoard({
+      project: plan.project,
+      host: plan.host,
+      seat: plan.seat,
+      agents,
+      conversations: limit === 'all' ? everyOne() : k.all,
+      total: files.size,
+      unread: files.size - k.all.length - k.mailOnly,
+      machineOf,
+      behind,
+      silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
+      limit,
+    });
+  const show = (b: Board, to: (line: string) => void) => {
+    for (const l of b.lines) to(l);
+  };
+  if (mode === 'print') {
+    show(make(5), (t) => deps.out(t + '\n'));
+    return { kind: 'listed' };
+  }
+
+  // Nobody to ask (no terminal, or --dry-run): this machine's agent, else its newest
+  // conversation, else a new one — never another machine's, and a new one while the project's
+  // agent runs elsewhere only after a yes (vdx-ai DL #29). The others are named with the command
+  // that reaches them.
+  if (mode === 'auto') {
+    // Under --dry-run at a terminal the list is shown as well: what Enter would take.
+    if (deps.interactive) show(make(5), (t) => deps.out(t + '\n'));
+    const rank = (a: AgentFact) => (freeWork(a, plan.seat) ? 0 : 1);
+    const mineAgent = here
+      .filter((a) => !a.mail)
+      .sort((a, b) => rank(a) - rank(b) || (b.activeAt ?? 0) - (a.activeAt ?? 0))[0];
+    const ours = continuable.filter((c) => {
+      const m = machineOf(c);
+      return m !== null && sameMachine(m, plan.host) && !k.runsHere(c);
+    });
+    const mineConv = ours.find((c) => !c.finished) ?? ours[0];
+    const chosenAt = mineConv?.updated ?? new Date(0);
+    const notes: string[] = [];
+    for (const a of [...outside, ...there].filter((x) => !x.mail)) {
+      const c = conversationOf(a);
+      const which = `${c && c.updated > chosenAt ? 'a newer' : 'another'} conversation ${(a.conversation ?? '?').slice(0, 8)}, ${describeLive(k.on(a.machine), { pid: a.pid, conversation: a.conversation ?? '', tmux: a.session, status: a.status, cwd: null })}`;
+      if (sameMachine(a.machine, plan.host)) notes.push(`note: ${which} — not taken: it would have two sessions`);
+      else if (sameMachine(a.machine, plan.seat))
+        notes.push(
+          `note: ${a.machine} has ${which} — continue it where you are: vdx ai ${k.rootOn(a.machine)} --conversation ${a.conversation}`,
+        );
+      else
+        notes.push(
+          `note: ${a.machine} has ${which} — continue it there: vdx ai@${a.machine} ${k.root} --conversation ${a.conversation}`,
+        );
+    }
+    for (const c of continuable) {
+      if (c === mineConv) continue;
+      const m = machineOf(c);
+      if (m && sameMachine(m, plan.host)) continue;
+      const which = `${c.updated > chosenAt ? 'a newer' : 'another'} conversation ${c.id.slice(0, 8)}`;
+      if (!m)
+        notes.push(
+          `note: ${which} is of an unknown machine (never typed in ${k.on(plan.host)}) — on its machine: vdx ai@<machine> ${k.root} --conversation ${c.id}`,
+        );
+      else if (sameMachine(m, plan.seat))
+        notes.push(`note: ${m} has ${which} — continue it where you are: vdx ai ${k.rootOn(m)} --conversation ${c.id}`);
+      else notes.push(`note: ${m} has ${which} — continue it there: vdx ai@${m} ${k.root} --conversation ${c.id}`);
+    }
+    notes.push(...k.silent);
+    if (mineAgent) {
+      const pane = paneOf.get(mineAgent.pid)!;
+      const others = here.filter((a) => !a.mail).length;
+      return {
+        kind: 'attach',
+        agent: pane,
+        open: false,
+        lines: [
+          ...(others > 1 ? [`note: ${others} agents of this project run here — taking ${pane.pane.session}`] : []),
+          ...notes,
+        ],
+      };
+    }
+    if (mineConv) {
+      const chosen = k.take(mineConv);
+      return { kind: 'continue', choice: { ...chosen, lines: [...chosen.lines, ...notes] } };
+    }
+    const why =
+      k.all.length === 0
+        ? k.mailOnly
+          ? `only the mail session's conversations here (${k.mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+          : plan.resumeArgs.length
+            ? 'no conversation of this project yet — starting a new one'
+            : 'the profile has no resume_args — starting a new conversation'
+        : `no idle conversation ${k.atSeat ? 'of this machine' : `on ${plan.host}`} — starting a new one`;
+    return { kind: 'continue', choice: k.fresh([why, ...notes]) };
+  }
+
+  // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
+  // shows already.
+  const only = working.length === 1 ? working[0]! : null;
+  if (only && !openAtSeat(only, plan.seat)) {
+    const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
+    return outcomeOf({ kind: 'agent', agent: only }, [
+      `the only agent of ${plan.project} runs ${where}${only.session ? ` (${only.session})` : ` (pid ${only.pid})`}, and no terminal at your seat shows it`,
+      ...k.silent,
+    ]);
+  }
+  if (working.length === 0) {
+    const newest = continuable[0];
+    if (!newest)
+      return outcomeOf({ kind: 'new', focused: false }, [
+        k.mailOnly
+          ? `only the mail session's conversations here (${k.mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+          : plan.resumeArgs.length
+            ? 'no conversation of this project yet — starting a new one'
+            : 'the profile has no resume_args — starting a new conversation',
+        ...k.silent,
+      ]);
+    const m = machineOf(newest);
+    if (m && sameMachine(m, plan.host) && !newest.finished && !behind.has(newest.id))
+      return outcomeOf({ kind: 'conversation', conversation: newest, machine: m }, k.silent);
+  }
+
+  let board = make(5);
+  show(board, deps.log);
+  for (let tries = 0; tries < 3; tries++) {
+    const answer = deps.ask(`Which one? [${board.enter === 'new' ? 'n' : board.enter + 1}]: `);
+    // Ctrl-D at the question is a cancel, not "no terminal": start nothing.
+    if (answer === null) return { kind: 'abort', lines: ['no answer — nothing started'] };
+    const pick = readAnswer(answer, board);
+    if (pick?.kind === 'all') {
+      board = make('all');
+      show(board, deps.log);
+      continue;
+    }
+    if (pick) return outcomeOf(pick, []);
+    deps.log(`  1–${board.rows.length}, a, n or f`);
+  }
+  return { kind: 'abort', lines: ['nothing started'] };
 }
 
 /**
@@ -1685,6 +2187,45 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
   return { projectRoot, environment, profilePath, profileDir, plan, replan };
 }
 
+/**
+ * A process's environment as words (`ps -E` on macOS, /proc on Linux); null — not readable.
+ * `ps -E` joins it to the command line: a word is an assignment or a piece of the command.
+ */
+function processEnvWords(pid: number): string[] | null {
+  try {
+    const environ = `/proc/${pid}/environ`;
+    if (fs.existsSync(environ)) return fs.readFileSync(environ, 'utf8').split('\0');
+    const out = execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out.split(/\s+/);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The seat of a tmux client: the mark `vdx ai` gave it at the attach; else a client under sshd
+ * is another machine's — which one, nothing says (`?`); else this machine's.
+ */
+export function clientSeat(
+  pid: number,
+  procs: ProcInfo[],
+  host: string,
+  envOf: (pid: number) => string[] | null = processEnvWords,
+): string {
+  const mark = envOf(pid)
+    ?.find((w) => w.startsWith(`${SEAT_MARK_ENV_VAR}=`))
+    ?.slice(SEAT_MARK_ENV_VAR.length + 1);
+  if (mark && isMachineLabel(mark)) return mark;
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  for (let p = byPid.get(pid), n = 0; p && n < 32; p = byPid.get(p.ppid), n++) {
+    if (/\bsshd(-session)?\b/.test(p.args)) return '?';
+  }
+  return host;
+}
+
 /** How an agent process was started: `vdx ai --focused`, `vdx ai --intercom`, or neither. */
 export type AgentMode = 'focused' | 'mail' | 'plain';
 
@@ -1693,20 +2234,8 @@ export type AgentMode = 'focused' | 'mail' | 'plain';
  * focused: deaf wins, as intercom reads it.
  */
 export function processMode(pid: number): AgentMode {
-  let words: string[];
-  try {
-    const environ = `/proc/${pid}/environ`;
-    if (fs.existsSync(environ)) words = fs.readFileSync(environ, 'utf8').split('\0');
-    else {
-      const out = execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      words = out.split(/\s+/);
-    }
-  } catch {
-    return 'plain';
-  }
+  const words = processEnvWords(pid);
+  if (!words) return 'plain';
   if (words.includes(`${FOCUSED_ENV_VAR}=1`)) return 'focused';
   return words.includes(`${INTERCOM_ENV_VAR}=1`) ? 'mail' : 'plain';
 }
@@ -2110,8 +2639,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     return EXIT_USAGE;
   }
 
-  const agentsHere =
-    multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), deps.processes(), projectRoot, plan.command) : [];
+  const procs = multiplexer === 'tmux' ? deps.processes() : [];
+  const agentsHere = multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), procs, projectRoot, plan.command) : [];
   // The mail session and the person's sessions do not see each other: --intercom is about the
   // one mail session, every other start leaves it alone — nobody sits at it, and it ends itself.
   const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
@@ -2125,7 +2654,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   const inConversation = opts.conversation ? running.find((a) => conversationOf(a) === opts.conversation) : undefined;
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
   // One mail session per project and machine: a running one is the one, never a second next to it.
-  const alongside =
+  let alongside =
     !plan.intercom &&
     running.length > 0 &&
     !opts.restart &&
@@ -2133,7 +2662,94 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     !unreadable &&
     (wantsNew || !!opts.conversation);
   let current = inConversation ?? unreadable;
-  if (!current && !alongside && running.length > 0) {
+
+  // A plain start of Claude Code: one list of what runs on every machine and what can be
+  // continued, unless the choice is plain (vdx-ai-predictable).
+  const wrapSkills = environment.session?.wrap_skills ?? [];
+  const onBoard =
+    opts.list === true ||
+    (isClaude(plan.command) && !opts.conversation && !opts.restart && !plan.intercom && !wantsNew);
+  let boardChoice: ConversationChoice | null = null;
+  let boardNew = false;
+  if (onBoard) {
+    if (!isClaude(plan.command)) {
+      log(`vdx ai: --list shows Claude Code's agents and conversations; the agent here is ${plan.command}`);
+      return EXIT_USAGE;
+    }
+    const outcome = boardStart(
+      plan,
+      deps,
+      running,
+      procs,
+      wrapSkills,
+      { focused: focusedOf, mail: mailOf },
+      opts.list ? 'print' : deps.interactive && !opts.dryRun ? 'ask' : 'auto',
+    );
+    switch (outcome.kind) {
+      case 'listed':
+        return EXIT_OK;
+      case 'abort':
+        for (const l of outcome.lines) log(l);
+        return EXIT_LAUNCH_FAILED;
+      case 'remote':
+        for (const l of outcome.lines) log(l);
+        return runAiRemote(
+          { ...opts, path: projectRoot, conversation: outcome.conversation ?? undefined },
+          outcome.host,
+          deps,
+          plan.seat,
+        );
+      case 'attach': {
+        for (const l of outcome.lines) log(l);
+        if (outcome.open) {
+          const answer = deps.interactive
+            ? deps.ask(`${outcome.agent.pane.session} is open in another terminal here — attach this one too? [y/N]: `)
+            : null;
+          if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
+            log(`nothing done — ${outcome.agent.pane.session} is in your other terminal`);
+            return EXIT_LAUNCH_FAILED;
+          }
+        }
+        current = outcome.agent;
+        break;
+      }
+      case 'continue':
+        boardChoice = outcome.choice;
+        break;
+      case 'new':
+        for (const l of outcome.lines) log(l);
+        boardChoice = { args: [], lines: [] };
+        boardNew = true;
+        plan = outcome.focused ? { ...prepared.replan(true), resumeArgs: [] } : { ...plan, resumeArgs: [] };
+        break;
+    }
+  }
+
+  // An empty session of the project here — nothing typed in it since /clear — is the place for a
+  // new conversation, not a reason for one more next to it (vdx-ai-predictable P9). Not one a
+  // terminal at this seat shows, not one with a draft, and not a focused one for a plain start.
+  let reused = false;
+  if (
+    isClaude(plan.command) &&
+    !current &&
+    !opts.restart &&
+    !plan.intercom &&
+    !opts.conversation &&
+    (wantsNew || boardNew) &&
+    running.length > 0
+  ) {
+    const free = agentFacts(running, plan, deps, procs, wrapSkills, { focused: focusedOf, mail: mailOf }).find(
+      (f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused),
+    );
+    const pane = free && running.find((a) => a.proc.pid === free.pid);
+    if (pane) {
+      current = pane;
+      alongside = false;
+      reused = true;
+      log(`♻ ${pane.pane.session}: nothing typed in it since /clear — the new conversation goes there`);
+    }
+  }
+  if (!onBoard && !current && !alongside && running.length > 0) {
     const picked = pickAgent(running, focusedOf, deps, !opts.dryRun);
     if (picked === null) {
       log('nothing done');
@@ -2149,8 +2765,9 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   }
 
   // What a start continues. A restart keeps the conversation the agent is in.
-  let choice: ConversationChoice | null = null;
-  if (!current || opts.restart) {
+  let choice: ConversationChoice | null = boardChoice;
+  if (boardChoice) plan = { ...plan, resumeArgs: boardChoice.args };
+  else if (!current || opts.restart) {
     // The mail session runs next to the person's agents on any machine by design: nothing to ask.
     if (plan.intercom) choice = { args: [], lines: [] };
     else if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
@@ -2285,7 +2902,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     );
   }
 
-  if (current && !opts.restart) {
+  // A focused conversation in an empty session: its agent restarts focused, with the new topic.
+  if (current && !opts.restart && !(reused && plan.focused)) {
     if (current === unreadable) {
       log(
         `note: ${current.pane.session} runs ${plan.command} in a conversation vdx cannot read — attaching to it; ` +
@@ -2305,7 +2923,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       const mode = runningFocused ? ', focused' : plan.intercom ? ', the mail session' : '';
       log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused, plan.seat);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
@@ -2334,7 +2952,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     if (answer === '') {
       log(`→ ${current.pane.session}: as is — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused, plan.seat);
     }
     if (answer?.toLowerCase() !== 'r') {
       log('nothing done');
@@ -2356,7 +2974,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // The topic goes into the tmux session before the agent starts: its session-start hook reads it.
   let topic: Topic | null = null;
   if (plan.focused) {
-    topic = chooseTopic(opts, plan, deps, current, true);
+    topic = chooseTopic(opts, plan, deps, reused ? undefined : current, true);
     if (!topic) {
       log('no answer — nothing started');
       return EXIT_LAUNCH_FAILED;
@@ -2379,6 +2997,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       opts,
       deps,
       plan.focused,
+      plan.seat,
     );
   }
 
@@ -2394,5 +3013,5 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   if (!reuse && topic?.text) setSessionTopic(tmux, session, topic.text);
   log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
   topicSaid();
-  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused);
+  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused, plan.seat);
 }

@@ -45,6 +45,7 @@ import {
   runAi,
   runAiCheck,
   runAiClose,
+  runAiReport,
   runAiRemote,
   defaultDeps,
   hostLabel,
@@ -92,7 +93,7 @@ interface CommandSpec {
 }
 
 const AI_HELP = `Starts your agent in the project, or attaches to the one already running there.
-Several running there: a list to pick from — Enter takes the newest.
+Not plain which: one list of what runs on every machine and what can be continued.
 Which agent, its flags and whether it runs in tmux come from your profile:
 $VDX_ENVIRONMENT, else ~/.vdx-environment.yaml, else a plain claude/codex.
 
@@ -151,22 +152,39 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 folder Claude Code does not trust yet, nothing starts (exit 4):
                 its trust window would wait with nobody at it — start once
                 without --detach and answer it
-  --dry-run     print the plan and the project's running agents; start nothing
+  --dry-run     print the plan and the project's running agents; start nothing.
+                Claude Code: the list as well, and what a start without a terminal takes
+  --list        Claude Code: the list a plain start shows; ask nothing, start nothing
+  --report      for the vdx of another machine, over ssh: this machine on the project,
+                as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
                 whether this session carries the profile's flags, and whether it
                 runs the installed Claude Code and plugins (the vdx plugin's
                 SessionStart hook); prints nothing without a profile; exit 3 on drift
   -h, --help    this help
 
-Which conversation a start continues (Claude Code): each one is marked with the
-machine it was last started on (the vdx plugin's hook writes it in), and the
-other machines (session.machines in the profile, and those the conversations
-name) are asked over ssh what runs there now. Another machine's conversation
-is continued on that machine; if it does not answer, vdx asks before
-continuing it here. When the choice is not plain, vdx lists them, the running
-ones marked — Enter takes the newest; without a terminal it takes this
-machine's. A new conversation (--new, or none to continue) while an agent of
-the project runs on another machine starts only after a yes.
+What a plain start does (Claude Code). The other machines (session.machines in
+the profile, and those the conversations name) are asked over ssh what runs
+there now; each conversation is marked with the machine it was last started on
+(the vdx plugin's hook writes it in, or that machine's prompt history). Silent in
+three cases only: one agent of the project runs on all the machines and no
+terminal at your seat shows it — attach to it; none runs, and the newest
+conversation is this machine's and not finished — continue it; the project has
+none — a new one. Otherwise one list: the agents running on every machine (its
+state — working, waiting, a draft in its input line, empty since /clear,
+finished with a wrap skill of session.wrap_skills, idle N days — and which seat's
+terminal shows it), then the newest conversations nobody runs, cut off or
+finished, and how many more there are. Enter takes the marked row: an agent with
+work in it that no terminal at your seat shows, else the newest conversation cut
+off. a — every conversation; n — a new one; f — a new focused one. Another
+machine's conversation is continued on that machine (if it does not answer, vdx
+asks before continuing it here), and one whose copy here is behind that
+machine's — Syncthing has not brought it yet — too. Without a terminal it takes
+this machine's agent, else its newest conversation, else a new one. A new
+conversation while an agent of the project runs on another machine starts only
+after a yes — unless you picked it from the list. --new and --focused take an
+empty session of the project (nothing typed since /clear) when one is there and
+no terminal at your seat shows it; a session with work in it they leave running.
 
 Claude Code's memory of the project (Claude Code only): when it is not inside the
 project, .claude/memory/, or the folder was moved, a start in a terminal asks to
@@ -342,10 +360,10 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close'],
+    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close', 'list', 'report'],
     values: ['conversation', 'waiting'],
     optional: ['focused'],
     positionals: 1,
@@ -765,6 +783,17 @@ function cmdAi(opts: ParsedArgs): void {
     }
     process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps()));
   }
+  if (opts.flags.report === true) {
+    // What another machine's vdx asks over ssh: this machine's facts on the project, as JSON.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'report');
+    if (others.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        `vdx ai: --report takes only the project path (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
+      );
+      process.exit(2);
+    }
+    process.exit(runAiReport(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
+  }
   if (opts.flags.close === true || opts.flags.waiting !== undefined) {
     // Run inside the mail session, about that session: nothing to start, no other machine.
     const others = Object.keys(opts.flags).filter((f) => f !== 'close' && f !== 'waiting');
@@ -814,6 +843,7 @@ function cmdAi(opts: ParsedArgs): void {
     focused: opts.flags.focused !== undefined,
     topic,
     intercom: opts.flags.intercom === true,
+    list: opts.flags.list === true,
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.

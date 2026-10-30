@@ -40,6 +40,9 @@ import {
   runAi,
   runAiCheck,
   runAiClose,
+  runAiReport,
+  type RemoteReport,
+  clientSeat,
   shellQuote,
   sleepSync,
   tmuxShellCommand,
@@ -52,7 +55,18 @@ import {
   readConversation,
   topicLine,
 } from '../../src/conversations.ts';
-import { ID, hookLine, promptLine, startedOn, userLine, writeConversation, writeHistory } from './transcripts.ts';
+import {
+  ID,
+  bashLine,
+  commandLine as slashLine,
+  hookLine,
+  promptLine,
+  skillLine,
+  startedOn,
+  userLine,
+  writeConversation,
+  writeHistory,
+} from './transcripts.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
@@ -236,9 +250,29 @@ describe('parseEnvironment', () => {
     ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
     ['agent: {command: claude, when: [{id: a, if: true, wakes: "true"}]}', 'agent.when[0].wakes'],
     ['session: {folders_fix: ""}', 'session.folders_fix'],
+    ['session: {wrap_skills: vdm:wrap}', 'session.wrap_skills'],
     ['- just a list', 'top level'],
   ])('rejects %s naming %s', (yaml, key) => {
     expect(() => parseEnvironment(yaml, 'p.yaml')).toThrow(key);
+  });
+});
+
+describe('clientSeat: which seat a terminal on a tmux session is at', () => {
+  const procs = [
+    { pid: 1, ppid: 0, args: '/sbin/launchd' },
+    { pid: 50, ppid: 1, args: 'sshd-session: vdm@ttys004' },
+    { pid: 51, ppid: 50, args: '-zsh' },
+    { pid: 52, ppid: 51, args: 'node /opt/homebrew/bin/vdx ai' },
+    { pid: 53, ppid: 52, args: 'tmux attach-session -t =proj@lft' },
+    { pid: 60, ppid: 1, args: '/Applications/cmux.app/Contents/MacOS/cmux' },
+    { pid: 61, ppid: 60, args: 'tmux attach-session -t =proj@lft' },
+  ];
+  it('the mark vdx ai gave it at the attach; else under sshd another machine; else this one', () => {
+    expect(clientSeat(53, procs, 'lft', () => ['tmux', 'VDX_AI_SEAT=m3'])).toBe('m3');
+    expect(clientSeat(53, procs, 'lft', () => null)).toBe('?');
+    expect(clientSeat(61, procs, 'lft', () => ['tmux'])).toBe('lft');
+    // A mark that would read as an option to ssh is no mark.
+    expect(clientSeat(61, procs, 'lft', () => ['VDX_AI_SEAT=-oX'])).toBe('lft');
   });
 });
 
@@ -799,10 +833,12 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     answers = [''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual([]);
-    expect(text()).toMatch(/1\) m3 .*bbbbbbbb.*← newest/);
-    expect(text()).toMatch(/2\) lft .*aaaaaaaa.*← this machine/);
+    expect(text()).toMatch(/1\) m3 +5 min ago {2}bbbbbbbb {2}cut off/);
+    expect(text()).toMatch(/2\) lft +30 min ago {2}aaaaaaaa {2}cut off/);
+    expect(text()).toContain('Enter → 1');
     expect(sshCalls[0]!.args.slice(0, 5)).toEqual(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'm3']);
-    expect(asked()).toEqual([expect.stringMatching(/^sh -c .*sessions/)]);
+    // The vdx there reports on the project; an older one, or none — the script of live sessions.
+    expect(asked()).toEqual([expect.stringMatching(/^vdx ai .* --report 2>\/dev\/null \|\| sh -c .*sessions/)]);
     expect(remoteRuns()).toHaveLength(1);
     expect(remoteRuns()[0]!.slice(0, 2)).toEqual(['-t', 'm3']);
     expect(remoteRuns()[0]![2]).toContain(`exec vdx ai ${root} --conversation ${ID.b}`);
@@ -837,9 +873,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(sshCalls).toHaveLength(1); // asked once; nothing run there
     // said under the list, before the person picks — not only after Enter
-    expect(text()).toMatch(
-      /n\) a new conversation\n {2}note: m3 does not answer over ssh — what runs there is not known\n/,
-    );
+    expect(text()).toMatch(/ {2}note: m3 does not answer over ssh — what runs there is not known\n {2}Enter → 1/);
     expect(text()).toContain('m3 does not answer over ssh');
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
   });
@@ -887,7 +921,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     conv(ID.b, null, 55);
     answers = ['', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/1\) \? .*bbbbbbbb.*← newest, machine unknown/);
+    expect(text()).toMatch(/1\) \? +55 min ago {2}bbbbbbbb {2}cut off, machine unknown/);
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     expect(sshCalls).toEqual([]); // no machine to ask: none is named
     answers = ['', ''];
@@ -903,14 +937,15 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(sshCalls).toEqual([]);
   });
 
-  it("a conversation running on another machine right now is listed and marked, even when it is not that machine's newest", () => {
+  it("the only agent of the project, running on another machine, is attached to there — even in a conversation not that machine's newest (P1)", () => {
     conv(ID.a, 'lft', 30);
     conv(ID.b, 'm3', 5);
     conv(ID.c, 'm3', 120);
     remoteLive = [{ pid: 10984, sessionId: ID.c, tmux: 'proj@m3:@25.%25', status: 'busy' }];
-    answers = ['3'];
+    answers = ['should not be read'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/3\) m3 .*cccccccc.*← running on m3 now \(proj@m3, busy\)/);
+    expect(answers).toHaveLength(1);
+    expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\), and no terminal at your seat shows it/);
     expect(remoteRuns()).toHaveLength(1);
     expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
     expect(runs()).toEqual([]);
@@ -931,10 +966,12 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   it('a conversation running here outside tmux is continued only after a yes — two sessions would write to it', () => {
     conv(ID.a, 'lft', 30);
     liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: null }];
-    answers = ['', ''];
+    // It runs in a terminal here: Enter passes it by (DL #2); picked, it asks.
+    answers = ['1', ''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
-    expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running here now \(pid 4242, busy\)/);
-    answers = ['', 'y'];
+    expect(text()).toMatch(/1\) lft +pid 4242 {2}working · «prompt aaaa» {3}open here/);
+    expect(text()).toContain('Enter → n');
+    answers = ['1', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual([`--base --resume ${ID.a}`]);
   });
@@ -978,8 +1015,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     const d = deps({ ask: (q) => (questions.push(q), answers.shift() ?? null) });
     d.env['VDX_AI_FROM'] = 'm3';
     expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_LAUNCH_FAILED);
-    expect(text()).toMatch(/1\) lft .*aaaaaaaa.*← newest, running on lft now \(pid 4242, busy\)/);
-    expect(questions[1]).toBe(
+    // The only agent, and no terminal at m3 shows it: no list — straight to the question.
+    expect(text()).toMatch(/the only agent of .* runs on lft \(pid 4242\), and no terminal at your seat shows it/);
+    expect(questions[0]).toBe(
       `Continue aaaaaaaa on lft? It runs on lft right now (pid 4242); two sessions would write to it. [y/N]: `,
     );
     expect(text()).toContain(
@@ -1008,10 +1046,10 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       conv(ID.a, 'lft', 300);
       conv(ID.c, null, 5); // started on m3 before vdx named machines; never typed in here
       remoteLive = [agentOnM3(root)];
-      answers = [''];
+      answers = ['should not be read'];
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(asked()).toEqual(['m3']); // never this machine
-      expect(text()).toMatch(/1\) m3 .*cccccccc.*← newest, running on m3 now \(proj@m3, idle\)/);
+      expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\)/);
       expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
       expect(runs()).toEqual([]);
     });
@@ -1062,12 +1100,22 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(text()).toContain('nothing started');
     });
 
-    it('a project without conversations asks the same — the agent there has not synced one yet', () => {
+    it('a project without conversations here, its agent running there: attached to there (P1) — not a new one here', () => {
       remoteLive = [agentOnM3(root)];
-      answers = [''];
-      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
+      answers = ['should not be read'];
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+      expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\)/);
+      expect(remoteRuns()).toHaveLength(1);
+      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+      expect(runs()).toEqual([]);
+    });
+
+    it('…without a terminal nothing starts: a new conversation here waits for a yes', () => {
+      remoteLive = [agentOnM3(root)];
+      expect(runAi({ ...opts, path: root }, deps({ interactive: false }))).toBe(EXIT_LAUNCH_FAILED);
       expect(text()).toContain('no conversation of this project yet');
       expect(text()).toContain('an agent of this project is running on m3 now');
+      expect(remoteRuns()).toEqual([]);
       expect(runs()).toEqual([]);
     });
 
@@ -1112,6 +1160,161 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     conv(ID.b, 'm3', 5);
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual(['--base resume --last']);
+  });
+
+  describe('one list for a plain start (vdx-ai-predictable)', () => {
+    const withWrap = () =>
+      fs.writeFileSync(
+        path.join(home, 'env.yaml'),
+        `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue]}\n` +
+          'session: {multiplexer: none, machines: [m3], wrap_skills: [vdm:wrap]}\n',
+      );
+    /** What a vdx 0.44+ on m3 answers: its report on the project. */
+    const report = (over: object = {}) =>
+      deps({
+        ssh: (args, capture) => {
+          sshCalls.push({ args, capture });
+          if (!capture) return { status: 0, stdout: '' };
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              vdx: '0.44.0',
+              machine: 'm3',
+              home: remoteHome,
+              sessions: [],
+              agents: [],
+              typed: [],
+              transcripts: [],
+              ...over,
+            }),
+          };
+        },
+      });
+    const agentThere = (over: object = {}) => ({
+      machine: 'm3',
+      session: 'proj@m3',
+      pid: 10984,
+      conversation: ID.c,
+      status: 'idle',
+      activeAt: Date.now() - 60_000,
+      draft: 0,
+      focused: false,
+      topic: null,
+      mail: false,
+      openAt: [],
+      title: 'On m3',
+      empty: false,
+      finished: false,
+      ...over,
+    });
+
+    it('a finished conversation (wrap, nothing typed after) is not continued without asking; Enter passes it by', () => {
+      withWrap();
+      remoteLive = [];
+      writeConversation(
+        path.join(home, 'cc'),
+        root,
+        ID.a,
+        [startedOn('lft'), userLine('work'), skillLine('vdm:wrap'), bashLine('sh /tmp/c.sh')],
+        5,
+      );
+      conv(ID.b, 'lft', 60);
+      answers = [''];
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+      expect(text()).toMatch(/1\) lft +5 min ago {2}aaaaaaaa {2}finished \(wrap\)/);
+      expect(text()).toMatch(/2\) lft .*bbbbbbbb {2}cut off/);
+      expect(text()).toContain('Enter → 2');
+      expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+    });
+
+    it('an agent a terminal at this seat shows is marked, and Enter does not take it (DL #2)', () => {
+      withWrap();
+      conv(ID.a, 'lft', 30);
+      answers = [''];
+      const d = report({ agents: [agentThere({ openAt: ['lft'] })] });
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(text()).toMatch(/1\) m3 +proj@m3 {2}idle · «On m3» {3}open here/);
+      expect(text()).toContain('Enter → 2');
+      expect(runs()).toEqual([`--base --resume ${ID.a}`]);
+      expect(remoteRuns()).toEqual([]);
+    });
+
+    it("the other machine's report: its agents, the machine of a conversation typed there, a copy here that is behind", () => {
+      withWrap();
+      conv(ID.a, 'lft', 30);
+      conv(ID.b, null, 40); // no machine line: typed on m3 (its history.jsonl)
+      const behind = { id: ID.a, mtime: Date.now(), size: 10_000_000 }; // m3 wrote on since our copy
+      answers = ['4'];
+      const focused = agentThere({
+        session: 'proj@m3-2',
+        pid: 10985,
+        conversation: ID.d,
+        status: 'busy',
+        activeAt: Date.now(),
+        focused: true,
+        topic: 'search',
+        title: 'Focused',
+      });
+      const d = report({
+        agents: [agentThere({ draft: 12, openAt: ['m3'] }), focused],
+        typed: [ID.b],
+        transcripts: [behind],
+      });
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(text()).toMatch(/1\) m3 +proj@m3-2 {2}focused «search» · working · «Focused»/);
+      expect(text()).toMatch(/2\) m3 +proj@m3 {4}draft \(12 chars\) · «On m3» {3}open on m3/);
+      expect(text()).toMatch(/3\) m3 +30 min ago {2}aaaaaaaa {2}not here yet from m3 — continues there/);
+      expect(text()).toMatch(/4\) m3 +40 min ago {2}bbbbbbbb {2}cut off/);
+      expect(text()).toContain('note: 1 conversation not here yet from another machine (sync behind)');
+      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+      expect(runs()).toEqual([]);
+    });
+
+    it('`a` shows every conversation; n starts a new one', () => {
+      withWrap();
+      remoteLive = [];
+      for (const [i, id] of [
+        ID.a,
+        ID.b,
+        ID.c,
+        ID.d,
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ].entries())
+        conv(id, i % 2 ? 'lft' : 'm3', 10 + i);
+      answers = ['a', 'n'];
+      expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+      expect(text()).toContain('a all (1 more)');
+      expect(text()).toMatch(/6\) lft .*22222222/);
+      expect(runs()).toEqual(['--base']);
+    });
+
+    it('--list prints the list and starts nothing, asks nothing', () => {
+      conv(ID.a, 'lft', 30);
+      conv(ID.b, 'm3', 5);
+      answers = ['should not be read'];
+      expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+      expect(answers).toHaveLength(1);
+      expect(text()).toMatch(/— 0 running, 2 conversations \(2 shown\)/);
+      expect(runs()).toEqual([]);
+      expect(remoteRuns()).toEqual([]);
+    });
+
+    it('--report: this machine on the project — live sessions, conversations typed here, its transcripts', () => {
+      conv(ID.a, 'lft', 30);
+      conv(ID.b, 'm3', 5);
+      writeHistory(path.join(home, 'cc'), root, [ID.a]);
+      liveHere = [{ pid: 4242, conversation: ID.a, tmux: null, status: 'busy', cwd: root }];
+      const out: string[] = [];
+      expect(runAiReport(root, deps({ out: (t) => out.push(t) }))).toBe(EXIT_OK);
+      const r = JSON.parse(out.join('')) as RemoteReport;
+      expect(r.machine).toBe('lft');
+      expect(r.home).toBe(home);
+      expect(r.sessions.map((l) => l.pid)).toEqual([4242]);
+      expect(r.typed).toEqual([ID.a]);
+      expect(r.transcripts.map((t) => t.id)).toEqual([ID.b, ID.a]);
+      expect(r.agents).toEqual([]); // none in tmux here
+    });
   });
 });
 
@@ -1757,6 +1960,139 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     sleepSync(3_000);
     expect(agents()).toHaveLength(1);
   }, 60_000);
+});
+
+describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmux (isolated server)', () => {
+  const socket = `vdx-test-board-${process.pid}`;
+  const tmux = new Tmux(socket);
+  let base: string;
+  let root: string;
+  let logs: string[];
+  let answers: (string | null)[];
+  const claude = () => path.join(base, 'bin', 'claude');
+  const cc = () => path.join(base, 'cc');
+
+  const deps = (): AiDeps => ({
+    env: {
+      VDX_ENVIRONMENT: path.join(base, 'env.yaml'),
+      VDX_HOST: 'testhost',
+      CLAUDE_CONFIG_DIR: cc(),
+      PATH: process.env['PATH'],
+    },
+    home: base,
+    tmux,
+    interactive: true,
+    shell: '/bin/sh',
+    log: (l) => logs.push(l),
+    out: (t) => logs.push(t),
+    onPath,
+    processes: listProcesses,
+    agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
+    agentMail: () => false,
+    sleep: sleepSync,
+    confirmTimeoutMs: 5_000,
+    ask: () => answers.shift() ?? null,
+    ssh: () => ({ status: 255, stdout: '' }),
+    liveHere: () => [],
+  });
+  // `detach`: nothing attaches this test's terminal; the line names the session instead.
+  const opts = { path: '', restart: false, fresh: false, detach: true, dryRun: false };
+  const text = () => logs.join('\n');
+
+  /** An agent in a session of its own, in conversation `id` — its session file as Claude Code keeps it. */
+  const agentIn = (session: string, id: string, lines: string[]) => {
+    tmux.newSession(session, root, `${claude()} --base`);
+    let pane: ReturnType<typeof findAgentPanes>[number] | undefined;
+    for (let i = 0; i < 50 && !pane; i++) {
+      pane = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').find((a) => a.pane.session === session);
+      if (!pane) sleepSync(100);
+    }
+    fs.mkdirSync(path.join(cc(), 'sessions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(cc(), 'sessions', `${pane!.proc.pid}.json`),
+      JSON.stringify({ pid: pane!.proc.pid, sessionId: id, status: 'idle', statusUpdatedAt: Date.now() }),
+    );
+    writeConversation(cc(), root, id, lines, 1);
+    return pane!;
+  };
+
+  beforeAll(() => {
+    base = tmpDir('vdx-ai-board-');
+    root = path.join(base, 'proj');
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, '.claude', 'settings.local.json'),
+      JSON.stringify({ autoMemoryDirectory: `${root}/.claude/memory/` }),
+    );
+    fs.mkdirSync(path.join(base, 'bin'));
+    fs.writeFileSync(
+      claude(),
+      '#!/bin/sh\n[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/../focused-$$"\nwhile :; do sleep 1; done\n',
+      { mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(base, 'env.yaml'),
+      `agent: {command: ${claude()}, args: [--base], resume_args: [--continue]}\n` +
+        'session: {multiplexer: tmux, name: "{project}@{host}", wrap_skills: [vdm:wrap]}\n',
+    );
+  });
+  beforeEach(() => {
+    logs = [];
+    answers = [];
+  });
+  afterEach(() => {
+    tmux.tryRun(['kill-server']);
+    fs.rmSync(path.join(cc(), 'sessions'), { recursive: true, force: true });
+  });
+  afterAll(() => {
+    dropServer(tmux, socket);
+    fs.rmSync(base, { recursive: true, force: true });
+  });
+
+  it('the only agent, open in no terminal: attached to without a question (P1)', () => {
+    agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    answers = ['should not be read'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(answers).toHaveLength(1);
+    expect(text()).toContain('the only agent of proj runs here (proj@testhost), and no terminal at your seat shows it');
+    expect(text()).toContain('✓ proj@testhost: already running with the profile');
+  });
+
+  it('two agents: one list, and the one picked is attached to', () => {
+    agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    agentIn('proj@testhost-2', ID.b, [startedOn('testhost'), userLine('other work')]);
+    answers = ['2'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toMatch(/proj — 2 running/);
+    expect(text()).toMatch(/1\) testhost proj@testhost(-2)? +idle/);
+    expect(text()).toMatch(/✓ proj@testhost(-2)?: already running with the profile/);
+    expect(tmux.panes()).toHaveLength(2);
+  });
+
+  it('--new goes into an empty session — nothing typed since /clear — not into one more (P9)', () => {
+    agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
+    expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('♻ proj@testhost: nothing typed in it since /clear — the new conversation goes there');
+    expect(tmux.hasSession('proj@testhost-2')).toBe(false);
+  });
+
+  it('…--focused restarts it focused, with the new topic', () => {
+    agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'search' }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('♻ proj@testhost');
+    expect(tmux.hasSession('proj@testhost-2')).toBe(false);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('search');
+    const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(now).toHaveLength(1);
+    expect(fs.existsSync(path.join(base, `focused-${now[0]!.proc.pid}`))).toBe(true);
+  });
+
+  it('…but not one with work in it: --new starts next to it', () => {
+    agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(text()).not.toContain('♻');
+    expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+  });
 });
 
 describe('vdx ai@host', () => {

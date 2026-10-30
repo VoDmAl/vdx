@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.9.0"
+  version: "1.10.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -63,6 +63,10 @@ session:
   # the tmux server: its run heals the server while no session runs, and
   # offers a restart (which closes every session) otherwise.
   folders_fix: "~/nas-info/gather-and-send-info.sh in a plain terminal, not under tmux"
+  # Skills that end a conversation: run (or typed, /vdm:wrap) with nothing typed
+  # after it but the `!` commit line, vdx ai (0.44+) lists the conversation as
+  # finished and Enter passes it by. 146 of 162 wraps in two weeks ended that way.
+  wrap_skills: [vdm:wrap]
 
 git:
   # A repo without its own author makes git refuse to commit (user.useConfigOnly);
