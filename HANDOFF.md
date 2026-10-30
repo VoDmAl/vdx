@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-10-24, @vodmal/vdx-cli@0.39.2)
+# vdx — Handoff (2026-10-29, @vodmal/vdx-cli@0.43.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -8,9 +8,9 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.39.2` — в npm с 2026-10-24 (`aaecf94`), Node 22 и
-  новее; на m3 и lft — 0.39.2 с 2026-10-24 (`npm update -g --prefer-online`).
-- **Сет** `vdx-rubric-vodmal@v1.8.0` (schema 0.3): рубрика и личный профиль
+- **CLI** `@vodmal/vdx-cli@0.43.0` — в npm с 2026-10-29 (`5862611`), Node 22 и
+  новее; на m3 и lft — 0.43.0 с 2026-10-29 (`npm update -g --prefer-online`).
+- **Сет** `vdx-rubric-vodmal@v1.9.0` (schema 0.3; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
   `branch-protection`; v1.7.0 (2026-10-22) — ключ `git.personal_hosts`; v1.8.0
@@ -20,7 +20,7 @@
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
   читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
   (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
-- **Плагин** vdx 0.10.0 (`plugin/`, с `e1d80e1`), едет через маркетплейс vodmal.
+- **Плагин** vdx 0.11.1 (`plugin/`, с `518cff4`), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
 - **vdx по своей рубрике — L4** (аудит 2026-10-21, CLI 0.34.0, сет v1.5.0):
@@ -53,7 +53,7 @@
 | Кристалл | Статус | Что открыто |
 |---|---|---|
 | [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | почтовая сессия `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
-| [focused-topic](docs/tasks/focused-topic/workitem.md) | in-progress с 2026-10-27 | тема focused-сессии: `vdx ai --focused "<тема>"`, опция tmux `@vdx_topic`, хук `UserPromptSubmit` плагина 0.11 — CLI 0.41.0 и плагин 0.11.0 (2026-10-29), 0.11.1 — хук под UTF-8; живьём: тема, сообщение не по теме, смена изнутри; описание workspace cmux из `vdx ai` (DL #6) — код в рабочем дереве, живьём из терминала cmux не проверено, выпуск 0.43; ждём ai-dev-plugins (письма по теме) |
+| [focused-topic](docs/tasks/focused-topic/workitem.md) | in-progress с 2026-10-27 | тема focused-сессии: `vdx ai --focused "<тема>"`, опция tmux `@vdx_topic`, хук `UserPromptSubmit` плагина 0.11 — CLI 0.41.0 и плагин 0.11.0 (2026-10-29), 0.11.1 — хук под UTF-8; живьём: тема, сообщение не по теме, смена изнутри; описание workspace cmux из `vdx ai` (DL #6) — в 0.43.0, живьём из терминала cmux не проверено (первым — владелец); ждём ai-dev-plugins (письма по теме) |
 | [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-29 (`vdx move` — любой перенос и пауза Syncthing, DL #19–#22, в 0.42.0) | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); 0.37.1; память 34 проектов перенесена (2026-10-23); сторож коммита памяти (DL #11, #12) — в 0.38.0, хук `vdx-memory` на lft и m3 (сет v1.8.0); в 0.39.0: заметки старых сессий после переноса, второй клон, доверие к папке (DL #13, Sidetracks #2, #4, #5); идущие сессии перезапущены (2026-10-24); в 0.39.1: общая память клонов одного репо — не предупреждение (DL #14); в 0.39.2: старый путь по ссылке — тоже перенос (DL #15); коммиты памяти в личных репо — 8 из 8 (2026-10-25); nas-info: ссылки на старых корнях останутся, даты смены корня нет — к ней скрипт `--fix` (Sidetrack #6), профиль не меняется; перенос папки — `vdx move` в 0.40.0 (DL #17, #18), живьём на двух станциях; открыт до переноса папок (у владельца) и скрипта к смене корня — решение владельца 2026-10-27 (DL #16); ждём nas-info о паузе Syncthing |
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | done 2026-10-22 | `branch-protection` L3 — GitHub (0.29.0), GitLab (0.33.0), Bitbucket Server (0.34.0); vdx под гейтом, общий L4; отвергнутый вход Bitbucket — причина с командой (0.36.0); отложен gitolite (Sidetrack #1) |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
