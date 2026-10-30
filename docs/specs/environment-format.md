@@ -382,6 +382,16 @@ Claude Code без вопросов: агент, который в нём идё
 - `vdx ai@<host> --focused "<тема>"` передаёт тему после пути: там это тема,
   а не путь.
 - В списке идущих агентов (выбор «Which one?») у focused-агента — его тема.
+- cmux (с 0.43, DL #6): `vdx ai`, запущенный из терминала cmux (`CMUX_WORKSPACE_ID` в окружении),
+  пока держит `tmux attach` focused-сессии, показывает её тему описанием workspace (`cmux
+  workspace-action --action set-description`, Markdown экранирован) — только такой процесс
+  пускает сокет cmux. Рядом идёт `bin/vdx-cmux-topic.cjs`: раз в 15 с (первые 30 с — раз в 3 с)
+  читает `@vdx_topic` и обновляет описание при смене; отпустил `tmux attach` или `vdx ai` пропал —
+  описание снимается. Своё описание vdx помнит в `~/.cache/vdx/cmux/<workspace>`; другое в снимке
+  cmux (`customDescription`) — поставлено человеком, его vdx не трогает. `vdx ai@<host>`: vdx там
+  получает метку (`VDX_AI_CMUX`) и ставит её опцией `@vdx_cmux` на focused-сессию, к которой
+  подключается; местный наблюдатель читает тему этой сессии по ssh; метки за 30 с нет (сессия не
+  focused или vdx там старше) — он выходит.
 
 ### `vdx ai --intercom`
 

@@ -194,6 +194,7 @@ npm run typecheck
 - `src/run.ts`        — `resolveLifecycleVerb` + error renderer (pure logic for `vdx <verb>`)
 - `src/publish.ts`    — `planPublish` (pre-flight) + `executePublish` (bump → npm → git)
 - `src/ai.ts`         — `vdx ai`: profile loader, launch plan, tmux session handling
+- `src/cmux.ts`       — the focused topic as the cmux workspace description while `vdx ai` holds the attach (`bin/vdx-cmux-topic.cjs` watches it)
 - `src/move.ts`       — `vdx move`: checks on every machine (Syncthing folders and peers, copies, containers, processes), Syncthing paused for the mv on each, memory path, conversations and trust follow
 - `src/report.ts`     — markdown / JSON output
 - `src/index.ts`      — CLI entry

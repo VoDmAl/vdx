@@ -216,8 +216,18 @@ tmux — `Access denied`); у `vdx ai`, родителя `tmux attach`, в ок�
       была 9 ч назад — дойдёт строкой при следующем сообщении там)
 - [x] Ответ nas-info на `focused-topic-cmux-line`: `focused-topic-cmux-line-outcome` (2026-10-29) — описание
       workspace, ставит `vdx ai` (DL #6), и наблюдение «U+FFFD» (Sidetrack #1)
-- [ ] `vdx ai`: описание workspace cmux по теме — при подключении, при смене темы, пока подключён, при выходе;
-      Markdown экранировать, чужое описание не трогать (DL #6); тесты; выпуск
+- [x] `vdx ai`: описание workspace cmux по теме — при подключении, при смене темы, пока подключён, при выходе;
+      Markdown экранировать, чужое описание не трогать (DL #6). Код (2026-10-29, не закоммичено): `src/cmux.ts`
+      (`watchTopic`, `cmuxToken`), наблюдатель `bin/vdx-cmux-topic.cjs` (`watch`/`clear`; своё описание — файл в
+      `~/.cache/vdx/cmux/<workspace>`, чужое — по `customDescription` снимка cmux), `finish` — только при
+      подключении к focused-сессии вне tmux; `vdx ai@<host>` — метка `VDX_AI_CMUX` → опция `@vdx_cmux` на сессии
+      там, местный наблюдатель читает её тему по ssh, без метки за 30 с выходит. Тесты `cmux.test.ts` (7, с
+      заглушками cmux, tmux, ssh; гонка «записать состояние после set» найдена тестом и закрыта — запись до
+      set), справка, `environment-format.md`, README, `cli/README.md`, `architecture.md`. Живьём не проверено:
+      из этой сессии сокет cmux закрыт (`cmuxOnly`), нужен `vdx ai` из терминала cmux
+- [ ] Живьём: `vdx ai --focused "<тема>"` из терминала cmux (рабочим CLI или после выпуска) — описание
+      workspace появилось, сменилось изнутри за ~15 с, снялось после detach; и `vdx ai@lft` с m3
+- [ ] Выпуск 0.43 (minor) — описание workspace
 - [ ] nas-info — сказать о выпуске описания workspace (их мяч после: документация и приёмка на m3, lft,
       `vdx ai@lft` с m3)
 - [x] Бриф ai-dev-plugins: письма по теме — focused-сессии (читать, будить), остальным — нет; счёт

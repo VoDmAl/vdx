@@ -120,7 +120,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 --conversation brings back the conversation's. Run by the
                 session's own agent, it changes the topic and starts nothing.
                 A word that is a folder, with no path named, is the path. Needs
-                tmux
+                tmux. Attached from a cmux terminal (here or @host), the
+                workspace shows the topic as its description while vdx ai holds
+                the attach, and drops it after; one you set by hand stays
   --intercom    the project's mail session: a new conversation in a tmux
                 session of its own (<name>-mail), one per project and machine —
                 a running one is attached to, never a second. The agent, its

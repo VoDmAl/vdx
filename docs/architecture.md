@@ -96,7 +96,8 @@ report.ts      markdown, ansi, json
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
   с машиной и разговором, почтовая сессия проекта (`--intercom`, `--close`) и
   тема focused-сессии — опция tmux `@vdx_topic` (`--focused <тема>`, кристалл
-  `focused-topic`); `conversations.ts` — разговоры Claude Code проекта, машина,
+  `focused-topic`); `cmux.ts` — тема описанием workspace cmux, пока `vdx ai` держит `tmux attach`
+  (наблюдатель — `bin/vdx-cmux-topic.cjs`, DL #6); `conversations.ts` — разговоры Claude Code проекта, машина,
   на которой каждый запускали, был ли запуск почтовым, последняя тема, доверяет ли Claude Code папке
   (`claudeTrusts`: отказ `--detach`, строка после переноса папки); `session-versions.ts` — от чего отстала
   живая сессия: Claude Code и плагины, обновлённые после её старта или

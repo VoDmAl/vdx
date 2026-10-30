@@ -1,4 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["mise"]
+  "ignoreBinaries": ["mise"],
+  "ignore": ["bin/vdx-cmux-topic.cjs"]
 }

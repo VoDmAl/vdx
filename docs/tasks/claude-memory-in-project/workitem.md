@@ -843,8 +843,9 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       пути нет, у каждой свой `node_modules`, `paused get` — `false`; через 150 с старый путь не вернулся,
       конфликтов 0. caught-up по новому пути на lft — 1: метаданные каталога, который я тронул на m3 в 17:51.
       Пробник убран на обеих
-- [ ] Выпуск 0.42 (minor) и ответ nas-info на `vdx-move-two-stations-outcome`: что принято — пауза, порядок,
-      коды, контейнеры; что не так, как они просили, — код 2 не отказ, а случай (DL #20), и почему
+- [x] Выпуск 0.42.0 (minor) — `c479bc4`, выпуск `d2ee7b0`, тег `v0.42.0` (2026-10-29); на lft и m3 — 0.42.0
+      (`npm update -g --prefer-online`). Ответ nas-info `vdx-move-two-stations-outcome-outcome` (2026-10-29): пауза
+      и порядок, коды, контейнеры — как просили; код 2 — не отказ, а случай (DL #20); мяч — ни у кого
 - [ ] Ответ nas-info на `vdx-move-two-stations-outcome`: что принято, что нет (код 2), версия с паузой
 - [x] Выпуск 0.39.1 (patch) — DL #14: `287cae3`, 2026-10-24, на lft и m3; `vdx doctor
       ~/nas-info` на обеих — «ok — in the memory of another clone of this repo»; nas-info —

@@ -42,6 +42,7 @@ import {
   type PersonalHost,
 } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
+import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, watchTopic } from './cmux.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 
 /**
@@ -724,6 +725,11 @@ export function listProcesses(): ProcInfo[] {
 export class Tmux {
   constructor(private readonly socket: string | null = null) {}
 
+  /** `-L <name>`: the server's socket name; null — the default server. */
+  get socketName(): string | null {
+    return this.socket;
+  }
+
   private argv(args: string[]): string[] {
     return this.socket ? ['-L', this.socket, ...args] : args;
   }
@@ -1125,11 +1131,24 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
   return settle(plan, paneId, deps) === 'ok';
 }
 
-function finish(ok: boolean, session: string, paneId: string, opts: AiOptions, deps: AiDeps): number {
+/**
+ * Attach to the session, or name how. Attached in cmux to a focused session, the workspace shows
+ * its topic while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
+ * the mark the vdx there watches it by.
+ */
+function finish(ok: boolean, session: string, paneId: string, opts: AiOptions, deps: AiDeps, focused = false): number {
   if (deps.interactive && !opts.detach) {
     if (!ok) deps.log('attaching so you can see the pane');
     deps.tmux.focus(paneId);
-    return deps.tmux.attach(session, Boolean(deps.env['TMUX']));
+    const insideTmux = Boolean(deps.env['TMUX']);
+    const token = deps.env[CMUX_TOKEN_ENV_VAR];
+    if (focused && token && /^[0-9a-f]+$/.test(token))
+      deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
+    const watch =
+      focused && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
+    const status = deps.tmux.attach(session, insideTmux);
+    watch?.stop();
+    return status;
   }
   deps.log(`attach: ${deps.tmux.attachHint(session)}`);
   return ok ? EXIT_OK : EXIT_LAUNCH_FAILED;
@@ -1161,6 +1180,8 @@ export function remoteAiArgs(input: {
   version: string;
   opts: AiOptions;
   tty: boolean;
+  /** Under cmux: the mark the vdx there puts on the focused session it attaches to (cmux.ts). */
+  cmuxToken?: string | null;
 }): string[] {
   const { host, opts, version } = input;
   const flags = [
@@ -1178,6 +1199,7 @@ export function remoteAiArgs(input: {
     `v=$(vdx --version 2>/dev/null) || v='older than 0.13.1'; ` +
     `[ "$v" = ${v} ] || echo "note: vdx on ${host} is $v, here "${v} >&2; ` +
     `export ${SEAT_ENV_VAR}=${shellQuote(input.from)}; ` +
+    (input.cmuxToken ? `export ${CMUX_TOKEN_ENV_VAR}=${shellQuote(input.cmuxToken)}; ` : '') +
     `exec vdx ai ${[remotePathWord(input.projectPath, input.home), ...flags].join(' ')}`;
   return [input.tty ? '-t' : '-T', host, script];
 }
@@ -1307,11 +1329,24 @@ export function ensureMemory(
 export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: string = seatLabel(deps.env)): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
-  const args = remoteAiArgs({ host, from, projectPath, home: deps.home, version: deps.version ?? '', opts, tty });
+  // In cmux the workspace shows the topic of the focused session the vdx there attaches to.
+  const token = tty ? cmuxToken(deps.env) : null;
+  const args = remoteAiArgs({
+    host,
+    from,
+    projectPath,
+    home: deps.home,
+    version: deps.version ?? '',
+    opts,
+    tty,
+    cmuxToken: token,
+  });
   deps.log(
     `→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`,
   );
+  const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
   const res = (deps.ssh ?? runSsh)(args, false);
+  watch?.stop();
   if (res === null) {
     deps.log('vdx ai: `ssh` not found on PATH');
     return 127;
@@ -2270,7 +2305,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       const mode = runningFocused ? ', focused' : plan.intercom ? ', the mail session' : '';
       log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
@@ -2299,7 +2334,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     if (answer === '') {
       log(`→ ${current.pane.session}: as is — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused);
     }
     if (answer?.toLowerCase() !== 'r') {
       log('nothing done');
@@ -2343,6 +2378,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       current.pane.paneId,
       opts,
       deps,
+      plan.focused,
     );
   }
 
@@ -2358,5 +2394,5 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   if (!reuse && topic?.text) setSessionTopic(tmux, session, topic.text);
   log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
   topicSaid();
-  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps);
+  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused);
 }
