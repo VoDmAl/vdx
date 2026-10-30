@@ -81,7 +81,7 @@ function currentDescription(o) {
     const v = seen.pop();
     if (Array.isArray(v)) seen.push(...v);
     else if (v && typeof v === 'object') {
-      if (v.id === o.workspace) return typeof v.customDescription === 'string' ? v.customDescription : '';
+      if (v.workspaceId === o.workspace) return typeof v.customDescription === 'string' ? v.customDescription : '';
       seen.push(...Object.values(v));
     }
   }

@@ -13,11 +13,15 @@ let dir: string;
 let bin: string;
 const file = (name: string) => path.join(dir, name);
 const calls = () => (fs.existsSync(file('cmux.log')) ? fs.readFileSync(file('cmux.log'), 'utf8') : '');
-const snapshot = (description?: string) =>
-  fs.writeFileSync(
-    file('snapshot.json'),
-    JSON.stringify({ windows: [{ workspaces: [{ id: 'WS-1', customTitle: 'x', customDescription: description }] }] }),
-  );
+// The shape of cmux's own session snapshot (0.64.25 and 0.65.0): a workspace goes by `workspaceId`.
+const snapshotOf = (workspace: string, description?: string) =>
+  JSON.stringify({
+    version: 1,
+    windows: [
+      { tabManager: { workspaces: [{ workspaceId: workspace, customTitle: 'x', customDescription: description }] } },
+    ],
+  });
+const snapshot = (description?: string) => fs.writeFileSync(file('snapshot.json'), snapshotOf('WS-1', description));
 const args = (mode: string, extra: string[]) => [
   SCRIPT,
   mode,
@@ -171,7 +175,7 @@ describe('vdx ai in cmux', () => {
     const home = path.join(dir, 'home');
     const snap = path.join(home, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json');
     fs.mkdirSync(path.dirname(snap), { recursive: true });
-    fs.writeFileSync(snap, JSON.stringify({ workspaces: [{ id: 'WS-9' }] }));
+    fs.writeFileSync(snap, snapshotOf('WS-9'));
     const watch = watchTopic(
       { ...env(), CMUX_WORKSPACE_ID: 'WS-9', CMUX_BUNDLED_CLI_PATH: path.join(bin, 'cmux') },
       { session: 's', socket: null },
