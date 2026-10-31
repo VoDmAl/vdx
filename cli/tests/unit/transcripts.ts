@@ -13,7 +13,8 @@ export const hookLine = (text: string) =>
       hookEvent: 'SessionStart',
     },
   });
-export const userLine = (text: string) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
+export const userLine = (text: string, entrypoint = 'cli') =>
+  JSON.stringify({ type: 'user', entrypoint, message: { role: 'user', content: text } });
 export const promptLine = (text: string) => JSON.stringify({ type: 'last-prompt', lastPrompt: text });
 /** A slash command the person typed: `/clear`, `/vdm:wrap`. */
 export const commandLine = (name: string) =>

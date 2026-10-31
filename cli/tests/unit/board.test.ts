@@ -36,6 +36,7 @@ const conv = (id: string, over: Partial<Conversation> = {}): Conversation => ({
   bornClear: false,
   typed: 3,
   finished: false,
+  automated: false,
   ...over,
 });
 const board = (agents: AgentFact[], conversations: Conversation[] = [], extra = {}) =>
@@ -86,6 +87,8 @@ describe('buildBoard: one list, Enter marked', () => {
     ]);
     expect(b.enter).toBe(1);
     expect(b.lines.join('\n')).toContain('open here');
+    expect(board([agent({ openAt: ['m3', 'lft'] })]).lines.join('\n')).toContain('open here, on lft');
+    expect(board([agent({ openAt: ['lft', '?'] })]).lines.join('\n')).toContain('open on lft, another machine');
     expect(b.lines.join('\n')).toContain('focused «search»');
   });
 

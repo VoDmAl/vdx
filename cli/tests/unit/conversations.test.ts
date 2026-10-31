@@ -163,6 +163,12 @@ describe('readConversation', () => {
       expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:intercom')]).finished).toBe(false);
     });
 
+    it("a program's run through the SDK is automated; one typed at a terminal is not", () => {
+      expect(readWith([userLine('Review this change for security vulnerabilities.', 'sdk-py')]).automated).toBe(true);
+      expect(readWith([userLine('go', 'sdk-cli')]).automated).toBe(true);
+      expect(readWith([startedOn('lft'), userLine('hi')]).automated).toBe(false);
+    });
+
     it('nothing is a wrap unless the profile names it', () => {
       expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:wrap')], []).finished).toBe(false);
     });

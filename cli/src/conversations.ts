@@ -84,6 +84,11 @@ export interface Conversation {
    * at most the `!` command it handed over: the conversation is done (vdx-ai-predictable DL #3).
    */
   finished: boolean;
+  /**
+   * Run by a program through the SDK (`claude -p`, the Python or TypeScript SDK: Claude Code's
+   * `entrypoint` starts with `sdk`) — a review, a hook's agent — not a conversation of the person's.
+   */
+  automated: boolean;
 }
 
 /** Nothing typed in it since `/clear`: a pane waiting for a first prompt, with nothing to continue. */
@@ -181,6 +186,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
   let turns = false;
   let bornClear = false;
   let typed = 0;
+  let entrypoint: string | undefined;
   // Where the last wrap ran and the last prompt was typed: an order of entries, not of clocks.
   let wrapAt = -1;
   let typedAt = -1;
@@ -208,6 +214,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     const title = str(at(entry, 'aiTitle'));
     const prompt = str(at(entry, 'lastPrompt'));
     if (type === 'user') {
+      entrypoint ??= str(at(entry, 'entrypoint'));
       const said = userText(entry);
       if (!said) continue;
       const command = said.match(COMMAND_RE)?.[1];
@@ -250,6 +257,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     bornClear,
     typed,
     finished: wrapAt > typedAt,
+    automated: entrypoint?.startsWith('sdk') === true,
   };
 }
 

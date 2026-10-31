@@ -1566,7 +1566,8 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
     plan.resumeArgs.length === 0
       ? []
       : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, wrapSkills });
-  const all = listed.filter((c) => !c.mail);
+  // Nor a program's run through the SDK: nobody sits at it.
+  const all = listed.filter((c) => !c.mail && !c.automated);
   const mailOnly = listed.length - all.length;
   const root = shellQuote(plan.projectRoot);
   // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
@@ -1884,9 +1885,21 @@ function boardStart(
         finished: c?.finished ?? false,
       };
     });
-  const agents = [...here, ...outside, ...there];
+  // `?` — a terminal over ssh from a machine nothing names: the attaches of a vdx older than 0.44
+  // carry no seat mark. When the profile has one machine besides the agent's, it is that one.
+  const machinesAll = [plan.host, ...plan.machines];
+  const seatOf = (a: AgentFact): AgentFact => {
+    const others = machinesAll.filter((m) => !sameMachine(m, a.machine));
+    return a.openAt.includes('?') && others.length === 1
+      ? { ...a, openAt: a.openAt.map((s) => (s === '?' ? others[0]! : s)) }
+      : a;
+  };
+  const agents = [...here, ...outside, ...there].map(seatOf);
   const working = agents.filter((a) => !a.mail);
   const busy = new Set(working.map((a) => a.conversation));
+  // A conversation running there is written right now: its copy here is a few seconds behind, and
+  // it is an agent's row, not one to continue.
+  for (const id of busy) if (id) behind.delete(id);
   const continuable = k.all.filter((c) => !isEmpty(c) && !busy.has(c.id));
   const conversationOf = (a: AgentFact) => k.all.find((c) => c.id === a.conversation) ?? copy(a.conversation);
   const outcomeOf = (pick: Pick, why: string[]): BoardOutcome => {
@@ -1929,7 +1942,7 @@ function boardStart(
       projectRoot: plan.projectRoot,
       limit: Infinity,
       wrapSkills,
-    }).filter((c) => !c.mail);
+    }).filter((c) => !c.mail && !c.automated);
   const make = (limit: number | 'all') =>
     buildBoard({
       project: plan.project,

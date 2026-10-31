@@ -1227,6 +1227,29 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     });
 
+    it('a terminal over ssh with no seat mark (an attach of vdx before 0.44) is the other machine of two: here', () => {
+      withWrap();
+      conv(ID.a, 'lft', 30);
+      answers = [''];
+      const d = report({ agents: [agentThere({ openAt: ['m3', '?'] })] });
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(text()).toMatch(/1\) m3 +proj@m3 {2}idle · «On m3» {3}open here/);
+      expect(text()).toContain('Enter → 2');
+      expect(remoteRuns()).toEqual([]);
+    });
+
+    it("a program's SDK run is not listed; a conversation running there is no «not here yet»", () => {
+      withWrap();
+      conv(ID.a, 'lft', 30);
+      writeConversation(path.join(home, 'cc'), root, ID.b, [userLine('Review this change', 'sdk-py')], 5);
+      answers = ['n'];
+      const running = { id: ID.c, mtime: Date.now(), size: 10_000_000 };
+      const d = report({ agents: [agentThere({ openAt: ['lft'] })], transcripts: [running] });
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(text()).not.toContain('bbbbbbbb');
+      expect(text()).not.toContain('not here yet');
+    });
+
     it('an agent a terminal at this seat shows is marked, and Enter does not take it (DL #2)', () => {
       withWrap();
       conv(ID.a, 'lft', 30);

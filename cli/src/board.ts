@@ -145,10 +145,10 @@ function stateWord(a: AgentFact, now: Date): string {
 }
 
 function openWord(a: AgentFact, seat: string): string {
-  if (openAtSeat(a, seat)) return 'open here';
-  const there = a.openAt.filter((s) => s !== '?');
-  if (there.length) return `open on ${[...new Set(there)].join(', ')}`;
-  return a.openAt.length ? 'open on another machine' : '';
+  const places = [...new Set(a.openAt.filter((s) => s !== '?' && !same(s, seat)))];
+  if (a.openAt.includes('?')) places.push('another machine');
+  if (openAtSeat(a, seat)) return `open here${places.length ? `, on ${places.join(', ')}` : ''}`;
+  return places.length ? `open on ${places.join(', ')}` : '';
 }
 
 const quoted = (t: string | null) => (t ? `«${t.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : '');
