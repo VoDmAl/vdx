@@ -668,7 +668,8 @@ export function runsInProject(live: LiveSession, liveHome: string | null, projec
   return cwd === root || cwd.startsWith(root.endsWith('/') ? root : `${root}/`);
 }
 
-function pidAlive(pid: number): boolean {
+/** The process `pid` runs — maybe as another user's. */
+export function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

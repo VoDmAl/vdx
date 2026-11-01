@@ -34,6 +34,7 @@ import {
   isEmpty,
   readConversation,
   liveSessionFile,
+  pidAlive,
   typedHere,
   parseMachineReport,
   runsInProject,
@@ -52,9 +53,21 @@ import { at, errorMessage, isStringList, str } from './narrow.ts';
 import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, watchTopic } from './cmux.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 import {
+  currentServer,
+  forget,
+  type LostRecord,
+  lostRecords,
+  pruneRecords,
+  type RecordMode,
+  type TmuxServer,
+  updateTopic,
+  writeRecord,
+} from './restore.ts';
+import {
   type AgentFact,
   type Board,
   buildBoard,
+  enterKey,
   freeWork,
   inputDraft,
   openAtSeat,
@@ -128,6 +141,11 @@ interface SessionProfile {
    * finished, and Enter passes it by (vdx-ai-predictable DL #3).
    */
   wrap_skills?: string[];
+  /**
+   * A project where `vdx ai` brings back every agent a fallen tmux server took down, not only the
+   * project's own — the one the person's day starts in (vdx-ai-predictable DL #4): a rubric predicate.
+   */
+  restore_all?: Predicate;
 }
 
 /**
@@ -316,6 +334,12 @@ export function parseEnvironment(text: string, source: string): Environment {
     }
     if (session.wrap_skills !== undefined && !isStringList(session.wrap_skills)) {
       fail('session.wrap_skills', 'must be a list of skill names');
+    }
+    if (
+      session.restore_all !== undefined &&
+      (typeof session.restore_all !== 'object' || session.restore_all === null || Array.isArray(session.restore_all))
+    ) {
+      fail('session.restore_all', 'must be a rubric predicate (has_file: …)');
     }
   }
 
@@ -1794,6 +1818,7 @@ type BoardOutcome =
   | { kind: 'continue'; choice: ConversationChoice }
   | { kind: 'new'; focused: boolean; lines: string[] }
   | { kind: 'abort'; lines: string[] }
+  | { kind: 'restore' }
   | { kind: 'listed' };
 
 /**
@@ -1804,6 +1829,8 @@ type BoardOutcome =
  * conversation: a new one. `print` (`--list`, `--dry-run`) shows the list and decides nothing;
  * `auto` (no terminal) takes the marked row if it is this machine's. `find` (`--find`) — the
  * list is what a search for it found, never silent; `/<phrase>` at the question searches too.
+ * `restore` — how many agents a fallen tmux server took down that `r` brings back: never silent
+ * then, and Enter is `r` (DL #9).
  */
 function boardStart(
   plan: LaunchPlan,
@@ -1814,6 +1841,7 @@ function boardStart(
   modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
   mode: 'ask' | 'print' | 'auto',
   find?: string,
+  restore = 0,
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -1938,6 +1966,7 @@ function boardStart(
       return { kind: 'continue', choice: { ...chosen, lines: [...why, ...chosen.lines] } };
     }
     if (pick.kind === 'new') return { kind: 'new', focused: pick.focused, lines: why };
+    if (pick.kind === 'restore') return { kind: 'restore' };
     return { kind: 'abort', lines: why };
   };
 
@@ -1963,6 +1992,7 @@ function boardStart(
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
       limit,
+      restore: mode === 'ask' ? restore : 0,
     });
   const show = (b: Board, to: (line: string) => void) => {
     for (const l of b.lines) to(l);
@@ -2008,6 +2038,7 @@ function boardStart(
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
       find: { phrase, searched: files.size, around },
       reach: print ? reach : undefined,
+      restore: print ? 0 : restore,
     });
   };
   if (mode === 'print') {
@@ -2091,8 +2122,8 @@ function boardStart(
   }
 
   // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
-  // shows already. A search is a choice.
-  const only = working.length === 1 && find === undefined ? working[0]! : null;
+  // shows already. A search is a choice, and so is what tmux took down.
+  const only = working.length === 1 && find === undefined && restore === 0 ? working[0]! : null;
   if (only && !openAtSeat(only, plan.seat)) {
     const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
     return outcomeOf({ kind: 'agent', agent: only }, [
@@ -2100,7 +2131,7 @@ function boardStart(
       ...k.silent,
     ]);
   }
-  if (working.length === 0 && find === undefined) {
+  if (working.length === 0 && find === undefined && restore === 0) {
     const newest = continuable[0];
     if (!newest)
       return outcomeOf({ kind: 'new', focused: false }, [
@@ -2131,7 +2162,7 @@ function boardStart(
   if (find === undefined || !searchFor(find)) show(board, deps.log);
   // Searches and the whole list are not wrong answers: only what is not understood counts.
   for (let wrong = 0; wrong < 3;) {
-    const answer = deps.ask(`Which one? [${board.enter === 'new' ? 'n' : board.enter + 1}]: `);
+    const answer = deps.ask(`Which one? [${enterKey(board)}]: `);
     // Ctrl-D at the question is a cancel, not "no terminal": start nothing.
     if (answer === null) return { kind: 'abort', lines: ['no answer — nothing started'] };
     const pick = readAnswer(answer, board);
@@ -2146,7 +2177,7 @@ function boardStart(
     }
     if (pick) return outcomeOf(pick, []);
     wrong++;
-    deps.log(`  1–${board.rows.length}, a, /<phrase>, n or f`);
+    deps.log(`  1–${board.rows.length}, a, /<phrase>, n${board.restore ? ', f or r' : ' or f'}`);
   }
   return { kind: 'abort', lines: ['nothing started'] };
 }
@@ -2435,11 +2466,54 @@ function focusedTopicLines(projectRoot: string, tmux: Tmux, procs: ProcInfo[], a
 }
 
 /**
+ * The record of the agent `pid` for a restore after tmux falls (restore.ts): its pane, project,
+ * conversation, mode and topic, under the server it runs in. The current server's records of panes
+ * and agents that are gone go first. Nothing outside tmux; a state folder vdx cannot write leaves
+ * no record, and the session goes on.
+ */
+function keepRecord(
+  deps: AiDeps,
+  procs: ProcInfo[],
+  pid: number,
+  projectRoot: string,
+  mode: RecordMode,
+  conversation: string | undefined,
+): void {
+  const server = currentServer(deps.tmux);
+  if (!server) return;
+  const panes = deps.tmux.panes();
+  try {
+    pruneRecords(deps.env, deps.home, server, new Set(panes.map((p) => p.paneId)), pidAlive);
+    const pane = panes.find((p) => processTree(procs, p.panePid).some((x) => x.pid === pid));
+    if (!pane) return;
+    writeRecord(deps.env, deps.home, server, {
+      session: pane.session,
+      pane: pane.paneId,
+      project: projectRoot,
+      conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
+      mode,
+      topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+      pid,
+      written: Date.now(),
+    });
+  } catch {
+    // no record: the hook's text is what the session needs
+  }
+}
+
+/**
  * `vdx ai --check`: what an agent should know about how it is launched here,
  * and whether the session it runs in carries the profile's flags. Prints
  * nothing without a profile — on such a machine `vdx ai` decides nothing.
+ * Run by the vdx plugin's hook, it also keeps the record of the agent's tmux pane
+ * for a restore after tmux falls; `conversation` — the one the hook says starts.
  */
-export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = process.pid): number {
+export function runAiCheck(
+  pathArg: string,
+  deps: AiDeps,
+  selfPid: number = process.pid,
+  conversation?: string,
+): number {
   if (!resolveEnvironmentPath(deps.env, deps.home)) return EXIT_OK;
   // The hook runs in the agent's environment: a focused session's carries VDX_FOCUSED=1,
   // a mail session's VDX_INTERCOM=1.
@@ -2459,6 +2533,8 @@ export function runAiCheck(pathArg: string, deps: AiDeps, selfPid: number = proc
   ];
   const procs = deps.processes();
   const own = findOwnAgent(procs, selfPid, plan.command);
+  if (own && isClaude(plan.command))
+    keepRecord(deps, procs, own.pid, projectRoot, focused ? 'focused' : intercom ? 'mail' : 'plain', conversation);
   if (focused) {
     lines.push(
       `· this session is focused (\`vdx ai --focused\`): it works on what the user gave it — nothing should wake it, ` +
@@ -2585,6 +2661,212 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
   return EXIT_OK;
 }
 
+/**
+ * The agents a fallen tmux server took down here (restore.ts) that are still to bring back: not a
+ * mail session — a letter starts one — and not one whose conversation runs here now. `tidy` — the
+ * current server's records of panes that are gone, and those left out here, are forgotten.
+ */
+function lostAgents(deps: AiDeps, server: TmuxServer | null, tidy: boolean): LostRecord[] {
+  try {
+    if (server && tidy)
+      pruneRecords(deps.env, deps.home, server, new Set(deps.tmux.panes().map((p) => p.paneId)), pidAlive);
+    const live = new Set((deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))().map((l) => l.conversation));
+    return lostRecords(deps.env, deps.home, server, server?.socket ?? deps.tmux.socketName ?? 'default').filter((r) => {
+      const done = r.mode === 'mail' || (r.conversation !== null && live.has(r.conversation));
+      if (done && tidy) forget(r);
+      return !done;
+    });
+  } catch {
+    // records vdx cannot read or tidy: nothing to offer
+    return [];
+  }
+}
+
+/** What a fallen tmux server took down, as a start in a project sees it. */
+interface LostHere {
+  /** Every one: what `vdx ai --restore` brings back. */
+  all: LostRecord[];
+  /** What `r` brings back: the project's own, or every one where session.restore_all holds (DL #4). */
+  mine: LostRecord[];
+  /** What tmux did and who ran before it. */
+  line: string;
+  /** The command that brings back every one. */
+  hint: string;
+}
+
+function lostHere(deps: AiDeps, plan: LaunchPlan, environment: Environment, tidy: boolean): LostHere | null {
+  const server = currentServer(deps.tmux);
+  const all = lostAgents(deps, server, tidy);
+  if (all.length === 0) return null;
+  const rule = environment.session?.restore_all;
+  const everyOne =
+    rule !== undefined &&
+    evalPredicate(rule, { projectRoot: plan.projectRoot, stack: autoDetectStack(plan.projectRoot), cache: new Map() });
+  const root = realpathOr(plan.projectRoot);
+  const mine = everyOne ? all : all.filter((r) => realpathOr(r.project) === root);
+  const agents = (n: number) => `${n} agent${n === 1 ? '' : 's'}`;
+  const named = (rs: LostRecord[]) =>
+    rs
+      .slice(0, 6)
+      .map((r) => `${r.session}${r.mode === 'focused' && r.topic ? ` «${r.topic}»` : ''}`)
+      .join(', ') + (rs.length > 6 ? `, … (${rs.length - 6} more)` : '');
+  const when = server
+    ? `tmux here was started again ${describeAge(new Date(server.started * 1000))}`
+    : 'no tmux server runs here';
+  const others = all.length - mine.length;
+  const ran =
+    mine.length === 0
+      ? `${agents(others)} of other projects ran: ${named(all)}`
+      : `${agents(mine.length)}${everyOne ? '' : ` of ${plan.project}`} ran: ${named(mine)}` +
+        (others > 0 ? `; and ${others} of other projects` : '');
+  return {
+    all,
+    mine,
+    line: `⚠ ${when} — before that ${ran}`,
+    hint:
+      `  vdx ai --restore brings back ${all.length === 1 ? 'it' : `all ${all.length}`} — each in its tmux session, ` +
+      `conversation, mode and topic; --dry-run: what it would start`,
+  };
+}
+
+/** What a restore did: started, left out (and why it said), and failed to start. */
+interface Restored {
+  started: number;
+  skipped: number;
+  failed: number;
+}
+
+/**
+ * Start again the agents a fallen tmux server took down (vdx-ai-predictable P6, DL #9): each in a
+ * tmux session of its old name — taken, the next free one — with its project's profile, in its
+ * conversation, mode and topic; nothing attaches. An empty one (nothing typed since /clear) and a
+ * wrapped one come back as places: a new conversation in the same session. Left out: a
+ * conversation running on another machine now, or continued there since (its last machine is that
+ * one), and a project folder that is gone. Each record is forgotten once tried. `dryRun` — what
+ * would start, on stdout, and nothing is forgotten.
+ */
+function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Restored {
+  const { tmux } = deps;
+  const host = hostLabel(deps.env);
+  const say = (line: string) => (dryRun ? deps.out(`${line}\n`) : deps.log(line));
+  const done = (r: LostRecord) => {
+    if (!dryRun) forget(r);
+  };
+  // What runs on the other machines now — asked once, every project's: none is started here too.
+  let elsewhere: Map<string, string> | null = null;
+  const runsOn = (machines: string[], id: string): string | null => {
+    if (!elsewhere) {
+      elsewhere = new Map();
+      for (const m of machines) {
+        const res = (deps.ssh ?? runSsh)(
+          ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', m, LIVE_SESSIONS_SCRIPT],
+          true,
+        );
+        if (res && res.status === 0)
+          for (const l of parseMachineReport(res.stdout).sessions) elsewhere.set(l.conversation, m);
+        else say(`note: ${m} does not answer over ssh — what runs there is not known`);
+      }
+    }
+    return elsewhere.get(id) ?? null;
+  };
+  const result: Restored = { started: 0, skipped: 0, failed: 0 };
+  for (const r of lost) {
+    if (!fs.existsSync(r.project)) {
+      say(`· ${r.session}: not brought back — ${r.project} is not there any more`);
+      result.skipped++;
+      done(r);
+      continue;
+    }
+    const prepared = prepare(r.project, deps, r.mode === 'focused');
+    if (typeof prepared === 'number') {
+      result.failed++;
+      done(r);
+      continue;
+    }
+    let { plan } = prepared;
+    const id = r.conversation;
+    const c = id
+      ? conversationById({
+          env: deps.env,
+          home: deps.home,
+          projectRoot: plan.projectRoot,
+          id,
+          wrapSkills: prepared.environment.session?.wrap_skills ?? [],
+        })
+      : null;
+    const there = id ? runsOn(plan.machines, id) : null;
+    const moved = c?.machine && !sameMachine(c.machine, host) ? c.machine : null;
+    if (id && (there || moved)) {
+      say(
+        `· ${r.session}: not brought back — its conversation ${id.slice(0, 8)} ` +
+          (there ? `runs on ${there} now` : `was continued on ${moved} since`),
+      );
+      result.skipped++;
+      done(r);
+      continue;
+    }
+    const place = !c || isEmpty(c) || c.finished;
+    plan = { ...plan, resumeArgs: place ? [] : resumeId(id!) };
+    const topic = plan.focused ? (r.topic ?? c?.topic ?? null) : null;
+    let session = r.session;
+    for (let n = 2; tmux.hasSession(session); n++) session = `${r.session}-${n}`;
+    const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
+    const short = id?.slice(0, 8);
+    const what = !place
+      ? `conversation ${short}${c.title ? ` «${c.title.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : ''}`
+      : `a new conversation — ${!c ? 'none to continue' : c.finished ? `${short} was finished with a wrap` : `nothing typed in ${short} since /clear`}`;
+    const mode = plan.focused ? `, focused${topic ? ` «${topic}»` : ''}` : '';
+    if (dryRun) {
+      deps.out(`  ${session}: ${what}${mode}\n    ${line}\n`);
+      result.started++;
+      continue;
+    }
+    deps.log(`▶ ${session}: ${what}${mode}`);
+    let ok = false;
+    try {
+      const paneId = tmux.newSession(session, plan.projectRoot, tmuxShellCommand(line, deps.shell, true));
+      if (topic) setSessionTopic(tmux, session, topic);
+      ok = settleResumed(plan, paneId, deps);
+    } catch (e) {
+      deps.log(`✗ ${session}: tmux did not start it — ${errorMessage(e)}`);
+    }
+    done(r);
+    if (ok) result.started++;
+    else result.failed++;
+  }
+  return result;
+}
+
+/**
+ * `vdx ai --restore`: bring back every agent a fallen tmux server took down here, of every
+ * project, without a question — for the person, and for whatever starts tmux again after a crash
+ * or a reboot. `dryRun` — what it would start. Exit 4 when one did not start.
+ */
+export function runAiRestore(dryRun: boolean, deps: AiDeps): number {
+  if (!deps.tmux.available()) {
+    deps.log('vdx ai --restore: tmux is not installed here — nothing went down with it');
+    return EXIT_USAGE;
+  }
+  const server = currentServer(deps.tmux);
+  const lost = lostAgents(deps, server, !dryRun);
+  const say = (line: string) => (dryRun ? deps.out(`${line}\n`) : deps.log(line));
+  if (lost.length === 0) {
+    say('vdx ai --restore: nothing to bring back — no agent here went down with a tmux server');
+    return EXIT_OK;
+  }
+  const when = server ? `; tmux was started again ${describeAge(new Date(server.started * 1000))}` : '';
+  say(
+    `vdx ai --restore — ${lost.length} agent${lost.length === 1 ? '' : 's'} went down with the tmux server here${when}` +
+      (dryRun ? '; would start:' : ''),
+  );
+  const { started, skipped, failed } = restoreAgents(lost, deps, dryRun);
+  if (!dryRun) {
+    const rest = [skipped && `${skipped} left out`, failed && `${failed} did not start`].filter(Boolean).join(', ');
+    deps.log(`${failed ? '✗' : '✓'} ${started} back${rest ? ` (${rest})` : ''} — attach: vdx ai <project>`);
+  }
+  return failed > 0 ? EXIT_LAUNCH_FAILED : EXIT_OK;
+}
+
 /** A focused session's topic for a start, and where it came from — as `--dry-run` and the start say. */
 interface Topic {
   text: string | null;
@@ -2659,6 +2941,13 @@ function changeTopic(opts: AiOptions, plan: LaunchPlan, deps: AiDeps, selfPid: n
     deps.log(`✗ ${pane.session}: tmux did not take the topic — it stays ${before ? `«${before}»` : 'unset'}`);
     return EXIT_LAUNCH_FAILED;
   }
+  // A restore after tmux falls brings the session back with the topic it has now.
+  const server = currentServer(deps.tmux);
+  try {
+    if (server) updateTopic(deps.env, deps.home, server, pane.paneId, topic);
+  } catch {
+    // the record keeps the topic the hook saw
+  }
   deps.log(`✓ ${pane.session}: the topic is «${topic}»${was}`);
   return EXIT_OK;
 }
@@ -2729,6 +3018,12 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
 
   const procs = multiplexer === 'tmux' ? deps.processes() : [];
   const agentsHere = multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), procs, projectRoot, plan.command) : [];
+  // What a fallen tmux server took down (vdx-ai-predictable P6): said before any start; a plain
+  // start at a terminal offers to bring it back.
+  const lost =
+    multiplexer === 'tmux' && isClaude(plan.command) && !plan.intercom
+      ? lostHere(deps, plan, environment, !opts.dryRun && !opts.list)
+      : null;
   // The mail session and the person's sessions do not see each other: --intercom is about the
   // one mail session, every other start leaves it alone — nobody sits at it, and it ends itself.
   const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
@@ -2760,6 +3055,11 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     (isClaude(plan.command) && !opts.conversation && !opts.restart && !plan.intercom && !wantsNew);
   let boardChoice: ConversationChoice | null = null;
   let boardNew = false;
+  // Any other start says what tmux took down, with the command that brings it back.
+  if (lost && !onBoard) {
+    log(lost.line);
+    log(lost.hint);
+  }
   if (onBoard) {
     if (!isClaude(plan.command)) {
       log(
@@ -2769,6 +3069,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     }
     // A search nobody can be asked about is printed with the commands for its rows, as --list is.
     const ask = deps.interactive && !opts.dryRun;
+    const listed = opts.list || (opts.find !== undefined && !ask);
+    const offer = ask && !listed ? (lost?.mine.length ?? 0) : 0;
+    if (lost) {
+      const say = (l: string) => (listed ? deps.out(`${l}\n`) : log(l));
+      say(lost.line);
+      if (offer === 0 || offer < lost.all.length) say(lost.hint);
+    }
     const outcome = boardStart(
       plan,
       deps,
@@ -2776,8 +3083,9 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       procs,
       wrapSkills,
       { focused: focusedOf, mail: mailOf },
-      opts.list || (opts.find !== undefined && !ask) ? 'print' : ask ? 'ask' : 'auto',
+      listed ? 'print' : ask ? 'ask' : 'auto',
       opts.find,
+      offer,
     );
     switch (outcome.kind) {
       case 'listed':
@@ -2810,6 +3118,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       case 'continue':
         boardChoice = outcome.choice;
         break;
+      case 'restore': {
+        const { started, skipped, failed } = restoreAgents(lost?.mine ?? [], deps, false);
+        const rest = [skipped && `${skipped} left out`, failed && `${failed} did not start`].filter(Boolean).join(', ');
+        log(`${failed ? '✗' : '✓'} ${started} back${rest ? ` (${rest})` : ''}`);
+        // What runs now is another list: the start goes on from there.
+        return runAi(opts, deps, selfPid);
+      }
       case 'new':
         for (const l of outcome.lines) log(l);
         boardChoice = { args: [], lines: [] };

@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.10.0"
+  version: "1.11.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -67,6 +67,11 @@ session:
   # after it but the `!` commit line, vdx ai (0.44+) lists the conversation as
   # finished and Enter passes it by. 146 of 162 wraps in two weeks ended that way.
   wrap_skills: [vdm:wrap]
+  # Where vdx ai (0.46+), after the tmux server fell, offers to bring back every
+  # agent it took down on the machine, of every project — elsewhere only the
+  # project's own: the projects the day starts in, the ones echelon feeds.
+  restore_all:
+    has_file: {path: signals/sources.yaml}
 
 git:
   # A repo without its own author makes git refuse to commit (user.useConfigOnly);

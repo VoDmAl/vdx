@@ -61,6 +61,7 @@ vdx doctor --fix [project-path]     # write the profile's personal hooks (git.ho
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's mail session
+vdx ai --restore [--dry-run]   # every agent a fallen tmux server took down on this machine, back where it was
 vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic); run by that session's agent: a new topic, nothing started
 vdx ai --close [--waiting <n>]   # inside the mail session: it ends itself; n questions to you still unanswered show on the project's other tmux sessions
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
@@ -137,7 +138,12 @@ their state; Enter never takes one your seat already shows; without a terminal,
 this machine's. `vdx ai --list` prints the list and starts nothing. `vdx ai --find
 "<phrase>"` (or `/<phrase>` at the list's question, 0.45+) lists the conversations
 whose replies — yours and the agent's — have the phrase: a piece of a screen left
-after tmux fell finds its conversation.
+after tmux fell finds its conversation. After the tmux server fell (0.46+), a plain
+start opens the list with what it took down, and Enter (`r`) brings those agents
+back — each in its tmux session, conversation, mode and topic; `vdx ai --restore`
+brings back every one on the machine without a question. The plugin's
+session-start hook keeps the record of each agent pane for it, in
+`~/.local/state/vdx/`.
 
 Every command takes `--help` (`-h`) and runs nothing with it. An unknown option,
 a stray argument or a value flag without its value is refused with exit 2

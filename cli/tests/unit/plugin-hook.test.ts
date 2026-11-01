@@ -38,9 +38,10 @@ describe('plugin SessionStart hook', () => {
   let nodeBin: string;
   let log: string;
   // Node from a folder of its own: its install folder holds a global vdx on a machine that has one.
-  const run = (env: Record<string, string>, withVdx = true) =>
+  const run = (env: Record<string, string>, withVdx = true, input = '') =>
     spawnSync('/bin/sh', [HOOK], {
       encoding: 'utf8',
+      input,
       env: {
         PATH: [...(withVdx ? [bin] : []), nodeBin, '/usr/bin', '/bin'].join(':'),
         STUB_LOG: log,
@@ -102,6 +103,25 @@ describe('plugin SessionStart hook', () => {
       expect(r.status, version).toBe(0);
       expect(r.stdout, version).toBe('');
       expect(calls(), version).toBe('');
+    }
+  });
+
+  it("from 0.46 names the conversation the hook's input says starts — for the record of the tmux pane", () => {
+    const input = JSON.stringify({ session_id: ID.a, source: 'clear', hook_event_name: 'SessionStart' });
+    run({ STUB_VERSION: '0.46.0' }, true, input);
+    expect(calls()).toBe(
+      `ai --check /projects/my project --conversation ${ID.a}\ndoctor --check /projects/my project\n`,
+    );
+    // An older vdx refuses a flag next to --check; input that names no conversation adds none.
+    for (const [version, text] of [
+      ['0.45.0', input],
+      ['0.46.0', '{"session_id": "../x"}'],
+      ['0.46.0', 'not json'],
+      ['0.46.0', ''],
+    ]) {
+      fs.rmSync(log, { force: true });
+      expect(run({ STUB_VERSION: version! }, true, text).status, `${version} ${text}`).toBe(0);
+      expect(calls().split('\n')[0], `${version} ${text}`).toBe('ai --check /projects/my project');
     }
   });
 

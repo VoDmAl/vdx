@@ -44,6 +44,7 @@ import {
   askLine,
   runAi,
   runAiCheck,
+  runAiRestore,
   runAiClose,
   runAiReport,
   runAiRemote,
@@ -163,12 +164,23 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 one as from the list; without a terminal, or with --list or
                 --dry-run, it is printed with the command for each row.
                 /<phrase> at the list's question searches the same way
+  --restore     Claude Code: bring back every agent a fallen tmux server took down
+                on this machine — a crash, a kill-server, a reboot — of every
+                project, without a question: each in its tmux session (its old
+                name, or the next free one), conversation, mode and topic, attached
+                to by nobody. One with nothing typed since /clear, or finished with
+                a wrap, comes back in a new conversation, as a place. Left out: the
+                mail session, a conversation running now (here or on another
+                machine) or continued on another machine since. With --dry-run:
+                what it would start. A plain start offers the same as r
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
                 whether this session carries the profile's flags, and whether it
                 runs the installed Claude Code and plugins (the vdx plugin's
-                SessionStart hook); prints nothing without a profile; exit 3 on drift
+                SessionStart hook); prints nothing without a profile; exit 3 on drift.
+                It also keeps a record of the agent's tmux pane, for --restore;
+                --conversation <id> — the conversation the hook says starts
   -h, --help    this help
 
 What a plain start does (Claude Code). The other machines (session.machines in
@@ -188,7 +200,10 @@ off. a — every conversation; /<phrase> — the conversations that have it
 (--find); n — a new one; f — a new focused one. Another
 machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
-machine's — Syncthing has not brought it yet — too. Without a terminal it takes
+machine's — Syncthing has not brought it yet — too. After the tmux server here
+fell, the list opens with what it took down (of this project; of every project
+where session.restore_all holds), never silent: Enter and r bring them back, as
+--restore does, and the start goes on. Without a terminal it takes
 this machine's agent, else its newest conversation, else a new one. A new
 conversation while an agent of the project runs on another machine starts only
 after a yes — unless you picked it from the list. --new and --focused take an
@@ -369,10 +384,10 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close', 'list', 'report'],
+    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close', 'list', 'report', 'restore'],
     values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
     positionals: 1,
@@ -782,15 +797,38 @@ function cmdDoctor(opts: ParsedArgs): void {
 
 function cmdAi(opts: ParsedArgs): void {
   if (opts.flags.check === true) {
-    // About the session this runs in — there is nothing to start, and no other machine.
-    const others = Object.keys(opts.flags).filter((f) => f !== 'check');
+    // About the session this runs in — there is nothing to start, and no other machine. The vdx
+    // plugin's hook names the conversation that starts (0.46): the record for a restore keeps it.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'check' && f !== 'conversation');
     if (others.length > 0 || opts.cmd !== 'ai') {
       process.stderr.write(
-        `vdx ai: --check takes only the project path (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
+        `vdx ai: --check takes only the project path and --conversation (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
       );
       process.exit(2);
     }
-    process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps()));
+    const id = opts.flags.conversation;
+    if (id !== undefined && !(typeof id === 'string' && isConversationId(id))) {
+      process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${String(id)}"\n`);
+      process.exit(2);
+    }
+    process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps(), process.pid, id));
+  }
+  if (opts.flags.restore === true) {
+    // Every project's agents a fallen tmux server took down on this machine: no project to name.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'restore' && f !== 'dry-run');
+    if (others.length > 0 || opts.cmd !== 'ai' || opts.positionals.length > 0) {
+      process.stderr.write(
+        `vdx ai: --restore brings back every project's agents on this machine — it takes only --dry-run (not ${
+          opts.cmd !== 'ai'
+            ? `${opts.cmd}; there: ssh ${opts.cmd.slice(3)} vdx ai --restore`
+            : others.length
+              ? `--${others.join(', --')}`
+              : opts.positionals.join(' ')
+        })\n`,
+      );
+      process.exit(2);
+    }
+    process.exit(runAiRestore(opts.flags['dry-run'] === true, defaultDeps()));
   }
   if (opts.flags.report === true) {
     // What another machine's vdx asks over ssh: this machine's facts on the project, as JSON.

@@ -95,7 +95,8 @@ export type Pick =
   | { kind: 'conversation'; conversation: Conversation; machine: string | null }
   | { kind: 'new'; focused: boolean }
   | { kind: 'all' }
-  | { kind: 'find'; phrase: string };
+  | { kind: 'find'; phrase: string }
+  | { kind: 'restore' };
 
 export interface BoardInput {
   project: string;
@@ -125,14 +126,21 @@ export interface BoardInput {
   find?: { phrase: string; searched: number; around: Map<string, string> };
   /** Nobody is asked: under each row the command that reaches it, and no keys. */
   reach?: (p: Pick) => string | null;
+  /**
+   * How many agents a fallen tmux server took down that `r` brings back (vdx-ai-predictable P6):
+   * then Enter is `r`, unless a search was asked for.
+   */
+  restore?: number;
   now?: Date;
 }
 
 export interface Board {
   lines: string[];
   rows: Pick[];
-  /** The row Enter takes (index into rows), or the new conversation. */
-  enter: number | 'new';
+  /** The row Enter takes (index into rows), the new conversation, or bringing back what tmux took down. */
+  enter: number | 'new' | 'restore';
+  /** What `r` brings back; 0 — nothing, no such key. */
+  restore: number;
 }
 
 const SHOWN = 5;
@@ -228,12 +236,16 @@ export function buildBoard(input: BoardInput): Board {
     const i = rows.findIndex(ok);
     return i < 0 ? null : i;
   };
+  // After tmux fell, bringing back what it took down comes first (DL #9).
+  const restore = input.restore ?? 0;
   const enter = input.find
     ? (pickAt((p) => !(p.kind === 'agent' && openAtSeat(p.agent, seat))) ?? (rows.length ? 0 : 'new'))
-    : (pickAt((p) => p.kind === 'agent' && freeWork(p.agent, seat)) ??
-      pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
-      pickAt((p) => p.kind === 'agent' && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty') ??
-      'new');
+    : restore > 0
+      ? 'restore'
+      : (pickAt((p) => p.kind === 'agent' && freeWork(p.agent, seat)) ??
+        pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
+        pickAt((p) => p.kind === 'agent' && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty') ??
+        'new');
 
   const unread = all ? 0 : (input.unread ?? 0);
   const hidden = idleAll.length - shown.length + unread;
@@ -252,19 +264,36 @@ export function buildBoard(input: BoardInput): Board {
       : []),
   ];
   const keys = [
-    `Enter → ${enter === 'new' ? 'n' : enter + 1}`,
+    `Enter → ${enterKey({ enter })}`,
+    ...(restore > 0 ? [`r bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`] : []),
     ...(input.find ? ['a the whole list'] : hidden > 0 ? [`a all (${unread ? 'up to ' : ''}${hidden} more)`] : []),
     input.find ? '/<phrase> another search' : '/<phrase> find',
     'n new',
     'f new focused',
   ];
-  return { lines: [head, ...lines, ...notes, ...(input.reach ? [] : [`  ${keys.join(' · ')}`])], rows, enter };
+  return {
+    lines: [head, ...lines, ...notes, ...(input.reach ? [] : [`  ${keys.join(' · ')}`])],
+    rows,
+    enter,
+    restore,
+  };
 }
 
-/** The person's answer: a row, `a`, `/<phrase>`, `n`, `f`; Enter is the marked one. Null — not understood. */
+/** The key Enter stands for: a row's number, `n` or `r`. */
+export function enterKey(board: { enter: Board['enter'] }): string {
+  return board.enter === 'new' ? 'n' : board.enter === 'restore' ? 'r' : String(board.enter + 1);
+}
+
+/** The person's answer: a row, `a`, `/<phrase>`, `n`, `f`, `r`; Enter is the marked one. Null — not understood. */
 export function readAnswer(answer: string, board: Board): Pick | null {
   const a = answer.trim();
-  if (a === '') return board.enter === 'new' ? { kind: 'new', focused: false } : board.rows[board.enter]!;
+  if (a === '')
+    return board.enter === 'new'
+      ? { kind: 'new', focused: false }
+      : board.enter === 'restore'
+        ? { kind: 'restore' }
+        : board.rows[board.enter]!;
+  if (/^r$/i.test(a)) return board.restore > 0 ? { kind: 'restore' } : null;
   if (/^n(ew)?$/i.test(a)) return { kind: 'new', focused: false };
   if (/^f$/i.test(a)) return { kind: 'new', focused: true };
   if (/^a(ll)?$/i.test(a)) return { kind: 'all' };

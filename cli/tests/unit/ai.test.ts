@@ -41,6 +41,7 @@ import {
   runAiCheck,
   runAiClose,
   runAiReport,
+  runAiRestore,
   type RemoteReport,
   clientSeat,
   shellQuote,
@@ -68,6 +69,7 @@ import {
   writeConversation,
   writeHistory,
 } from './transcripts.ts';
+import { currentServer, socketDir, writeRecord } from '../../src/restore.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
@@ -2124,6 +2126,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
   afterEach(() => {
     tmux.tryRun(['kill-server']);
     fs.rmSync(path.join(cc(), 'sessions'), { recursive: true, force: true });
+    fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
   });
   afterAll(() => {
     dropServer(tmux, socket);
@@ -2174,6 +2177,112 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(text()).not.toContain('♻');
     expect(tmux.hasSession('proj@testhost-2')).toBe(true);
   });
+
+  /** The vdx plugin's SessionStart hook in the agent's pane: `vdx ai --check` below the agent. */
+  const hook = (pane: ReturnType<typeof agentIn>, id: string, env: NodeJS.ProcessEnv = {}) => {
+    const self = 999_999;
+    const d = deps();
+    runAiCheck(
+      root,
+      {
+        ...d,
+        env: { ...d.env, ...env },
+        out: () => {},
+        processes: () => [...listProcesses(), { pid: self, ppid: pane.proc.pid, args: 'vdx ai --check' }],
+        lag: () => null,
+      },
+      self,
+      id,
+    );
+  };
+  const records = () => {
+    const dir = socketDir({}, base, socket);
+    return fs.existsSync(dir) ? fs.readdirSync(dir).flatMap((s) => fs.readdirSync(path.join(dir, s))) : [];
+  };
+
+  it('tmux fell: the list opens with what it took down, Enter brings it back, and the start goes on (P6)', () => {
+    const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    hook(pane, ID.a);
+    expect(records()).toEqual([`${pane.pane.paneId.slice(1)}.json`]);
+    tmux.tryRun(['kill-server']);
+    answers = [''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('⚠ no tmux server runs here — before that 1 agent of proj ran: proj@testhost\n');
+    expect(text()).not.toContain('vdx ai --restore brings back');
+    expect(text()).toContain('Enter → r · r bring back the agent tmux took down');
+    expect(text()).toContain(`▶ proj@testhost: conversation ${ID.a.slice(0, 8)}`);
+    expect(text()).toContain('✓ 1 back');
+    // The start goes on from what runs now: the one agent of the project, shown by no terminal.
+    expect(text()).toContain('the only agent of proj runs here (proj@testhost)');
+    const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(now.map((a) => [a.pane.session, a.proc.args])).toEqual([
+      ['proj@testhost', `/bin/sh ${claude()} --base --resume ${ID.a}`],
+    ]);
+    expect(records()).toEqual([]);
+  }, 30_000);
+
+  it('--restore: every project, focused with its topic, an empty one as a place; one continued elsewhere left out', () => {
+    const a = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    tmux.run(['set-option', '-t', '=proj@testhost:', '@vdx_topic', 'search']);
+    hook(a, ID.a, { VDX_FOCUSED: '1' });
+    hook(agentIn('proj@testhost-2', ID.b, [slashLine('clear'), startedOn('testhost')]), ID.b);
+    hook(agentIn('proj@testhost-3', ID.c, [startedOn('testhost'), userLine('x'), startedOn('lft')]), ID.c);
+    const other = path.join(base, 'other');
+    fs.mkdirSync(other, { recursive: true });
+    const server = currentServer(tmux)!;
+    writeRecord({}, base, server, {
+      session: 'other@testhost',
+      pane: '%99',
+      project: other,
+      conversation: null,
+      mode: 'plain',
+      topic: null,
+      pid: 1,
+      written: Date.now(),
+    });
+    tmux.tryRun(['kill-server']);
+
+    // The project's start says what tmux took down, of it and of the others, and how to bring all back.
+    expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(
+      '⚠ no tmux server runs here — before that 3 agents of proj ran: proj@testhost «search», proj@testhost-2, ' +
+        'proj@testhost-3; and 1 of other projects',
+    );
+    expect(text()).toContain('vdx ai --restore brings back all 4');
+
+    logs = [];
+    expect(runAiRestore(true, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('vdx ai --restore — 4 agents went down with the tmux server here; would start:');
+    expect(text()).toContain(`  other@testhost: a new conversation — none to continue\n    ${claude()} --base\n`);
+    expect(text()).toContain(
+      `  proj@testhost: conversation ${ID.a.slice(0, 8)}, focused «search»\n    VDX_FOCUSED=1 ${claude()} --base --resume ${ID.a}\n`,
+    );
+    expect(text()).toContain(
+      `  proj@testhost-2: a new conversation — nothing typed in ${ID.b.slice(0, 8)} since /clear`,
+    );
+    expect(text()).toContain(
+      `· proj@testhost-3: not brought back — its conversation ${ID.c.slice(0, 8)} was continued on lft since`,
+    );
+    expect(tmux.panes()).toEqual([]);
+    expect(records()).toHaveLength(4);
+
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('✓ 3 back (1 left out)');
+    const sessions = tmux.panes().map((p) => p.session);
+    expect(sessions.sort()).toEqual(['other@testhost', 'proj@testhost', 'proj@testhost-2']);
+    const mine = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    const focusedNow = mine.find((x) => x.pane.session === 'proj@testhost')!;
+    expect(focusedNow.proc.args).toContain(`--resume ${ID.a}`);
+    expect(fs.existsSync(path.join(base, `focused-${focusedNow.proc.pid}`))).toBe(true);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('search');
+    expect(mine.find((x) => x.pane.session === 'proj@testhost-2')!.proc.args).not.toContain('--resume');
+    expect(records()).toEqual([]);
+
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('nothing to bring back');
+  }, 60_000);
 });
 
 describe('vdx ai@host', () => {

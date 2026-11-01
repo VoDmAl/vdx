@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type AgentFact, agentState, buildBoard, inputDraft, readAnswer } from '../../src/board.ts';
+import { type AgentFact, agentState, buildBoard, enterKey, inputDraft, readAnswer } from '../../src/board.ts';
 import type { Conversation } from '../../src/conversations.ts';
 import { ID } from './transcripts.ts';
 
@@ -203,5 +203,35 @@ describe('readAnswer', () => {
     expect(readAnswer('/', b)).toBeNull();
     expect(readAnswer('9', b)).toBeNull();
     expect(b.lines.at(-1)).toContain('/<phrase> find');
+  });
+});
+
+describe('buildBoard: after tmux fell, r brings back what it took down (DL #9)', () => {
+  it('Enter is r; r is a key of its own; the rows stay as they are', () => {
+    const b = board([agent()], [conv(ID.b)], { restore: 3 });
+    expect(b.enter).toBe('restore');
+    expect(enterKey(b)).toBe('r');
+    expect(readAnswer('', b)).toEqual({ kind: 'restore' });
+    expect(readAnswer('R', b)).toEqual({ kind: 'restore' });
+    expect(readAnswer('1', b)).toEqual(b.rows[0]);
+    expect(b.lines.at(-1)).toBe(
+      '  Enter → r · r bring back the 3 agents tmux took down · /<phrase> find · n new · f new focused',
+    );
+    expect(board([], [], { restore: 1 }).lines.at(-1)).toContain('r bring back the agent tmux took down');
+  });
+
+  it('nothing taken down: r is no answer, and Enter is what it was', () => {
+    const b = board([agent()], [conv(ID.b)]);
+    expect(readAnswer('r', b)).toBeNull();
+    expect(enterKey(b)).toBe('1');
+    expect(enterKey(board([], []))).toBe('n');
+    expect(b.lines.at(-1)).not.toContain(' r ');
+  });
+
+  it('a search asked for: Enter takes what it found, r still brings them back', () => {
+    const find = { phrase: 'x', searched: 2, around: new Map<string, string>() };
+    const b = board([], [conv(ID.c)], { restore: 2, find });
+    expect(b.enter).toBe(0);
+    expect(readAnswer('r', b)).toEqual({ kind: 'restore' });
   });
 });
