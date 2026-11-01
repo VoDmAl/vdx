@@ -279,7 +279,7 @@ Decision Log её кристалла.
 15. **Скрипты плагина идут под `/bin/sh` — на macOS это bash 3.2.** Под UTF-8-локалью (так Claude Code
     запускает хуки) `$имя` вплотную к не-ASCII символу читается вместе с его первым байтом:
     `«$topic»` давал «U+FFFD» (`focused-topic` Sidetrack #1). Писать `${имя}`; тест хука — и под
-    `LC_ALL=en_US.UTF-8`.
+    `LC_ALL=en_US.UTF-8`. С vdm 2.67.0 такое место блокирует `shell-syntax-check` ai-dev-plugins.
 
 ---
 
