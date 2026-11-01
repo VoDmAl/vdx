@@ -142,7 +142,8 @@ export function projectDirName(projectRoot: string): string {
 
 /** The text of a user entry the person wrote, or a command; null — a tool's result or nothing. */
 function userText(entry: unknown): string | null {
-  if (at(entry, 'isMeta') === true) return null;
+  // A compaction's summary is filed as a user entry, untagged: Claude Code wrote it, not the person.
+  if (at(entry, 'isMeta') === true || at(entry, 'isCompactSummary') === true) return null;
   const content = at(entry, 'message', 'content');
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return null;
@@ -359,6 +360,152 @@ export function listConversations(
   }
   const typed = typedHere(input.env, input.home, seen);
   return out.map((c) => ({ ...c, typedHere: typed.has(c.id) }));
+}
+
+/**
+ * The search of `vdx ai --find` and of `/<phrase>` at the list (vdx-ai-predictable P5): a phrase
+ * left on a screen — after tmux fell, a piece of an old session — finds its conversation.
+ *
+ * Only what was said is searched: the person's prompts, the agent's text, and the updates Claude
+ * Code shows on the screen as the agent works — `thinking` blocks of an entry with
+ * `thinkingDisplay: "updates"` (10 931 of them in the owner's last 400 transcripts, 2026-10-31);
+ * thinking it does not show is left out. A hook's text, a tool's result, a file read repeat
+ * across conversations (one word of a phrase was in 42 of echelon's 72, 2026-10-30), and a
+ * screen does not show them as said. Case, punctuation,
+ * markdown and the screen's line breaks do not count: both sides keep their letters and digits,
+ * and whatever stands between them is one space.
+ */
+export interface Found {
+  id: string;
+  file: string;
+  updated: Date;
+  /** How many replies in it have the phrase. */
+  hits: number;
+  /** The last of them: who said it, and the text around the phrase. */
+  who: 'you' | 'agent';
+  around: string;
+}
+
+const WORD_CHAR_RE = /[\p{L}\p{M}\p{N}]/u;
+
+/** `text` as the search compares it, and for each of its code units the index in `text` it came from. */
+function fold(text: string): { s: string; from: number[] } {
+  let s = '';
+  const from: number[] = [];
+  let gap = false;
+  for (let i = 0; i < text.length;) {
+    const ch = String.fromCodePoint(text.codePointAt(i)!);
+    if (WORD_CHAR_RE.test(ch)) {
+      if (gap && s) {
+        s += ' ';
+        from.push(i);
+      }
+      gap = false;
+      const low = ch.toLowerCase();
+      s += low;
+      for (let k = 0; k < low.length; k++) from.push(i);
+    } else gap = true;
+    i += ch.length;
+  }
+  return { s, from };
+}
+
+/** What a phrase is searched as: its letters and digits; empty — it has none. */
+function searchKey(phrase: string): string {
+  return fold(phrase.normalize('NFC')).s;
+}
+
+/** What an entry says as a screen shows it: the person's prompt, the agent's text or update. */
+function said(entry: unknown): { who: 'you' | 'agent'; text: string }[] {
+  if (at(entry, 'isSidechain') === true) return [];
+  const type = at(entry, 'type');
+  if (type === 'user') {
+    const text = userText(entry);
+    // A hook's or a channel's text, a command, a `!` line come tagged; the person's prompt does not.
+    return text && !text.startsWith('<') ? [{ who: 'you', text }] : [];
+  }
+  const content = at(entry, 'message', 'content');
+  if (type !== 'assistant' || !Array.isArray(content)) return [];
+  const updates = at(entry, 'thinkingDisplay') === 'updates';
+  return (content as unknown[]).flatMap((p) => {
+    const kind = at(p, 'type');
+    const text =
+      kind === 'text' ? str(at(p, 'text')) : kind === 'thinking' && updates ? str(at(p, 'thinking')) : undefined;
+    return text ? [{ who: 'agent' as const, text }] : [];
+  });
+}
+
+const AROUND = 72;
+
+/** The text from `start` to `end` with what stands around it, up to AROUND characters, on one line. */
+function around(text: string, start: number, end: number): string {
+  const room = Math.max(0, AROUND - (end - start));
+  // Not between the halves of a character outside the BMP (an emoji).
+  const whole = (i: number) => (/[\udc00-\udfff]/.test(text[i] ?? '') ? i + 1 : i);
+  const a = whole(Math.max(0, Math.min(start - Math.floor(room / 2), text.length - AROUND)));
+  const b = whole(Math.min(text.length, a + AROUND));
+  const piece = text.slice(a, b).replace(/\s+/g, ' ').trim();
+  return `${a > 0 ? '…' : ''}${piece}${b < text.length ? '…' : ''}`;
+}
+
+/**
+ * The project's conversations whose replies have `phrase`, newest first; null — the phrase has
+ * no letters or digits to search for.
+ */
+export function findInConversations(input: ProjectInput & { phrase: string }): Found[] | null {
+  const key = searchKey(input.phrase);
+  if (!key) return null;
+  // Each word of the phrase stands in the file as it was said, whatever its case: a cheap test of
+  // a whole file. Then only the lines the longest word is on are read as JSON. Without the `u`
+  // flag: six times faster on echelon's 389 MB, and Cyrillic still matches in any case.
+  const words = [...new Set(key.split(' '))].sort((a, b) => b.length - a.length);
+  const wordRes = words.map((w) => new RegExp(w, 'i'));
+  const lineRe = new RegExp(words[0]!, 'gi');
+  const out: Found[] = [];
+  const seen = new Set<string>();
+  for (const f of conversationFiles(input)) {
+    const id = path.basename(f.file, '.jsonl');
+    if (seen.has(id)) continue;
+    let text: string;
+    try {
+      text = fs.readFileSync(f.file, 'utf8');
+    } catch {
+      continue;
+    }
+    if (!wordRes.every((re) => re.test(text))) continue;
+    let hits = 0;
+    let last: { who: 'you' | 'agent'; around: string } | null = null;
+    lineRe.lastIndex = 0;
+    for (let m = lineRe.exec(text); m; m = lineRe.exec(text)) {
+      const end = text.indexOf('\n', m.index);
+      const line = text.slice(text.lastIndexOf('\n', m.index) + 1, end < 0 ? text.length : end);
+      lineRe.lastIndex = end < 0 ? text.length : end;
+      if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"')) continue;
+      // A tool's result, or a call with no text beside it: nothing said there.
+      if (line.includes('"type":"tool_result"')) continue;
+      if (line.includes('"type":"tool_use"') && !line.includes('"type":"text"') && !line.includes('"thinking"'))
+        continue;
+      let entry: unknown;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      for (const { who, text: reply } of said(entry)) {
+        const t = reply.normalize('NFC');
+        const { s, from } = fold(t);
+        const p = s.lastIndexOf(key);
+        if (p < 0) continue;
+        hits++;
+        const e = from[p + key.length - 1]!;
+        last = { who, around: around(t, from[p]!, e + String.fromCodePoint(t.codePointAt(e)!).length) };
+      }
+    }
+    if (!last) continue;
+    seen.add(id);
+    out.push({ id, file: f.file, updated: f.updated, hits, ...last });
+  }
+  return out;
 }
 
 function sameMachine(a: string | null, b: string | null): boolean {

@@ -27,6 +27,19 @@ export const skillLine = (skill: string) =>
     type: 'assistant',
     message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Skill', input: { skill } }] },
   });
+/** The agent's text: one block per entry, as Claude Code writes them. */
+export const replyLine = (text: string) =>
+  JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+/** The agent's thinking; `shown` — Claude Code shows it on the screen as an update (`thinkingDisplay`). */
+export const thinkingLine = (text: string, shown = true) =>
+  JSON.stringify({
+    type: 'assistant',
+    ...(shown ? { thinkingDisplay: 'updates' } : {}),
+    message: { role: 'assistant', content: [{ type: 'thinking', thinking: text, signature: 'x' }] },
+  });
+/** A compaction's summary, which Claude Code files as a user entry, untagged. */
+export const compactLine = (text: string) =>
+  JSON.stringify({ type: 'user', isCompactSummary: true, message: { role: 'user', content: text } });
 /** A tool's result, which Claude Code files as a user entry. */
 export const toolResultLine = (text: string) =>
   JSON.stringify({

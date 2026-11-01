@@ -151,14 +151,57 @@ describe('buildBoard: one list, Enter marked', () => {
   });
 });
 
+describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
+  const around = new Map([
+    [ID.a, 'you: «where is the needle?»'],
+    [ID.c, 'agent: «the needle is here» (2 replies have it)'],
+  ]);
+  const find = { phrase: 'the  needle', searched: 29, around };
+
+  it('every row it found, the text under it; Enter — the first a terminal here does not show, wrapped too', () => {
+    const b = board([agent({ openAt: ['m3'] })], [conv(ID.c, { finished: true })], { find });
+    const text = b.lines.join('\n');
+    expect(b.lines[0]).toBe('proj — «the needle» in 2 of 29 conversations');
+    expect(text).toMatch(/1\) m3 +proj@m3 {2}idle · «Work» {3}open here\n {7}you: «where is the needle\?»/);
+    expect(text).toMatch(
+      /2\) lft .*cccccccc {2}finished \(wrap\).*\n {7}agent: «the needle is here» \(2 replies have it\)/,
+    );
+    expect(b.enter).toBe(1);
+    expect(b.lines.at(-1)).toBe('  Enter → 2 · a the whole list · /<phrase> another search · n new · f new focused');
+  });
+
+  it('nobody asked: the command under each row, no keys', () => {
+    const b = board([], [conv(ID.c)], {
+      find,
+      reach: (p: { kind: string }) => (p.kind === 'conversation' ? `vdx ai@lft x --conversation ${ID.c}` : null),
+    });
+    expect(b.lines.slice(1)).toEqual([
+      '  conversations nobody runs:',
+      `  1) lft  today 11:00  cccccccc  cut off · «t cccc»`,
+      '       agent: «the needle is here» (2 replies have it)',
+      `       vdx ai@lft x --conversation ${ID.c}`,
+    ]);
+  });
+
+  it('a copy here behind its machine: the search says its latest part was not searched', () => {
+    const b = board([], [conv(ID.c)], { find, behind: new Map([[ID.b, 'lft']]) });
+    expect(b.lines.join('\n')).toContain(
+      'note: 1 conversation not here yet from another machine (sync behind) — its latest part is not searched',
+    );
+  });
+});
+
 describe('readAnswer', () => {
-  it('Enter is the marked row; a number, n, f, a', () => {
+  it('Enter is the marked row; a number, n, f, a, /<phrase>', () => {
     const b = board([agent()], [conv(ID.b)]);
     expect(readAnswer('', b)).toEqual(b.rows[0]);
     expect(readAnswer('2', b)).toEqual(b.rows[1]);
     expect(readAnswer('n', b)).toEqual({ kind: 'new', focused: false });
     expect(readAnswer('f', b)).toEqual({ kind: 'new', focused: true });
     expect(readAnswer('a', b)).toEqual({ kind: 'all' });
+    expect(readAnswer('/ 17 незаявленных ', b)).toEqual({ kind: 'find', phrase: '17 незаявленных' });
+    expect(readAnswer('/', b)).toBeNull();
     expect(readAnswer('9', b)).toBeNull();
+    expect(b.lines.at(-1)).toContain('/<phrase> find');
   });
 });

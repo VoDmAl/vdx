@@ -6,7 +6,11 @@ import { spawnSync } from 'node:child_process';
 import {
   bashLine,
   commandLine,
+  compactLine,
+  hookLine,
   ID,
+  replyLine,
+  thinkingLine,
   skillLine,
   startedOn,
   toolResultLine,
@@ -20,6 +24,7 @@ import {
   claudeConfigDir,
   claudeTrusts,
   describeAge,
+  findInConversations,
   isEmpty,
   latestPerMachine,
   listConversations,
@@ -172,6 +177,92 @@ describe('readConversation', () => {
     it('nothing is a wrap unless the profile names it', () => {
       expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:wrap')], []).finished).toBe(false);
     });
+
+    it("a compaction's summary is not a prompt: a wrapped conversation compacted after stays finished", () => {
+      const c = readWith([
+        startedOn('lft'),
+        userLine('work'),
+        skillLine('vdm:wrap'),
+        compactLine('This session is being continued from a previous conversation.'),
+      ]);
+      expect([c.typed, c.finished]).toEqual([1, true]);
+    });
+  });
+});
+
+describe('findInConversations: a phrase from a screen finds its conversation (vdx-ai-predictable P5)', () => {
+  let home: string;
+  const root = '/Users/x/AI Projects/proj';
+  const config = () => path.join(home, '.claude');
+  const find = (phrase: string) => findInConversations({ env: {}, home, projectRoot: root, phrase });
+  beforeEach(() => {
+    home = tmpDir('vdx-find-home-');
+  });
+  afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  it('case, punctuation, markdown and the line breaks of a screen do not count', () => {
+    writeConversation(
+      config(),
+      root,
+      ID.a,
+      [
+        startedOn('lft'),
+        userLine('go'),
+        replyLine('**Список для ответа** space-hq готов. У space-hq 17 незаявленных.'),
+      ],
+      30,
+    );
+    for (const phrase of ['17 незаявленных', 'список для\n  ответа SPACE-HQ', 'ответа space hq готов'])
+      expect(
+        find(phrase)?.map((f) => f.id),
+        phrase,
+      ).toEqual([ID.a]);
+    expect(find('17 заявленных')).toEqual([]);
+    const [f] = find('17 незаявленных')!;
+    expect(f).toMatchObject({ who: 'agent', hits: 1 });
+    expect(f!.around).toBe('**Список для ответа** space-hq готов. У space-hq 17 незаявленных.');
+  });
+
+  it('only what was said: not a hook, a tool result, a tagged text or a compaction summary', () => {
+    writeConversation(
+      config(),
+      root,
+      ID.a,
+      [
+        hookLine('the hook says needle here'),
+        userLine('hi'),
+        toolResultLine('a file with needle in it'),
+        bashLine('grep needle'),
+        userLine('<channel source="echelon">needle</channel>'),
+        compactLine('Summary: we looked for the needle'),
+      ],
+      30,
+    );
+    writeConversation(config(), root, ID.b, [userLine('where is the needle?'), replyLine('No needle.')], 10);
+    const found = find('needle')!;
+    expect(found.map((f) => [f.id, f.hits, f.who])).toEqual([[ID.b, 2, 'agent']]);
+  });
+
+  it('the newest first; the text around the last match, cut to a line', () => {
+    const long = 'word '.repeat(40) + 'the needle ' + 'tail '.repeat(40);
+    writeConversation(config(), root, ID.a, [userLine('a needle, early'), replyLine(long)], 60);
+    writeConversation(config(), root, ID.b, [userLine('the needle, later')], 5);
+    const found = find('Needle')!;
+    expect(found.map((f) => f.id)).toEqual([ID.b, ID.a]);
+    expect(found[0]).toMatchObject({ who: 'you', around: 'the needle, later' });
+    const around = found[1]!.around;
+    expect(around).toMatch(/^….*the needle.*…$/);
+    expect(around.length).toBeLessThanOrEqual(80);
+  });
+
+  it("the agent's updates Claude Code shows on the screen; thinking it does not show — not", () => {
+    writeConversation(config(), root, ID.a, [userLine('go'), thinkingLine('Checking the crystal against npm')], 30);
+    writeConversation(config(), root, ID.b, [userLine('go'), thinkingLine('Checking the crystal quietly', false)], 10);
+    expect(find('checking the crystal')!.map((f) => [f.id, f.who])).toEqual([[ID.a, 'agent']]);
+  });
+
+  it('a phrase with no letters or digits is no search', () => {
+    expect(find(' … ')).toBeNull();
   });
 });
 

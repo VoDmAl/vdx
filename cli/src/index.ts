@@ -155,6 +155,14 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --dry-run     print the plan and the project's running agents; start nothing.
                 Claude Code: the list as well, and what a start without a terminal takes
   --list        Claude Code: the list a plain start shows; ask nothing, start nothing
+  --find <phrase>
+                Claude Code: the list of the project's conversations whose replies
+                — yours and the agent's — have the phrase, with the text around it:
+                a piece of a screen left after tmux fell finds its conversation.
+                Case, punctuation and the screen's line breaks do not count. Pick
+                one as from the list; without a terminal, or with --list or
+                --dry-run, it is printed with the command for each row.
+                /<phrase> at the list's question searches the same way
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
@@ -176,7 +184,8 @@ finished with a wrap skill of session.wrap_skills, idle N days — and which sea
 terminal shows it), then the newest conversations nobody runs, cut off or
 finished, and how many more there are. Enter takes the marked row: an agent with
 work in it that no terminal at your seat shows, else the newest conversation cut
-off. a — every conversation; n — a new one; f — a new focused one. Another
+off. a — every conversation; /<phrase> — the conversations that have it
+(--find); n — a new one; f — a new focused one. Another
 machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
 machine's — Syncthing has not brought it yet — too. Without a terminal it takes
@@ -360,11 +369,11 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close', 'list', 'report'],
-    values: ['conversation', 'waiting'],
+    values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
     positionals: 1,
   },
@@ -820,6 +829,11 @@ function cmdAi(opts: ParsedArgs): void {
     process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${conversation}"\n`);
     process.exit(2);
   }
+  const find = typeof opts.flags.find === 'string' ? opts.flags.find : undefined;
+  if (find !== undefined && !find.trim()) {
+    process.stderr.write('vdx ai: --find takes a phrase to search for: --find "a piece of the screen"\n');
+    process.exit(2);
+  }
   if (conversation !== undefined && opts.flags.new === true) {
     process.stderr.write('vdx ai: --new and --conversation ask for different conversations — pick one\n');
     process.exit(2);
@@ -844,6 +858,7 @@ function cmdAi(opts: ParsedArgs): void {
     topic,
     intercom: opts.flags.intercom === true,
     list: opts.flags.list === true,
+    find: find?.trim(),
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.

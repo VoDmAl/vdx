@@ -30,7 +30,9 @@ import {
   machineOf,
   conversationById,
   conversationFiles,
+  findInConversations,
   isEmpty,
+  readConversation,
   liveSessionFile,
   typedHere,
   parseMachineReport,
@@ -878,6 +880,8 @@ export interface AiOptions {
   intercom?: boolean;
   /** `--list`: the list of a plain start, printed; nothing is asked or started. */
   list?: boolean;
+  /** `--find <phrase>`: the list of the conversations whose replies have it (vdx-ai-predictable P5). */
+  find?: string;
 }
 
 /** A topic is one line: it goes into a tmux option, a terminal's title and a transcript line. */
@@ -1247,6 +1251,7 @@ export function remoteAiArgs(input: {
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
     opts.list && '--list',
+    opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
   ].filter((f): f is string => Boolean(f));
   const v = shellQuote(version);
@@ -1797,7 +1802,8 @@ type BoardOutcome =
  * runs on all the machines and no terminal at this seat shows it: attach; none runs, and the
  * newest conversation is this machine's and not finished: continue it; the project has no
  * conversation: a new one. `print` (`--list`, `--dry-run`) shows the list and decides nothing;
- * `auto` (no terminal) takes the marked row if it is this machine's.
+ * `auto` (no terminal) takes the marked row if it is this machine's. `find` (`--find`) — the
+ * list is what a search for it found, never silent; `/<phrase>` at the question searches too.
  */
 function boardStart(
   plan: LaunchPlan,
@@ -1807,6 +1813,7 @@ function boardStart(
   wrapSkills: readonly string[],
   modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
   mode: 'ask' | 'print' | 'auto',
+  find?: string,
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -1960,8 +1967,53 @@ function boardStart(
   const show = (b: Board, to: (line: string) => void) => {
     for (const l of b.lines) to(l);
   };
+  // What a search found (vdx-ai-predictable P5): the running agents and the conversations whose
+  // replies have the phrase, each with the text around it. A string — nothing found, said so.
+  const search = (phrase: string, print: boolean): Board | string => {
+    const found = findInConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, phrase });
+    if (found === null) return `«${phrase}» has no letters or digits to search for`;
+    const read = new Map(k.all.map((c) => [c.id, c]));
+    const typed = typedHere(deps.env, deps.home, new Set(found.map((f) => f.id)));
+    const conversations = found
+      .map((f) => read.get(f.id) ?? readConversation(f.file, f.updated, wrapSkills))
+      .filter((c): c is Conversation => c !== null && !c.mail && !c.automated)
+      .map((c) => (read.has(c.id) ? c : { ...c, typedHere: typed.has(c.id) }));
+    const ids = new Set(conversations.map((c) => c.id));
+    const ran = working.filter((a) => a.conversation !== null && ids.has(a.conversation));
+    if (ids.size === 0)
+      return `no conversation of ${plan.project} has «${phrase}» — searched what you and the agent said in ${files.size} conversations`;
+    const around = new Map(
+      found.map((f) => [f.id, `${f.who}: «${f.around}»${f.hits > 1 ? ` (${f.hits} replies have it)` : ''}`]),
+    );
+    // Nobody to ask: the command for each row — the conversation's id is not on the row whole.
+    const reach = (p: Pick): string | null => {
+      if (p.kind !== 'agent' && p.kind !== 'conversation') return null;
+      if (p.kind === 'agent' && (!p.agent.session || !p.agent.conversation)) return null;
+      const id = p.kind === 'agent' ? p.agent.conversation! : p.conversation.id;
+      const m = p.kind === 'agent' ? p.agent.machine : p.machine;
+      if (m === null) return `on its machine: vdx ai@<machine> ${k.root} --conversation ${id}`;
+      return sameMachine(m, plan.seat)
+        ? `vdx ai ${k.rootOn(m)} --conversation ${id}`
+        : `vdx ai@${m} ${k.root} --conversation ${id}`;
+    };
+    return buildBoard({
+      project: plan.project,
+      host: plan.host,
+      seat: plan.seat,
+      agents: ran,
+      conversations,
+      total: files.size,
+      machineOf,
+      behind,
+      silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
+      find: { phrase, searched: files.size, around },
+      reach: print ? reach : undefined,
+    });
+  };
   if (mode === 'print') {
-    show(make(5), (t) => deps.out(t + '\n'));
+    const b = find !== undefined ? search(find, true) : make(5);
+    if (typeof b === 'string') deps.out(b + '\n');
+    else show(b, (t) => deps.out(t + '\n'));
     return { kind: 'listed' };
   }
 
@@ -2039,8 +2091,8 @@ function boardStart(
   }
 
   // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
-  // shows already.
-  const only = working.length === 1 ? working[0]! : null;
+  // shows already. A search is a choice.
+  const only = working.length === 1 && find === undefined ? working[0]! : null;
   if (only && !openAtSeat(only, plan.seat)) {
     const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
     return outcomeOf({ kind: 'agent', agent: only }, [
@@ -2048,7 +2100,7 @@ function boardStart(
       ...k.silent,
     ]);
   }
-  if (working.length === 0) {
+  if (working.length === 0 && find === undefined) {
     const newest = continuable[0];
     if (!newest)
       return outcomeOf({ kind: 'new', focused: false }, [
@@ -2065,8 +2117,20 @@ function boardStart(
   }
 
   let board = make(5);
-  show(board, deps.log);
-  for (let tries = 0; tries < 3; tries++) {
+  // Nothing found leaves the board as it was: the line says so, the question comes again.
+  const searchFor = (phrase: string): boolean => {
+    const b = search(phrase, false);
+    if (typeof b === 'string') {
+      deps.log(b);
+      return false;
+    }
+    board = b;
+    show(board, deps.log);
+    return true;
+  };
+  if (find === undefined || !searchFor(find)) show(board, deps.log);
+  // Searches and the whole list are not wrong answers: only what is not understood counts.
+  for (let wrong = 0; wrong < 3;) {
     const answer = deps.ask(`Which one? [${board.enter === 'new' ? 'n' : board.enter + 1}]: `);
     // Ctrl-D at the question is a cancel, not "no terminal": start nothing.
     if (answer === null) return { kind: 'abort', lines: ['no answer — nothing started'] };
@@ -2076,8 +2140,13 @@ function boardStart(
       show(board, deps.log);
       continue;
     }
+    if (pick?.kind === 'find') {
+      searchFor(pick.phrase);
+      continue;
+    }
     if (pick) return outcomeOf(pick, []);
-    deps.log(`  1–${board.rows.length}, a, n or f`);
+    wrong++;
+    deps.log(`  1–${board.rows.length}, a, /<phrase>, n or f`);
   }
   return { kind: 'abort', lines: ['nothing started'] };
 }
@@ -2613,6 +2682,12 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     log('vdx ai: --intercom starts the mail session in a new conversation — it takes no --conversation');
     return EXIT_USAGE;
   }
+  if (opts.find !== undefined && (opts.fresh || opts.focused || opts.intercom || opts.conversation || opts.restart)) {
+    log(
+      'vdx ai: --find picks from the conversations it finds — not with --new, --focused, --intercom, --conversation or --restart',
+    );
+    return EXIT_USAGE;
+  }
   const prepared = prepare(opts.path, deps, opts.focused === true, opts.intercom === true);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
@@ -2681,14 +2756,19 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   const wrapSkills = environment.session?.wrap_skills ?? [];
   const onBoard =
     opts.list === true ||
+    opts.find !== undefined ||
     (isClaude(plan.command) && !opts.conversation && !opts.restart && !plan.intercom && !wantsNew);
   let boardChoice: ConversationChoice | null = null;
   let boardNew = false;
   if (onBoard) {
     if (!isClaude(plan.command)) {
-      log(`vdx ai: --list shows Claude Code's agents and conversations; the agent here is ${plan.command}`);
+      log(
+        `vdx ai: --${opts.find !== undefined ? 'find' : 'list'} reads Claude Code's agents and conversations; the agent here is ${plan.command}`,
+      );
       return EXIT_USAGE;
     }
+    // A search nobody can be asked about is printed with the commands for its rows, as --list is.
+    const ask = deps.interactive && !opts.dryRun;
     const outcome = boardStart(
       plan,
       deps,
@@ -2696,7 +2776,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       procs,
       wrapSkills,
       { focused: focusedOf, mail: mailOf },
-      opts.list ? 'print' : deps.interactive && !opts.dryRun ? 'ask' : 'auto',
+      opts.list || (opts.find !== undefined && !ask) ? 'print' : ask ? 'ask' : 'auto',
+      opts.find,
     );
     switch (outcome.kind) {
       case 'listed':

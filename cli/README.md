@@ -134,7 +134,10 @@ another machine's conversation is continued there. Unless the choice is plain
 none running and this machine's newest conversation not finished) it shows one
 list of the agents on every machine and the conversations nobody runs, with
 their state; Enter never takes one your seat already shows; without a terminal,
-this machine's. `vdx ai --list` prints the list and starts nothing.
+this machine's. `vdx ai --list` prints the list and starts nothing. `vdx ai --find
+"<phrase>"` (or `/<phrase>` at the list's question, 0.45+) lists the conversations
+whose replies — yours and the agent's — have the phrase: a piece of a screen left
+after tmux fell finds its conversation.
 
 Every command takes `--help` (`-h`) and runs nothing with it. An unknown option,
 a stray argument or a value flag without its value is refused with exit 2

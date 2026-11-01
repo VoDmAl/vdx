@@ -61,6 +61,7 @@ import {
   commandLine as slashLine,
   hookLine,
   promptLine,
+  replyLine,
   skillLine,
   startedOn,
   userLine,
@@ -1323,6 +1324,63 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(remoteRuns()).toEqual([]);
     });
 
+    describe('the search: `/<phrase>` at the question and --find (P5)', () => {
+      const said = (id: string, machine: string, lines: string[], minutesAgo: number) =>
+        writeConversation(path.join(home, 'cc'), root, id, [startedOn(machine), ...lines], minutesAgo);
+
+      it('`/<phrase>` at the list: the conversations that have it — a wrapped one too; Enter continues it', () => {
+        withWrap();
+        remoteLive = [];
+        conv(ID.a, 'm3', 5);
+        said(
+          ID.b,
+          'lft',
+          [userLine('go'), replyLine('Список для ответа готов: 17 незаявленных'), skillLine('vdm:wrap')],
+          60,
+        );
+        answers = ['/nothing like it', '/17 НЕЗАЯВЛЕННЫХ', ''];
+        expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+        expect(text()).toContain('Enter → 1 · /<phrase> find · n new · f new focused');
+        expect(text()).toContain('has «nothing like it» — searched what you and the agent said in 2 conversations');
+        expect(text()).toMatch(
+          /— «17 НЕЗАЯВЛЕННЫХ» in 1 of 2 conversations\n.*\n {2}1\) lft .*bbbbbbbb {2}finished \(wrap\)/,
+        );
+        expect(text()).toContain('       agent: «Список для ответа готов: 17 незаявленных»');
+        expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+        expect(remoteRuns()).toEqual([]);
+      });
+
+      it('--find at a terminal: the search first, where a plain start would continue without asking', () => {
+        conv(ID.a, 'lft', 5);
+        said(ID.b, 'lft', [userLine('the screen said: server exited unexpectedly')], 60);
+        answers = [''];
+        expect(runAi({ ...opts, path: root, find: 'server exited' }, deps())).toBe(EXIT_OK);
+        expect(text()).toContain('you: «the screen said: server exited unexpectedly»');
+        expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+      });
+
+      it('--find with nobody to ask: printed with the command for each row; nothing asked or started', () => {
+        remoteLive = [];
+        conv(ID.a, 'lft', 5);
+        said(ID.b, 'm3', [userLine('server exited unexpectedly')], 60);
+        answers = ['should not be read'];
+        expect(runAi({ ...opts, path: root, find: 'server exited' }, deps({ interactive: false }))).toBe(EXIT_OK);
+        expect(text()).toContain(`       vdx ai@m3 ${shellQuote(root)} --conversation ${ID.b}`);
+        expect(text()).not.toContain('Enter →');
+        expect(answers).toHaveLength(1);
+        expect(runs()).toEqual([]);
+        expect(remoteRuns()).toEqual([]);
+      });
+
+      it('--find with --new, --focused or --conversation: refused, nothing started', () => {
+        for (const over of [{ fresh: true }, { focused: true }, { conversation: ID.a }]) {
+          expect(runAi({ ...opts, path: root, find: 'x', ...over }, deps())).toBe(EXIT_USAGE);
+        }
+        expect(text()).toContain('vdx ai: --find picks from the conversations it finds');
+        expect(runs()).toEqual([]);
+      });
+    });
+
     it('--report: this machine on the project — live sessions, conversations typed here, its transcripts', () => {
       conv(ID.a, 'lft', 30);
       conv(ID.b, 'm3', 5);
@@ -2132,6 +2190,9 @@ describe('vdx ai@host', () => {
     const base = { host: 'm3', from: 'lft', projectPath: '/h/p', home: '/h', version: '1.0.0', opts };
     expect(remoteAiArgs({ ...base, tty: true }).slice(0, 2)).toEqual(['-t', 'm3']);
     expect(remoteAiArgs({ ...base, tty: false }).slice(0, 2)).toEqual(['-T', 'm3']);
+    expect(remoteAiArgs({ ...base, opts: { ...opts, find: "it's here" }, tty: true })[2]).toContain(
+      `--find 'it'\\''s here'`,
+    );
   });
 
   describe('the remote script, run by a shell against a stub vdx', () => {

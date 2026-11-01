@@ -94,7 +94,8 @@ export type Pick =
   | { kind: 'agent'; agent: AgentFact }
   | { kind: 'conversation'; conversation: Conversation; machine: string | null }
   | { kind: 'new'; focused: boolean }
-  | { kind: 'all' };
+  | { kind: 'all' }
+  | { kind: 'find'; phrase: string };
 
 export interface BoardInput {
   project: string;
@@ -116,6 +117,14 @@ export interface BoardInput {
   silent?: string[];
   /** How many conversations nobody runs to show; `all` — every one. */
   limit?: number | 'all';
+  /**
+   * A search (`/<phrase>`, `--find`): the agents and conversations given are what it found, all
+   * shown; under each row, the text around the phrase, by conversation id. `searched` — how many
+   * conversations it read.
+   */
+  find?: { phrase: string; searched: number; around: Map<string, string> };
+  /** Nobody is asked: under each row the command that reaches it, and no keys. */
+  reach?: (p: Pick) => string | null;
   now?: Date;
 }
 
@@ -165,26 +174,36 @@ export function buildBoard(input: BoardInput): Board {
   const mail = input.agents.filter((a) => a.mail);
   const runningIds = new Set(input.agents.map((a) => a.conversation).filter(Boolean));
   const idleAll = input.conversations.filter((c) => !runningIds.has(c.id) && continuable(c));
-  const shown = input.limit === 'all' ? idleAll : idleAll.slice(0, input.limit ?? SHOWN);
+  const all = input.limit === 'all' || input.find !== undefined;
+  const shown = all ? idleAll : idleAll.slice(0, typeof input.limit === 'number' ? input.limit : SHOWN);
 
   const rows: Pick[] = [];
   const lines: string[] = [];
+  // Under a row: what a search found in it, and the command that reaches it when nobody is asked.
+  const under = (p: Pick, id: string | null) => {
+    const found = id ? input.find?.around.get(id) : undefined;
+    const command = input.reach?.(p);
+    for (const l of [found, command]) if (l) lines.push(`       ${l}`);
+  };
   const width = Math.max(0, ...agents.map((a) => (a.session ?? `pid ${a.pid}`).length));
   for (const a of agents) {
-    rows.push({ kind: 'agent', agent: a });
+    const row: Pick = { kind: 'agent', agent: a };
+    rows.push(row);
     const where = (a.session ?? `pid ${a.pid}`).padEnd(width);
     const what = [a.focused ? `focused${a.topic ? ` ${quoted(a.topic)}` : ''}` : '', stateWord(a, now), quoted(a.title)]
       .filter(Boolean)
       .join(' · ');
     const open = openWord(a, seat);
     lines.push(`  ${rows.length}) ${a.machine.padEnd(4)} ${where}  ${what}${open ? `   ${open}` : ''}`);
+    under(row, a.conversation);
   }
   for (const a of mail)
     lines.push(`     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the mail session — not yours to attach`);
   if (shown.length) lines.push('  conversations nobody runs:');
   for (const c of shown) {
     const machine = input.behind?.get(c.id) ?? input.machineOf(c);
-    rows.push({ kind: 'conversation', conversation: c, machine });
+    const row: Pick = { kind: 'conversation', conversation: c, machine };
+    rows.push(row);
     const state = [
       input.behind?.has(c.id)
         ? `not here yet from ${machine} — continues there`
@@ -198,43 +217,51 @@ export function buildBoard(input: BoardInput): Board {
     lines.push(
       `  ${rows.length}) ${(machine ?? '?').padEnd(4)} ${describeAge(c.updated, now)}  ${c.id.slice(0, 8)}  ${state}${c.title ? ` · ${quoted(c.title)}` : ''}`,
     );
+    under(row, c.id);
   }
 
   // Enter: the agent with work in it nobody at this seat looks at, the last active; else the
   // newest conversation cut off; else an agent waiting for a first prompt; else a new one.
-  // Never one a terminal here shows already (DL #2), never a wrapped one.
+  // Never one a terminal here shows already (DL #2), never a wrapped one. What a search found
+  // was asked for, wrapped or not: the first a terminal here does not show.
   const pickAt = (ok: (p: Pick) => boolean) => {
     const i = rows.findIndex(ok);
     return i < 0 ? null : i;
   };
-  const enter =
-    pickAt((p) => p.kind === 'agent' && freeWork(p.agent, seat)) ??
-    pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
-    pickAt((p) => p.kind === 'agent' && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty') ??
-    'new';
+  const enter = input.find
+    ? (pickAt((p) => !(p.kind === 'agent' && openAtSeat(p.agent, seat))) ?? (rows.length ? 0 : 'new'))
+    : (pickAt((p) => p.kind === 'agent' && freeWork(p.agent, seat)) ??
+      pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
+      pickAt((p) => p.kind === 'agent' && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty') ??
+      'new');
 
-  const unread = input.limit === 'all' ? 0 : (input.unread ?? 0);
+  const unread = all ? 0 : (input.unread ?? 0);
   const hidden = idleAll.length - shown.length + unread;
-  const head =
-    `${input.project} — ${agents.length} running, ${input.total} conversation${input.total === 1 ? '' : 's'}` +
-    (input.limit === 'all' ? '' : ` (${shown.length} shown)`);
+  const head = input.find
+    ? `${input.project} — ${quoted(input.find.phrase)} in ${rows.length} of ${input.find.searched} conversations`
+    : `${input.project} — ${agents.length} running, ${input.total} conversation${input.total === 1 ? '' : 's'}` +
+      (input.limit === 'all' ? '' : ` (${shown.length} shown)`);
   const behind = input.behind?.size ?? 0;
   const notes = [
     ...(input.silent ?? []).map((m) => `  note: ${m} does not answer over ssh — what runs there is not known`),
     ...(behind
-      ? [`  note: ${behind} conversation${behind === 1 ? '' : 's'} not here yet from another machine (sync behind)`]
+      ? [
+          `  note: ${behind} conversation${behind === 1 ? '' : 's'} not here yet from another machine (sync behind)` +
+            (input.find ? ` — ${behind === 1 ? 'its' : 'their'} latest part is not searched` : ''),
+        ]
       : []),
   ];
   const keys = [
     `Enter → ${enter === 'new' ? 'n' : enter + 1}`,
-    ...(hidden > 0 ? [`a all (${unread ? 'up to ' : ''}${hidden} more)`] : []),
+    ...(input.find ? ['a the whole list'] : hidden > 0 ? [`a all (${unread ? 'up to ' : ''}${hidden} more)`] : []),
+    input.find ? '/<phrase> another search' : '/<phrase> find',
     'n new',
     'f new focused',
   ];
-  return { lines: [head, ...lines, ...notes, `  ${keys.join(' · ')}`], rows, enter };
+  return { lines: [head, ...lines, ...notes, ...(input.reach ? [] : [`  ${keys.join(' · ')}`])], rows, enter };
 }
 
-/** The person's answer: a row, `a`, `n`, `f`; Enter is the marked one. Null — not understood. */
+/** The person's answer: a row, `a`, `/<phrase>`, `n`, `f`; Enter is the marked one. Null — not understood. */
 export function readAnswer(answer: string, board: Board): Pick | null {
   const a = answer.trim();
   if (a === '') return board.enter === 'new' ? { kind: 'new', focused: false } : board.rows[board.enter]!;
@@ -242,5 +269,6 @@ export function readAnswer(answer: string, board: Board): Pick | null {
   if (/^f$/i.test(a)) return { kind: 'new', focused: true };
   if (/^a(ll)?$/i.test(a)) return { kind: 'all' };
   if (/^\d+$/.test(a)) return board.rows[Number(a) - 1] ?? null;
-  return null;
+  const phrase = a.match(/^\/\s*(.+)$/)?.[1];
+  return phrase ? { kind: 'find', phrase } : null;
 }
