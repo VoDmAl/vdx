@@ -35,12 +35,14 @@ const contextOf = (stdout: string): string =>
 describe('plugin SessionStart hook', () => {
   let dir: string;
   let bin: string;
+  let nodeBin: string;
   let log: string;
+  // Node from a folder of its own: its install folder holds a global vdx on a machine that has one.
   const run = (env: Record<string, string>, withVdx = true) =>
     spawnSync('/bin/sh', [HOOK], {
       encoding: 'utf8',
       env: {
-        PATH: [...(withVdx ? [bin] : []), path.dirname(process.execPath), '/usr/bin', '/bin'].join(':'),
+        PATH: [...(withVdx ? [bin] : []), nodeBin, '/usr/bin', '/bin'].join(':'),
         STUB_LOG: log,
         CLAUDE_PROJECT_DIR: '/projects/my project',
         ...env,
@@ -52,7 +54,10 @@ describe('plugin SessionStart hook', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-hook-'));
     bin = path.join(dir, 'bin');
     log = path.join(dir, 'calls.log');
+    nodeBin = path.join(dir, 'node-bin');
     fs.mkdirSync(bin);
+    fs.mkdirSync(nodeBin);
+    fs.symlinkSync(process.execPath, path.join(nodeBin, 'node'));
     fs.writeFileSync(path.join(bin, 'vdx'), STUB, { mode: 0o755 });
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
