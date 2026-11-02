@@ -2283,6 +2283,61 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAiRestore(false, deps())).toBe(EXIT_OK);
     expect(text()).toContain('nothing to bring back');
   }, 60_000);
+
+  /** A Tmux whose attach plays the terminal: `onAttach` decides what happens while it is attached. */
+  const attaching = (onAttach: (n: number, t: Tmux) => number) => {
+    const sessions: string[] = [];
+    const t = new (class extends Tmux {
+      override attach(session: string): number {
+        sessions.push(session);
+        return onAttach(sessions.length, this);
+      }
+    })(socket);
+    return { t, sessions };
+  };
+
+  it('the tmux server falls under the attach: the terminal waits for its session and attaches again (DL #11)', () => {
+    hook(agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]), ID.a);
+    const { t, sessions } = attaching((n, self) => {
+      if (n === 1) self.tryRun(['kill-server']);
+      return n === 1 ? 1 : 0;
+    });
+    let restored = false;
+    const d: AiDeps = {
+      ...deps(),
+      tmux: t,
+      // The first wait is when something brings the agents back: here, a restore from another terminal.
+      sleep: (ms) => {
+        if (restored) return sleepSync(ms);
+        restored = true;
+        runAiRestore(false, { ...deps(), log: () => {} });
+      },
+    };
+    expect(runAi({ ...opts, path: root, detach: false }, d)).toBe(EXIT_OK);
+    expect(sessions).toEqual(['proj@testhost', 'proj@testhost']);
+    expect(text()).toContain('⚠ the tmux server here fell under proj@testhost — waiting for it to come back');
+    expect(text()).toContain('↻ proj@testhost is back — attaching');
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').map((a) => a.proc.args)).toEqual([
+      `/bin/sh ${claude()} --base --resume ${ID.a}`,
+    ]);
+  }, 30_000);
+
+  it('a detach leaves the server as it was: no wait; a fallen server with no record: said, no wait', () => {
+    hook(agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]), ID.a);
+    const detached = attaching(() => 0);
+    expect(runAi({ ...opts, path: root, detach: false }, { ...deps(), tmux: detached.t })).toBe(EXIT_OK);
+    expect(detached.sessions).toHaveLength(1);
+    expect(text()).not.toContain('fell');
+
+    fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
+    logs = [];
+    const fell = attaching((_, self) => (self.tryRun(['kill-server']), 1));
+    expect(runAi({ ...opts, path: root, detach: false }, { ...deps(), tmux: fell.t })).toBe(1);
+    expect(fell.sessions).toHaveLength(1);
+    expect(text()).toContain(
+      '⚠ the tmux server here fell, and vdx has no record of proj@testhost to bring it back — vdx ai starts it',
+    );
+  }, 30_000);
 });
 
 describe('vdx ai@host', () => {

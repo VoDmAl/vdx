@@ -172,7 +172,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 a wrap, comes back in a new conversation, as a place. Left out: the
                 mail session, a conversation running now (here or on another
                 machine) or continued on another machine since. With --dry-run:
-                what it would start. A plain start offers the same as r
+                what it would start. A plain start offers the same as r. A
+                terminal vdx ai attached waits for its session when the server
+                falls under it, and attaches again once a restore brings it back
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,

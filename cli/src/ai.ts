@@ -232,6 +232,8 @@ const WAITING_OPTION = '@vdx_waiting';
 const TOPIC_OPTION = '@vdx_topic';
 /** A mail session's pane closes this long after `--close`, so the call returns and the turn ends. */
 const CLOSE_DELAY_S = 2;
+/** How often a terminal whose tmux server fell looks for its session to come back. */
+const REATTACH_POLL_MS = 2_000;
 const USER_ENVIRONMENT_FILE = '.vdx-environment.yaml';
 /** Tried in order when no profile names an agent. Started plain, with no flags. */
 const FALLBACK_AGENTS = ['claude', 'codex'] as const;
@@ -1226,14 +1228,70 @@ function finish(
     const token = deps.env[CMUX_TOKEN_ENV_VAR];
     if (focused && token && /^[0-9a-f]+$/.test(token))
       deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
-    const watch =
-      focused && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
-    const status = deps.tmux.attach(session, insideTmux, { ...process.env, [SEAT_MARK_ENV_VAR]: seat });
-    watch?.stop();
+    const attach = () => {
+      const watch =
+        focused && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
+      const status = deps.tmux.attach(session, insideTmux, { ...process.env, [SEAT_MARK_ENV_VAR]: seat });
+      watch?.stop();
+      return status;
+    };
+    // The tmux server fell under the attach — a crash, a kill-server: its session comes back with
+    // `vdx ai --restore`, and this terminal with it (vdx-ai-predictable DL #11). A detach leaves the
+    // server as it was, and so does a switch-client inside tmux.
+    let before = insideTmux ? null : currentServer(deps.tmux);
+    let status = attach();
+    while (before && fellUnder(before, session, deps)) {
+      if (!awaitSession(session, before, deps)) return status;
+      before = currentServer(deps.tmux);
+      status = attach();
+    }
     return status;
   }
   deps.log(`attach: ${deps.tmux.attachHint(session)}`);
   return ok ? EXIT_OK : EXIT_LAUNCH_FAILED;
+}
+
+/** The record vdx keeps of `session` under `server` (restore.ts) — what a restore brings back. */
+function recordOf(session: string, server: TmuxServer, deps: AiDeps): boolean {
+  try {
+    return lostRecords(deps.env, deps.home, currentServer(deps.tmux), server.socket).some(
+      (r) => r.session === session && r.server.pid === server.pid && r.server.started === server.started,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The server the attach began on is gone, and vdx has the record that brings `session` back. */
+function fellUnder(before: TmuxServer, session: string, deps: AiDeps): boolean {
+  const now = currentServer(deps.tmux);
+  if (now && now.pid === before.pid && now.started === before.started) return false;
+  if (recordOf(session, before, deps)) return true;
+  deps.log(`⚠ the tmux server here fell, and vdx has no record of ${session} to bring it back — vdx ai starts it`);
+  return false;
+}
+
+/**
+ * Wait for `session` to come back after its server fell: `vdx ai --restore` brings it, run in any
+ * terminal or by whatever starts tmux again. False — the record is gone and the session did not
+ * come (the restore left it out); Ctrl-C leaves at any time.
+ */
+function awaitSession(session: string, before: TmuxServer, deps: AiDeps): boolean {
+  deps.log(
+    `⚠ the tmux server here fell under ${session} — waiting for it to come back: vdx ai --restore ` +
+      `(in any terminal, or after tmux starts again) brings back every agent it took down; Ctrl-C leaves`,
+  );
+  for (;;) {
+    if (deps.tmux.hasSession(session)) {
+      deps.log(`↻ ${session} is back — attaching`);
+      return true;
+    }
+    if (!recordOf(session, before, deps)) {
+      deps.log(`${session} did not come back — vdx ai starts it`);
+      return false;
+    }
+    deps.sleep(REATTACH_POLL_MS);
+  }
 }
 
 /** `vdx ai@<host>`: an ssh destination such as `m3` — never an option to ssh. */

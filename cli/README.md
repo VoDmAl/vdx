@@ -141,7 +141,8 @@ whose replies — yours and the agent's — have the phrase: a piece of a screen
 after tmux fell finds its conversation. After the tmux server fell (0.46+), a plain
 start opens the list with what it took down, and Enter (`r`) brings those agents
 back — each in its tmux session, conversation, mode and topic; `vdx ai --restore`
-brings back every one on the machine without a question. The plugin's
+brings back every one on the machine without a question; a terminal `vdx ai`
+attached waits for its session and attaches again (0.47+). The plugin's
 session-start hook keeps the record of each agent pane for it, in
 `~/.local/state/vdx/`.
 
