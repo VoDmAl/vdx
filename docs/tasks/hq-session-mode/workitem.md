@@ -38,7 +38,7 @@ relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focu
 
 ## Текущая модель
 
-**Код, тесты, документация и живой запуск невыпущенного CLI — готовы (DL #6); выпуска ещё нет; сет v1.12.0 на GitHub.**
+**Выпущено 2026-11-03: CLI 0.49.0 (`2be8326`, код — `a96eb97`), плагин 0.14.0, сет v1.12.0; на lft и m3. Итог echelon отправлен; первый настоящий запуск на global-auth-gap сошёлся (DL #8). Открыто: значок 👑 — выпуск 0.49.1 и письмо nas-info (DL #9), правки по живому от владельца, след проб у echelon (Sidetrack #3).**
 
 - **Режим** `--hq`: метка `VDX_HQ=1`, значение режима `hq` в записи панели и в `processMode`; с `--focused` и `--intercom`
   — отказ. Читается как у соседей: `VDX_FOCUSED` важнее (DL #1).
@@ -46,7 +46,7 @@ relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focu
   `--focused "<тема>"` сама тема. Идёт только в новый разговор: при продолжении агент получил бы новый ход (DL #2).
 - **Разговор.** Запуск — новый. `--hq --restart` продолжает её разговор, а не начинает новый, как у `--intercom`;
   `--hq --conversation <id>` возвращает в разговор (DL #3).
-- **Знак** — `@vdx_topic` = `📥 HQ` и описание рабочего места cmux; intercom и хук плагина читают тему только у focused
+- **Знак** — `@vdx_topic` = `👑 HQ` (DL #9, до 0.49.1 — `📥 HQ`) и описание рабочего места cmux; intercom и хук плагина читают тему только у focused
   (DL #4).
 - **Владельцу не мешает:** разговор узнаётся по строке хука `vdx ai --check`, как у сессии intercom; обычные запуски его не
   продолжают, в списке — строка без номера с командой входа (DL #5).
@@ -96,6 +96,7 @@ relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focu
 
 ### #4 / 2026-11-03 / Знак — `@vdx_topic` = `📥 HQ`; значок в заголовке — у nas-info
 
+**Superseded-by:** #9
 **Source:** assistant
 **Basis:** observed
 **Basis-detail:** прочитано 2026-11-03 на lft. vdm 2.72.0 `intercom-common.sh`: `intercom_focused_sessions` берёт тему только
@@ -141,7 +142,59 @@ Next actions. Локальная сессия intercom в список не по
 **Why:** unit-тесты идут на поддельном агенте; порядок запуска, окружение MCP и первый промпт видны только на настоящем.
 **Implication:** echelon может полагаться на `VDX_HQ` в своём MCP-сервере. В Next actions — что проверить на выпущенном.
 
+### #7 / 2026-11-03 / На выпущенном 0.49.0: разговор помечен, обычный запуск его не берёт
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** lft, 2026-11-03, `vdx --version` 0.49.0, пробный `hq_args`, папка vdx. Транскрипт `feb88ed3` — строка
+`this is the project's HQ session` есть (3 вхождения), запись панели — `vdx@lft-hq hq null`. После конца сессии `vdx ai --list` и
+`--dry-run` этот разговор не называют (0 строк), хотя он был самым свежим. Сессию закрыл раньше, чем агент ответил: транскрипт
+дописался при выходе, проверке это не помешало; ответ агента в этой пробе не видел, в DL #6 видел. Транскрипт удалён, список сошёлся с записанным
+до запуска. Не проверено по-прежнему: окно канала на проекте echelon и описание cmux.
+**Context:** DL #6 оставил пометку разговора на выпущенное: хук зовёт установленный vdx.
+**Why:** на этой пометке держится «обычный `vdx ai` её не выбирает» для разговоров после её конца.
+**Implication:** DL #5 подтверждён на выпущенном CLI. Остаток — живой прогон владельца.
+
+### #8 / 2026-11-03 / Первый настоящий запуск: всё, что оставалось непроверенным, сошлось
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** lft, 2026-11-03, 16:24 EST, владелец запустил `vdx ai '<global-auth-gap>' --hq` из терминала cmux, vdx 0.49.0, claude 2.1.312;
+прочитано в 16:26 EST, сессию не трогал. `global-auth-gap@lft-hq`, подключён 1 терминал, `@vdx_topic` = `📥 HQ`, `@vdx_mode` = `hq` (сверка, которую
+просил nas-info). Агент: `claude /echelon:whatsup --dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon`,
+`VDX_HQ=1` у него и у `python -m echelon mcp`. В панели `❯ /echelon:whatsup` и идёт разбор: первый промпт дошёл вместе с окном канала.
+`hqalive-global-auth-gap-lft.json` свежий, `pid` — этот MCP-сервер; транскрипт `9084b269` несёт строку HQ-сессии; снимок cmux —
+`workspaces.2.customDescription = 📥 HQ`; `vdx ai --list` — `global-auth-gap@lft-hq  the HQ session · working   open here — vdx ai --hq`.
+Значок 📥 в сайдбаре cmux глазами проверяет только владелец.
+**Context:** DL #6 и #7 оставили на этот запуск окно канала и описание cmux.
+**Why:** на проекте-потребителе echelon всё работает вместе: флаг канала, первый промпт, отметка, знак.
+**Implication:** технический критерий успеха выполнен. Открыты только правки по живому от владельца и след проб (Sidetrack #3).
+
+### #9 / 2026-11-03 / Знак — корона: `👑 HQ` вместо `📥 HQ`
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** владелец, посмотрев на 📥 в сайдбаре cmux: «Да, виден. Правда это не совсем иконка подходящая для HQ. У HQ скорее корона или не знаю звездочка». Выбор
+короны из двух — мой, назван владельцу в ответе; довод — комментарий `~/.tmux.conf`: cmux вырезает из заголовков значки-спиннеры Claude Code (`✢ ✶ ✻ ✽ ✳ · …`), звезда на них похожа.
+Вырезает ли cmux 👑, живьём не проверено, до ответа nas-info.
+**Context:** 📥 предложил я (DL #4) по смыслу «входящие». Владельцу роль важнее содержимого: «шляпа мастера» (DL #5 кристалла echelon).
+**Why:** знак для того, чтобы роль была видна сразу. Менять значок дёшево: константа в `ai.ts`, значок в заголовке у nas-info.
+**Implication:** `HQ_TOPIC` = `👑 HQ` с 0.49.1. У живой `global-auth-gap@lft-hq` опция поменяна руками. Письмо nas-info `hq-session-title-icon-crown`. Письма echelon и ai-dev-plugins
+называли `📥 HQ`; не поправлял: они текст знака не читают.
+**Supersedes:** #4
+
 ## Sidetracks
+
+### #3. Пробы в папке vdx оставили отметки у echelon
+
+**Возникло в:** чтение `data/watch/` при первом настоящем запуске, 2026-11-03
+**Описание:** MCP-сервер echelon при `VDX_HQ=1` пишет `hqalive-<проект>-<машина>.json` и один раз `hqsince-<проект>.json`. Мои две пробы (DL #6, #7)
+оставили `hqsince-vdx.json` и `hqalive-vdx-lft.json`. Убирая пробы, я проверил только транскрипты, а не этот след; поэтому «остатков нет» было верно лишь о
+транскриптах. По `hooks.plain_mode` такой проект считается «запускал, её нет»; доходит ли это до vdx без `signals/sources.yaml`, не проверял. Файлы — данные
+echelon, письмо `hq-since-vdx-probe`. Следующая проба `--hq` в чужой папке оставит то же: пробовать лучше с `VDX_HQ` только у агента-заглушки или предупредить
+echelon заранее.
+
+**Status:** open
 
 ### #1. `--find` не ищет в разговорах HQ-сессии
 
@@ -169,13 +222,16 @@ anyway?». То же сегодня у сессии intercom. Строка др�
       запуск её не берёт, тема `--focused` уходит промптом (DL #6)
 - [x] Сет: `v1.12.0` (`5cec6ee`, тег и `main` на GitHub, 2026-11-03) — `agent.hq_args: ["/echelon:whatsup"]`; зеркало и
       `DEFAULT_BASELINE` — в коммите кода, комментарий `intercom-session-mode` Sidetrack #9 — с ним
-- [ ] Коммит кода в vdx и `vdx push`, с ним бухгалтерия выпуска 0.48.0 соседней сессии (`HANDOFF`, журнал, `intercom-session-mode`)
-- [ ] На выпущенном: разговор HQ-сессии помечен, обычный `vdx ai` его не продолжает; описание cmux у HQ-сессии; первый промпт с
-      окном канала на проекте echelon — when: 0.49 на станции; check: `vdx --version`
-- [ ] Выпуск CLI (minor) и плагина — коммит, `vdx push`, владелец `vdx publish minor`; на lft и m3
-- [ ] Outcome to `echelon`: intercom reply hq-session-mode --done "<что сделано, версия, VDX_HQ, правка профиля, машины>" --ball "<кто — что>"
-- [ ] Письмо nas-info: `@vdx_mode` = `hq` по `VDX_HQ`, значок в заголовке терминала — after: выпуск
-- [ ] Живой прогон на global-auth-gap, обратная связь владельца — when: владелец запустил `vdx ai --hq` там; check: `tmux ls | grep -- -hq`
+- [x] Коммит кода в vdx и `vdx push` — `a96eb97`, с ним бухгалтерия выпуска 0.48.0 соседней сессии; CI прошёл за 212 с
+- [x] На выпущенном: разговор HQ-сессии помечен, обычный `vdx ai` его не продолжает (DL #7)
+- [x] Выпуск CLI 0.49.0 (`2be8326`, тег `v0.49.0`) и плагина 0.14.0; на lft и m3 (`npm update -g --prefer-online`, 2026-11-03)
+- [x] Outcome to `echelon`: `hq-session-mode-outcome` (2026-11-03), сессию `echelon-5f` разбудил
+- [x] Письмо nas-info: `nas-info/hq-session-title-icon` (2026-11-03), их сессию intercom поднял; письмо ai-dev-plugins о `@vdx_topic` и `VDX_HQ` — `ai-dev-plugins/hq-session-vdx-side`, ответа не просит
+- [x] Ответ nas-info на `hq-session-title-icon`: 📥 на lft и m3 (`-outcome`, 2026-11-03); их сверка на первом запуске — `@vdx_mode` = `hq` (DL #8)
+- [x] Первый настоящий запуск на global-auth-gap: первый промпт с окном канала, `VDX_HQ` у MCP-сервера, описание cmux, строка в списке (DL #8)
+- [ ] Значок 👑 (DL #9): код — выпуск CLI 0.49.1, команда владельца `vdx publish patch`; заголовок — итог nas-info на `hq-session-title-icon-crown`; живьём владелец видит 👑 в сайдбаре — when: их итог и выпуск; check: `npm view @vodmal/vdx-cli version`, `/vdm:intercom check`
+- [ ] Обратная связь владельца по живому использованию HQ-сессии — when: владелец скажет, что поправить; check: его слово в этой теме
+- [ ] Sidetrack #3: отметки проб убраны — when: echelon убрал их по письму `hq-since-vdx-probe`; check: `ls '/Users/vdm/AI Projects/echelon/data/watch/' | grep -- hq.*-vdx`
 - [ ] Sidetrack #1: решить по живому использованию, искать ли `--find` в разговорах HQ-сессии
 - [ ] Sidetrack #2: убрать лишний вопрос про агента на другой машине, если мешает вживую
 

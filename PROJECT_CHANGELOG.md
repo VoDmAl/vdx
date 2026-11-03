@@ -10,7 +10,8 @@
 её: `VDX_HQ=1`, сессия tmux `<имя>-hq`, одна на проект и машину, первый промпт из `agent.hq_args` (сет v1.12.0), знак — `@vdx_topic`
 и описание рабочего места cmux. Обычные запуски её не берут, список называет её без номера, `--restore` и `vdx move` её
 возвращают. `vdx ai --focused "<тема>"` открывает новый разговор этой темой, а подсказка плагина «вне темы» даёт готовую строку.
-Выйдет в CLI 0.49, плагин 0.14 ([hq-session-mode](docs/tasks/hq-session-mode/workitem.md), письмо echelon `hq-session-mode`).
+Вышло в CLI 0.49.0, плагин 0.14.0 ([hq-session-mode](docs/tasks/hq-session-mode/workitem.md), письмо echelon `hq-session-mode`). Знак
+`👑 HQ` вместо `📥 HQ` — слово владельца после первого запуска, выйдет в 0.49.1 (DL #9).
 
 ## 2026-11-02
 

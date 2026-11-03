@@ -3049,7 +3049,7 @@ interface Topic {
 
 const AGENT_TAKES_TOPIC = "the agent takes it from the user's first message";
 /** An HQ session's sign: what the workspace's description shows (hq-session-mode DL #4). */
-const HQ_TOPIC: Topic = { text: '📥 HQ', from: "the HQ session's sign" };
+const HQ_TOPIC: Topic = { text: '👑 HQ', from: "the HQ session's sign" };
 
 /**
  * The topic of the focused session a start makes (focused-topic DL #3): the one named with

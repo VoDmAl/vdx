@@ -2144,7 +2144,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(deps().agentHq!(hq.proc.pid)).toBe(true);
     expect(deps().agentMail!(hq.proc.pid)).toBe(false);
     expect(hq.proc.args).toMatch(/fake-agent \/first prompt --base --chan plugin:x@y$/);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim()).toBe('📥 HQ');
+    expect(tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim()).toBe('👑 HQ');
     expect(logs.join('\n')).not.toContain('keeps running');
 
     // Asked again: the one running, never a second.
@@ -2166,7 +2166,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     logs = [];
     expect(runAi({ ...opts, path: root, hq: true, dryRun: true }, deps())).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain("hq:       the project's HQ session; first: /first prompt");
-    expect(logs.join('\n')).toContain("topic:    «📥 HQ» (the HQ session's sign)");
+    expect(logs.join('\n')).toContain("topic:    «👑 HQ» (the HQ session's sign)");
     expect(logs.join('\n')).toContain(`aside:    proj@testhost ${plain.pane.paneId} — not the HQ session, left alone`);
 
     // --close is not for it.
@@ -2539,7 +2539,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     ]);
     expect(fs.existsSync(path.join(base, `hq-${resumed[0]!.proc.pid}`))).toBe(true);
     // Its sign stays through the restart.
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('📥 HQ');
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('👑 HQ');
     fs.writeFileSync(
       path.join(cc(), 'sessions', `${resumed[0]!.proc.pid}.json`),
       JSON.stringify({ pid: resumed[0]!.proc.pid, sessionId: ID.a, status: 'idle', statusUpdatedAt: Date.now() }),
@@ -2624,7 +2624,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       ['proj@testhost-hq', `/bin/sh ${claude()} --base --resume ${ID.a}`],
     ]);
     expect(fs.existsSync(path.join(base, `hq-${now[0]!.proc.pid}`))).toBe(true);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('📥 HQ');
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('👑 HQ');
   }, 60_000);
 
   /** A Tmux whose attach plays the terminal: `onAttach` decides what happens while it is attached. */
