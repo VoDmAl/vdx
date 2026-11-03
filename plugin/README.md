@@ -116,11 +116,13 @@ first line `🎯 off topic «…»` and where to put it aside; edits, commits an
 letters off the topic wait for the user's word. The model judges; the hook
 only reads the option. In any other session it exits at once.
 
-In the project's mail session, started with `vdx ai --intercom` (vdx 0.36+),
+In the project's intercom session, started with `vdx ai --intercom` (vdx 0.36+),
 the line says that letters and wakes for the project come there and nobody
 sits at it, and how it ends itself: `vdx ai --close`, with `--waiting <n>`
-when questions to the user are still unanswered. The line, kept in the
-transcript, is how vdx later knows the conversation is the mail session's.
+when questions to the user are still unanswered. In a session the user started
+or attached to from a terminal it says the session stays and waits for the next
+wake (vdx 0.48+). The line, kept in the
+transcript, is how vdx later knows the conversation is the intercom session's.
 
 ## Limitations
 

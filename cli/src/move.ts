@@ -688,7 +688,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
   const startAgain = (place: (f: Found) => string) => {
     for (const f of closed) {
       if (f.mode === 'mail') {
-        log(`  ${describeSession(f)}: the mail session — the next letter starts it`);
+        log(`  ${describeSession(f)}: the intercom session — the next letter starts it`);
         continue;
       }
       const status = deps.restart({

@@ -28,7 +28,7 @@ set_it="\`vdx ai $root --focused \"<topic>\"\` (it changes this session's topic 
 if [ -n "$topic" ]; then
   text=$(cat <<EOF
 vdx ai: the topic of this focused session is «${topic}»
-· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «${topic}»» in the user's language (Russian: «🎯 вне темы «${topic}»»), and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's mail session, a session of its own (\`vdx ai --new\`). A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it. The user names another topic («тема теперь Y»): run $set_it.
+· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «${topic}»» in the user's language (Russian: «🎯 вне темы «${topic}»»), and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's intercom session, a session of its own (\`vdx ai --new\`). A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it. The user names another topic («тема теперь Y»): run $set_it.
 EOF
 )
 else

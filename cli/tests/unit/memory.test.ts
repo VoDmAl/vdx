@@ -382,7 +382,8 @@ describe('fixMemory', () => {
         path.join(dir, 'claude', '.claude.json'),
         JSON.stringify({ projects: Object.fromEntries(dirs.map((d) => [d, { hasTrustDialogAccepted: true }])) }),
       );
-    const moveLine = /^Claude Code has not trusted this folder yet: .*a detached start \(the mail session\) is refused/;
+    const moveLine =
+      /^Claude Code has not trusted this folder yet: .*a detached start \(the intercom session\) is refused/;
     trust([from]);
     write(settings, JSON.stringify({ autoMemoryDirectory: `${from}/.claude/memory/` }));
     expect(

@@ -94,11 +94,11 @@ report.ts      markdown, ansi, json
   состояние — у GitHub через `hosting.ts`. Тем же путём `vdx publish` пушит
   коммит выпуска (кристалл `hosting-extension`, DL #8–#10).
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
-  с машиной и разговором, почтовая сессия проекта (`--intercom`, `--close`) и
+  с машиной и разговором, сессия intercom проекта (`--intercom`, `--close`) и
   тема focused-сессии — опция tmux `@vdx_topic` (`--focused <тема>`, кристалл
   `focused-topic`); `cmux.ts` — тема описанием workspace cmux, пока `vdx ai` держит `tmux attach`
   (наблюдатель — `bin/vdx-cmux-topic.cjs`, DL #6); `conversations.ts` — разговоры Claude Code проекта, машина,
-  на которой каждый запускали, был ли запуск почтовым, последняя тема, доверяет ли Claude Code папке
+  на которой каждый запускали, был ли запуск сессией intercom, последняя тема, доверяет ли Claude Code папке
   (`claudeTrusts`: отказ `--detach`, строка после переноса папки), рождён ли разговор `/clear`, сколько в нём
   набрано и закончен ли он wrap-скиллом профиля; `board.ts` — один список голого `vdx ai` (кристалл
   `vdx-ai-predictable`): состояние агента, черновик в строке ввода, какая строка Enter; факты собирает

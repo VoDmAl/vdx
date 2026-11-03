@@ -125,8 +125,8 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 tmux. Attached from a cmux terminal (here or @host), the
                 workspace shows the topic as its description while vdx ai holds
                 the attach, and drops it after; one you set by hand stays
-  --intercom    the project's mail session: a new conversation in a tmux
-                session of its own (<name>-mail), one per project and machine —
+  --intercom    the project's intercom session: a new conversation in a tmux
+                session of its own (<name>-intercom), one per project and machine —
                 a running one is attached to, never a second. The agent, its
                 hooks and MCP servers get VDX_INTERCOM=1: letters and wakes for
                 the project go there, and your own session stays quiet; the
@@ -136,8 +136,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 Started by the agent that has a letter and nobody to wake:
                 vdx ai --intercom --detach <project>
   --close [--waiting <n>]
-                inside the mail session: it ends itself — its pane closes 2 s
-                later. --waiting <n>: n questions to you still unanswered; the
+                inside the intercom session: it ends itself — its pane closes 2 s
+                later; one you started or attached to from a terminal stays, and
+                only the mark changes. --waiting <n>: n questions to you still unanswered; the
                 project's other tmux sessions here get @vdx_waiting = n (without
                 it the mark is cleared). Anywhere else: refused, nothing closed
   --conversation <id>
@@ -145,7 +146,7 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 it, or start one next to the agents running here
   --restart     restart the running agent in its pane — applies a changed profile;
                 with --new, --focused or --conversation, it is replaced by that;
-                with --intercom, the mail session gets a new conversation.
+                with --intercom, the intercom session gets a new conversation.
                 Without it, an agent running without the profile's flags is
                 a question in a terminal: Enter attaches to it as is, r
                 restarts it, q leaves it
@@ -170,7 +171,7 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 name, or the next free one), conversation, mode and topic, attached
                 to by nobody. One with nothing typed since /clear, or finished with
                 a wrap, comes back in a new conversation, as a place. Left out: the
-                mail session, a conversation running now (here or on another
+                intercom session, a conversation running now (here or on another
                 machine) or continued on another machine since. With --dry-run:
                 what it would start. A plain start offers the same as r. A
                 terminal vdx ai attached waits for its session when the server
@@ -355,7 +356,7 @@ every machine answers over ssh, Syncthing has caught up with both paths there
 (changes on the way are waited for a minute), no container mounts the folder, and
 no Claude Code session of a project is in a turn or waiting for an answer. An idle
 session is a question at a terminal — Enter closes it and starts it again in the
-new place, in the same conversation (a mail session: the next letter starts it);
+new place, in the same conversation (an intercom session: the next letter starts it);
 without a terminal the move is refused. A process working in the folder is named;
 when the new place is on another volume (mv copies, then deletes), it refuses the
 move until it stops — a shell does not.
@@ -844,7 +845,7 @@ function cmdAi(opts: ParsedArgs): void {
     process.exit(runAiReport(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
   }
   if (opts.flags.close === true || opts.flags.waiting !== undefined) {
-    // Run inside the mail session, about that session: nothing to start, no other machine.
+    // Run inside the intercom session, about that session: nothing to start, no other machine.
     const others = Object.keys(opts.flags).filter((f) => f !== 'close' && f !== 'waiting');
     if (opts.flags.close !== true || others.length > 0 || opts.cmd !== 'ai') {
       process.stderr.write(

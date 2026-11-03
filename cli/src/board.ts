@@ -105,11 +105,11 @@ export interface BoardInput {
   /** The machine the person sits at. */
   seat: string;
   agents: AgentFact[];
-  /** The project's conversations as read here, newest first, the mail session's left out. */
+  /** The project's conversations as read here, newest first, the intercom session's left out. */
   conversations: Conversation[];
   /** How many conversations the project has in all, read or not. */
   total: number;
-  /** How many of them were not read: some may be the mail session's or empty ones. */
+  /** How many of them were not read: some may be the intercom session's or empty ones. */
   unread?: number;
   machineOf: (c: Conversation) => string | null;
   /** Conversations whose copy here is behind the machine that writes them: id → that machine. */
@@ -206,7 +206,9 @@ export function buildBoard(input: BoardInput): Board {
     under(row, a.conversation);
   }
   for (const a of mail)
-    lines.push(`     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the mail session — not yours to attach`);
+    lines.push(
+      `     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the intercom session — not yours to attach`,
+    );
   if (shown.length) lines.push('  conversations nobody runs:');
   for (const c of shown) {
     const machine = input.behind?.get(c.id) ?? input.machineOf(c);

@@ -531,7 +531,7 @@ export function fixMemory(projectRoot: string, state: MemoryState, ctx: MemoryCt
       // Claude Code trusts a folder by its path: the moved one is new to it (Sidetrack #2).
       if (state.kind === 'moved' && claudeTrusts(root, ctx.env, ctx.home) === false)
         done.push(
-          'Claude Code has not trusted this folder yet: its first start here stops on the trust window — start vdx ai here once and answer it; a detached start (the mail session) is refused until then',
+          'Claude Code has not trusted this folder yet: its first start here stops on the trust window — start vdx ai here once and answer it; a detached start (the intercom session) is refused until then',
         );
       return done;
     }

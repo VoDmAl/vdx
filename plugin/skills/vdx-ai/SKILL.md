@@ -18,7 +18,7 @@ from a personal profile, not from a command anyone types:
   that is there to wake the agent (a channel flag);
 - `resume_args` — continue the last conversation on every start except `--new`,
   `--focused` and `--intercom`;
-- `intercom_args` — what the project's mail session starts with (its first
+- `intercom_args` — what the project's intercom session starts with (its first
   prompt), right after the command.
   For Claude Code vdx picks which one: the session-start line opens with the
   machine this session runs on (``vdx ai: this machine is `lft` ``), and that
@@ -64,17 +64,19 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   your own focused session changes its topic and starts nothing (in a
   session that is not focused it is refused). The same when the user names
   another topic.
-- **A letter for a project, and nobody to wake there: its mail session.**
+- **A letter for a project, and nobody to wake there: its intercom session.**
   `vdx ai --intercom --detach <project root>` (vdx 0.36+) starts it on this
   machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
-  (`<name>-mail`) that opens with the profile's `agent.intercom_args`. One per
+  (`<name>-intercom`) that opens with the profile's `agent.intercom_args`. One per
   project and machine: when one runs, the command says so and starts nothing.
   This one you run yourself — it touches no session anyone sits at.
-- **When the session-start line says this is the project's mail session:**
+- **When the session-start line says this is the project's intercom session:**
   nobody sits at it. When a check of the inbox shows nothing left to take, end
   it yourself — say what was done first, then `vdx ai --close` (the pane goes
   2 s later); with questions to the user still unanswered,
-  `vdx ai --close --waiting <n>`. Anywhere else `--close` is refused.
+  `vdx ai --close --waiting <n>`. If the line says the user started this one and
+  it stays, say what was done and wait for the next wake: `--close` there only
+  moves the number. Anywhere else `--close` is refused.
 
 ## Commands
 
@@ -90,8 +92,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
 | `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+); run inside the focused session by its agent — a new topic, nothing started |
-| `vdx ai --intercom [--detach] [path]` | the project's mail session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
-| `vdx ai --close [--waiting <n>]` | inside the mail session: it ends itself; n — questions to the user still unanswered |
+| `vdx ai --intercom [--detach] [path]` | the project's intercom session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
+| `vdx ai --close [--waiting <n>]` | inside the intercom session: it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |
 | `vdx ai --help` | flags and exit codes |

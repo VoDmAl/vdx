@@ -31,8 +31,10 @@ import { at, dict, str } from './narrow.ts';
 /** The opening of `vdx ai --check`'s text; the label is an ssh destination from the other machines. */
 const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
 const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
-/** The opening of the line `vdx ai --check` adds in a mail session (`vdx ai --intercom`). */
-export const MAIL_LINE_PREFIX = "· this is the project's mail session";
+/** The opening of the line `vdx ai --check` adds in an intercom session (`vdx ai --intercom`). */
+export const INTERCOM_LINE_PREFIX = "· this is the project's intercom session";
+/** That line under its former name: older transcripts keep it, and their conversations stay the session's. */
+const FORMER_INTERCOM_LINE_PREFIX = "· this is the project's mail session";
 /**
  * A focused session's topic, on a line of its own: `vdx ai --check` and the vdx plugin's
  * prompt hook give it, and `--focused --conversation <id>` reads the last one back
@@ -238,8 +240,8 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
         const label = part.match(MACHINE_LINE_RE)?.[1];
         if (label && LABEL_RE.test(label)) {
           machine = label;
-          // The same text says whether that start was a mail session's.
-          mail = part.includes(MAIL_LINE_PREFIX);
+          // The same text says whether that start was an intercom session's.
+          mail = part.includes(INTERCOM_LINE_PREFIX) || part.includes(FORMER_INTERCOM_LINE_PREFIX);
         }
         topic = part.match(TOPIC_LINE_RE)?.[1] ?? topic;
       }

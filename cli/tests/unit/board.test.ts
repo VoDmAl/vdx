@@ -144,10 +144,10 @@ describe('buildBoard: one list, Enter marked', () => {
     expect(b.lines.join('\n')).toContain('not here yet from lft');
   });
 
-  it('the mail session is a line, not a row', () => {
-    const b = board([agent({ mail: true, session: 'proj@m3-mail' }), agent({ pid: 2, conversation: ID.b })]);
+  it('the intercom session is a line, not a row', () => {
+    const b = board([agent({ mail: true, session: 'proj@m3-intercom' }), agent({ pid: 2, conversation: ID.b })]);
     expect(b.rows).toHaveLength(1);
-    expect(b.lines.join('\n')).toContain('the mail session');
+    expect(b.lines.join('\n')).toContain('the intercom session');
   });
 });
 
