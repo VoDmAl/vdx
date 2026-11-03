@@ -1,4 +1,4 @@
-# vdx — Handoff (2026-11-01, @vodmal/vdx-cli@0.46.0)
+# vdx — Handoff (2026-11-03, @vodmal/vdx-cli@0.48.0)
 
 Карта для новой сессии: что есть, где лежит, что ждёт, на чём спотыкаются.
 Читать первой. Правила работы — [CLAUDE.md](CLAUDE.md), замысел —
@@ -8,20 +8,20 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.46.0` — в npm с 2026-11-01 (`6d86a75`), Node 22 и
-  новее; на m3 и lft — 0.46.0 с 2026-11-01 (`npm update -g --prefer-online`).
-- **Сет** `vdx-rubric-vodmal@v1.11.0` (schema 0.3; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
+- **CLI** `@vodmal/vdx-cli@0.48.0` — в npm с 2026-11-03 (`5ce6131`), Node 22 и
+  новее; на m3 и lft — 0.48.0 с 2026-11-03 (`npm update -g --prefer-online`).
+- **Сет** `vdx-rubric-vodmal@v1.12.0` (schema 0.3; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
   `branch-protection`; v1.7.0 (2026-10-22) — ключ `git.personal_hosts`; v1.8.0
   (2026-10-23) — зеркала gitolite в нём и личный хук `vdx-memory`, нужен vdx 0.38+.
   `DEFAULT_BASELINE` в `cli/src/init.ts` и сет внутри CLI — `@v1.7.0` в 0.37–0.38,
-  `@v1.8.0` с 0.39, `@v1.10.0` с 0.44, `@v1.11.0` с 0.46.
+  `@v1.8.0` с 0.39, `@v1.10.0` с 0.44, `@v1.11.0` с 0.46, `@v1.12.0` с 0.49.
 - **Манифест** — `[_.vdx]` в `mise.toml` (с 0.26), у vdx тоже. Старый `[vdx]`
   читается; echelon перенёс (`fb4f525`, 2026-10-14), у mediko перенёс vdx
   (2026-10-15, по просьбе владельца; `mise.toml` mediko не в git).
-- **Плагин** vdx 0.13.0 (`plugin/`, 2026-11-01: хук передаёт `session_id` в `vdx ai --check` при vdx 0.46+;
-  строка `--restore` в скилле), едет через маркетплейс vodmal.
+- **Плагин** vdx 0.13.1 (`plugin/`, 2026-11-03: «сессия intercom» в скилле и хуке; 0.13.0, 2026-11-01: хук передаёт
+  `session_id` в `vdx ai --check` при vdx 0.46+, строка `--restore` в скилле), едет через маркетплейс vodmal.
 - **CI** — GitHub Actions, Node 22 и 24, шаги `mise run check`,
   `mise run test` и `mise run test:e2e`; по понедельникам — `check:code:security`.
 - **vdx по своей рубрике — L4** (аудит 2026-10-21, CLI 0.34.0, сет v1.5.0):
@@ -39,7 +39,7 @@
 | `vdx publish <patch\|minor\|major>` | выпуск одной командой: вход в npm, bump, publish, тег, push, ожидание registry |
 | `vdx push [path]` | push ветки; ветка на GitHub с обязательными проверками получает коммит через `vdx-gate/<ветка>`, когда CI его проверил (с 0.31) |
 | `vdx doctor [path]` | окружение и хуки, токен GitHub у репо на GitHub, где память Claude Code; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` и переносит память в `.claude/memory/` (с 0.37) |
-| `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--restart`, `--detach`, `--dry-run`, `--list`, `--find`, `--check`; `vdx ai --restore` — агенты, которых унёс упавший tmux (с 0.46) |
+| `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--intercom`, `--hq` (с 0.49), `--restart`, `--detach`, `--dry-run`, `--list`, `--find`, `--check`; `vdx ai --restore` — агенты, которых унёс упавший tmux (с 0.46) |
 | `vdx-mcp` | MCP-сервер для агента (`vdx_audit`, `vdx_build`, …) |
 
 У каждой команды есть `--help`; чужой аргумент — отказ, exit 2.
@@ -53,7 +53,8 @@
 
 | Кристалл | Статус | Что открыто |
 |---|---|---|
-| [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | имя «сессия intercom», `-intercom`, панели без вопроса oh-my-zsh, поднятая человеком остаётся (DL #9, #10) — выходит в 0.48; сессия intercom `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
+| [intercom-session-mode](docs/tasks/intercom-session-mode/workitem.md) | dormant с 2026-10-22 | имя «сессия intercom», `-intercom`, панели без вопроса oh-my-zsh, поднятая человеком остаётся (DL #9, #10) — в 0.48.0; сессия intercom `vdx ai --intercom` и `vdx ai --close` — в 0.36.0, проверено на выпущенном (DL #8); ответы ai-dev-plugins, nas-info, echelon — есть; запуск из `send` — у ai-dev-plugins, только с `intercom.mail-session: true`; открыты побеги: окно доверия при `--detach` (#4), строка выбора разговора (#5), место на lft (#1), окно закрытия (#2) |
+| [hq-session-mode](docs/tasks/hq-session-mode/workitem.md) | in-progress с 2026-11-03 | HQ-сессия `vdx ai --hq`, тема `--focused` как первый промпт, готовая строка в подсказке «вне темы» (письмо echelon): код, тесты, документация и живой запуск невыпущенного CLI — в дереве; выпуск CLI 0.49 и плагина 0.14, сет v1.12.0, итог echelon, письмо nas-info о значке — впереди |
 | [focused-topic](docs/tasks/focused-topic/workitem.md) | in-progress с 2026-10-27 | тема focused-сессии: `vdx ai --focused "<тема>"`, опция tmux `@vdx_topic`, хук `UserPromptSubmit` плагина 0.11 — CLI 0.41.0 и плагин 0.11.0 (2026-10-29), 0.11.1 — хук под UTF-8; живьём: тема, сообщение не по теме, смена изнутри; описание workspace cmux из `vdx ai` (DL #6) — в 0.43.0, живьём с m3 через `vdx ai@lft` (владелец, 2026-10-30: нареканий нет); защита описания, поставленного руками, — в 0.44.0 (Sidetrack #2), на обеих станциях; nas-info — письмо о выпуске 2026-10-31, ждём их приёмку; письма по теме — у intercom, vdm 2.66.0 (DL #7): `@vdx_topic` и строку темы в `vdx ai --check` менять только с письмом ai-dev-plugins; разбор промахов — 2026-11-12, выдача intercom ⏰ 2026-11-14 |
 | [vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md) | in-progress с 2026-10-30 | предсказуемый `vdx ai` (просьба владельца 2026-10-30): молча — три случая, иначе один список агентов всех машин и разговоров с состоянием (черновик, пустая после `/clear`, закончена wrap) и чей терминал их показывает; Enter не берёт открытую с этого места; `--list`, `--report` другой машины, пустая сессия под `--new`/`--focused` — выпуск 1: CLI 0.44.0, плагин 0.12.0, сет v1.10.0 (`session.wrap_skills`), исправления живой проверки — 0.44.1 (DL #7); поиск по фразе с экрана (`/фраза`, `--find`) — выпуск 2, CLI 0.45.0 (DL #8), владелец пробует `/фраза` в терминале; восстановление после падения tmux (запись хуком, `r` в списке, `--restore`) — выпуск 3, CLI 0.46.0, плагин 0.13.0, сет v1.11.0 (`session.restore_all`), DL #9, #10 — 2026-11-01; письмо nas-info `restore-after-tmux-falls`: `--restore` из их `tmux-server.sh` берут (срока нет), tmux 3.8 — позже; вкладки возвращает `vdx ai` — выпуск 4, часть 1, CLI 0.47.0 (DL #11); дальше: P2+ и значки (выпуск 4) |
 | [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-29 (`vdx move` — любой перенос и пауза Syncthing, DL #19–#22, в 0.42.0) | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); 0.37.1; память 34 проектов перенесена (2026-10-23); сторож коммита памяти (DL #11, #12) — в 0.38.0, хук `vdx-memory` на lft и m3 (сет v1.8.0); в 0.39.0: заметки старых сессий после переноса, второй клон, доверие к папке (DL #13, Sidetracks #2, #4, #5); идущие сессии перезапущены (2026-10-24); в 0.39.1: общая память клонов одного репо — не предупреждение (DL #14); в 0.39.2: старый путь по ссылке — тоже перенос (DL #15); коммиты памяти в личных репо — 8 из 8 (2026-10-25); nas-info: ссылки на старых корнях останутся, даты смены корня нет — к ней скрипт `--fix` (Sidetrack #6), профиль не меняется; перенос папки — `vdx move` в 0.40.0 (DL #17, #18), живьём на двух станциях; открыт до переноса папок (у владельца) и скрипта к смене корня — решение владельца 2026-10-27 (DL #16); ждём nas-info о паузе Syncthing |
@@ -89,11 +90,12 @@
 
 ### Следующий выпуск CLI
 
-0.47.0 (minor) — `vdx ai` переподключает свой терминал, когда сервер tmux упал под ним, а `--restore` вернул сессию
-(`vdx-ai-predictable` DL #11, выпуск 4, часть 1). Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит
-`--restore` в свой `tmux-server.sh` (срока нет).
+0.49.0 (minor) — HQ-сессия `vdx ai --hq`, тема `--focused` как первый промпт (`hq-session-mode`), сет v1.12.0, плагин 0.14.0. Дальше —
+P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет).
 
-Прежние: 0.46.0 (2026-11-01, `6d86a75`) — восстановление после падения tmux (`vdx-ai-predictable` выпуск 3,
+Прежние: 0.48.0 (2026-11-03, `5ce6131`) — «сессия intercom» в словах и имени tmux, поднятая человеком остаётся, панели без вопроса
+oh-my-zsh (`intercom-session-mode` DL #9, #10). 0.47.0 (2026-11-02, `68ff36f`) — `vdx ai` переподключает свой терминал, когда сервер
+tmux упал под ним, а `--restore` вернул сессию (`vdx-ai-predictable` DL #11). 0.46.0 (2026-11-01, `6d86a75`) — восстановление после падения tmux (`vdx-ai-predictable` выпуск 3,
 DL #9, #10): запись панели агента хуком (`cli/src/restore.ts`), `r` и Enter в списке после падения,
 `vdx ai --restore`; сет v1.11.0, плагин 0.13.0. 0.45.0 (2026-11-01, `439517b`) — поиск разговора по фразе с экрана (`vdx-ai-predictable`
 выпуск 2, DL #8), плагин 0.12.1. 0.44.1 (2026-10-31, `aa3e27f`) — исправления живой проверки списка (DL #7). 0.44.0 (2026-10-30,
@@ -283,7 +285,9 @@ Decision Log её кристалла.
 15. **Скрипты плагина идут под `/bin/sh` — на macOS это bash 3.2.** Под UTF-8-локалью (так Claude Code
     запускает хуки) `$имя` вплотную к не-ASCII символу читается вместе с его первым байтом:
     `«$topic»` давал «U+FFFD» (`focused-topic` Sidetrack #1). Писать `${имя}`; тест хука — и под
-    `LC_ALL=en_US.UTF-8`. С vdm 2.67.0 такое место блокирует `shell-syntax-check` ai-dev-plugins.
+    `LC_ALL=en_US.UTF-8`. С vdm 2.67.0 такое место блокирует `shell-syntax-check` ai-dev-plugins. И heredoc внутри `$( )`:
+    bash 3.2 считает его апострофы, при нечётном числе скрипт не разбирается и хук молчит (`hq-session-mode`, 2026-11-03) —
+    heredoc выносить в функцию, проверять `/bin/sh -n` и `dash -n`.
 
 ---
 

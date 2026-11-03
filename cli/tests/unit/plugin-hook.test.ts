@@ -190,6 +190,10 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
     expect(text.split('\n')[0]).toBe(topicLine('релиз 0.41 «тема» $HOME `x`'));
     expect(text).toContain('«🎯 off topic «релиз 0.41 «тема» $HOME `x`»»');
     expect(text).toContain(`run \`vdx ai '/projects/it'\\''s mine' --focused "<topic>"\``);
+    // Off the topic: the line the user copies, ready — and not one to run here.
+    expect(text).toContain(`\`vdx ai '/projects/it'\\''s mine' --focused "<the topic you suggest>"\``);
+    expect(text).toContain("here it would change this session's topic");
+    expect(text).not.toContain('--new');
     expect(r.stdout).toContain('"hookEventName":"UserPromptSubmit"');
     expect(calls()).toBe('tmux -u display-message -p -t %7 #{@vdx_topic}\n');
     const file = path.join(dir, `${ID.a}.jsonl`);

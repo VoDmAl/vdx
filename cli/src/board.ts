@@ -28,6 +28,8 @@ export interface AgentFact {
   focused: boolean;
   topic: string | null;
   mail: boolean;
+  /** The project's HQ session (`vdx ai --hq`); a vdx there older than it does not say. */
+  hq?: boolean;
   /** The seats whose terminals show its session: machine labels; `?` — another machine, which not known. */
   openAt: string[];
   title: string | null;
@@ -178,8 +180,9 @@ function continuable(c: Conversation): boolean {
 export function buildBoard(input: BoardInput): Board {
   const now = input.now ?? new Date();
   const seat = input.seat;
-  const agents = input.agents.filter((a) => !a.mail).sort(byActivity);
+  const agents = input.agents.filter((a) => !a.mail && !a.hq).sort(byActivity);
   const mail = input.agents.filter((a) => a.mail);
+  const hq = input.agents.filter((a) => a.hq);
   const runningIds = new Set(input.agents.map((a) => a.conversation).filter(Boolean));
   const idleAll = input.conversations.filter((c) => !runningIds.has(c.id) && continuable(c));
   const all = input.limit === 'all' || input.find !== undefined;
@@ -209,6 +212,14 @@ export function buildBoard(input: BoardInput): Board {
     lines.push(
       `     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the intercom session — not yours to attach`,
     );
+  // The person sits at this one, so it is named — and no key leads to it: its own command does.
+  for (const a of hq) {
+    const open = openWord(a, seat);
+    lines.push(
+      `     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}` +
+        ` — vdx ai${same(a.machine, seat) ? '' : `@${a.machine}`} --hq`,
+    );
+  }
   if (shown.length) lines.push('  conversations nobody runs:');
   for (const c of shown) {
     const machine = input.behind?.get(c.id) ?? input.machineOf(c);

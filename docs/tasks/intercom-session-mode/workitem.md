@@ -431,7 +431,8 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 не запустился», текст панели идёт следом, и письмо говорит, что этого хватило; справку `send`, где код 4 описан как
 запрет доверия, правит ai-dev-plugins.
 
-**Status:** open — до выпуска и ответа на письмо
+**Status:** resolved — 2026-11-03: в 0.48.0 (`4ed2bee`, выпуск `5ce6131`), на lft и m3; живьём `vdm@lft-intercom` —
+`DISABLE_AUTO_UPDATE=true` в панели; ответ `detached-start-omz-prompt-outcome`, справка `send` — у ai-dev-plugins
 
 ### #9. Осталось старое слово в комментарии профиля
 
@@ -440,7 +441,7 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 «The project's mail session». Правка canonical-файла — новый тег сета, а комментарий этого не стоит: едет со
 следующим тегом сета.
 
-**Status:** open — со следующим тегом сета
+**Status:** resolved — 2026-11-03: комментарий поправлен в сете v1.12.0 и зеркале (кристалл `hq-session-mode`)
 
 ## Next actions
 
@@ -485,15 +486,22 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       (echelon читает iMessage — сначала спросить его), профиль Chrome 6,2 ГБ
 - [ ] Sidetrack #2: закрытие проверено на письме, пришедшем в последние секунды
 - [x] Sidetrack #7: решение владельца — остаётся (2026-11-02, DL #10)
-- [ ] Sidetrack #8: `DISABLE_AUTO_UPDATE` в выпуске и ответ на `detached-start-omz-prompt` (что решено; справка
+- [x] Sidetrack #8: `DISABLE_AUTO_UPDATE` в 0.48.0 и ответ `detached-start-omz-prompt-outcome` (2026-11-03; справка
       `send`: код 4 — не только доверие, у них)
-- [ ] DL #9, #10: выпуск CLI 0.48 и плагина 0.13.1 — код в дереве поверх 0.47.0 (2026-11-02), коммит, `vdx push`,
-      владелец — `vdx publish minor`
-- [ ] После выпуска: `reply` на `intercom-session-name-vdx` (с версией); письмо ai-dev-plugins о `@vdx_stays`:
-      `intercom close` не обещает закрытия; сессия `-intercom` и `--close` в поднятой руками живьём на выпущенном
+- [x] DL #9, #10: выпуск CLI 0.48.0 (`4ed2bee`, выпуск `5ce6131`, тег `v0.48.0`) и плагина 0.13.1; на lft и m3
+      (`npm update -g --prefer-online`, 2026-11-03; 0.47.0 на станции не ставили, сразу 0.48.0)
+- [x] `reply` на `intercom-session-name-vdx` (`-outcome`, 2026-11-03); письмо ai-dev-plugins о `@vdx_stays` —
+      `ai-dev-plugins/vdx-stays-option`; их итог ждём, срока нет
+- [ ] Ответ ai-dev-plugins на `vdx-stays-option`: `intercom close` не обещает закрытия, строка старта и побудка для
+      сессии с `@vdx_stays`
+- [x] Живьём на 0.48.0, запуск письмом: `vdm@lft-intercom` (2026-11-03, поднята письмом `vdx-stays-option`):
+      суффикс, `DISABLE_AUTO_UPDATE=true` и `VDX_INTERCOM=1` в панели, `@vdx_stays` нет; письма разобрала, закрылась
+      сама за 360 с, в транскрипте «the intercom session closes in 2 s»
+- [ ] Живьём на 0.48.0, поднятая руками: `vdx ai --intercom` из терминала — `@vdx_stays` = 1, `--close` панель не
+      закрывает — check: `tmux ls -F '#{session_name} #{@vdx_stays}' | grep -- -intercom`, когда владелец её поднимет
 - [ ] `vdx ai --restore`: поднимать ли сессию с `@vdx_stays` после падения tmux — `vdx-ai-predictable` записал, что
       решение по Sidetrack #7 может это поменять; нужен режим в записи панели и новый запуск с `VDX_INTERCOM=1`
-- [ ] Sidetrack #9: комментарий профиля — со следующим тегом сета
+- [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано
       (`intercom-mail-start-shipped`, vdm 2.58.0, коммит `a448c72` ждёт push владельца;

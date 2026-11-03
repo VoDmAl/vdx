@@ -32,6 +32,7 @@ const conv = (id: string, over: Partial<Conversation> = {}): Conversation => ({
   typedHere: false,
   title: `t ${id.slice(0, 4)}`,
   mail: false,
+  hq: false,
   topic: null,
   bornClear: false,
   typed: 3,
@@ -148,6 +149,24 @@ describe('buildBoard: one list, Enter marked', () => {
     const b = board([agent({ mail: true, session: 'proj@m3-intercom' }), agent({ pid: 2, conversation: ID.b })]);
     expect(b.rows).toHaveLength(1);
     expect(b.lines.join('\n')).toContain('the intercom session');
+  });
+});
+
+describe('buildBoard: the HQ session', () => {
+  it('is a line with its state and its own command, not a row, and not in the count', () => {
+    const b = board([
+      agent({ hq: true, session: 'proj@m3-hq', status: 'busy' }),
+      agent({ pid: 2, conversation: ID.b }),
+    ]);
+    expect(b.rows).toHaveLength(1);
+    expect(b.lines[0]).toMatch(/1 running/);
+    expect(b.lines.join('\n')).toContain('proj@m3-hq  the HQ session · working — vdx ai --hq');
+  });
+
+  it('on another machine, its command names the machine; a terminal showing it is said', () => {
+    const b = board([agent({ machine: 'lft', hq: true, session: 'proj@lft-hq', openAt: ['m3'] })]);
+    expect(b.rows).toHaveLength(0);
+    expect(b.lines.join('\n')).toContain('the HQ session · idle   open here — vdx ai@lft --hq');
   });
 });
 

@@ -79,7 +79,13 @@ export interface MoveDeps {
   /** A `move.after` command on this machine; its output goes to the person. Returns the exit status. */
   hook: (command: string, env: Record<string, string>) => number;
   /** Start the agent again in its conversation, in the new place: here (host null) or on `host`. */
-  restart: (input: { host: string | null; path: string; conversation: string; focused: boolean }) => number;
+  restart: (input: {
+    host: string | null;
+    path: string;
+    conversation: string;
+    focused: boolean;
+    hq: boolean;
+  }) => number;
   sleep: (ms: number) => void;
   today: string;
   /** How long to wait for Syncthing to catch up with a folder; default a minute. */
@@ -143,7 +149,7 @@ interface Found {
   project: number;
   live: LiveSession;
   /** Read when it is closed: from its process's environment. */
-  mode?: 'focused' | 'mail' | 'plain';
+  mode?: 'focused' | 'hq' | 'mail' | 'plain';
 }
 
 /** One copy of a project's folder, and where its `mv` runs. */
@@ -369,7 +375,7 @@ function endScript(live: LiveSession, agent: string): string {
     `p=${live.pid}`,
     `ps -o args= -p $p 2>/dev/null | grep -q -- ${shellQuote(agent)} || exit 3`,
     `if [ -r /proc/$p/environ ]; then e=$(tr '\\0' ' ' < /proc/$p/environ); else e=$(ps -E -ww -o command= -p $p 2>/dev/null); fi`,
-    'case " $e " in *" VDX_FOCUSED=1 "*) echo focused;; *" VDX_INTERCOM=1 "*) echo mail;; *) echo plain;; esac',
+    'case " $e " in *" VDX_FOCUSED=1 "*) echo focused;; *" VDX_HQ=1 "*) echo hq;; *" VDX_INTERCOM=1 "*) echo mail;; *) echo plain;; esac',
     'kill -TERM $p',
     'i=0; while kill -0 $p 2>/dev/null && [ $i -lt 40 ]; do sleep 0.25; i=$((i+1)); done',
     'kill -0 $p 2>/dev/null && exit 1',
@@ -696,6 +702,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
         path: place(f),
         conversation: f.live.conversation,
         focused: f.mode === 'focused',
+        hq: f.mode === 'hq',
       });
       log(`${status === 0 ? '✓' : '✗'} started again: ${describeSession(f)}${status === 0 ? '' : ` — exit ${status}`}`);
     }
@@ -709,7 +716,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
       return EXIT_FAILED;
     }
     const mode = ran.stdout.trim().split('\n').pop();
-    f.mode = mode === 'focused' || mode === 'mail' ? mode : 'plain';
+    f.mode = mode === 'focused' || mode === 'hq' || mode === 'mail' ? mode : 'plain';
     closed.push(f);
     log(`✓ closed ${describeSession(f)}`);
   }

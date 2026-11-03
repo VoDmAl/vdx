@@ -17,9 +17,9 @@ from a personal profile, not from a command anyone types:
   plus `confirm` for a prompt the flag causes; `wakes: true` marks a rule
   that is there to wake the agent (a channel flag);
 - `resume_args` — continue the last conversation on every start except `--new`,
-  `--focused` and `--intercom`;
-- `intercom_args` — what the project's intercom session starts with (its first
-  prompt), right after the command.
+  `--focused`, `--intercom` and `--hq`;
+- `intercom_args`, `hq_args` — what the project's intercom session and HQ session
+  start with (the first prompt of a new conversation), right after the command.
   For Claude Code vdx picks which one: the session-start line opens with the
   machine this session runs on (``vdx ai: this machine is `lft` ``), and that
   line, kept in the transcript, tells later starts whose conversation it is.
@@ -64,12 +64,24 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   your own focused session changes its topic and starts nothing (in a
   session that is not focused it is refused). The same when the user names
   another topic.
+- **A new topic for a session of its own** (vdx 0.49+): hand the user
+  `vdx ai '<root>' --focused "<topic>"`, the topic filled in, to paste into a
+  terminal: the new session opens with the topic as its first prompt. Do not
+  run it yourself: in a focused session it changes your own topic, in another
+  it is refused.
 - **A letter for a project, and nobody to wake there: its intercom session.**
   `vdx ai --intercom --detach <project root>` (vdx 0.36+) starts it on this
   machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
   (`<name>-intercom`) that opens with the profile's `agent.intercom_args`. One per
   project and machine: when one runs, the command says so and starts nothing.
   This one you run yourself — it touches no session anyone sits at.
+- **The project's HQ session: `vdx ai --hq`** (vdx 0.49+), for what comes from
+  outside. `VDX_HQ=1`, a new conversation in a tmux session of its own
+  (`<name>-hq`) that opens with the profile's `agent.hq_args`; one per project and
+  machine. The user sits at it and keeps it running: hand them the command, do
+  not start it for them. When the session-start line says this is the HQ
+  session: `vdx ai --close` is not for it, and a topic that is not its work goes
+  to a session of its own, by the line above.
 - **When the session-start line says this is the project's intercom session:**
   nobody sits at it. When a check of the inbox shows nothing left to take, end
   it yourself — say what was done first, then `vdx ai --close` (the pane goes
@@ -91,8 +103,9 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
-| `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+); run inside the focused session by its agent — a new topic, nothing started |
+| `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+), which opens a new conversation as its first prompt (vdx 0.49+); run inside the focused session by its agent — a new topic, nothing started |
 | `vdx ai --intercom [--detach] [path]` | the project's intercom session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
+| `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; every other start leaves it alone, `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one |
 | `vdx ai --close [--waiting <n>]` | inside the intercom session: it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |

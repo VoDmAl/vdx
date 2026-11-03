@@ -13,7 +13,7 @@ let base: string;
 let here: string;
 let m3: string;
 let logs: string[];
-let restarts: { host: string | null; path: string; conversation: string; focused: boolean }[];
+let restarts: { host: string | null; path: string; conversation: string; focused: boolean; hq: boolean }[];
 let sleepers: number[];
 const saved = { global: process.env['GIT_CONFIG_GLOBAL'], nosystem: process.env['GIT_CONFIG_NOSYSTEM'] };
 const CONVERSATION = '11111111-2222-4333-8444-555555555555';
@@ -288,7 +288,7 @@ describe('vdx move', () => {
     const pid = session(m3, 'idle');
     expect(move()).toBe(EXIT_MOVED);
     expect(alive(pid)).toBe(false);
-    expect(restarts).toEqual([{ host: 'm3', path: ga(here), conversation: CONVERSATION, focused: false }]);
+    expect(restarts).toEqual([{ host: 'm3', path: ga(here), conversation: CONVERSATION, focused: false, hq: false }]);
   });
 
   it('a session in a turn, or waiting for an answer, refuses the move: nothing closed, nothing moved', () => {
@@ -440,7 +440,9 @@ describe('vdx move', () => {
     expect(fs.existsSync(projDir(here))).toBe(true);
     expect(fs.existsSync(ga(here))).toBe(false);
     expect(logs.join('\n')).toContain('put back on here');
-    expect(restarts).toEqual([{ host: null, path: projDir(here), conversation: CONVERSATION, focused: false }]);
+    expect(restarts).toEqual([
+      { host: null, path: projDir(here), conversation: CONVERSATION, focused: false, hq: false },
+    ]);
     for (const home of [here, m3]) expect(pausedLog(home)).toBe('AI Projects true\nAI Projects false\n');
   });
 

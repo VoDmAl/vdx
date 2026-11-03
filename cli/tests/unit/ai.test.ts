@@ -51,6 +51,7 @@ import {
 } from '../../src/ai.ts';
 import {
   type LiveSession,
+  HQ_LINE_PREFIX,
   INTERCOM_LINE_PREFIX,
   machineLine,
   readConversation,
@@ -73,14 +74,14 @@ import { currentServer, socketDir, writeRecord } from '../../src/restore.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
-// Run from a focused session (`vdx ai --focused`), the tests carry its VDX_FOCUSED=1 into the
-// agents and tmux servers they start, and a plain start reads as a focused one.
-const runnerFocused = process.env['VDX_FOCUSED'];
+// Run from a focused or an HQ session, the tests carry its VDX_FOCUSED=1 or VDX_HQ=1 into the
+// agents and tmux servers they start, and a plain start reads as one of those.
+const runnerModes = ['VDX_FOCUSED', 'VDX_HQ'].map((name) => [name, process.env[name]] as const);
 beforeAll(() => {
-  delete process.env['VDX_FOCUSED'];
+  for (const [name] of runnerModes) delete process.env[name];
 });
 afterAll(() => {
-  if (runnerFocused !== undefined) process.env['VDX_FOCUSED'] = runnerFocused;
+  for (const [name, value] of runnerModes) if (value !== undefined) process.env[name] = value;
 });
 
 // The tests' own tmux servers, `vdx-test[-<what>]-<pid>`. kill-server leaves the socket file behind.
@@ -209,6 +210,20 @@ describe('processFocused', () => {
     }
   });
 
+  it('processMode: VDX_HQ=1 is the HQ session; with VDX_FOCUSED=1 too, focused', async () => {
+    const run = (env: NodeJS.ProcessEnv) =>
+      spawn(process.execPath, ['-e', 'setTimeout(() => {}, 5000)'], { env: { ...process.env, ...env } });
+    const hq = run({ VDX_HQ: '1', VDX_FOCUSED: '' });
+    const both = run({ VDX_HQ: '1', VDX_FOCUSED: '1' });
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      expect(processMode(hq.pid!)).toBe('hq');
+      expect(processMode(both.pid!)).toBe('focused');
+    } finally {
+      for (const p of [hq, both]) p.kill();
+    }
+  });
+
   it('processMode: VDX_INTERCOM=1 is the intercom session; with VDX_FOCUSED=1 too, focused — deaf wins', async () => {
     const run = (env: NodeJS.ProcessEnv) =>
       spawn(process.execPath, ['-e', 'setTimeout(() => {}, 5000)'], { env: { ...process.env, ...env } });
@@ -243,6 +258,7 @@ describe('parseEnvironment', () => {
     ['agent: {args: [x]}', 'agent.command'],
     ['agent: {command: claude, args: flag}', 'agent.args'],
     ['agent: {command: claude, intercom_args: "/vdm:intercom check"}', 'agent.intercom_args'],
+    ['agent: {command: claude, hq_args: "/echelon:whatsup"}', 'agent.hq_args'],
     ['agent: {command: claude, when: [{id: a}]}', 'agent.when[0].if'],
     [
       'agent: {command: claude, when: [{id: a, if: true, confirm: [{screen: x, keys: []}]}]}',
@@ -333,6 +349,36 @@ describe('planLaunch', () => {
     expect(plan().focused).toBe(false);
   });
 
+  it('the HQ session keeps the rules that wake it, has a session of its own and its first prompt', () => {
+    fs.mkdirSync(path.join(root, 'signals'));
+    fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: UTC\n');
+    const agent = { ...env.agent!, intercom_args: ['/mail'], hq_args: ['/echelon:whatsup'] };
+    const mode = (over: { hq?: boolean; focused?: boolean; intercom?: boolean }) =>
+      planLaunch({
+        environment: env,
+        profilePath: 'p.yaml',
+        agent,
+        projectRoot: root,
+        project: 'proj',
+        host: 'lft',
+        ...over,
+      });
+    const p = mode({ hq: true });
+    expect([p.hq, p.focused, p.intercom, p.sessionName, p.opening]).toEqual([
+      true,
+      false,
+      false,
+      'proj@lft-hq',
+      ['/echelon:whatsup'],
+    ]);
+    expect(p.matched).toEqual(['echelon-channel']);
+    expect(p.skipped).toEqual([]);
+    // Asked for it with another mode: that mode, no HQ session.
+    expect(mode({ hq: true, focused: true }).hq).toBe(false);
+    expect(mode({ hq: true, intercom: true }).opening).toEqual(['/mail']);
+    expect(mode({}).opening).toEqual([]);
+  });
+
   it('the intercom session keeps the rules that wake it, has a session of its own and its first prompt', () => {
     fs.mkdirSync(path.join(root, 'signals'));
     fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: UTC\n');
@@ -352,11 +398,11 @@ describe('planLaunch', () => {
     expect(p.intercom).toBe(true);
     expect(p.matched).toEqual(['echelon-channel']);
     expect(p.args).toContain('plugin:echelon@echelon');
-    expect(p.intercomArgs).toEqual(['/vdm:intercom check']);
+    expect(p.opening).toEqual(['/vdm:intercom check']);
     expect(p.sessionName).toBe('proj@lft-intercom');
     // Asked for both, it is focused, as intercom reads it — no intercom session.
     const both = mail({ focused: true });
-    expect([both.intercom, both.focused, both.sessionName, both.intercomArgs]).toEqual([false, true, 'proj@lft', []]);
+    expect([both.intercom, both.focused, both.sessionName, both.opening]).toEqual([false, true, 'proj@lft', []]);
     // A plain start does not carry the intercom session's first prompt.
     const plain = planLaunch({
       environment: env,
@@ -366,7 +412,7 @@ describe('planLaunch', () => {
       project: 'proj',
       host: 'lft',
     });
-    expect(plain.intercomArgs).toEqual([]);
+    expect(plain.opening).toEqual([]);
   });
 
   it('leaves the flag out when sources.yaml has mail but no watch (the space-hq case)', () => {
@@ -801,6 +847,21 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     // Named, it is opened all the same.
     expect(runAi({ ...opts, path: root, conversation: ID.b }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual([`--base --resume ${ID.a}`, `--base --resume ${ID.b}`]);
+  });
+
+  it("passes over the HQ session's conversations, and says so when there are no others", () => {
+    const hqStart = hookLine(`${machineLine('lft')}; …\n${HQ_LINE_PREFIX} (\`vdx ai --hq\`): …`);
+    writeConversation(path.join(home, 'cc'), root, ID.b, [hqStart, userLine('/echelon:whatsup')], 5);
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual(['--base']);
+    expect(text()).toContain(
+      "only the HQ session's conversations here (1; vdx ai --conversation <id> opens one) — starting a new one",
+    );
+    conv(ID.a, 'lft', 30);
+    answers = ['should not be read'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(runs()).toEqual(['--base', `--base --resume ${ID.a}`]);
+    expect(answers).toHaveLength(1);
   });
 
   it("a transcript with the line under its former name stays the intercom session's", () => {
@@ -1423,7 +1484,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   let profile: string;
   let logs: string[];
 
-  const writeProfile = (args: string[], wakes = false, intercomArgs: string[] = []) =>
+  const writeProfile = (args: string[], wakes = false, intercomArgs: string[] = [], hqArgs: string[] = []) =>
     fs.writeFileSync(
       profile,
       [
@@ -1432,6 +1493,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         `  args: [${args.join(', ')}]`,
         '  resume_args: [--resume-me]',
         ...(intercomArgs.length ? [`  intercom_args: [${intercomArgs.map((a) => JSON.stringify(a)).join(', ')}]`] : []),
+        ...(hqArgs.length ? [`  hq_args: [${hqArgs.map((a) => JSON.stringify(a)).join(', ')}]`] : []),
         '  when:',
         '    - id: chan',
         '      if: {config_value: {path: signals/sources.yaml, jsonpath: mail.watch}}',
@@ -1461,6 +1523,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     // from `ps -E`: the agent marks its mode itself. processFocused has its own test.
     agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
     agentMail: (pid) => fs.existsSync(path.join(base, `mail-${pid}`)),
+    agentHq: (pid) => fs.existsSync(path.join(base, `hq-${pid}`)),
     sleep: sleepSync,
     confirmTimeoutMs: 10_000,
     ask: () => null,
@@ -1482,6 +1545,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         '#!/bin/sh',
         '[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/focused-$$"',
         '[ "$VDX_INTERCOM" = 1 ] && touch "$(dirname "$0")/mail-$$"',
+        '[ "$VDX_HQ" = 1 ] && touch "$(dirname "$0")/hq-$$"',
         'echo "FAKE PROMPT: press enter"',
         'read answer',
         "printf '\\033[2J\\033[H'",
@@ -2060,6 +2124,100 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agents()).toHaveLength(1);
   }, 60_000);
 
+  it('--hq: a session of its own with its sign, one per project; the other starts leave it alone, --close too', () => {
+    writeProfile(['--base'], true, [], ['/first prompt']);
+    tmux.tryRun(['kill-server']);
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const session = 'proj@testhost-hq';
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    const plain = agents()[0]!;
+
+    expect(runAi({ ...opts, path: root, hq: true, focused: true }, deps())).toBe(EXIT_USAGE);
+    expect(runAi({ ...opts, path: root, hq: true, intercom: true }, deps())).toBe(EXIT_USAGE);
+    expect(agents()).toHaveLength(1);
+
+    // VDX_HQ=1, the first prompt right after the command, the waking rule kept, nothing resumed.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_OK);
+    const hq = agents().find((a) => a.proc.pid !== plain.proc.pid)!;
+    expect(hq.pane.session).toBe(session);
+    expect(deps().agentHq!(hq.proc.pid)).toBe(true);
+    expect(deps().agentMail!(hq.proc.pid)).toBe(false);
+    expect(hq.proc.args).toMatch(/fake-agent \/first prompt --base --chan plugin:x@y$/);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim()).toBe('📥 HQ');
+    expect(logs.join('\n')).not.toContain('keeps running');
+
+    // Asked again: the one running, never a second.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`✓ ${session}: already running with the profile, the HQ session`);
+    expect(agents()).toHaveLength(2);
+
+    // A plain start, and --new, leave it alone; the plan names it.
+    logs = [];
+    const asked: string[] = [];
+    const terminal = { ...deps(), interactive: true, ask: (p: string) => (asked.push(p), '2') };
+    expect(runAi({ ...opts, path: root, detach: true }, terminal)).toBe(EXIT_OK);
+    expect(asked).toEqual([]);
+    expect(logs.join('\n')).toContain('✓ proj@testhost: already running with the profile —');
+    logs = [];
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`aside:    ${session} ${hq.pane.paneId} — the HQ session, left alone`);
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain("hq:       the project's HQ session; first: /first prompt");
+    expect(logs.join('\n')).toContain("topic:    «📥 HQ» (the HQ session's sign)");
+    expect(logs.join('\n')).toContain(`aside:    proj@testhost ${plain.pane.paneId} — not the HQ session, left alone`);
+
+    // --close is not for it.
+    logs = [];
+    const toolOf = (agentPid: number) => () => [
+      ...listProcesses(),
+      { pid: 9_999_991, ppid: agentPid, args: 'node vdx ai --close' },
+    ];
+    expect(runAiClose(root, 0, { ...deps(), processes: toolOf(hq.proc.pid) }, 9_999_991)).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('this is not an intercom session');
+    sleepSync(2_500);
+    expect(agents()).toHaveLength(2);
+
+    // The drift of a changed profile is named with its own flag.
+    writeProfile(['--base', '--more'], true, [], ['/first prompt']);
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_DRIFT);
+    expect(logs.join('\n')).toContain(`vdx ai --restart --hq ${root}`);
+  }, 60_000);
+
+  it('--focused <topic>: the topic is the first prompt; typed at the question, or with --conversation, it is not', () => {
+    writeProfile(['--base'], true);
+    tmux.tryRun(['kill-server']);
+    const agentOf = (session: string) =>
+      findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').find((a) => a.pane.session === session)!;
+
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'релиз «0.49»' }, deps())).toBe(EXIT_OK);
+    expect(agentOf('proj@testhost').proc.args).toMatch(/fake-agent релиз «0\.49» --base$/);
+
+    // Next to it, with another topic: that one's first prompt.
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'second' }, deps())).toBe(EXIT_OK);
+    expect(agentOf('proj@testhost-2').proc.args).toMatch(/fake-agent second --base$/);
+
+    // A topic that would reach the agent as a flag stays a topic.
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, topic: '-x' }, deps())).toBe(EXIT_OK);
+    expect(agentOf('proj@testhost-3').proc.args).toMatch(/fake-agent --base$/);
+    expect(logs.join('\n')).toContain('does not go to the agent as a first prompt');
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-3:', '@vdx_topic'])?.trim()).toBe('-x');
+
+    // Typed at the question: a topic, and no turn.
+    tmux.tryRun(['kill-server']);
+    const typed = Object.create(tmux) as typeof tmux;
+    typed.attach = () => 0;
+    expect(
+      runAi({ ...opts, path: root, focused: true }, { ...deps(), interactive: true, tmux: typed, ask: () => 'typed' }),
+    ).toBe(EXIT_OK);
+    expect(agentOf('proj@testhost').proc.args).toMatch(/fake-agent --base$/);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('typed');
+  }, 60_000);
+
   it('the intercom session the person started: --close leaves its pane, the line says it stays', () => {
     writeProfile(['--base'], true, ['/first prompt']);
     tmux.tryRun(['kill-server']);
@@ -2136,6 +2294,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     processes: listProcesses,
     agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
     agentMail: () => false,
+    agentHq: (pid) => fs.existsSync(path.join(base, `hq-${pid}`)),
     sleep: sleepSync,
     confirmTimeoutMs: 5_000,
     ask: () => answers.shift() ?? null,
@@ -2174,12 +2333,13 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     fs.mkdirSync(path.join(base, 'bin'));
     fs.writeFileSync(
       claude(),
-      '#!/bin/sh\n[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/../focused-$$"\nwhile :; do sleep 1; done\n',
+      '#!/bin/sh\n[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/../focused-$$"\n' +
+        '[ "$VDX_HQ" = 1 ] && touch "$(dirname "$0")/../hq-$$"\nwhile :; do sleep 1; done\n',
       { mode: 0o755 },
     );
     fs.writeFileSync(
       path.join(base, 'env.yaml'),
-      `agent: {command: ${claude()}, args: [--base], resume_args: [--continue]}\n` +
+      `agent: {command: ${claude()}, args: [--base], resume_args: [--continue], hq_args: ["/first"]}\n` +
         'session: {multiplexer: tmux, name: "{project}@{host}", wrap_skills: [vdm:wrap]}\n',
     );
   });
@@ -2348,6 +2508,125 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(text()).toContain('nothing to bring back');
   }, 60_000);
 
+  /** The HQ session in conversation `id`, started by vdx as it would be: its pane, with the mark on the agent. */
+  const hqIn = (id: string) => {
+    expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_OK);
+    const pane = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').find(
+      (a) => a.pane.session === 'proj@testhost-hq',
+    )!;
+    fs.mkdirSync(path.join(cc(), 'sessions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(cc(), 'sessions', `${pane.proc.pid}.json`),
+      JSON.stringify({ pid: pane.proc.pid, sessionId: id, status: 'idle', statusUpdatedAt: Date.now() }),
+    );
+    writeConversation(
+      cc(),
+      root,
+      id,
+      [hookLine(`${machineLine('testhost')}; …\n${HQ_LINE_PREFIX} (\`vdx ai --hq\`): …`), userLine('/first')],
+      1,
+    );
+    return pane;
+  };
+
+  it('--hq --restart keeps its conversation, no first prompt; with --new a new one, with it', () => {
+    const before = hqIn(ID.a);
+    expect(before.proc.args).toBe(`/bin/sh ${claude()} /first --base`);
+    expect(runAi({ ...opts, path: root, hq: true, restart: true }, deps())).toBe(EXIT_OK);
+    const resumed = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(resumed.map((a) => [a.pane.session, a.proc.args])).toEqual([
+      ['proj@testhost-hq', `/bin/sh ${claude()} --base --resume ${ID.a}`],
+    ]);
+    expect(fs.existsSync(path.join(base, `hq-${resumed[0]!.proc.pid}`))).toBe(true);
+    // Its sign stays through the restart.
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('📥 HQ');
+    fs.writeFileSync(
+      path.join(cc(), 'sessions', `${resumed[0]!.proc.pid}.json`),
+      JSON.stringify({ pid: resumed[0]!.proc.pid, sessionId: ID.a, status: 'idle', statusUpdatedAt: Date.now() }),
+    );
+
+    expect(runAi({ ...opts, path: root, hq: true, restart: true, fresh: true }, deps())).toBe(EXIT_OK);
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').map((a) => a.proc.args)).toEqual([
+      `/bin/sh ${claude()} /first --base`,
+    ]);
+  }, 30_000);
+
+  it('--hq --conversation: back to it when none runs; a running one in another conversation stays, and it is said', () => {
+    writeConversation(
+      cc(),
+      root,
+      ID.b,
+      [hookLine(`${machineLine('testhost')}; …\n${HQ_LINE_PREFIX} (\`vdx ai --hq\`): …`), userLine('/first')],
+      1,
+    );
+    expect(runAi({ ...opts, path: root, hq: true, conversation: ID.b }, deps())).toBe(EXIT_OK);
+    const back = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(back.map((a) => [a.pane.session, a.proc.args])).toEqual([
+      ['proj@testhost-hq', `/bin/sh ${claude()} --base --resume ${ID.b}`],
+    ]);
+    fs.mkdirSync(path.join(cc(), 'sessions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(cc(), 'sessions', `${back[0]!.proc.pid}.json`),
+      JSON.stringify({ pid: back[0]!.proc.pid, sessionId: ID.b, status: 'idle', statusUpdatedAt: Date.now() }),
+    );
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true, conversation: ID.c }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`to switch it: vdx ai --hq --restart ${root} --conversation ${ID.c}`);
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toHaveLength(1);
+  }, 30_000);
+
+  it('--focused <topic> --conversation: the session gets the topic, the agent no new turn', () => {
+    writeConversation(cc(), root, ID.b, [startedOn('testhost'), userLine('work')], 1);
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'back', conversation: ID.b }, deps())).toBe(EXIT_OK);
+    const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(now.map((a) => a.proc.args)).toEqual([`/bin/sh ${claude()} --base --resume ${ID.b}`]);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('back');
+  }, 30_000);
+
+  it('the list names the HQ session here with no key to it, and Enter does not lead there', () => {
+    hqIn(ID.a);
+    agentIn('proj@testhost', ID.b, [startedOn('testhost'), userLine('work')]);
+    expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toMatch(/proj — 1 running/);
+    expect(text()).toContain('proj@testhost-hq  the HQ session · idle — vdx ai --hq');
+    expect(text()).toMatch(/1\) testhost proj@testhost +idle/);
+    expect(text()).not.toMatch(/\d\) testhost proj@testhost-hq/);
+  }, 30_000);
+
+  it('--restore brings the HQ session back in its conversation, mode and sign — unless one runs now', () => {
+    const pane = hqIn(ID.a);
+    hook(pane, ID.a, { VDX_HQ: '1' });
+    tmux.tryRun(['kill-server']);
+
+    logs = [];
+    expect(runAiRestore(true, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(
+      `  proj@testhost-hq: conversation ${ID.a.slice(0, 8)}, the HQ session\n    VDX_HQ=1 ${claude()} --base --resume ${ID.a}\n`,
+    );
+
+    // Started by hand since, in another conversation: the one record does not make a second.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('vdx ai --restore brings back it');
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain("· proj@testhost-hq: not brought back — the project's HQ session runs here now");
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toHaveLength(1);
+    tmux.tryRun(['kill-server']);
+
+    // With none running: back, marked, with its sign and no new turn.
+    hook(hqIn(ID.a), ID.a, { VDX_HQ: '1' });
+    tmux.tryRun(['kill-server']);
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
+    expect(now.map((a) => [a.pane.session, a.proc.args])).toEqual([
+      ['proj@testhost-hq', `/bin/sh ${claude()} --base --resume ${ID.a}`],
+    ]);
+    expect(fs.existsSync(path.join(base, `hq-${now[0]!.proc.pid}`))).toBe(true);
+    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('📥 HQ');
+  }, 60_000);
+
   /** A Tmux whose attach plays the terminal: `onAttach` decides what happens while it is attached. */
   const attaching = (onAttach: (n: number, t: Tmux) => number) => {
     const sessions: string[] = [];
@@ -2421,6 +2700,7 @@ describe('vdx ai@host', () => {
     expect(remoteAiArgs({ ...base, opts: { ...opts, find: "it's here" }, tty: true })[2]).toContain(
       `--find 'it'\\''s here'`,
     );
+    expect(remoteAiArgs({ ...base, opts: { ...opts, hq: true }, tty: true })[2]).toContain(' --hq');
   });
 
   describe('the remote script, run by a shell against a stub vdx', () => {
@@ -2802,6 +3082,27 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     // A restart that resumes keeps the chat: no wrap first.
     out = [];
     expect(runAiCheck(root, deps(chain('--x')), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).not.toContain('wrap check');
+  });
+
+  it('the HQ session: says what it is, names the line for a new topic; a restart resumes; the transcript keeps it', () => {
+    const procs = chain(
+      '--dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon',
+    );
+    expect(runAiCheck(root, deps(procs, { VDX_HQ: '1' }), 40)).toBe(EXIT_OK);
+    const text = out.join('');
+    expect(text).toContain(`${HQ_LINE_PREFIX} (\`vdx ai --hq\`)`);
+    expect(text).toContain(`\`vdx ai ${root} --focused "<topic>"\``);
+    const file = path.join(home, `${ID.a}.jsonl`);
+    fs.writeFileSync(file, [hookLine(text.trimEnd()), userLine('hi')].join('\n') + '\n');
+    const c = readConversation(file, new Date());
+    expect([c?.hq, c?.mail]).toEqual([true, false]);
+
+    // Its restart keeps the conversation: nothing to wrap first.
+    out = [];
+    expect(runAiCheck(root, deps(chain('--x'), { VDX_HQ: '1' }), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).toContain(`\`vdx ai --hq --restart ${root}\`: it stops this session and starts it again`);
+    expect(out.join('')).toContain('resuming the conversation');
     expect(out.join('')).not.toContain('wrap check');
   });
 

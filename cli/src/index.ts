@@ -67,7 +67,7 @@ const USAGE = `Usage:
   vdx publish <patch|minor|major> [--dry-run] [--force] [--no-push]
   vdx push    [project_path] [--dry-run]                     (default: cwd; through the branch's required checks)
   vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
-  vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
+  vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx move    <project_path>... <folder> [--dry-run]       (on every machine of the profile, with its Claude Code memory and conversations)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
@@ -116,11 +116,13 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 mode: plain vdx ai attaches to it as it is.
                 <topic> — what the session is about: the option @vdx_topic of
                 its tmux session (the terminal's title can show it), and the vdx
-                plugin keeps the conversation in it. Without one a terminal
-                asks — Enter leaves it to the agent, which takes it from your
-                first message; a restart keeps the session's topic, and
-                --conversation brings back the conversation's. Run by the
-                session's own agent, it changes the topic and starts nothing.
+                plugin keeps the conversation in it. A new conversation opens
+                with it as its first prompt. Without one a terminal asks — Enter
+                leaves it to the agent, which takes it from your first message;
+                what you type there is the topic, not a prompt. A restart keeps
+                the session's topic, and --conversation brings back the
+                conversation's. Run by the session's own agent, it changes the
+                topic and starts nothing.
                 A word that is a folder, with no path named, is the path. Needs
                 tmux. Attached from a cmux terminal (here or @host), the
                 workspace shows the topic as its description while vdx ai holds
@@ -135,6 +137,18 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 conversations are not continued unless named with --conversation.
                 Started by the agent that has a letter and nobody to wake:
                 vdx ai --intercom --detach <project>
+  --hq          the project's HQ session, for what comes from outside: a new
+                conversation in a tmux session of its own (<name>-hq), one per
+                project and machine — a running one is attached to, never a
+                second. You sit at it and keep it running; nothing starts it for
+                you. The agent, its hooks and MCP servers get VDX_HQ=1, the
+                profile's \`wakes\` rules stay, and it opens with agent.hq_args (its
+                first prompt). Its sign: @vdx_topic and, attached from a cmux
+                terminal, the workspace's description. Every other start leaves it
+                alone, the list names it, and --restore brings it back. --restart
+                keeps its conversation, with --new it gets a new one;
+                --conversation <id> brings it back to that one. Not with
+                --focused or --intercom; --close is not for it
   --close [--waiting <n>]
                 inside the intercom session: it ends itself — its pane closes 2 s
                 later; one you started or attached to from a terminal stays, and
@@ -387,10 +401,23 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run]',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
-    bools: ['new', 'intercom', 'restart', 'resume', 'detach', 'dry-run', 'check', 'close', 'list', 'report', 'restore'],
+    bools: [
+      'new',
+      'intercom',
+      'hq',
+      'restart',
+      'resume',
+      'detach',
+      'dry-run',
+      'check',
+      'close',
+      'list',
+      'report',
+      'restore',
+    ],
     values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
     positionals: 1,
@@ -898,6 +925,7 @@ function cmdAi(opts: ParsedArgs): void {
     focused: opts.flags.focused !== undefined,
     topic,
     intercom: opts.flags.intercom === true,
+    hq: opts.flags.hq === true,
     list: opts.flags.list === true,
     find: find?.trim(),
   };
@@ -924,11 +952,18 @@ function cmdMove(opts: ParsedArgs): void {
     process.exit(2);
   }
   const ai = { ...defaultDeps(), version: readCliVersion() };
-  const restart = (input: { host: string | null; path: string; conversation: string; focused: boolean }): number => {
+  const restart = (input: {
+    host: string | null;
+    path: string;
+    conversation: string;
+    focused: boolean;
+    hq: boolean;
+  }): number => {
     const options = {
       path: input.path,
       conversation: input.conversation,
       focused: input.focused,
+      hq: input.hq,
       detach: true,
       restart: false,
       fresh: false,

@@ -24,6 +24,7 @@ import {
   liveConversationId,
   liveSessionsHere,
   liveStartedAt,
+  HQ_LINE_PREFIX,
   INTERCOM_LINE_PREFIX,
   machineLine,
   type MachineReport,
@@ -115,6 +116,8 @@ export interface AgentProfile {
   resume_args?: string[];
   /** What an intercom session (`vdx ai --intercom`) starts with, right after the command: its first prompt. */
   intercom_args?: string[];
+  /** What an HQ session (`vdx ai --hq`) starts with, right after the command: its first prompt. */
+  hq_args?: string[];
   when?: WhenRule[];
 }
 
@@ -217,6 +220,12 @@ const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
  */
 const INTERCOM_ENV_VAR = 'VDX_INTERCOM';
 /**
+ * `1` in the environment of the project's HQ session (`vdx ai --hq`): the session for what comes
+ * from outside, so that the person's working sessions stay quiet. The person sits at it and keeps
+ * it running (hq-session-mode DL #1).
+ */
+const HQ_ENV_VAR = 'VDX_HQ';
+/**
  * In the environment of the tmux client `vdx ai` attaches: the seat — the machine the person
  * sits at — so that another start can tell a terminal at the same seat from one at another
  * (vdx-ai-predictable DL #2). tmux does not copy it into the session's environment.
@@ -273,7 +282,7 @@ export function parseEnvironment(text: string, source: string): Environment {
     if (typeof agent.command !== 'string' || agent.command.trim() === '') {
       fail('agent.command', 'must be a non-empty string');
     }
-    for (const key of ['args', 'resume_args', 'intercom_args'] as const) {
+    for (const key of ['args', 'resume_args', 'intercom_args', 'hq_args'] as const) {
       if (agent[key] !== undefined && !isStringList(agent[key])) {
         fail(`agent.${key}`, 'must be a list of strings');
       }
@@ -479,8 +488,13 @@ export interface LaunchPlan {
   skipped: string[];
   /** `vdx ai --intercom`: the project's intercom session — VDX_INTERCOM=1, a session `<name>-intercom`. */
   intercom: boolean;
-  /** agent.intercom_args: what an intercom session starts with; not required of a running agent. */
-  intercomArgs: string[];
+  /** `vdx ai --hq`: the project's HQ session — VDX_HQ=1, a session `<name>-hq`. */
+  hq: boolean;
+  /**
+   * What a new conversation of this session opens with, right after the command: agent.intercom_args,
+   * agent.hq_args, a topic named with --focused. Not required of a running agent.
+   */
+  opening: string[];
   confirm: ConfirmRule[];
   multiplexer: Multiplexer;
   sessionName: string;
@@ -499,10 +513,12 @@ export function planLaunch(input: {
   seat?: string;
   focused?: boolean;
   intercom?: boolean;
+  hq?: boolean;
 }): LaunchPlan {
   const { environment, agent, projectRoot } = input;
   const focused = input.focused === true;
   const intercom = input.intercom === true && !focused;
+  const hq = input.hq === true && !focused && !intercom;
   const ctx: Ctx = { projectRoot, stack: autoDetectStack(projectRoot), cache: new Map() };
   const args = [...(agent.args ?? [])];
   const matched: string[] = [];
@@ -532,14 +548,15 @@ export function planLaunch(input: {
     focused,
     skipped,
     intercom,
-    intercomArgs: intercom ? [...(agent.intercom_args ?? [])] : [],
+    hq,
+    opening: intercom ? [...(agent.intercom_args ?? [])] : hq ? [...(agent.hq_args ?? [])] : [],
     confirm,
     multiplexer: environment.session?.multiplexer ?? 'none',
     sessionName:
       renderSessionName(environment.session?.name ?? DEFAULT_SESSION_NAME, {
         project: input.project,
         host: input.host,
-      }) + (intercom ? '-intercom' : ''),
+      }) + (intercom ? '-intercom' : hq ? '-hq' : ''),
     machines: (environment.session?.machines ?? []).filter((m) => m.toLowerCase() !== input.host.toLowerCase()),
   };
 }
@@ -912,6 +929,8 @@ export interface AiOptions {
   topic?: string;
   /** `--intercom`: the project's intercom session — VDX_INTERCOM=1, one per project and machine. */
   intercom?: boolean;
+  /** `--hq`: the project's HQ session — VDX_HQ=1, one per project and machine. */
+  hq?: boolean;
   /** `--list`: the list of a plain start, printed; nothing is asked or started. */
   list?: boolean;
   /** `--find <phrase>`: the list of the conversations whose replies have it (vdx-ai-predictable P5). */
@@ -971,6 +990,8 @@ export interface AiDeps {
   agentFocused?: (pid: number) => boolean;
   /** Is this agent process an intercom session; default: its environment (`processMode`). */
   agentMail?: (pid: number) => boolean;
+  /** Is this agent process an HQ session; default: its environment (`processMode`). */
+  agentHq?: (pid: number) => boolean;
   /** Default `process.platform`: the folder check is for macOS. */
   platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
@@ -1077,8 +1098,8 @@ function renderPlan(
   focusedOf: (pid: number) => boolean,
   /** The session a start would make: next to running agents, one of its own. */
   session: string,
-  /** The project's agents this start leaves alone: the intercom session for the others, the others for it. */
-  aside: AgentPane[] = [],
+  /** The project's agents this start leaves alone, each with what it is. */
+  aside: { pane: PaneInfo; what: string }[] = [],
   topic: Topic | null = null,
 ): string {
   const lines = [
@@ -1095,8 +1116,12 @@ function renderPlan(
   if (plan.intercom)
     lines.push(
       `  intercom: the project's intercom session, a new conversation; first: ${
-        plan.intercomArgs.length ? plan.intercomArgs.join(' ') : '— (no agent.intercom_args: it waits for a wake)'
+        plan.opening.length ? plan.opening.join(' ') : '— (no agent.intercom_args: it waits for a wake)'
       }`,
+    );
+  if (plan.hq)
+    lines.push(
+      `  hq:       the project's HQ session; first: ${plan.opening.length ? plan.opening.join(' ') : '— (no agent.hq_args)'}`,
     );
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
@@ -1116,9 +1141,7 @@ function renderPlan(
       );
     }
     for (const a of aside) {
-      lines.push(
-        `  aside:    ${a.pane.session} ${a.pane.paneId} — ${plan.intercom ? 'not the intercom session' : 'the intercom session'}, left alone`,
-      );
+      lines.push(`  aside:    ${a.pane.session} ${a.pane.paneId} — ${a.what}, left alone`);
     }
   }
   return lines.join('\n') + '\n';
@@ -1220,15 +1243,15 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
 function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean {
   const result = settle(plan, paneId, deps);
   if (result !== 'not-running' || plan.resumeArgs.length === 0) return result === 'ok';
-  const line = agentLine(plan, plan.args);
+  const line = agentLine({ ...plan, resumeArgs: [] }, plan.args);
   deps.log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${line}`);
   deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
   return settle(plan, paneId, deps) === 'ok';
 }
 
 /**
- * Attach to the session, or name how. Attached in cmux to a focused session, the workspace shows
- * its topic while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
+ * Attach to the session, or name how. Attached in cmux to a session with a topic — a focused one,
+ * an HQ one — the workspace shows it while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
  * the mark the vdx there watches it by.
  */
 function finish(
@@ -1237,7 +1260,7 @@ function finish(
   paneId: string,
   opts: AiOptions,
   deps: AiDeps,
-  focused = false,
+  withTopic = false,
   seat: string = hostLabel(deps.env),
 ): number {
   if (deps.interactive && !opts.detach) {
@@ -1246,11 +1269,11 @@ function finish(
     deps.tmux.focus(paneId);
     const insideTmux = Boolean(deps.env['TMUX']);
     const token = deps.env[CMUX_TOKEN_ENV_VAR];
-    if (focused && token && /^[0-9a-f]+$/.test(token))
+    if (withTopic && token && /^[0-9a-f]+$/.test(token))
       deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
     const attach = () => {
       const watch =
-        focused && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
+        withTopic && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
       const status = deps.tmux.attach(session, insideTmux, { ...process.env, [SEAT_MARK_ENV_VAR]: seat });
       watch?.stop();
       return status;
@@ -1349,6 +1372,7 @@ export function remoteAiArgs(input: {
     // After the path: the word after --focused is then the topic there, never the path.
     opts.focused && (opts.topic ? `--focused ${shellQuote(opts.topic)}` : '--focused'),
     opts.intercom && '--intercom',
+    opts.hq && '--hq',
     opts.restart && '--restart',
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
@@ -1566,6 +1590,13 @@ function askMachine(host: string, deps: AiDeps, projectRoot: string): Reach | nu
   return res && res.status === 0 ? parseReach(res.stdout) : null;
 }
 
+/** Which mode an agent process was started in. */
+interface ModeOf {
+  focused: (pid: number) => boolean;
+  mail: (pid: number) => boolean;
+  hq: (pid: number) => boolean;
+}
+
 /**
  * The facts of the project's agents running here (board.ts): its session file, its transcript,
  * the terminals on its tmux session and its input line.
@@ -1576,7 +1607,7 @@ function agentFacts(
   deps: AiDeps,
   procs: ProcInfo[],
   wrapSkills: readonly string[],
-  modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
+  modeOf: ModeOf,
 ): AgentFact[] {
   if (agents.length === 0) return [];
   const clients = deps.tmux.clients();
@@ -1603,6 +1634,7 @@ function agentFacts(
       focused,
       topic: focused ? sessionTopic(deps.tmux, a.pane.session) : null,
       mail: modeOf.mail(a.proc.pid),
+      hq: modeOf.hq(a.proc.pid),
       openAt: clients.filter((k) => k.session === a.pane.session).map((k) => clientSeat(k.pid, procs, plan.host)),
       title: c?.title ?? null,
       // No transcript of the conversation it is in: nothing was written there yet.
@@ -1630,6 +1662,7 @@ export function runAiReport(pathArg: string, deps: AiDeps): number {
     agents: agentFacts(agents, plan, deps, procs, wrapSkills, {
       focused: deps.agentFocused ?? processFocused,
       mail: deps.agentMail ?? ((pid) => processMode(pid) === 'mail'),
+      hq: hqOf(deps),
     }),
     typed: [...typedHere(deps.env, deps.home, ids)],
     transcripts: files.map((f) => ({ id: path.basename(f.file, '.jsonl'), mtime: f.updated.getTime(), size: f.size })),
@@ -1659,6 +1692,9 @@ function isClaude(command: string): boolean {
 
 const resumeId = (id: string) => ['--resume', id];
 
+/** A conversation a start of the person's may continue: not the intercom or the HQ session's, not a program's. */
+const isPersons = (c: Conversation) => !c.mail && !c.hq && !c.automated;
+
 /**
  * What a choice of conversation stands on: what runs on every machine (this one from its
  * session files, the others over ssh), each conversation's machine, and how one is continued —
@@ -1668,14 +1704,22 @@ const resumeId = (id: string) => ['--resume', id];
 function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonly string[] = []) {
   const host = plan.host;
   const same = sameMachine;
-  // An intercom session's conversations are its own: a start of the person's never continues one.
+  // An intercom or HQ session's conversations are its own: a start of the person's never continues one.
   const listed =
     plan.resumeArgs.length === 0
       ? []
       : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, wrapSkills });
   // Nor a program's run through the SDK: nobody sits at it.
-  const all = listed.filter((c) => !c.mail && !c.automated);
-  const mailOnly = listed.length - all.length;
+  const all = listed.filter(isPersons);
+  const asideCount = listed.length - all.length;
+  const hqCount = listed.filter((c) => c.hq).length;
+  const whose =
+    hqCount === 0
+      ? "the intercom session's"
+      : hqCount === asideCount
+        ? "the HQ session's"
+        : "the intercom and HQ sessions'";
+  const onlyAside = `only ${whose} conversations here (${asideCount}; vdx ai --conversation <id> opens one) — starting a new one`;
   const root = shellQuote(plan.projectRoot);
   // Said from where the person sits: under `vdx ai@<host>` that is not this machine.
   const atSeat = same(plan.seat, host);
@@ -1759,7 +1803,8 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
     host,
     same,
     all,
-    mailOnly,
+    asideCount,
+    onlyAside,
     root,
     atSeat,
     on,
@@ -1810,7 +1855,8 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
     host,
     same,
     all,
-    mailOnly,
+    asideCount,
+    onlyAside,
     root,
     atSeat,
     on,
@@ -1827,12 +1873,7 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
   } = conversationContext(plan, deps);
   if (plan.resumeArgs.length === 0) return fresh(silent);
   if (all.length === 0) {
-    return fresh([
-      mailOnly
-        ? `only the intercom session's conversations here (${mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
-        : 'no conversation of this project yet — starting a new one',
-      ...silent,
-    ]);
+    return fresh([asideCount ? onlyAside : 'no conversation of this project yet — starting a new one', ...silent]);
   }
   if (found.every(idleHere)) {
     const chosen = take(found[0]!);
@@ -1914,9 +1955,11 @@ function boardStart(
   plan: LaunchPlan,
   deps: AiDeps,
   local: AgentPane[],
+  /** The project's HQ session here: named on the list, and no key leads to it. */
+  hqPanes: AgentPane[],
   procs: ProcInfo[],
   wrapSkills: readonly string[],
-  modeOf: { focused: (pid: number) => boolean; mail: (pid: number) => boolean },
+  modeOf: ModeOf,
   mode: 'ask' | 'print' | 'auto',
   find?: string,
   restore = 0,
@@ -1964,6 +2007,7 @@ function boardStart(
         focused: false,
         topic: c?.topic ?? null,
         mail: c?.mail ?? false,
+        hq: c?.hq ?? false,
         openAt: [],
         title: c?.title ?? null,
         empty: c ? isEmpty(c) : false,
@@ -1992,6 +2036,7 @@ function boardStart(
         focused: modeOf.focused(l.pid),
         topic: c?.topic ?? null,
         mail: c?.mail ?? false,
+        hq: c?.hq ?? false,
         openAt: [plan.host],
         title: c?.title ?? null,
         empty: c ? isEmpty(c) : false,
@@ -2007,8 +2052,10 @@ function boardStart(
       ? { ...a, openAt: a.openAt.map((s) => (s === '?' ? others[0]! : s)) }
       : a;
   };
-  const agents = [...here, ...outside, ...there].map(seatOf);
-  const working = agents.filter((a) => !a.mail);
+  const agents = [...here, ...agentFacts(hqPanes, plan, deps, procs, wrapSkills, modeOf), ...outside, ...there].map(
+    seatOf,
+  );
+  const working = agents.filter((a) => !a.mail && !a.hq);
   const busy = new Set(working.map((a) => a.conversation));
   // A conversation running there is written right now: its copy here is a few seconds behind, and
   // it is an agent's row, not one to continue.
@@ -2056,7 +2103,7 @@ function boardStart(
       projectRoot: plan.projectRoot,
       limit: Infinity,
       wrapSkills,
-    }).filter((c) => !c.mail && !c.automated);
+    }).filter(isPersons);
   const make = (limit: number | 'all') =>
     buildBoard({
       project: plan.project,
@@ -2065,7 +2112,7 @@ function boardStart(
       agents,
       conversations: limit === 'all' ? everyOne() : k.all,
       total: files.size,
-      unread: files.size - k.all.length - k.mailOnly,
+      unread: files.size - k.all.length - k.asideCount,
       machineOf,
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
@@ -2084,7 +2131,7 @@ function boardStart(
     const typed = typedHere(deps.env, deps.home, new Set(found.map((f) => f.id)));
     const conversations = found
       .map((f) => read.get(f.id) ?? readConversation(f.file, f.updated, wrapSkills))
-      .filter((c): c is Conversation => c !== null && !c.mail && !c.automated)
+      .filter((c): c is Conversation => c !== null && isPersons(c))
       .map((c) => (read.has(c.id) ? c : { ...c, typedHere: typed.has(c.id) }));
     const ids = new Set(conversations.map((c) => c.id));
     const ran = working.filter((a) => a.conversation !== null && ids.has(a.conversation));
@@ -2144,7 +2191,7 @@ function boardStart(
     const mineConv = ours.find((c) => !c.finished) ?? ours[0];
     const chosenAt = mineConv?.updated ?? new Date(0);
     const notes: string[] = [];
-    for (const a of [...outside, ...there].filter((x) => !x.mail)) {
+    for (const a of [...outside, ...there].filter((x) => !x.mail && !x.hq)) {
       const c = conversationOf(a);
       const which = `${c && c.updated > chosenAt ? 'a newer' : 'another'} conversation ${(a.conversation ?? '?').slice(0, 8)}, ${describeLive(k.on(a.machine), { pid: a.pid, conversation: a.conversation ?? '', tmux: a.session, status: a.status, cwd: null })}`;
       if (sameMachine(a.machine, plan.host)) notes.push(`note: ${which} — not taken: it would have two sessions`);
@@ -2190,8 +2237,8 @@ function boardStart(
     }
     const why =
       k.all.length === 0
-        ? k.mailOnly
-          ? `only the intercom session's conversations here (${k.mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+        ? k.asideCount
+          ? k.onlyAside
           : plan.resumeArgs.length
             ? 'no conversation of this project yet — starting a new one'
             : 'the profile has no resume_args — starting a new conversation'
@@ -2213,8 +2260,8 @@ function boardStart(
     const newest = continuable[0];
     if (!newest)
       return outcomeOf({ kind: 'new', focused: false }, [
-        k.mailOnly
-          ? `only the intercom session's conversations here (${k.mailOnly}; vdx ai --conversation <id> opens one) — starting a new one`
+        k.asideCount
+          ? k.onlyAside
           : plan.resumeArgs.length
             ? 'no conversation of this project yet — starting a new one'
             : 'the profile has no resume_args — starting a new conversation',
@@ -2317,7 +2364,7 @@ interface Prepared {
 }
 
 /** The project, the profile and the launch plan for `pathArg`; an exit code when there is none. */
-function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = false): Prepared | number {
+function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = false, hq = false): Prepared | number {
   const { log } = deps;
 
   const projectRoot = resolveProjectRoot(pathArg);
@@ -2367,6 +2414,7 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
       seat: seatLabel(deps.env),
       focused: asFocused,
       intercom,
+      hq,
     });
   let plan: LaunchPlan;
   try {
@@ -2417,8 +2465,8 @@ export function clientSeat(
   return host;
 }
 
-/** How an agent process was started: `vdx ai --focused`, `vdx ai --intercom`, or neither. */
-export type AgentMode = 'focused' | 'mail' | 'plain';
+/** How an agent process was started: `vdx ai --focused`, `vdx ai --intercom`, `vdx ai --hq`, or none. */
+export type AgentMode = 'focused' | 'mail' | 'hq' | 'plain';
 
 /**
  * The mode from the process's environment (`ps -E` on macOS, /proc on Linux). Both marks —
@@ -2428,7 +2476,12 @@ export function processMode(pid: number): AgentMode {
   const words = processEnvWords(pid);
   if (!words) return 'plain';
   if (words.includes(`${FOCUSED_ENV_VAR}=1`)) return 'focused';
+  if (words.includes(`${HQ_ENV_VAR}=1`)) return 'hq';
   return words.includes(`${INTERCOM_ENV_VAR}=1`) ? 'mail' : 'plain';
+}
+
+function hqOf(deps: AiDeps): (pid: number) => boolean {
+  return deps.agentHq ?? ((pid) => processMode(pid) === 'hq');
 }
 
 /** Was the process started focused — VDX_FOCUSED=1 in its environment? */
@@ -2491,16 +2544,17 @@ export function foldersWarning(denied: string[], viaTmux: boolean, fix: string |
 }
 
 /**
- * The agent's argv after the command. An intercom session's intercom_args go first: its first
+ * The agent's argv after the command. What a new conversation opens with goes first: its first
  * prompt after `--dangerously-load-development-channels <servers...>` would be read as a server.
+ * A conversation that goes on gets none: it would be a new turn (hq-session-mode DL #2).
  */
 function launchArgs(plan: LaunchPlan, args: string[]): string[] {
-  return [...plan.intercomArgs, ...args];
+  return plan.resumeArgs.length > 0 ? args : [...plan.opening, ...args];
 }
 
-/** The mark of the agent's mode in its environment, if any: `VDX_FOCUSED` or `VDX_INTERCOM`. */
+/** The mark of the agent's mode in its environment, if any: `VDX_FOCUSED`, `VDX_INTERCOM` or `VDX_HQ`. */
 function modeEnvVar(plan: LaunchPlan): string | null {
-  return plan.focused ? FOCUSED_ENV_VAR : plan.intercom ? INTERCOM_ENV_VAR : null;
+  return plan.focused ? FOCUSED_ENV_VAR : plan.intercom ? INTERCOM_ENV_VAR : plan.hq ? HQ_ENV_VAR : null;
 }
 
 /** The agent's command line; its mode's mark goes in front, for the shell in its tmux pane. */
@@ -2594,13 +2648,14 @@ export function runAiCheck(
 ): number {
   if (!resolveEnvironmentPath(deps.env, deps.home)) return EXIT_OK;
   // The hook runs in the agent's environment: a focused session's carries VDX_FOCUSED=1,
-  // an intercom session's VDX_INTERCOM=1.
+  // an intercom session's VDX_INTERCOM=1, an HQ session's VDX_HQ=1.
   const focused = deps.env[FOCUSED_ENV_VAR] === '1';
-  const intercom = !focused && deps.env[INTERCOM_ENV_VAR] === '1';
-  const prepared = prepare(pathArg, deps, focused, intercom);
+  const hq = !focused && deps.env[HQ_ENV_VAR] === '1';
+  const intercom = !focused && !hq && deps.env[INTERCOM_ENV_VAR] === '1';
+  const prepared = prepare(pathArg, deps, focused, intercom, hq);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, profilePath, plan } = prepared;
-  const vdxAi = `vdx ai${focused ? ' --focused' : intercom ? ' --intercom' : ''}`;
+  const vdxAi = `vdx ai${focused ? ' --focused' : intercom ? ' --intercom' : hq ? ' --hq' : ''}`;
 
   const lines = [
     `${machineLine(plan.host)}; the agent in this project is started with \`vdx ai\`, and its flags come from the profile ` +
@@ -2612,7 +2667,14 @@ export function runAiCheck(
   const procs = deps.processes();
   const own = findOwnAgent(procs, selfPid, plan.command);
   if (own && isClaude(plan.command))
-    keepRecord(deps, procs, own.pid, projectRoot, focused ? 'focused' : intercom ? 'mail' : 'plain', conversation);
+    keepRecord(
+      deps,
+      procs,
+      own.pid,
+      projectRoot,
+      focused ? 'focused' : intercom ? 'mail' : hq ? 'hq' : 'plain',
+      conversation,
+    );
   if (focused) {
     lines.push(
       `· this session is focused (\`vdx ai --focused\`): it works on what the user gave it — nothing should wake it, ` +
@@ -2643,6 +2705,14 @@ export function runAiCheck(
           `\`--close\` clears it.`,
       );
   }
+  // The conversation is known by this line as an HQ session's (conversations.ts): keep its opening.
+  if (hq)
+    lines.push(
+      `${HQ_LINE_PREFIX} (\`vdx ai --hq\`): the user sits at it, and what comes to the project from outside is ` +
+        `its work; a plain \`vdx ai\` leaves it alone, and \`vdx ai --close\` is not for it. A new topic that is not ` +
+        `its work goes to a session of its own: hand the user \`vdx ai ${shellQuote(projectRoot)} --focused "<topic>"\` ` +
+        `— it opens with the topic as its first prompt.`,
+    );
   if (!own) {
     lines.push(`· no ${plan.command} among the ancestors of this process — no session to compare with the profile.`);
     deps.out(lines.join('\n') + '\n');
@@ -2871,13 +2941,23 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
       done(r);
       continue;
     }
-    const prepared = prepare(r.project, deps, r.mode === 'focused');
+    const prepared = prepare(r.project, deps, r.mode === 'focused', false, r.mode === 'hq');
     if (typeof prepared === 'number') {
       result.failed++;
       done(r);
       continue;
     }
     let { plan } = prepared;
+    // One HQ session per project and machine: `vdx ai --hq` may have started one since.
+    if (
+      plan.hq &&
+      findAgentPanes(tmux.panes(), deps.processes(), plan.projectRoot, plan.command).some((a) => hqOf(deps)(a.proc.pid))
+    ) {
+      say(`· ${r.session}: not brought back — the project's HQ session runs here now`);
+      result.skipped++;
+      done(r);
+      continue;
+    }
     const id = r.conversation;
     const c = id
       ? conversationById({
@@ -2901,7 +2981,7 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     }
     const place = !c || isEmpty(c) || c.finished;
     plan = { ...plan, resumeArgs: place ? [] : resumeId(id!) };
-    const topic = plan.focused ? (r.topic ?? c?.topic ?? null) : null;
+    const topic = plan.focused ? (r.topic ?? c?.topic ?? null) : plan.hq ? HQ_TOPIC.text : null;
     let session = r.session;
     for (let n = 2; tmux.hasSession(session); n++) session = `${r.session}-${n}`;
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
@@ -2909,7 +2989,7 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     const what = !place
       ? `conversation ${short}${c.title ? ` «${c.title.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : ''}`
       : `a new conversation — ${!c ? 'none to continue' : c.finished ? `${short} was finished with a wrap` : `nothing typed in ${short} since /clear`}`;
-    const mode = plan.focused ? `, focused${topic ? ` «${topic}»` : ''}` : '';
+    const mode = plan.focused ? `, focused${topic ? ` «${topic}»` : ''}` : plan.hq ? ', the HQ session' : '';
     if (dryRun) {
       deps.out(`  ${session}: ${what}${mode}\n    ${line}\n`);
       result.started++;
@@ -2968,6 +3048,8 @@ interface Topic {
 }
 
 const AGENT_TAKES_TOPIC = "the agent takes it from the user's first message";
+/** An HQ session's sign: what the workspace's description shows (hq-session-mode DL #4). */
+const HQ_TOPIC: Topic = { text: '📥 HQ', from: "the HQ session's sign" };
 
 /**
  * The topic of the focused session a start makes (focused-topic DL #3): the one named with
@@ -3063,17 +3145,30 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     );
     return EXIT_USAGE;
   }
+  if (opts.hq && (opts.focused || opts.intercom)) {
+    log(
+      `vdx ai: --hq and --${opts.focused ? 'focused' : 'intercom'} are different sessions — ` +
+        (opts.focused
+          ? 'the one for what comes from outside, or one on a topic'
+          : 'the one you sit at, or the one for letters') +
+        '; pick one',
+    );
+    return EXIT_USAGE;
+  }
   if (opts.intercom && opts.conversation) {
     log('vdx ai: --intercom starts the intercom session in a new conversation — it takes no --conversation');
     return EXIT_USAGE;
   }
-  if (opts.find !== undefined && (opts.fresh || opts.focused || opts.intercom || opts.conversation || opts.restart)) {
+  if (
+    opts.find !== undefined &&
+    (opts.fresh || opts.focused || opts.intercom || opts.hq || opts.conversation || opts.restart)
+  ) {
     log(
-      'vdx ai: --find picks from the conversations it finds — not with --new, --focused, --intercom, --conversation or --restart',
+      'vdx ai: --find picks from the conversations it finds — not with --new, --focused, --intercom, --hq, --conversation or --restart',
     );
     return EXIT_USAGE;
   }
-  const prepared = prepare(opts.path, deps, opts.focused === true, opts.intercom === true);
+  const prepared = prepare(opts.path, deps, opts.focused === true, opts.intercom === true, opts.hq === true);
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
@@ -3086,6 +3181,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   delete deps.env[SEAT_ENV_VAR];
   delete deps.env[FOCUSED_ENV_VAR];
   delete deps.env[INTERCOM_ENV_VAR];
+  delete deps.env[HQ_ENV_VAR];
   // Under `vdx ai@<host>` the person is not here: this machine goes by its name.
   const atSeat = sameMachine(plan.seat, plan.host);
   const here = atSeat ? `here, on ${plan.host}` : `on ${plan.host}`;
@@ -3098,6 +3194,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // the intercom session are new ones.
   const wantsNew = (opts.fresh || opts.focused === true || plan.intercom) && !opts.conversation;
   if (wantsNew) plan = { ...plan, resumeArgs: [] };
+  // A topic named with the flag is also the new conversation's first prompt; one that starts with
+  // `-` would reach the agent as a flag of its own.
+  if (plan.focused && opts.topic) {
+    if (opts.topic.startsWith('-'))
+      log(`note: the topic starts with "-", so it does not go to the agent as a first prompt`);
+    else plan = { ...plan, opening: [opts.topic] };
+  }
 
   let multiplexer = plan.multiplexer;
   if (multiplexer === 'tmux' && !tmux.available()) {
@@ -3120,11 +3223,20 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     multiplexer === 'tmux' && isClaude(plan.command) && !plan.intercom
       ? lostHere(deps, plan, environment, !opts.dryRun && !opts.list)
       : null;
-  // The intercom session and the person's sessions do not see each other: --intercom is about the
-  // one intercom session, every other start leaves it alone — nobody sits at it, and it ends itself.
+  // The intercom session, the HQ session and the person's other sessions do not see each other:
+  // --intercom and --hq are about their one session, and every other start leaves those alone.
   const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
-  const running = agentsHere.filter((a) => mailOf(a.proc.pid) === plan.intercom);
+  const hqAgent = hqOf(deps);
+  const running = agentsHere.filter((a) => mailOf(a.proc.pid) === plan.intercom && hqAgent(a.proc.pid) === plan.hq);
   const aside = agentsHere.filter((a) => !running.includes(a));
+  const asideWords = aside.map((a) => ({
+    pane: a.pane,
+    what: hqAgent(a.proc.pid)
+      ? 'the HQ session'
+      : mailOf(a.proc.pid)
+        ? 'the intercom session'
+        : `not the ${plan.hq ? 'HQ' : 'intercom'} session`,
+  }));
   const focusedOf = deps.agentFocused ?? processFocused;
   const conversationOf = (a: AgentPane) => liveConversationId(deps.env, deps.home, a.proc.pid);
   // Which running agent the start is about. A new conversation, or one no agent here is in, starts
@@ -3132,9 +3244,10 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // one asked for: no second agent in it blindly.
   const inConversation = opts.conversation ? running.find((a) => conversationOf(a) === opts.conversation) : undefined;
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
-  // One intercom session per project and machine: a running one is the one, never a second next to it.
+  // One intercom or HQ session per project and machine: a running one is the one, never a second next to it.
   let alongside =
     !plan.intercom &&
+    !plan.hq &&
     running.length > 0 &&
     !opts.restart &&
     !inConversation &&
@@ -3148,7 +3261,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   const onBoard =
     opts.list === true ||
     opts.find !== undefined ||
-    (isClaude(plan.command) && !opts.conversation && !opts.restart && !plan.intercom && !wantsNew);
+    (isClaude(plan.command) && !opts.conversation && !opts.restart && !plan.intercom && !plan.hq && !wantsNew);
   let boardChoice: ConversationChoice | null = null;
   let boardNew = false;
   // Any other start says what tmux took down, with the command that brings it back.
@@ -3176,9 +3289,10 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       plan,
       deps,
       running,
+      aside.filter((a) => hqAgent(a.proc.pid)),
       procs,
       wrapSkills,
-      { focused: focusedOf, mail: mailOf },
+      { focused: focusedOf, mail: mailOf, hq: hqAgent },
       listed ? 'print' : ask ? 'ask' : 'auto',
       opts.find,
       offer,
@@ -3239,13 +3353,16 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     !current &&
     !opts.restart &&
     !plan.intercom &&
+    !plan.hq &&
     !opts.conversation &&
     (wantsNew || boardNew) &&
     running.length > 0
   ) {
-    const free = agentFacts(running, plan, deps, procs, wrapSkills, { focused: focusedOf, mail: mailOf }).find(
-      (f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused),
-    );
+    const free = agentFacts(running, plan, deps, procs, wrapSkills, {
+      focused: focusedOf,
+      mail: mailOf,
+      hq: hqAgent,
+    }).find((f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused));
     const pane = free && running.find((a) => a.proc.pid === free.pid);
     if (pane) {
       current = pane;
@@ -3276,6 +3393,14 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     // The intercom session runs next to the person's agents on any machine by design: nothing to ask.
     if (plan.intercom) choice = { args: [], lines: [] };
     else if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
+    // So does the HQ session, and it is a new conversation — but a restart keeps the one it is in:
+    // a restart for a plugin should not cost it its context (hq-session-mode DL #3).
+    else if (plan.hq) {
+      const live = current && plan.resumeArgs.length > 0 ? conversationOf(current) : null;
+      choice = live
+        ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
+        : { args: [], lines: [] };
+    }
     // A restart into a new conversation replaces the agent here, and a new one next to an agent here
     // is what was asked for: the other machines are not asked.
     else if ((current || alongside) && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
@@ -3298,11 +3423,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     ? foldersWarning(denied, multiplexer === 'tmux', environment.session?.folders_fix, deps.home)
     : [];
   if (opts.dryRun) {
-    const topic = !plan.focused
-      ? null
-      : multiplexer === 'tmux'
-        ? chooseTopic(opts, plan, deps, current, false)
-        : { text: null, from: 'none: a topic lives in the tmux session, and this start has none' };
+    const topic = plan.hq
+      ? HQ_TOPIC
+      : !plan.focused
+        ? null
+        : multiplexer === 'tmux'
+          ? chooseTopic(opts, plan, deps, current, false)
+          : { text: null, from: 'none: a topic lives in the tmux session, and this start has none' };
     deps.out(
       renderPlan(
         plan,
@@ -3310,7 +3437,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
         running,
         focusedOf,
         freeSessionName(plan.sessionName, alongside ? running : []),
-        aside,
+        asideWords,
         topic,
       ),
     );
@@ -3393,8 +3520,14 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     }
     const failedAtOnce = res.status !== null && res.status !== 0 && Date.now() - startedAt < NOTHING_TO_RESUME_MS;
     if (plan.resumeArgs.length > 0 && failedAtOnce) {
-      log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${agentLine(plan, plan.args)}`);
-      res = spawnSync(plan.command, launchArgs(plan, plan.args), { cwd: projectRoot, stdio: 'inherit', env });
+      log(
+        `↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${agentLine({ ...plan, resumeArgs: [] }, plan.args)}`,
+      );
+      res = spawnSync(plan.command, launchArgs({ ...plan, resumeArgs: [] }, plan.args), {
+        cwd: projectRoot,
+        stdio: 'inherit',
+        env,
+      });
     }
     return res.status ?? 1;
   }
@@ -3415,6 +3548,12 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
           `to switch it: vdx ai --restart ${shellQuote(projectRoot)} --conversation ${opts.conversation}`,
       );
     }
+    if (plan.hq && opts.conversation && current !== inConversation && current !== unreadable) {
+      log(
+        `note: ${current.pane.session} is the project's HQ session, in another conversation, and there is one per project ` +
+          `and machine — attaching to it; to switch it: vdx ai --hq --restart ${shellQuote(projectRoot)} --conversation ${opts.conversation}`,
+      );
+    }
     const unfocused = plan.focused && !runningFocused;
     // A topic named for the focused agent attached to is its topic from now on.
     const { session } = current.pane;
@@ -3425,15 +3564,21 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     };
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
     if (!unfocused && missing.length === 0) {
-      const mode = runningFocused ? ', focused' : plan.intercom ? ', the intercom session' : '';
+      const mode = runningFocused
+        ? ', focused'
+        : plan.intercom
+          ? ', the intercom session'
+          : plan.hq
+            ? ', the HQ session'
+            : '';
       log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused, plan.seat);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused || plan.hq, plan.seat);
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
     const drift = `${current.pane.session}: ${plan.command} is running${unfocused ? ', not focused' : ` without ${missing.join(' ')}`}`;
-    const modeFlag = plan.focused ? ' --focused' : plan.intercom ? ' --intercom' : '';
+    const modeFlag = plan.focused ? ' --focused' : plan.intercom ? ' --intercom' : plan.hq ? ' --hq' : '';
     const fix =
       `vdx ai --restart${modeFlag}${opts.fresh ? ' --new' : ''} ${shellQuote(projectRoot)}` +
       (opts.conversation ? ` --conversation ${opts.conversation}` : '');
@@ -3457,7 +3602,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     if (answer === '') {
       log(`→ ${current.pane.session}: as is — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused, plan.seat);
+      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused || plan.hq, plan.seat);
     }
     if (answer?.toLowerCase() !== 'r') {
       log('nothing done');
@@ -3466,6 +3611,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     // As --restart: the conversation the agent is in, not the folder's newest — another agent's, maybe.
     const live = isClaude(plan.command) && plan.resumeArgs.length > 0 ? conversationOf(current) : null;
     if (live) plan = { ...plan, resumeArgs: resumeId(live) };
+    // Not the folder's newest either: it may be a conversation of the person's.
+    else if (plan.hq) plan = { ...plan, resumeArgs: [] };
   }
 
   // Nobody sits at a detached start, and Claude Code holds one in a folder it does not trust on
@@ -3477,7 +3624,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   }
 
   // The topic goes into the tmux session before the agent starts: its session-start hook reads it.
-  let topic: Topic | null = null;
+  let topic: Topic | null = plan.hq ? HQ_TOPIC : null;
   if (plan.focused) {
     topic = chooseTopic(opts, plan, deps, reused ? undefined : current, true);
     if (!topic) {
@@ -3502,14 +3649,16 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       current.pane.paneId,
       opts,
       deps,
-      plan.focused,
+      plan.focused || plan.hq,
       plan.seat,
     );
   }
 
   if (opts.restart) log(`note: no running ${plan.command} in this project — starting one`);
-  if (plan.intercom && plan.intercomArgs.length === 0)
+  if (plan.intercom && plan.opening.length === 0)
     log('note: the profile has no agent.intercom_args — the intercom session starts idle and waits for a wake');
+  if (plan.hq && plan.opening.length === 0 && plan.resumeArgs.length === 0)
+    log('note: the profile has no agent.hq_args — the HQ session starts with no first prompt');
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
   const session = freeSessionName(plan.sessionName, running);
@@ -3520,5 +3669,5 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   markSessionStays(session, opts, deps);
   log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
   topicSaid();
-  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused, plan.seat);
+  return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused || plan.hq, plan.seat);
 }

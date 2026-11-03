@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.11.0"
+  version: "1.12.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -22,11 +22,15 @@ agent:
   command: claude
   args: [--dangerously-skip-permissions]
   resume_args: [--continue]
-  # The project's mail session (vdx ai --intercom, vdx 0.36+) starts with this
+  # The project's intercom session (vdx ai --intercom, vdx 0.36+) starts with this
   # prompt: the inbox is its work — each letter taken, handled, answered —
   # and then it ends itself (vdx ai --close). vdx puts it right after the
   # command: the channel flag below takes a list and would swallow it.
   intercom_args: ["/vdm:intercom check"]
+  # The project's HQ session (vdx ai --hq, vdx 0.49+) starts with this prompt, in a
+  # new conversation only: what comes from outside is its work, so the sheet
+  # first. An older vdx skips the key.
+  hq_args: ["/echelon:whatsup"]
   when:
     # echelon sends its consumers' agents Claude Code channel events: mail
     # while the project's mail window is open (mail.watch), and to every

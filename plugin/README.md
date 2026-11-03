@@ -112,9 +112,14 @@ topic back with `--focused --conversation <id>` — or asks the agent to set
 one from the user's first message. The plugin's `UserPromptSubmit` hook
 (0.11.0, `scripts/focused-topic.sh`) brings the topic with every message of
 the user's in a focused session, with what to do with a message off it: a
-first line `🎯 off topic «…»` and where to put it aside; edits, commits and
-letters off the topic wait for the user's word. The model judges; the hook
+first line `🎯 off topic «…»` and where to put it aside — among them the line the user
+pastes into a terminal, `vdx ai '<root>' --focused "<topic>"` (vdx 0.49+ opens that
+session with the topic as its first prompt); edits, commits and letters off the topic
+wait for the user's word. The model judges; the hook
 only reads the option. In any other session it exits at once.
+
+In the project's HQ session (`vdx ai --hq`, vdx 0.49+) the `vdx ai --check` line says
+what it is, and the `vdx-ai` skill tells the agent the same.
 
 In the project's intercom session, started with `vdx ai --intercom` (vdx 0.36+),
 the line says that letters and wakes for the project come there and nobody

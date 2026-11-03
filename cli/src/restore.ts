@@ -25,8 +25,8 @@ export interface TmuxServer {
   started: number;
 }
 
-/** How the agent was started: plain, `vdx ai --focused`, or `vdx ai --intercom`. */
-export type RecordMode = 'plain' | 'focused' | 'mail';
+/** How the agent was started: plain, `vdx ai --focused`, `vdx ai --intercom`, or `vdx ai --hq`. */
+export type RecordMode = 'plain' | 'focused' | 'mail' | 'hq';
 
 /** One agent pane, as the hook last saw it. */
 export interface SessionRecord {
@@ -61,7 +61,7 @@ interface TmuxLike {
 /** Records of servers gone this long before the current one started are forgotten. */
 const FORGET_AFTER_MS = 7 * 86_400_000;
 const SERVER_DIR_RE = /^(\d+)-(\d+)$/;
-const MODES: readonly RecordMode[] = ['plain', 'focused', 'mail'];
+const MODES: readonly RecordMode[] = ['plain', 'focused', 'mail', 'hq'];
 
 /** The server tmux talks to from here; null — none runs. */
 export function currentServer(tmux: TmuxLike): TmuxServer | null {

@@ -33,6 +33,8 @@ const MACHINE_LINE_PREFIX = 'vdx ai: this machine is';
 const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
 /** The opening of the line `vdx ai --check` adds in an intercom session (`vdx ai --intercom`). */
 export const INTERCOM_LINE_PREFIX = "· this is the project's intercom session";
+/** The opening of the line `vdx ai --check` adds in an HQ session (`vdx ai --hq`). */
+export const HQ_LINE_PREFIX = "· this is the project's HQ session";
 /** That line under its former name: older transcripts keep it, and their conversations stay the session's. */
 const FORMER_INTERCOM_LINE_PREFIX = "· this is the project's mail session";
 /**
@@ -75,6 +77,8 @@ export interface Conversation {
   title: string | null;
   /** Last started as the project's mail session (`vdx ai --intercom`): not the person's to continue. */
   mail: boolean;
+  /** Last started as the project's HQ session (`vdx ai --hq`): continued only by that session. */
+  hq: boolean;
   /** A focused conversation's last topic; null — it never had one. */
   topic: string | null;
   /** Begun by `/clear` in a running agent: the pane stayed, the conversation is a new one. */
@@ -183,6 +187,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
   }
   let machine: string | null = null;
   let mail = false;
+  let hq = false;
   let topic: string | null = null;
   let aiTitle: string | null = null;
   let lastPrompt: string | null = null;
@@ -242,6 +247,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
           machine = label;
           // The same text says whether that start was an intercom session's.
           mail = part.includes(INTERCOM_LINE_PREFIX) || part.includes(FORMER_INTERCOM_LINE_PREFIX);
+          hq = part.includes(HQ_LINE_PREFIX);
         }
         topic = part.match(TOPIC_LINE_RE)?.[1] ?? topic;
       }
@@ -256,6 +262,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     typedHere: false,
     title: aiTitle ?? lastPrompt,
     mail,
+    hq,
     topic,
     bornClear,
     typed,
