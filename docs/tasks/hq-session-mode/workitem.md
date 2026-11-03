@@ -38,7 +38,7 @@ relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focu
 
 ## Текущая модель
 
-**Выпущено 2026-11-03: CLI 0.49.0 (`2be8326`, код — `a96eb97`), плагин 0.14.0, сет v1.12.0; на lft и m3. Итог echelon отправлен; первый настоящий запуск на global-auth-gap сошёлся (DL #8). Открыто: значок 👑 — выпуск 0.49.1 и письмо nas-info (DL #9), правки по живому от владельца, след проб у echelon (Sidetrack #3).**
+**Выпущено 2026-11-03: CLI 0.49.0 (`2be8326`, код — `a96eb97`), затем 0.49.1 (`8ca3548`, знак 👑), плагин 0.14.0, сет v1.12.0; на lft и m3. Итог echelon отправлен; первый настоящий запуск на global-auth-gap сошёлся (DL #8). Знак 👑 — в 0.49.1 и в заголовке терминала (DL #9). Открыто: правки по живому от владельца.**
 
 - **Режим** `--hq`: метка `VDX_HQ=1`, значение режима `hq` в записи панели и в `processMode`; с `--focused` и `--intercom`
   — отказ. Читается как у соседей: `VDX_FOCUSED` важнее (DL #1).
@@ -194,7 +194,7 @@ Next actions. Локальная сессия intercom в список не по
 echelon, письмо `hq-since-vdx-probe`. Следующая проба `--hq` в чужой папке оставит то же: пробовать лучше с `VDX_HQ` только у агента-заглушки или предупредить
 echelon заранее.
 
-**Status:** open
+**Status:** resolved — 2026-11-03: в `data/watch/` echelon файлов `hq*-vdx*` нет, проверено `ls` после письма `hq-since-vdx-probe`; кто и как убрал, не спрашивал, ответа письмо не просило
 
 ### #1. `--find` не ищет в разговорах HQ-сессии
 
@@ -229,9 +229,10 @@ anyway?». То же сегодня у сессии intercom. Строка др�
 - [x] Письмо nas-info: `nas-info/hq-session-title-icon` (2026-11-03), их сессию intercom поднял; письмо ai-dev-plugins о `@vdx_topic` и `VDX_HQ` — `ai-dev-plugins/hq-session-vdx-side`, ответа не просит
 - [x] Ответ nas-info на `hq-session-title-icon`: 📥 на lft и m3 (`-outcome`, 2026-11-03); их сверка на первом запуске — `@vdx_mode` = `hq` (DL #8)
 - [x] Первый настоящий запуск на global-auth-gap: первый промпт с окном канала, `VDX_HQ` у MCP-сервера, описание cmux, строка в списке (DL #8)
-- [ ] Значок 👑 (DL #9): код — выпуск CLI 0.49.1, команда владельца `vdx publish patch`; заголовок — итог nas-info на `hq-session-title-icon-crown`; живьём владелец видит 👑 в сайдбаре — when: их итог и выпуск; check: `npm view @vodmal/vdx-cli version`, `/vdm:intercom check`
-- [ ] Обратная связь владельца по живому использованию HQ-сессии — when: владелец скажет, что поправить; check: его слово в этой теме
-- [ ] Sidetrack #3: отметки проб убраны — when: echelon убрал их по письму `hq-since-vdx-probe`; check: `ls '/Users/vdm/AI Projects/echelon/data/watch/' | grep -- hq.*-vdx`
+- [x] Значок 👑 (DL #9): CLI 0.49.1 (`8ca3548`, тег `v0.49.1`, CI зелёный), на lft и m3, `--dry-run` на global-auth-gap — `«👑 HQ»`; заголовок — итог nas-info `hq-session-title-icon-crown-outcome`, tmux на lft показал `🟢 global-auth-gap-hq  🔔👑`
+- [x] 👑 в сайдбаре cmux — владелец: «Да вижую» (2026-11-03)
+- [ ] Обратная связь владельца по живому использованию HQ-сессии — when: владелец скажет, что поправить; срока нет, сам пользуется с 2026-11-03; никто не следит, кроме этого пункта
+- [x] Sidetrack #3: отметки проб убраны — в `data/watch/` их нет (2026-11-03)
 - [ ] Sidetrack #1: решить по живому использованию, искать ли `--find` в разговорах HQ-сессии
 - [ ] Sidetrack #2: убрать лишний вопрос про агента на другой машине, если мешает вживую
 
