@@ -196,8 +196,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 whether this session carries the profile's flags, and whether it
                 runs the installed Claude Code and plugins (the vdx plugin's
                 SessionStart hook); prints nothing without a profile; exit 3 on drift.
-                It also keeps a record of the agent's tmux pane, for --restore;
-                --conversation <id> — the conversation the hook says starts
+                It also keeps a record of the agent's tmux pane, for --restore,
+                and of any agent pane here that has none (a plain start and
+                --restore do too); --conversation <id> — the conversation the
+                hook says starts
   -h, --help    this help
 
 What a plain start does (Claude Code). The other machines (session.machines in

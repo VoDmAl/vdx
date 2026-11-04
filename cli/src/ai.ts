@@ -59,6 +59,7 @@ import {
   type LostRecord,
   lostRecords,
   pruneRecords,
+  recordedPanes,
   type RecordMode,
   type TmuxServer,
   updateTopic,
@@ -2658,19 +2659,56 @@ function keepRecord(
   try {
     pruneRecords(deps.env, deps.home, server, new Set(panes.map((p) => p.paneId)), pidAlive);
     const pane = panes.find((p) => processTree(procs, p.panePid).some((x) => x.pid === pid));
-    if (!pane) return;
+    if (pane)
+      writeRecord(deps.env, deps.home, server, {
+        session: pane.session,
+        pane: pane.paneId,
+        project: projectRoot,
+        conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
+        mode,
+        topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+        pid,
+        written: Date.now(),
+      });
+    recordRunning(deps, server, panes, procs);
+  } catch {
+    // no record: the hook's text is what the session needs
+  }
+}
+
+/** The agent's mode, as the hook would name it: one look at its environment, unless the deps say. */
+function recordModeOf(deps: AiDeps, pid: number): RecordMode {
+  if (!deps.agentFocused && !deps.agentMail && !deps.agentHq) return processMode(pid);
+  if ((deps.agentFocused ?? processFocused)(pid)) return 'focused';
+  if (hqOf(deps)(pid)) return 'hq';
+  return (deps.agentMail ?? ((p: number) => processMode(p) === 'mail'))(pid) ? 'mail' : 'plain';
+}
+
+/**
+ * Records for the agents running in tmux here that have none: started before vdx kept them (0.46),
+ * and not started, resumed or cleared since, so the hook has not written one, and a restore would
+ * not know them (vdx-ai-predictable DL #12). What the hook writes from inside, read from outside:
+ * the project from the pane's folder, the conversation from Claude Code's session file, the mode
+ * from the process's environment, the topic from the tmux session.
+ */
+function recordRunning(deps: AiDeps, server: TmuxServer, panes: PaneInfo[], procs: ProcInfo[]): void {
+  const have = recordedPanes(deps.env, deps.home, server);
+  for (const pane of panes) {
+    if (have.has(pane.paneId)) continue;
+    const agent = processTree(procs, pane.panePid).find((p) => isAgentProcess(p, 'claude'));
+    const project = agent ? resolveProjectRoot(pane.cwd) : null;
+    if (!agent || !project) continue;
+    const mode = recordModeOf(deps, agent.pid);
     writeRecord(deps.env, deps.home, server, {
       session: pane.session,
       pane: pane.paneId,
-      project: projectRoot,
-      conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
+      project,
+      conversation: liveConversationId(deps.env, deps.home, agent.pid),
       mode,
       topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
-      pid,
+      pid: agent.pid,
       written: Date.now(),
     });
-  } catch {
-    // no record: the hook's text is what the session needs
   }
 }
 
@@ -2873,8 +2911,11 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
  */
 function lostAgents(deps: AiDeps, server: TmuxServer | null, tidy: boolean): LostRecord[] {
   try {
-    if (server && tidy)
-      pruneRecords(deps.env, deps.home, server, new Set(deps.tmux.panes().map((p) => p.paneId)), pidAlive);
+    if (server && tidy) {
+      const panes = deps.tmux.panes();
+      pruneRecords(deps.env, deps.home, server, new Set(panes.map((p) => p.paneId)), pidAlive);
+      recordRunning(deps, server, panes, deps.processes());
+    }
     const live = new Set((deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))().map((l) => l.conversation));
     return lostRecords(deps.env, deps.home, server, server?.socket ?? deps.tmux.socketName ?? 'default').filter((r) => {
       const done = r.mode === 'mail' || (r.conversation !== null && live.has(r.conversation));

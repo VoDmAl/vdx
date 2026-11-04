@@ -1563,6 +1563,9 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   beforeEach(() => {
     logs = [];
+    // A start records the agents it sees, and the tests drop their servers: what one test left would
+    // be another's agents tmux took down.
+    fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
   });
 
   afterAll(() => {
@@ -2542,7 +2545,26 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(now.map((a) => [a.pane.session, a.proc.args])).toEqual([
       ['proj@testhost', `/bin/sh ${claude()} --base --resume ${ID.a}`],
     ]);
+    // The old server's record is gone; the start that went on recorded the agent under the new one.
+    expect(records()).toEqual([`${now[0]!.pane.paneId.slice(1)}.json`]);
+  }, 30_000);
+
+  it('an agent the hook never recorded: the next vdx ai records it, and a restore brings it back (DL #12)', () => {
+    agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    tmux.run(['set-option', '-t', '=proj@testhost:', '@vdx_topic', 'search']);
     expect(records()).toEqual([]);
+    // --list and --dry-run write nothing.
+    expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+    expect(records()).toEqual([]);
+    expect(runAi({ ...opts, path: root }, { ...deps(), agentFocused: () => true })).toBe(EXIT_OK);
+    expect(records()).toHaveLength(1);
+    tmux.tryRun(['kill-server']);
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`▶ proj@testhost: conversation ${ID.a.slice(0, 8)}, focused «search»`);
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').map((a) => a.proc.args)).toEqual([
+      `/bin/sh ${claude()} --base --resume ${ID.a}`,
+    ]);
   }, 30_000);
 
   it('--restore: every project, focused with its topic, an empty one as a place; one continued elsewhere left out', () => {
@@ -2774,7 +2796,12 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
 
     fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
     logs = [];
-    const fell = attaching((_, self) => (self.tryRun(['kill-server']), 1));
+    // The start records the agent before it attaches: the record goes with the server here.
+    const fell = attaching((_, self) => {
+      fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
+      self.tryRun(['kill-server']);
+      return 1;
+    });
     expect(runAi({ ...opts, path: root, detach: false }, { ...deps(), tmux: fell.t })).toBe(1);
     expect(fell.sessions).toHaveLength(1);
     expect(text()).toContain(

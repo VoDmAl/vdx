@@ -141,6 +141,11 @@ export function writeRecord(env: NodeJS.ProcessEnv, home: string, server: TmuxSe
   fs.renameSync(tmp, file);
 }
 
+/** The panes the server's records cover. */
+export function recordedPanes(env: NodeJS.ProcessEnv, home: string, server: TmuxServer): Set<string> {
+  return new Set(readRecords(serverDir(env, home, server)).map((r) => r.record.pane));
+}
+
 /** A focused session's new topic, in the record of its pane — if the hook wrote one. */
 export function updateTopic(
   env: NodeJS.ProcessEnv,
@@ -171,7 +176,8 @@ export function pruneRecords(
 }
 
 /**
- * The agents the servers that are gone took down: the records of every server but `current`.
+ * The agents the servers that are gone took down: the records of every server but `current`, by
+ * session, the later server first.
  * Once the current server is a week old, the records of the ones before it are forgotten —
  * nobody brought them back.
  */
@@ -202,7 +208,10 @@ export function lostRecords(
     }
     lost.push(...readRecords(path.join(dir, name)).map(({ record, file }) => ({ ...record, server, file })));
   }
-  return lost.sort((a, b) => a.session.localeCompare(b.session) || a.pane.localeCompare(b.pane));
+  // A session two fallen servers both held: the later one's record first — it is what ran last.
+  return lost.sort(
+    (a, b) => a.session.localeCompare(b.session) || b.server.started - a.server.started || a.pane.localeCompare(b.pane),
+  );
 }
 
 /** The record is done with — brought back, or not to be: its file goes, and its server's folder once empty. */

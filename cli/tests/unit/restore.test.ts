@@ -70,6 +70,12 @@ describe('restore records: what ran in tmux, by server', () => {
     expect(lostRecords(env, home, null, 'vdx-test')).toEqual([]);
   });
 
+  it('a session two fallen servers held: the later one first — it ran last', () => {
+    writeRecord(env, home, server(100, 1_791_000_000), record({ conversation: ID.a }));
+    writeRecord(env, home, server(200, 1_791_500_000), record({ conversation: ID.b, pane: '%9' }));
+    expect(lostRecords(env, home, null, 'default').map((r) => r.conversation)).toEqual([ID.b, ID.a]);
+  });
+
   it('rewritten by the next hook in the same pane; a topic changed later goes into it', () => {
     const s = server(100, 1);
     writeRecord(env, home, s, record({ conversation: ID.a }));
