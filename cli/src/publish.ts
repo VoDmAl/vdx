@@ -138,6 +138,27 @@ export function planPush(projectRoot: string, enabled: boolean, git: GitRunner =
   return { enabled, upstream, ahead: count('@{u}..HEAD'), behind: count('HEAD..@{u}') };
 }
 
+/**
+ * How far apart the branch and the remote really are. The upstream ref is what this station last
+ * heard, and a push made on the other one reaches it by Syncthing, minutes after the commit
+ * (intercom-session-mode Sidetrack #10). Null: the remote does not answer, or names a commit not here.
+ */
+function remoteDistance(
+  projectRoot: string,
+  target: GateTarget,
+  git: GitRunner,
+): { ahead: number; behind: number } | null {
+  try {
+    const out = git(['ls-remote', target.remote, `refs/heads/${target.branch}`], projectRoot);
+    const sha = /^[0-9a-f]{40}\b/.exec(out)?.[0];
+    if (!sha) return null;
+    const count = (range: string) => parseInt(git(['rev-list', '--count', range], projectRoot).trim(), 10);
+    return { ahead: count(`${sha}..HEAD`), behind: count(`HEAD..${sha}`) };
+  } catch {
+    return null;
+  }
+}
+
 // A caller's `npm run -s` passes `npm_config_loglevel=silent` down, and npm then
 // fails with an empty stderr — no E401 or E404 left to tell the cases apart.
 const runNpm: NpmRunner = (args) =>
@@ -362,7 +383,10 @@ export function planPublish(
   const push = planPush(opts.projectRoot, opts.push ?? true, git);
   if (push.enabled && push.upstream) {
     const g = gate(opts.projectRoot);
-    if (g.kind === 'gate') push.gate = g.target;
+    if (g.kind === 'gate') {
+      push.gate = g.target;
+      if (push.ahead > 0) Object.assign(push, remoteDistance(opts.projectRoot, g.target, git));
+    }
   }
   if (push.enabled && push.upstream && push.behind > 0) {
     preflight.push({

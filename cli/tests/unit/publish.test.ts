@@ -636,6 +636,32 @@ describe('the release goes out whole: lock, push, registry', () => {
     );
   });
 
+  it('under the gate a lagging upstream ref is checked against the remote: a pushed commit is not refused', () => {
+    const pushTarget = () =>
+      planPublish(
+        { projectRoot: work, bump: 'patch', dryRun: true, force: false },
+        mockAudit(),
+        { projectRoot: work, stack: 'node', cache: new Map() },
+        fixtureNpm(),
+        undefined,
+        () => ({ kind: 'gate', target: GATE }),
+      ).preflight.find((c) => c.name === 'push-target');
+    // What a push from the other station leaves here: the commit has come, the ref has not.
+    git(['commit', '-q', '--allow-empty', '-m', 'pushed']);
+    git(['push', '-q']);
+    git(['update-ref', 'refs/remotes/origin/main', 'HEAD~1']);
+    expect(pushTarget()).toMatchObject({ ok: true, message: 'OK (origin/main, through cli (node 22))' });
+
+    // A commit really not pushed is still refused, and counted against the remote.
+    git(['commit', '-q', '--allow-empty', '-m', 'not pushed']);
+    expect(pushTarget()).toMatchObject({ ok: false });
+    expect(pushTarget()?.message).toContain('1 local commit(s) are not on origin/main');
+
+    // The remote does not answer: what the ref says stands.
+    git(['remote', 'set-url', 'origin', path.join(work, 'no-such-remote')]);
+    expect(pushTarget()?.message).toContain('2 local commit(s) are not on origin/main');
+  });
+
   it('the wait counts from npm publish: the push through CI before it is part of the time', () => {
     const lines: string[] = [];
     const twoMinAgo = Date.now() - 120_000;
