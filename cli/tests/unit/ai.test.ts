@@ -2265,6 +2265,106 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(logs.join('')).toContain(`${INTERCOM_LINE_PREFIX} (\`vdx ai --intercom\`)`);
     expect(logs.join('')).toContain('The user started this one, and it stays');
   }, 60_000);
+
+  describe('a start under way, the agent not among the processes yet', () => {
+    const session = 'proj@testhost-intercom';
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const windows = (name = session) =>
+      (tmux.tryRun(['list-windows', '-t', `=${name}:`, '-F', '#{pane_id}']) ?? '').trim().split('\n');
+    /** What another `vdx ai` opens: the login shell, `seconds` of it, then the agent — as `zsh -lic` does. */
+    const startedElsewhere = (seconds: number, mark = 'VDX_INTERCOM=1', name = session, keepShell = false) => {
+      const login = path.join(base, 'slow-login');
+      fs.writeFileSync(login, `#!/bin/sh\nsleep ${seconds}\nexec /bin/sh "$@"\n`, { mode: 0o755 });
+      const line = `${mark} ${path.join(base, 'fake-agent')} '/first prompt' --base`;
+      return tmux.newSession(name, root, tmuxShellCommand(line, login, keepShell));
+    };
+
+    beforeEach(() => {
+      writeProfile(['--base'], true, ['/first prompt'], ['/first prompt']);
+      tmux.tryRun(['kill-server']);
+      logs = [];
+    });
+
+    it('a letter joins it: no second window, and it says so', () => {
+      startedElsewhere(2);
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, deps())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain(`✓ ${session}: another start got there first`);
+      expect(windows()).toHaveLength(1);
+      expect(agents()).toHaveLength(1);
+    }, 30_000);
+
+    it('tmux refuses the name to the one that looked too early: it joins too', () => {
+      const late = Object.create(tmux) as typeof tmux;
+      let looked = false;
+      late.hasSession = (name) => {
+        if (looked) return tmux.hasSession(name);
+        looked = true;
+        startedElsewhere(2);
+        return false;
+      };
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, { ...deps(), tmux: late })).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain(`✓ ${session}: another start got there first`);
+      expect(windows()).toHaveLength(1);
+      expect(agents()).toHaveLength(1);
+    }, 30_000);
+
+    it('the person who joins it from a terminal keeps it', () => {
+      startedElsewhere(2);
+      const person = Object.create(tmux) as typeof tmux;
+      person.attach = () => 0;
+      expect(runAi({ ...opts, path: root, intercom: true }, { ...deps(), interactive: true, tmux: person })).toBe(
+        EXIT_OK,
+      );
+      expect(tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_stays'])?.trim()).toBe('1');
+      expect(windows()).toHaveLength(1);
+    }, 30_000);
+
+    it('one with no agent in time is started over in its pane, not next to it', () => {
+      const stuck = startedElsewhere(60);
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, { ...deps(), confirmTimeoutMs: 1_000 })).toBe(
+        EXIT_OK,
+      );
+      expect(logs.join('\n')).toContain(
+        `⚠ ${session} ${stuck}: no ${path.join(base, 'fake-agent')} after 1 s — starting it again`,
+      );
+      expect(windows()).toEqual([stuck]);
+      expect(agents()).toHaveLength(1);
+    }, 30_000);
+
+    it('the start it waits for dies with its session: this one starts on its own', () => {
+      startedElsewhere(60);
+      let gone = false;
+      const sleep = (ms: number) => {
+        if (!gone) tmux.tryRun(['kill-session', '-t', `=${session}`]);
+        gone = true;
+        sleepSync(ms);
+      };
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, { ...deps(), sleep })).toBe(EXIT_OK);
+      expect(gone).toBe(true);
+      expect(logs.join('\n')).toContain(`▶ ${session}: `);
+      expect(windows()).toHaveLength(1);
+      expect(agents()).toHaveLength(1);
+    }, 30_000);
+
+    it('a session left with no start in it takes the agent at once, in a window of its own', () => {
+      tmux.newSession(session, root, 'sleep 60');
+      const startedAt = Date.now();
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, deps())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain(`▶ ${session} (new window)`);
+      expect(windows()).toHaveLength(2);
+      expect(agents()).toHaveLength(1);
+      // settle takes about 2 s; a wait for a start nobody made would add its 10 s here.
+      expect(Date.now() - startedAt).toBeLessThan(9_000);
+    }, 30_000);
+
+    it('--hq: the same, the shell that stays after the agent being no start', () => {
+      startedElsewhere(2, 'VDX_HQ=1', 'proj@testhost-hq', true);
+      expect(runAi({ ...opts, path: root, hq: true, detach: true }, deps())).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('✓ proj@testhost-hq: another start got there first');
+      expect(windows('proj@testhost-hq')).toHaveLength(1);
+      expect(agents()).toHaveLength(1);
+    }, 30_000);
+  });
 });
 
 describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmux (isolated server)', () => {

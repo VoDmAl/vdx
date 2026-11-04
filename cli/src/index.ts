@@ -129,9 +129,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 the attach, and drops it after; one you set by hand stays
   --intercom    the project's intercom session: a new conversation in a tmux
                 session of its own (<name>-intercom), one per project and machine —
-                a running one is attached to, never a second. The agent, its
-                hooks and MCP servers get VDX_INTERCOM=1: letters and wakes for
-                the project go there, and your own session stays quiet; the
+                a running or starting one is attached to, never a second. The
+                agent, its hooks and MCP servers get VDX_INTERCOM=1: letters and
+                wakes for the project go there, and your own session stays quiet; the
                 profile's \`wakes\` rules stay. It starts with agent.intercom_args
                 (its first prompt). Every other start leaves it alone, and its
                 conversations are not continued unless named with --conversation.

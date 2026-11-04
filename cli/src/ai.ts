@@ -1249,6 +1249,47 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
   return settle(plan, paneId, deps) === 'ok';
 }
 
+/** As long as a start waits for its own agent (settle): past that, the start that opened the pane has given up on it. */
+const START_UNDER_WAY_MS = 15_000;
+
+function startUnderWayMs(deps: AiDeps): number {
+  return Math.min(START_UNDER_WAY_MS, deps.confirmTimeoutMs);
+}
+
+/**
+ * Another start of the one intercom or HQ session, in `session`. The agent shows among the processes
+ * only after the login shell (`zsh -lic`, 0.2–1.5 s), and until then the pane is told by that shell's
+ * command line, which carries the mode's mark; the shell an HQ pane keeps after its agent does not.
+ * Waits for its agent. Null: no such start, or its pane went. `agent` null: none came in time, the
+ * pane is stuck.
+ */
+function startUnderWay(
+  plan: LaunchPlan,
+  session: string,
+  sameMode: (pid: number) => boolean,
+  deps: AiDeps,
+): { pane: PaneInfo; agent: ProcInfo | null } | null {
+  const mark = `${modeEnvVar(plan)}=1`;
+  const by = Date.now() + startUnderWayMs(deps);
+  let seen: PaneInfo | undefined;
+  for (;;) {
+    const procs = deps.processes();
+    const panes = deps.tmux
+      .panes()
+      .filter((p) => p.session === session)
+      .map((pane) => ({ pane, tree: processTree(procs, pane.panePid) }));
+    for (const { pane, tree } of panes) {
+      const agent = tree.find((p) => isAgentProcess(p, plan.command) && sameMode(p.pid));
+      if (agent) return { pane, agent };
+    }
+    if (seen && !panes.some(({ pane }) => pane.paneId === seen?.paneId)) return null;
+    seen ??= panes.find(({ tree }) => tree.some((p) => p.args.includes(mark)))?.pane;
+    if (!seen) return null;
+    if (Date.now() >= by) return { pane: seen, agent: null };
+    deps.sleep(300);
+  }
+}
+
 /**
  * Attach to the session, or name how. Attached in cmux to a session with a topic — a focused one,
  * an HQ one — the workspace shows it while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
@@ -3662,12 +3703,41 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
   const session = freeSessionName(plan.sessionName, running);
-  const reuse = tmux.hasSession(session);
+  // One intercom or HQ session per project and machine holds for two starts at once too: letters
+  // come in pairs, and each sender starts it (intercom-session-mode DL #11).
+  const single = plan.intercom || plan.hq;
+  const sameMode = (pid: number) => mailOf(pid) === plan.intercom && hqAgent(pid) === plan.hq;
+  let reuse = tmux.hasSession(session);
+  let other = single && reuse ? startUnderWay(plan, session, sameMode, deps) : null;
+  // The start it waited for may have taken the session with it.
+  if (single && reuse && !other) reuse = tmux.hasSession(session);
   if (reuse) setSessionTopic(tmux, session, topic?.text ?? null);
-  const paneId = reuse ? tmux.newWindow(session, projectRoot, cmd) : tmux.newSession(session, projectRoot, cmd);
+  let paneId = '';
+  if (!other) {
+    try {
+      paneId = reuse ? tmux.newWindow(session, projectRoot, cmd) : tmux.newSession(session, projectRoot, cmd);
+    } catch (err) {
+      // tmux gives one name to one session: the other start took it after the look above.
+      if (!single || reuse || !tmux.hasSession(session)) throw err;
+      deps.sleep(300);
+      other = startUnderWay(plan, session, sameMode, deps);
+      if (!other) throw err;
+    }
+  }
+  if (other?.agent) {
+    log(`✓ ${session}: another start got there first — ${other.agent.args}`);
+    return finish(true, session, other.pane.paneId, opts, deps, plan.hq, plan.seat);
+  }
+  if (other) {
+    paneId = other.pane.paneId;
+    log(
+      `⚠ ${session} ${paneId}: no ${plan.command} after ${Math.round(startUnderWayMs(deps) / 1000)} s — starting it again`,
+    );
+    tmux.respawn(paneId, projectRoot, cmd);
+  }
   if (!reuse && topic?.text) setSessionTopic(tmux, session, topic.text);
   markSessionStays(session, opts, deps);
-  log(`▶ ${session}${reuse ? ' (new window)' : ''}: ${line}`);
+  log(`▶ ${session}${reuse && !other ? ' (new window)' : ''}: ${line}`);
   topicSaid();
   return finish(settleResumed(plan, paneId, deps), session, paneId, opts, deps, plan.focused || plan.hq, plan.seat);
 }
