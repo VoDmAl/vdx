@@ -497,8 +497,15 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [x] Живьём на 0.48.0, запуск письмом: `vdm@lft-intercom` (2026-11-03, поднята письмом `vdx-stays-option`):
       суффикс, `DISABLE_AUTO_UPDATE=true` и `VDX_INTERCOM=1` в панели, `@vdx_stays` нет; письма разобрала, закрылась
       сама за 360 с, в транскрипте «the intercom session closes in 2 s»
+- [ ] Письмо echelon `intercom-start-race-two-sessions` (в ящике, не взято, 2026-11-03): два старта подряд дают две
+      сессии intercom — в `echelon@lft-intercom` два окна, 16:18:06 и 16:18:07 EST, vdx 0.49.0. Их вывод из кода, руками
+      не воспроизведено: «один на проект» смотрит на живых агентов, пока идёт `zsh -lic` агента нет, `reuse` открывает
+      второе окно. Двойной работы не было. Их предложение: занятой считать и саму tmux-сессию `<имя>-intercom`; решить
+      случай «сессия есть, агент умер», иначе письмо его не поднимет. Итог — письмом echelon с версией. Сначала
+      свериться с `vdx@m3-2` (focused, тема «автовыход intercom сессии», живая 2026-11-03): не её ли это работа
 - [ ] Живьём на 0.48.0, поднятая руками: `vdx ai --intercom` из терминала — `@vdx_stays` = 1, `--close` панель не
-      закрывает — check: `tmux ls -F '#{session_name} #{@vdx_stays}' | grep -- -intercom`, когда владелец её поднимет
+      закрывает — when: владелец поднял такую сессию (срока нет); check:
+      `tmux ls -F '#{session_name} #{@vdx_stays}' | grep -- -intercom`
 - [ ] `vdx ai --restore`: поднимать ли сессию с `@vdx_stays` после падения tmux — `vdx-ai-predictable` записал, что
       решение по Sidetrack #7 может это поменять; нужен режим в записи панели и новый запуск с `VDX_INTERCOM=1`
 - [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
