@@ -471,6 +471,17 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 
 **Status:** resolved — 2026-11-03: комментарий поправлен в сете v1.12.0 и зеркале (кристалл `hq-session-mode`)
 
+### #10. `push-target` пугает, пока `origin/main` станции не догнал GitHub
+
+**Возникло в:** `vdx publish patch` владельца, 2026-11-04, сразу после `vdx push` на lft
+**Описание:** отказ `1 local commit(s) are not on origin/main … Push them first: vdx push`, хотя `ls-remote` уже показывал
+`f363f3d` в `main` на GitHub. Проверка смотрит на ссылку `origin/main` в `.git`, а на другую станцию она едет через Syncthing: на m3 в
+13:02:09 `rev-list origin/main..HEAD` = 1, в 13:02:30 — 0, push закончился в 13:00:10. Что владелец запускал на m3 — вывод: на lft
+ссылка сдвинулась вместе с push. Совет ведёт не туда, вред небольшой. Правка: при `ahead > 0` сверить с `ls-remote` и, если коммит
+уже там, не отказывать.
+
+**Status:** open
+
 ## Next actions
 
 - [x] `vdx ai --intercom`: метка, сессия `<имя>-mail`, одна на проект и машину,
@@ -529,6 +540,7 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       отдельном сервере tmux; сверка с `vdx@m3-2` — не её работа
 - [ ] Выпуск CLI с DL #11 — следующий patch, 0.49.2; владелец
 - [ ] Outcome to `echelon` на `intercom-start-race-two-sessions` — что сделано и версия, после выпуска; письмо отпущено с заметкой
+- [ ] Sidetrack #10: `push-target` сверяет с `ls-remote`, когда ссылка станции отстала
 - [ ] Живьём на выпущенном, настоящий claude: два письма подряд в проект с `intercom.mail-session` — when: следующая такая пара, срока
       нет; check: `tmux list-windows -t '=<имя>-intercom'` — одно окно, в транскрипте отправителя «another start got there first»
 - [ ] Живьём на 0.48.0, поднятая руками: `vdx ai --intercom` из терминала — `@vdx_stays` = 1, `--close` панель не
