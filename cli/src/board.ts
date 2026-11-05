@@ -45,9 +45,18 @@ export function agentState(a: AgentFact): AgentState {
   if (a.status === 'busy' || a.status === 'shell') return 'working';
   if (a.status === 'waiting') return 'waiting';
   if (a.draft > 0) return 'draft';
+  return settledState(a) ?? 'idle';
+}
+
+/**
+ * What its transcript says of a quiet agent: empty since /clear, or finished with a wrap; null —
+ * neither. The same word goes into the tmux option `@vdx_state`, which the cmux sidebar shows
+ * (vdx-ai-predictable Sidetrack #4): one definition for the list and the sidebar.
+ */
+export function settledState(a: { empty: boolean; finished: boolean }): 'empty' | 'finished' | null {
   if (a.empty) return 'empty';
   if (a.finished) return 'finished';
-  return 'idle';
+  return null;
 }
 
 /** An agent with work in it — not a pane waiting for its first prompt, not a wrapped one. */

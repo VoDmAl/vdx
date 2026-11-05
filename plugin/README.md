@@ -13,9 +13,10 @@ plugin/
 ├── .mcp.json                        # vdx-mcp stdio server (installed, else via npx)
 ├── skills/vdx-discover/SKILL.md     # discover-and-record workflow
 ├── skills/vdx-ai/SKILL.md           # how the agent is launched: vdx ai + profile
-├── hooks/hooks.json                 # SessionStart; UserPromptSubmit; PostToolUse on vdx_up
+├── hooks/hooks.json                 # SessionStart; UserPromptSubmit; Stop; SessionEnd; PostToolUse on vdx_up
 ├── scripts/session-start.sh         # SessionStart: `vdx ai --check` → agent context
 ├── scripts/focused-topic.sh         # UserPromptSubmit: a focused session's topic with every message
+├── scripts/session-state.sh         # UserPromptSubmit, Stop, SessionEnd: @vdx_state for the cmux sidebar
 └── scripts/record-success-path.sh   # PostToolUse hook script
 ```
 
@@ -128,6 +129,16 @@ when questions to the user are still unanswered. In a session the user started
 or attached to from a terminal it says the session stays and waits for the next
 wake (vdx 0.48+). The line, kept in the
 transcript, is how vdx later knows the conversation is the intercom session's.
+
+The cmux sidebar (nas-info keeps it) shows a quiet agent's state from the option
+`@vdx_state` of its tmux session: `empty` — nothing typed since `/clear`, `finished` —
+a wrap skill of the profile's `session.wrap_skills` ran and nothing was typed since;
+unset — neither. They are the words of the `vdx ai` list and come from the same code.
+With vdx 0.50+ the `vdx ai --check` of `SessionStart` sets it from the transcript — at a
+start, a resume (after `vdx ai --restore` too), a `/clear` and a compact — and
+`scripts/session-state.sh` (0.15.0) keeps it: `stop` runs `vdx ai --state` when a turn
+ends, in the background so the turn does not wait for it; `prompt` unsets it when a
+prompt goes in, and `end` when the session ends. Outside tmux it does nothing.
 
 ## Limitations
 

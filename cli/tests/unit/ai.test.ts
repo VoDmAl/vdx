@@ -42,6 +42,8 @@ import {
   runAiClose,
   runAiReport,
   runAiRestore,
+  runAiState,
+  STATE_OPTION,
   type RemoteReport,
   clientSeat,
   shellQuote,
@@ -2526,6 +2528,69 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     const dir = socketDir({}, base, socket);
     return fs.existsSync(dir) ? fs.readdirSync(dir).flatMap((s) => fs.readdirSync(path.join(dir, s))) : [];
   };
+
+  /** `@vdx_state` of a tmux session, as the cmux sidebar reads it; '' — unset. */
+  const stateOf = (session: string) =>
+    tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, STATE_OPTION])?.trim() ?? '';
+  /** The hook's environment in the agent's pane: tmux names the pane. */
+  const inPane = (pane: ReturnType<typeof agentIn>) => ({ TMUX: `${base}/tmux,1,0`, TMUX_PANE: pane.pane.paneId });
+
+  it('@vdx_state for the cmux sidebar: SessionStart sets empty or finished from the transcript, unsets it for work (Sidetrack #4)', () => {
+    const empty = agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
+    const wrapped = agentIn('proj@testhost-2', ID.b, [
+      startedOn('testhost'),
+      userLine('work'),
+      skillLine('vdm:wrap'),
+      // A `!` line after the wrap — the commit it handed over — does not undo it, as in the list.
+      bashLine('sh /tmp/c.sh'),
+    ]);
+    const working = agentIn('proj@testhost-3', ID.c, [startedOn('testhost'), userLine('work')]);
+    tmux.run(['set-option', '-t', '=proj@testhost-3:', STATE_OPTION, 'finished']);
+    hook(empty, ID.a, inPane(empty));
+    hook(wrapped, ID.b, inPane(wrapped));
+    hook(working, ID.c, inPane(working));
+    expect(['proj@testhost', 'proj@testhost-2', 'proj@testhost-3'].map(stateOf)).toEqual(['empty', 'finished', '']);
+    // The list says the same words of them.
+    expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+    expect(text()).toMatch(/proj@testhost +empty/);
+    expect(text()).toMatch(/proj@testhost-2 +finished \(wrap\)/);
+  });
+
+  it('…outside tmux the hook sets nothing', () => {
+    const empty = agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
+    hook(empty, ID.a);
+    expect(stateOf('proj@testhost')).toBe('');
+  });
+
+  it('--state, from the Stop hook: the same from the transcript, the live conversation when none is named; prints nothing', () => {
+    const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    const self = 999_998;
+    const d = deps();
+    const state = (env: NodeJS.ProcessEnv, id?: string) =>
+      runAiState(
+        root,
+        {
+          ...d,
+          env: { ...d.env, ...env },
+          processes: () => [...listProcesses(), { pid: self, ppid: pane.proc.pid, args: 'vdx ai --state' }],
+        },
+        self,
+        id,
+      );
+    tmux.run(['set-option', '-t', '=proj@testhost:', STATE_OPTION, 'empty']);
+    expect(state(inPane(pane), ID.a)).toBe(EXIT_OK);
+    expect(stateOf('proj@testhost')).toBe('');
+    // The turn ran a wrap: its Stop names no conversation here, and the session file says which.
+    writeConversation(cc(), root, ID.a, [startedOn('testhost'), userLine('work'), skillLine('vdm:wrap')], 0);
+    expect(state(inPane(pane))).toBe(EXIT_OK);
+    expect(stateOf('proj@testhost')).toBe('finished');
+    // Outside tmux nothing changes — a pane id left in the environment without TMUX is not a pane.
+    writeConversation(cc(), root, ID.a, [startedOn('testhost'), userLine('work')], 0);
+    expect(state({ TMUX: '', TMUX_PANE: '' }, ID.a)).toBe(EXIT_OK);
+    expect(state({ TMUX: '', TMUX_PANE: pane.pane.paneId }, ID.a)).toBe(EXIT_OK);
+    expect(stateOf('proj@testhost')).toBe('finished');
+    expect(text()).toBe('');
+  });
 
   it('tmux fell: the list opens with what it took down, Enter brings it back, and the start goes on (P6)', () => {
     const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);

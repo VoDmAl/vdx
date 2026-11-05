@@ -209,3 +209,91 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
       expect(run({ STUB_TOPIC: '', STUB_VERSION: version }).stdout, version).toBe('');
   });
 });
+
+// The vdx plugin's @vdx_state hooks (UserPromptSubmit, Stop, SessionEnd), against stub tmux and vdx.
+const STATE_HOOK = path.resolve(__dirname, '..', '..', '..', 'plugin', 'scripts', 'session-state.sh');
+
+describe('plugin @vdx_state hooks: the state the cmux sidebar shows (vdx-ai-predictable Sidetrack #4)', () => {
+  let dir: string;
+  let bin: string;
+  let log: string;
+  const run = (event: string, env: Record<string, string> = {}, input = '') =>
+    spawnSync('/bin/sh', [STATE_HOOK, event], {
+      encoding: 'utf8',
+      input,
+      env: {
+        PATH: [bin, '/usr/bin', '/bin'].join(':'),
+        STUB_LOG: log,
+        CLAUDE_PROJECT_DIR: "/projects/it's mine",
+        TMUX: '/tmp/tmux-501/default,1,0',
+        TMUX_PANE: '%7',
+        STUB_VERSION: '0.50.0',
+        ...env,
+      },
+    });
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '');
+  /** The Stop hook leaves its work in the background: wait until the log holds `n` lines. */
+  const settle = (n: number) => {
+    for (let i = 0; i < 100 && calls().split('\n').filter(Boolean).length < n; i++) spawnSync('/bin/sleep', ['0.05']);
+    return calls();
+  };
+  const stopInput = JSON.stringify({ session_id: ID.a, hook_event_name: 'Stop', stop_hook_active: false });
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-state-hook-'));
+    bin = path.join(dir, 'bin');
+    log = path.join(dir, 'calls.log');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'tmux'), '#!/bin/sh\necho "tmux $*" >> "$STUB_LOG"\n', { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(bin, 'vdx'),
+      '#!/bin/sh\nif [ "$1" = --version ]; then echo "$STUB_VERSION"; exit 0; fi\necho "vdx $*" >> "$STUB_LOG"\n',
+      { mode: 0o755 },
+    );
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('a prompt, and the end of the session, unset the option of the pane’s session — nothing computed, nothing said', () => {
+    for (const event of ['prompt', 'end']) {
+      fs.rmSync(log, { force: true });
+      const r = run(event, {}, JSON.stringify({ session_id: ID.a, prompt: 'go on' }));
+      expect(r.status, event).toBe(0);
+      expect(r.stdout + r.stderr, event).toBe('');
+      expect(calls(), event).toBe('tmux set-option -u -t %7 @vdx_state\n');
+    }
+  });
+
+  it('the end of a turn computes it again with vdx ai --state, for the conversation the hook names', () => {
+    const r = run('stop', {}, stopInput);
+    expect(r.status).toBe(0);
+    expect(r.stdout + r.stderr).toBe('');
+    expect(settle(1)).toBe(`vdx ai --state /projects/it's mine --conversation ${ID.a}\n`);
+    fs.rmSync(log, { force: true });
+    run('stop', {}, '{"hook_event_name":"Stop"}');
+    expect(settle(1)).toBe(`vdx ai --state /projects/it's mine\n`);
+  });
+
+  it('…only of a vdx that has --state (0.50): an older one refuses it, and before 0.16 would start an agent', () => {
+    for (const version of ['0.49.3', '0.15.0', '']) {
+      fs.rmSync(log, { force: true });
+      expect(run('stop', { STUB_VERSION: version }, stopInput).status, version).toBe(0);
+      spawnSync('/bin/sleep', ['0.3']);
+      expect(calls(), version).toBe('');
+    }
+  });
+
+  it('outside tmux, without tmux or vdx, or with no event it knows, it does nothing', () => {
+    for (const [event, env] of [
+      ['prompt', { TMUX: '' }],
+      ['stop', { TMUX_PANE: '' }],
+      ['bogus', {}],
+    ] as const) {
+      const r = run(event, env, stopInput);
+      expect(r.status, event).toBe(0);
+    }
+    fs.rmSync(path.join(bin, 'vdx'));
+    expect(run('stop', {}, stopInput).status).toBe(0);
+    spawnSync('/bin/sleep', ['0.3']);
+    expect(calls()).toBe('');
+  });
+});

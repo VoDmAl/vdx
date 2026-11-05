@@ -66,6 +66,7 @@ vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (t
 vdx ai --hq [project-path]   # the project's HQ session, for what comes from outside (VDX_HQ=1, tmux session <name>-hq, first prompt agent.hq_args): one per project and machine, you keep it running; other starts leave it alone, --restore brings it back
 vdx ai --close [--waiting <n>]   # inside the intercom session: it ends itself (one you started or attached to from a terminal stays); n questions to you still unanswered show on the project's other tmux sessions
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
+vdx ai --state [project-path] [--conversation <id>]   # the tmux option @vdx_state of this agent's session (empty | finished) for the cmux sidebar — the plugin's Stop hook; prints nothing
 
 # Move projects into a folder on every machine of the profile (session.machines), with what Claude Code keeps by
 # the folder's path: memory path, conversations, trust; idle sessions are closed and started again there.

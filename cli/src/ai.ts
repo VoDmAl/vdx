@@ -75,6 +75,7 @@ import {
   openAtSeat,
   type Pick,
   readAnswer,
+  settledState,
 } from './board.ts';
 
 /**
@@ -240,6 +241,14 @@ const WAITING_OPTION = '@vdx_waiting';
  * prompt hook and intercom. Every agent has a tmux session of its own (vdx-ai DL #36).
  */
 const TOPIC_OPTION = '@vdx_topic';
+/**
+ * The tmux session option with what the agent's transcript says of it: `empty` or `finished`, the
+ * words of the list (board.ts `settledState`); unset — neither. Set by the vdx plugin's hooks —
+ * SessionStart (`--check`) and Stop (`--state`) — and unset when a prompt goes in and when the
+ * session ends; read by the cmux sidebar, whose contract with nas-info names exactly these two
+ * values (vdx-ai-predictable Sidetrack #4).
+ */
+export const STATE_OPTION = '@vdx_state';
 /**
  * On the intercom session the person started or attached to from a terminal: it stays until they
  * end it, and `vdx ai --close` leaves its pane (intercom-session-mode DL #10). One a letter started
@@ -1679,11 +1688,82 @@ function agentFacts(
       hq: modeOf.hq(a.proc.pid),
       openAt: clients.filter((k) => k.session === a.pane.session).map((k) => clientSeat(k.pid, procs, plan.host)),
       title: c?.title ?? null,
-      // No transcript of the conversation it is in: nothing was written there yet.
-      empty: c ? isEmpty(c) : live !== null,
-      finished: c?.finished ?? false,
+      ...transcriptFacts(c, live !== null),
     };
   });
+}
+
+/**
+ * What a conversation's transcript says of the agent in it, for the list and `@vdx_state` alike.
+ * `started` — the agent is known to run in it: then no transcript means nothing was written there yet.
+ */
+function transcriptFacts(c: Conversation | null, started: boolean): { empty: boolean; finished: boolean } {
+  return { empty: c ? isEmpty(c) : started, finished: c?.finished ?? false };
+}
+
+/**
+ * Set `@vdx_state` on the tmux session of `pane` from the transcript of `conversation`, or unset
+ * it: the conversation not known says nothing. Errors are swallowed — a hook runs this.
+ */
+function keepState(
+  deps: AiDeps,
+  pane: string,
+  projectRoot: string,
+  wrapSkills: readonly string[],
+  conversation: string | null,
+): void {
+  try {
+    const c = conversation
+      ? conversationById({ env: deps.env, home: deps.home, projectRoot, id: conversation, wrapSkills })
+      : null;
+    const state = conversation ? settledState(transcriptFacts(c, true)) : null;
+    // A pane as the target: tmux sets the option of the session the pane is in.
+    deps.tmux.tryRun(
+      state ? ['set-option', '-t', pane, STATE_OPTION, state] : ['set-option', '-u', '-t', pane, STATE_OPTION],
+    );
+  } catch {
+    // no option: the sidebar shows what it showed before
+  }
+}
+
+/** The agent's own tmux pane, as the hook's environment names it; null — not in tmux. */
+function ownPane(env: NodeJS.ProcessEnv): string | null {
+  const pane = env['TMUX_PANE']?.trim();
+  return env['TMUX'] && pane && /^%\d+$/.test(pane) ? pane : null;
+}
+
+/**
+ * `vdx ai --state`: `@vdx_state` of the agent's own tmux session, from the transcript of the
+ * conversation the hook names (or the agent's live one) — run by the vdx plugin's Stop hook, so a
+ * wrap shows as finished when its turn ends. Prints nothing and exits 0 whatever happens: what a
+ * hook prints goes to the agent. Outside tmux it does nothing.
+ */
+export function runAiState(
+  pathArg: string,
+  deps: AiDeps,
+  selfPid: number = process.pid,
+  conversation?: string,
+): number {
+  const pane = ownPane(deps.env);
+  if (!pane) return EXIT_OK;
+  const projectRoot = resolveProjectRoot(pathArg);
+  if (!projectRoot) return EXIT_OK;
+  let wrapSkills: readonly string[] = [];
+  const profilePath = resolveEnvironmentPath(deps.env, deps.home);
+  if (profilePath) {
+    try {
+      wrapSkills = loadEnvironment(profilePath).session?.wrap_skills ?? [];
+    } catch {
+      // a profile that does not load names no wrap skill: finished is never said
+    }
+  }
+  let id = conversation ?? null;
+  if (!id) {
+    const own = findOwnAgent(deps.processes(), selfPid, 'claude');
+    id = own ? liveConversationId(deps.env, deps.home, own.pid) : null;
+  }
+  keepState(deps, pane, projectRoot, wrapSkills, id);
+  return EXIT_OK;
 }
 
 /** `vdx ai --report <path>`: this machine's RemoteReport on the project, as JSON on stdout. */
@@ -2052,8 +2132,7 @@ function boardStart(
         hq: c?.hq ?? false,
         openAt: [],
         title: c?.title ?? null,
-        empty: c ? isEmpty(c) : false,
-        finished: c?.finished ?? false,
+        ...transcriptFacts(c, false),
       });
     }
   }
@@ -2081,8 +2160,7 @@ function boardStart(
         hq: c?.hq ?? false,
         openAt: [plan.host],
         title: c?.title ?? null,
-        empty: c ? isEmpty(c) : false,
-        finished: c?.finished ?? false,
+        ...transcriptFacts(c, false),
       };
     });
   // `?` — a terminal over ssh from a machine nothing names: the attaches of a vdx older than 0.44
@@ -2745,7 +2823,7 @@ export function runAiCheck(
   ];
   const procs = deps.processes();
   const own = findOwnAgent(procs, selfPid, plan.command);
-  if (own && isClaude(plan.command))
+  if (own && isClaude(plan.command)) {
     keepRecord(
       deps,
       procs,
@@ -2754,6 +2832,17 @@ export function runAiCheck(
       focused ? 'focused' : intercom ? 'mail' : hq ? 'hq' : 'plain',
       conversation,
     );
+    // A start, a resume — after a restore too — a /clear or a compact: what the sidebar shows starts from the transcript.
+    const pane = ownPane(deps.env);
+    if (pane)
+      keepState(
+        deps,
+        pane,
+        projectRoot,
+        prepared.environment.session?.wrap_skills ?? [],
+        conversation ?? liveConversationId(deps.env, deps.home, own.pid),
+      );
+  }
   if (focused) {
     lines.push(
       `· this session is focused (\`vdx ai --focused\`): it works on what the user gave it — nothing should wake it, ` +

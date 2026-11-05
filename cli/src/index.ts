@@ -44,6 +44,7 @@ import {
   askLine,
   runAi,
   runAiCheck,
+  runAiState,
   runAiRestore,
   runAiClose,
   runAiReport,
@@ -199,7 +200,13 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 It also keeps a record of the agent's tmux pane, for --restore,
                 and of any agent pane here that has none (a plain start and
                 --restore do too); --conversation <id> — the conversation the
-                hook says starts
+                hook says starts. It also sets @vdx_state, as --state does
+  --state       for the agent's own session (the vdx plugin's Stop hook): the tmux
+                option @vdx_state of its session — empty (nothing typed since
+                /clear) or finished (a wrap skill of session.wrap_skills ran, and
+                nothing was typed since), from the transcript of the conversation
+                --conversation <id> names; unset when neither. The cmux sidebar
+                shows it. Prints nothing; outside tmux does nothing
   -h, --help    this help
 
 What a plain start does (Claude Code). The other machines (session.machines in
@@ -419,6 +426,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'list',
       'report',
       'restore',
+      'state',
     ],
     values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
@@ -844,6 +852,22 @@ function cmdAi(opts: ParsedArgs): void {
       process.exit(2);
     }
     process.exit(runAiCheck(opts.positionals[0] ?? '.', defaultDeps(), process.pid, id));
+  }
+  if (opts.flags.state === true) {
+    // About the session this runs in, from its Stop hook: one tmux option, nothing printed.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'state' && f !== 'conversation');
+    if (others.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        `vdx ai: --state takes only the project path and --conversation (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`})\n`,
+      );
+      process.exit(2);
+    }
+    const id = opts.flags.conversation;
+    if (id !== undefined && !(typeof id === 'string' && isConversationId(id))) {
+      process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${String(id)}"\n`);
+      process.exit(2);
+    }
+    process.exit(runAiState(opts.positionals[0] ?? '.', defaultDeps(), process.pid, id));
   }
   if (opts.flags.restore === true) {
     // Every project's agents a fallen tmux server took down on this machine: no project to name.
