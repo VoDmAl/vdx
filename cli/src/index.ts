@@ -114,7 +114,8 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 plugins that wake sessions to leave it alone — and the profile's
                 rules marked \`wakes: true\` (a channel flag) are left out. Back
                 to it: --focused --conversation <id>. A running agent keeps its
-                mode: plain vdx ai attaches to it as it is.
+                mode: plain vdx ai attaches to it as it is. A focused session
+                here already on <topic> is the one: vdx ai attaches to it (0.51)
                 <topic> — what the session is about: the option @vdx_topic of
                 its tmux session (the terminal's title can show it), and the vdx
                 plugin keeps the conversation in it. A new conversation opens
@@ -171,7 +172,8 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 without --detach and answer it
   --dry-run     print the plan and the project's running agents; start nothing.
                 Claude Code: the list as well, and what a start without a terminal takes
-  --list        Claude Code: the list a plain start shows; ask nothing, start nothing
+  --list        Claude Code: the list a plain start shows; ask nothing, start nothing.
+                Under each row, the command that reaches it from here (0.51)
   --find <phrase>
                 Claude Code: the list of the project's conversations whose replies
                 — yours and the agent's — have the phrase, with the text around it:

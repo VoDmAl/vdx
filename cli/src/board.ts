@@ -142,6 +142,8 @@ export interface BoardInput {
    * then Enter is `r`, unless a search was asked for.
    */
   restore?: number;
+  /** The profile's `session.machine_icons`: a machine's mark before its label, as the cmux sidebar shows it. */
+  machineIcons?: Record<string, string>;
   now?: Date;
 }
 
@@ -170,6 +172,27 @@ function stateWord(a: AgentFact, now: Date): string {
     if (days >= 1) return `idle ${days} d`;
   }
   return s;
+}
+
+/**
+ * The mark the cmux sidebar shows for an agent in this state (nas-info's header; the icons the owner
+ * chose, vdx-ai-predictable Sidetrack #4): ⏳ working, ✋ waiting, ✅ finished, 🆕 empty, 🕸️ idle a day
+ * or more, 💤 idle. A draft has no mark there: its row gets the one its age gives. 🔔 — a turn ended
+ * that nobody saw — the list does not know; it says which terminal shows the agent instead.
+ */
+export function stateIcon(a: AgentFact, now: Date): string {
+  const s = agentState(a);
+  if (s === 'working') return '⏳';
+  if (s === 'waiting') return '✋';
+  const settled = settledState(a);
+  if (settled === 'finished') return '✅';
+  if (settled === 'empty') return '🆕';
+  return a.activeAt !== null && now.getTime() - a.activeAt >= 86_400_000 ? '🕸️' : '💤';
+}
+
+/** The sidebar's mark of how the agent was started: 🎯 focused, 📬 the intercom session, 👑 the HQ session. */
+function modeIcon(a: AgentFact): string {
+  return a.focused ? '🎯' : a.mail ? '📬' : a.hq ? '👑' : '';
 }
 
 function openWord(a: AgentFact, seat: string): string {
@@ -206,6 +229,14 @@ export function buildBoard(input: BoardInput): Board {
     for (const l of [found, command]) if (l) lines.push(`       ${l}`);
   };
   const width = Math.max(0, ...agents.map((a) => (a.session ?? `pid ${a.pid}`).length));
+  // A machine's mark before its label; with marks in the profile, a machine without one keeps the column.
+  const icons = Object.entries(input.machineIcons ?? {});
+  const mark = (machine: string | null) => {
+    if (icons.length === 0) return '';
+    const icon = machine === null ? undefined : icons.find(([m]) => same(m, machine))?.[1];
+    return icon ? `${icon} ` : '   ';
+  };
+  const signs = (a: AgentFact) => `${stateIcon(a, now)}${modeIcon(a)}`;
   for (const a of agents) {
     const row: Pick = { kind: 'agent', agent: a };
     rows.push(row);
@@ -214,18 +245,20 @@ export function buildBoard(input: BoardInput): Board {
       .filter(Boolean)
       .join(' · ');
     const open = openWord(a, seat);
-    lines.push(`  ${rows.length}) ${a.machine.padEnd(4)} ${where}  ${what}${open ? `   ${open}` : ''}`);
+    lines.push(
+      `  ${rows.length}) ${mark(a.machine)}${a.machine.padEnd(4)} ${where}  ${signs(a)} ${what}${open ? `   ${open}` : ''}`,
+    );
     under(row, a.conversation);
   }
   for (const a of mail)
     lines.push(
-      `     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the intercom session — not yours to attach`,
+      `     ${mark(a.machine)}${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  ${signs(a)} the intercom session — not yours to attach`,
     );
   // The person sits at this one, so it is named — and no key leads to it: its own command does.
   for (const a of hq) {
     const open = openWord(a, seat);
     lines.push(
-      `     ${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}` +
+      `     ${mark(a.machine)}${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}` +
         ` — vdx ai${same(a.machine, seat) ? '' : `@${a.machine}`} --hq`,
     );
   }
@@ -238,14 +271,14 @@ export function buildBoard(input: BoardInput): Board {
       input.behind?.has(c.id)
         ? `not here yet from ${machine} — continues there`
         : c.finished
-          ? 'finished (wrap)'
+          ? '✅ finished (wrap)'
           : 'cut off',
       machine === null && 'machine unknown',
     ]
       .filter(Boolean)
       .join(', ');
     lines.push(
-      `  ${rows.length}) ${(machine ?? '?').padEnd(4)} ${describeAge(c.updated, now)}  ${c.id.slice(0, 8)}  ${state}${c.title ? ` · ${quoted(c.title)}` : ''}`,
+      `  ${rows.length}) ${mark(machine)}${(machine ?? '?').padEnd(4)} ${describeAge(c.updated, now)}  ${c.id.slice(0, 8)}  ${state}${c.title ? ` · ${quoted(c.title)}` : ''}`,
     );
     under(row, c.id);
   }

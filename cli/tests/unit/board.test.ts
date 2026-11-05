@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { type AgentFact, agentState, buildBoard, enterKey, inputDraft, readAnswer } from '../../src/board.ts';
+import {
+  type AgentFact,
+  agentState,
+  buildBoard,
+  enterKey,
+  inputDraft,
+  readAnswer,
+  stateIcon,
+} from '../../src/board.ts';
 import type { Conversation } from '../../src/conversations.ts';
 import { ID } from './transcripts.ts';
 
@@ -152,6 +160,55 @@ describe('buildBoard: one list, Enter marked', () => {
   });
 });
 
+describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrack #4)', () => {
+  const day = 86_400_000;
+  it('each state has the mark the sidebar shows for it; a draft — the one its age gives', () => {
+    expect(stateIcon(agent({ status: 'busy' }), now)).toBe('⏳');
+    expect(stateIcon(agent({ status: 'shell' }), now)).toBe('⏳');
+    expect(stateIcon(agent({ status: 'waiting' }), now)).toBe('✋');
+    expect(stateIcon(agent({ finished: true }), now)).toBe('✅');
+    // Empty and finished keep their mark however long they wait (the owner's rule, 2026-11-04).
+    expect(stateIcon(agent({ empty: true, activeAt: now.getTime() - 6 * day }), now)).toBe('🆕');
+    expect(stateIcon(agent({ finished: true, activeAt: now.getTime() - 6 * day }), now)).toBe('✅');
+    expect(stateIcon(agent(), now)).toBe('💤');
+    expect(stateIcon(agent({ activeAt: now.getTime() - day }), now)).toBe('🕸️');
+    expect(stateIcon(agent({ draft: 12, activeAt: now.getTime() - 2 * day }), now)).toBe('🕸️');
+    expect(stateIcon(agent({ draft: 12, empty: true }), now)).toBe('🆕');
+    expect(stateIcon(agent({ activeAt: null }), now)).toBe('💤');
+  });
+
+  it('the mode marks follow the state, as in the sidebar; a finished conversation nobody runs is ✅', () => {
+    const text = board(
+      [
+        agent({ focused: true, topic: 'search', status: 'busy' }),
+        agent({ session: 'proj@m3-intercom', pid: 101, mail: true }),
+        agent({ session: 'proj@m3-hq', pid: 102, hq: true, empty: true }),
+      ],
+      [conv(ID.b, { finished: true }), conv(ID.c)],
+    ).lines.join('\n');
+    expect(text).toContain('proj@m3  ⏳🎯 focused «search» · working');
+    expect(text).toContain('proj@m3-intercom  💤📬 the intercom session');
+    expect(text).toContain('proj@m3-hq  🆕👑 the HQ session · empty');
+    expect(text).toMatch(/bbbbbbbb {2}✅ finished \(wrap\)/);
+    expect(text).toMatch(/cccccccc {2}cut off/);
+  });
+
+  it("a machine's mark from the profile before its label; a machine without one, or not known, keeps the column", () => {
+    const icons = { M3: '🔹', lft: '🟢' };
+    const text = board(
+      [agent(), agent({ machine: 'lft', session: 'proj@lft', pid: 200 })],
+      [conv(ID.b, { machine: 'other' }), conv(ID.c, { machine: null })],
+      { machineIcons: icons },
+    ).lines.join('\n');
+    expect(text).toMatch(/1\) 🔹 m3 {3}proj@m3 /);
+    expect(text).toMatch(/2\) 🟢 lft {2}proj@lft /);
+    expect(text).toMatch(/3\) {4}other .*bbbbbbbb/);
+    expect(text).toMatch(/4\) {4}\? {4}.*cccccccc/);
+    // No marks in the profile: no column.
+    expect(board([agent()]).lines.join('\n')).toMatch(/1\) m3 {3}proj@m3 /);
+  });
+});
+
 describe('buildBoard: the HQ session', () => {
   it('is a line with its state and its own command, not a row, and not in the count', () => {
     const b = board([
@@ -160,7 +217,7 @@ describe('buildBoard: the HQ session', () => {
     ]);
     expect(b.rows).toHaveLength(1);
     expect(b.lines[0]).toMatch(/1 running/);
-    expect(b.lines.join('\n')).toContain('proj@m3-hq  the HQ session · working — vdx ai --hq');
+    expect(b.lines.join('\n')).toContain('proj@m3-hq  ⏳👑 the HQ session · working — vdx ai --hq');
   });
 
   it('on another machine, its command names the machine; a terminal showing it is said', () => {
@@ -181,9 +238,9 @@ describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
     const b = board([agent({ openAt: ['m3'] })], [conv(ID.c, { finished: true })], { find });
     const text = b.lines.join('\n');
     expect(b.lines[0]).toBe('proj — «the needle» in 2 of 29 conversations');
-    expect(text).toMatch(/1\) m3 +proj@m3 {2}idle · «Work» {3}open here\n {7}you: «where is the needle\?»/);
+    expect(text).toMatch(/1\) m3 +proj@m3 {2}💤 idle · «Work» {3}open here\n {7}you: «where is the needle\?»/);
     expect(text).toMatch(
-      /2\) lft .*cccccccc {2}finished \(wrap\).*\n {7}agent: «the needle is here» \(2 replies have it\)/,
+      /2\) lft .*cccccccc {2}✅ finished \(wrap\).*\n {7}agent: «the needle is here» \(2 replies have it\)/,
     );
     expect(b.enter).toBe(1);
     expect(b.lines.at(-1)).toBe('  Enter → 2 · a the whole list · /<phrase> another search · n new · f new focused');

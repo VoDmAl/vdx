@@ -139,6 +139,14 @@ interface SessionProfile {
   project_names?: NameSource[];
   /** The machines a project's agent may run on, as ssh destinations; vdx asks the others what runs there. */
   machines?: string[];
+  /** A machine's mark on the list of `vdx ai`, before its label — the one the cmux sidebar shows for it. */
+  machine_icons?: Record<string, string>;
+  /**
+   * At a terminal, a start never takes a session on its own: a plain start always shows the list, and a
+   * running session that `--focused "<topic>"` or `--new` would go into is a question. For a while, until the
+   * choice is trusted (the owner, 2026-11-05; vdx-ai-predictable Sidetrack #7).
+   */
+  always_list?: boolean;
   /** What to do when a session cannot read ~/Downloads, ~/Desktop or ~/Documents (macOS): shown after the warning. */
   folders_fix?: string;
   /**
@@ -352,6 +360,22 @@ export function parseEnvironment(text: string, source: string): Environment {
         if (!isMachineLabel(m))
           fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
       });
+    }
+    if (session.always_list !== undefined && typeof session.always_list !== 'boolean')
+      fail('session.always_list', 'must be true or false');
+    if (session.machine_icons !== undefined) {
+      const icons: unknown = session.machine_icons;
+      if (typeof icons !== 'object' || icons === null || Array.isArray(icons))
+        fail('session.machine_icons', 'must be a mapping of machine names to marks');
+      for (const [m, icon] of Object.entries(icons as Record<string, unknown>)) {
+        if (!isMachineLabel(m))
+          fail(
+            `session.machine_icons.${m}`,
+            'must be keyed by a machine name: letters, digits, . _ - and no leading -',
+          );
+        if (typeof icon !== 'string' || icon.trim() === '' || /\s/.test(icon) || [...icon].length > 4)
+          fail(`session.machine_icons.${m}`, 'must be a short mark: up to 4 characters, no spaces');
+      }
     }
     if (
       session.folders_fix !== undefined &&
@@ -2085,6 +2109,10 @@ function boardStart(
   mode: 'ask' | 'print' | 'auto',
   find?: string,
   restore = 0,
+  /** The profile's `session.machine_icons`. */
+  machineIcons: Record<string, string> = {},
+  /** The profile's `session.always_list`: at a terminal, never one of the plain cases — always the list. */
+  alwaysList = false,
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -2224,6 +2252,18 @@ function boardStart(
       limit: Infinity,
       wrapSkills,
     }).filter(isPersons);
+  // The command that reaches a row from this seat (Sidetrack #7): a running agent by its conversation,
+  // which attaches to it, on its machine; a conversation nobody runs, continued there.
+  const reachOf = (p: Pick): string | null => {
+    if (p.kind !== 'agent' && p.kind !== 'conversation') return null;
+    if (p.kind === 'agent' && (!p.agent.session || !p.agent.conversation)) return null;
+    const id = p.kind === 'agent' ? p.agent.conversation! : p.conversation.id;
+    const m = p.kind === 'agent' ? p.agent.machine : p.machine;
+    if (m === null) return `on its machine: vdx ai@<machine> ${k.root} --conversation ${id}`;
+    return sameMachine(m, plan.seat)
+      ? `vdx ai ${k.rootOn(m)} --conversation ${id}`
+      : `vdx ai@${m} ${k.root} --conversation ${id}`;
+  };
   const make = (limit: number | 'all') =>
     buildBoard({
       project: plan.project,
@@ -2238,6 +2278,8 @@ function boardStart(
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
       limit,
       restore: mode === 'ask' ? restore : 0,
+      machineIcons,
+      reach: mode === 'print' ? reachOf : undefined,
     });
   const show = (b: Board, to: (line: string) => void) => {
     for (const l of b.lines) to(l);
@@ -2260,17 +2302,6 @@ function boardStart(
     const around = new Map(
       found.map((f) => [f.id, `${f.who}: «${f.around}»${f.hits > 1 ? ` (${f.hits} replies have it)` : ''}`]),
     );
-    // Nobody to ask: the command for each row — the conversation's id is not on the row whole.
-    const reach = (p: Pick): string | null => {
-      if (p.kind !== 'agent' && p.kind !== 'conversation') return null;
-      if (p.kind === 'agent' && (!p.agent.session || !p.agent.conversation)) return null;
-      const id = p.kind === 'agent' ? p.agent.conversation! : p.conversation.id;
-      const m = p.kind === 'agent' ? p.agent.machine : p.machine;
-      if (m === null) return `on its machine: vdx ai@<machine> ${k.root} --conversation ${id}`;
-      return sameMachine(m, plan.seat)
-        ? `vdx ai ${k.rootOn(m)} --conversation ${id}`
-        : `vdx ai@${m} ${k.root} --conversation ${id}`;
-    };
     return buildBoard({
       project: plan.project,
       host: plan.host,
@@ -2282,8 +2313,10 @@ function boardStart(
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
       find: { phrase, searched: files.size, around },
-      reach: print ? reach : undefined,
+      // Nobody to ask: the command for each row — the conversation's id is not on the row whole.
+      reach: print ? reachOf : undefined,
       restore: print ? 0 : restore,
+      machineIcons,
     });
   };
   if (mode === 'print') {
@@ -2368,7 +2401,7 @@ function boardStart(
 
   // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
   // shows already. A search is a choice, and so is what tmux took down.
-  const only = working.length === 1 && find === undefined && restore === 0 ? working[0]! : null;
+  const only = working.length === 1 && find === undefined && restore === 0 && !alwaysList ? working[0]! : null;
   if (only && !openAtSeat(only, plan.seat)) {
     const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
     return outcomeOf({ kind: 'agent', agent: only }, [
@@ -2376,7 +2409,7 @@ function boardStart(
       ...k.silent,
     ]);
   }
-  if (working.length === 0 && find === undefined && restore === 0) {
+  if (working.length === 0 && find === undefined && restore === 0 && !alwaysList) {
     const newest = continuable[0];
     if (!newest)
       return outcomeOf({ kind: 'new', focused: false }, [
@@ -3414,6 +3447,28 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // next to them; --restart replaces one. An agent whose conversation vdx cannot read may be in the
   // one asked for: no second agent in it blindly.
   const inConversation = opts.conversation ? running.find((a) => conversationOf(a) === opts.conversation) : undefined;
+  // A focused start names a topic a focused session here already has: that session is the one asked
+  // for, not one more next to it (vdx-ai-predictable Sidetrack #7).
+  const topicAsked =
+    plan.focused && opts.topic && !opts.conversation && !opts.restart ? normalizeTopic(opts.topic) : '';
+  let onTopic = topicAsked
+    ? running.find(
+        (a) => focusedOf(a.proc.pid) && normalizeTopic(sessionTopic(tmux, a.pane.session) ?? '') === topicAsked,
+      )
+    : undefined;
+  // `session.always_list`: at a terminal, a running session is gone into only on the person's word.
+  const askFirst = environment.session?.always_list === true && deps.interactive && !opts.dryRun;
+  if (onTopic) {
+    const line = `${onTopic.pane.session} is the focused session on «${topicAsked}»`;
+    if (askFirst) {
+      const answer = deps.ask(`${line} — Enter attaches to it, n starts a new one next to it: `);
+      if (answer === null) {
+        log('no answer — nothing started');
+        return EXIT_LAUNCH_FAILED;
+      }
+      if (/^n(ew)?$/i.test(answer.trim())) onTopic = undefined;
+    } else log(`→ ${line} — attaching to it`);
+  }
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
   // One intercom or HQ session per project and machine: a running one is the one, never a second next to it.
   let alongside =
@@ -3423,8 +3478,9 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     !opts.restart &&
     !inConversation &&
     !unreadable &&
+    !onTopic &&
     (wantsNew || !!opts.conversation);
-  let current = inConversation ?? unreadable;
+  let current = inConversation ?? unreadable ?? onTopic;
 
   // A plain start of Claude Code: one list of what runs on every machine and what can be
   // continued, unless the choice is plain (vdx-ai-predictable).
@@ -3467,6 +3523,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       listed ? 'print' : ask ? 'ask' : 'auto',
       opts.find,
       offer,
+      environment.session?.machine_icons ?? {},
+      environment.session?.always_list === true,
     );
     switch (outcome.kind) {
       case 'listed':
@@ -3534,7 +3592,17 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       mail: mailOf,
       hq: hqAgent,
     }).find((f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused));
-    const pane = free && running.find((a) => a.proc.pid === free.pid);
+    let pane = free && running.find((a) => a.proc.pid === free.pid);
+    if (pane && askFirst) {
+      const answer = deps.ask(
+        `${pane.pane.session}: nothing typed in it since /clear — Enter puts the new conversation there, n starts one more next to it: `,
+      );
+      if (answer === null) {
+        log('no answer — nothing started');
+        return EXIT_LAUNCH_FAILED;
+      }
+      if (/^n(ew)?$/i.test(answer.trim())) pane = undefined;
+    }
     if (pane) {
       current = pane;
       alongside = false;
