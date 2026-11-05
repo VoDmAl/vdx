@@ -241,7 +241,12 @@ export function buildBoard(input: BoardInput): Board {
     const row: Pick = { kind: 'agent', agent: a };
     rows.push(row);
     const where = (a.session ?? `pid ${a.pid}`).padEnd(width);
-    const what = [a.focused ? `focused${a.topic ? ` ${quoted(a.topic)}` : ''}` : '', stateWord(a, now), quoted(a.title)]
+    // A focused session with no topic says so: started before topics (0.41), or the agent never set one.
+    const what = [
+      a.focused ? `focused ${a.topic ? quoted(a.topic) : '(no topic)'}` : '',
+      stateWord(a, now),
+      quoted(a.title),
+    ]
       .filter(Boolean)
       .join(' · ');
     const open = openWord(a, seat);

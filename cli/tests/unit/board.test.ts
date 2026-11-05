@@ -187,6 +187,8 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
       [conv(ID.b, { finished: true }), conv(ID.c)],
     ).lines.join('\n');
     expect(text).toContain('proj@m3  ⏳🎯 focused «search» · working');
+    // A focused session with no topic says so.
+    expect(board([agent({ focused: true })]).lines.join('\n')).toContain('proj@m3  💤🎯 focused (no topic) · idle');
     expect(text).toContain('proj@m3-intercom  💤📬 the intercom session');
     expect(text).toContain('proj@m3-hq  🆕👑 the HQ session · empty');
     expect(text).toMatch(/bbbbbbbb {2}✅ finished \(wrap\)/);

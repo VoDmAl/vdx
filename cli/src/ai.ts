@@ -2555,6 +2555,11 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
     profileDir,
   });
 
+  // Read once, here: a start drops VDX_AI_FROM from the environment before its agent starts, and a
+  // plan made again after that (a running focused agent, `f` on the list) would put the person's
+  // terminal at this machine — a terminal from another machine was marked with the wrong seat (2026-11-05).
+  const host = hostLabel(deps.env);
+  const seat = seatLabel(deps.env);
   const replan = (asFocused: boolean) =>
     planLaunch({
       environment,
@@ -2563,8 +2568,8 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
       projectRoot,
       project: named.name,
       projectSource: named.source,
-      host: hostLabel(deps.env),
-      seat: seatLabel(deps.env),
+      host,
+      seat,
       focused: asFocused,
       intercom,
       hq,
@@ -3561,8 +3566,9 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
         const { started, skipped, failed } = restoreAgents(lost?.mine ?? [], deps, false);
         const rest = [skipped && `${skipped} left out`, failed && `${failed} did not start`].filter(Boolean).join(', ');
         log(`${failed ? '✗' : '✓'} ${started} back${rest ? ` (${rest})` : ''}`);
-        // What runs now is another list: the start goes on from there.
-        return runAi(opts, deps, selfPid);
+        // What runs now is another list: the start goes on from there — from the same seat, which
+        // this start dropped from the environment before its agents came back.
+        return runAi(opts, { ...deps, env: { ...deps.env, [SEAT_ENV_VAR]: plan.seat } }, selfPid);
       }
       case 'new':
         for (const l of outcome.lines) log(l);

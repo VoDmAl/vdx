@@ -2520,6 +2520,39 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(tmux.hasSession('proj@testhost-3')).toBe(true);
   });
 
+  /** A start from another machine (`vdx ai@testhost` from lft): what seat each attach marks its terminal with. */
+  const fromLft = () => {
+    const seats: Record<string, string | undefined> = {};
+    const d = deps();
+    const t = Object.create(tmux) as typeof tmux;
+    t.attach = (session: string, _inside: boolean, env?: NodeJS.ProcessEnv) => {
+      seats[session] = env?.['VDX_AI_SEAT'];
+      return 0;
+    };
+    // A new environment for every start, as every vdx process has: a start drops VDX_AI_FROM from it.
+    return { seats, deps: () => ({ ...d, tmux: t, env: { ...d.env, VDX_AI_FROM: 'lft' } }) };
+  };
+
+  it('a terminal from another machine attached to an agent is marked with that seat — a focused one too (2026-11-05)', () => {
+    focusedIn('proj@testhost', ID.a, 'search');
+    agentIn('proj@testhost-2', ID.b, [startedOn('testhost'), userLine('other')]);
+    const from = fromLft();
+    expect(runAi({ ...opts, detach: false, path: root, conversation: ID.a }, from.deps())).toBe(EXIT_OK);
+    expect(runAi({ ...opts, detach: false, path: root, conversation: ID.b }, from.deps())).toBe(EXIT_OK);
+    expect(from.seats).toEqual({ 'proj@testhost': 'lft', 'proj@testhost-2': 'lft' });
+  });
+
+  it('…and the start that goes on after `r` brought back what tmux took down', () => {
+    const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    hook(pane, ID.a);
+    tmux.tryRun(['kill-server']);
+    const from = fromLft();
+    answers = [''];
+    expect(runAi({ ...opts, detach: false, path: root }, from.deps())).toBe(EXIT_OK);
+    expect(text()).toContain('✓ 1 back');
+    expect(from.seats).toEqual({ 'proj@testhost': 'lft' });
+  }, 30_000);
+
   describe('session.always_list: at a terminal nothing is gone into on its own (Sidetrack #7)', () => {
     const always = () => {
       const file = path.join(base, 'env-always.yaml');
