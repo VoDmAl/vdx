@@ -89,7 +89,7 @@ afterAll(() => {
 // The tests' own tmux servers, `vdx-test[-<what>]-<pid>`. kill-server leaves the socket file behind.
 const tmuxSocketDir = path.join(process.env['TMUX_TMPDIR'] || '/tmp', `tmux-${process.getuid?.() ?? ''}`);
 function dropServer(tmux: Tmux, socket: string): void {
-  tmux.tryRun(['kill-server']);
+  killServer(tmux);
   fs.rmSync(path.join(tmuxSocketDir, socket), { force: true });
 }
 const alive = (pid: number) => {
@@ -100,6 +100,16 @@ const alive = (pid: number) => {
     return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
 };
+/**
+ * kill-server returns before the server is gone, and a new-session right after it can reach the dying
+ * one: «server exited unexpectedly» — CI on node 24 failed so twice (2026-11-06, two different tests).
+ * Wait for its process to end, up to 2 s.
+ */
+function killServer(tmux: Tmux): void {
+  const pid = Number(tmux.tryRun(['display-message', '-p', '#{pid}'])?.trim());
+  tmux.tryRun(['kill-server']);
+  for (let i = 0; i < 100 && pid > 0 && alive(pid); i++) sleepSync(20);
+}
 // A run cut short (Ctrl-C, a timeout, a worker gone) never reaches its kill-server, and its server
 // keeps a fake agent alive (vdx-ai Sidetrack #23): those of runs that are gone go first.
 beforeAll(() => {
@@ -1731,7 +1741,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('after a reboot with nothing to resume, a plain start runs the agent without the resume args', () => {
     writeProfile(['--base', '--extra']);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     fs.writeFileSync(path.join(base, 'no-conversation'), '');
     try {
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
@@ -1744,7 +1754,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   }, 30_000); // "not running" is concluded after a 10 s wait
 
   it('--restart of a Claude Code agent resumes the conversation it is in, not the newest in the folder', () => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const claude = path.join(base, 'bin', 'claude');
     fs.mkdirSync(path.dirname(claude), { recursive: true });
     fs.copyFileSync(path.join(base, 'fake-agent'), claude);
@@ -1779,12 +1789,12 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         expect.stringMatching(new RegExp(`claude --base --resume ${ID.c}$`)),
       ]);
     } finally {
-      tmux.tryRun(['kill-server']);
+      killServer(tmux);
     }
   }, 30_000); // two starts, each answering the prompt and seeing the agent twice a second apart
 
   it('--detach in a folder Claude Code does not trust: refused — the agent would wait on the window unseen', () => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const claude = path.join(base, 'bin', 'claude');
     fs.mkdirSync(path.dirname(claude), { recursive: true });
     fs.copyFileSync(path.join(base, 'fake-agent'), claude);
@@ -1811,12 +1821,12 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       );
       expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toEqual([]);
     } finally {
-      tmux.tryRun(['kill-server']);
+      killServer(tmux);
     }
   });
 
   it('--conversation attaches to the agent in it, or starts one next to the agents here', () => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const claude = path.join(base, 'bin', 'claude');
     fs.mkdirSync(path.dirname(claude), { recursive: true });
     fs.copyFileSync(path.join(base, 'fake-agent'), claude);
@@ -1864,12 +1874,12 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(logs.join('\n')).toContain('in a conversation vdx cannot read — attaching to it');
       expect(agents()).toHaveLength(2);
     } finally {
-      tmux.tryRun(['kill-server']);
+      killServer(tmux);
     }
   }, 30_000);
 
   it('r at the drift question resumes the conversation the agent is in, not the newest in the folder', () => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const claude = path.join(base, 'bin', 'claude');
     fs.mkdirSync(path.dirname(claude), { recursive: true });
     fs.copyFileSync(path.join(base, 'fake-agent'), claude);
@@ -1900,13 +1910,13 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         expect.stringMatching(new RegExp(`claude --base --extra --resume ${ID.c}$`)),
       ]);
     } finally {
-      tmux.tryRun(['kill-server']);
+      killServer(tmux);
     }
   }, 30_000);
 
   it('--new on a fresh start runs the agent without the resume args', () => {
     writeProfile(['--base', '--extra']);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     expect(runAi({ ...opts, path: root, fresh: true, dryRun: true }, deps())).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain('resume:   —');
     expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
@@ -1916,7 +1926,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('--focused starts a focused agent in a new conversation next to the running one; a plain start then picks', () => {
     writeProfile(['--base'], true);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     const plain = agents()[0]!;
@@ -1960,7 +1970,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('--focused <topic>: its tmux session carries it, a restart keeps it, its own agent changes it (focused-topic)', () => {
     writeProfile(['--base'], true);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     const topicOf = (session: string) =>
       tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim() ?? '';
@@ -2042,7 +2052,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   }, 60_000);
 
   it('--focused --conversation <id> brings back the topic the conversation last had', () => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const claude = path.join(base, 'bin', 'claude');
     fs.mkdirSync(path.dirname(claude), { recursive: true });
     fs.copyFileSync(path.join(base, 'fake-agent'), claude);
@@ -2063,7 +2073,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('--intercom: the intercom session in a session of its own, one per project; the other starts leave it alone', () => {
     writeProfile(['--base'], true, ['/first prompt']);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     const plain = agents()[0]!;
@@ -2139,7 +2149,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('--hq: a session of its own with its sign, one per project; the other starts leave it alone, --close too', () => {
     writeProfile(['--base'], true, [], ['/first prompt']);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     const session = 'proj@testhost-hq';
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
@@ -2202,7 +2212,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('--focused <topic>: the topic is the first prompt; typed at the question, or with --conversation, it is not', () => {
     writeProfile(['--base'], true);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agentOf = (session: string) =>
       findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent').find((a) => a.pane.session === session)!;
 
@@ -2221,7 +2231,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-3:', '@vdx_topic'])?.trim()).toBe('-x');
 
     // Typed at the question: a topic, and no turn.
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const typed = Object.create(tmux) as typeof tmux;
     typed.attach = () => 0;
     expect(
@@ -2233,7 +2243,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
   it('the intercom session the person started: --close leaves its pane, the line says it stays', () => {
     writeProfile(['--base'], true, ['/first prompt']);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     const stays = (session: string) => tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_stays'])?.trim();
     const toolOf = (agentPid: number) => () => [
@@ -2294,7 +2304,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
     beforeEach(() => {
       writeProfile(['--base'], true, ['/first prompt'], ['/first prompt']);
-      tmux.tryRun(['kill-server']);
+      killServer(tmux);
       logs = [];
     });
 
@@ -2461,7 +2471,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     answers = [];
   });
   afterEach(() => {
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     fs.rmSync(path.join(cc(), 'sessions'), { recursive: true, force: true });
     fs.rmSync(path.join(base, '.local'), { recursive: true, force: true });
   });
@@ -2545,7 +2555,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
   it('…and the start that goes on after `r` brought back what tmux took down', () => {
     const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
     hook(pane, ID.a);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     const from = fromLft();
     answers = [''];
     expect(runAi({ ...opts, detach: false, path: root }, from.deps())).toBe(EXIT_OK);
@@ -2706,7 +2716,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     const pane = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
     hook(pane, ID.a);
     expect(records()).toEqual([`${pane.pane.paneId.slice(1)}.json`]);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     answers = [''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(text()).toContain('⚠ no tmux server runs here — before that 1 agent of proj ran: proj@testhost\n');
@@ -2733,7 +2743,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(records()).toEqual([]);
     expect(runAi({ ...opts, path: root }, { ...deps(), agentFocused: () => true })).toBe(EXIT_OK);
     expect(records()).toHaveLength(1);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     logs = [];
     expect(runAiRestore(false, deps())).toBe(EXIT_OK);
     expect(text()).toContain(`▶ proj@testhost: conversation ${ID.a.slice(0, 8)}, focused «search»`);
@@ -2761,7 +2771,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       pid: 1,
       written: Date.now(),
     });
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
 
     // The project's start says what tmux took down, of it and of the others, and how to bring all back.
     expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
@@ -2893,7 +2903,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
   it('--restore brings the HQ session back in its conversation, mode and sign — unless one runs now', () => {
     const pane = hqIn(ID.a);
     hook(pane, ID.a, { VDX_HQ: '1' });
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
 
     logs = [];
     expect(runAiRestore(true, deps())).toBe(EXIT_OK);
@@ -2909,11 +2919,11 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAiRestore(false, deps())).toBe(EXIT_OK);
     expect(text()).toContain("· proj@testhost-hq: not brought back — the project's HQ session runs here now");
     expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toHaveLength(1);
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
 
     // With none running: back, marked, with its sign and no new turn.
     hook(hqIn(ID.a), ID.a, { VDX_HQ: '1' });
-    tmux.tryRun(['kill-server']);
+    killServer(tmux);
     logs = [];
     expect(runAiRestore(false, deps())).toBe(EXIT_OK);
     const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
