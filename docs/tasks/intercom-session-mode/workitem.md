@@ -5,7 +5,7 @@ description: "Поднимает сессию проекта для писем i
 status: in-progress
 session-type: prd-work
 created: 2026-10-22
-last-updated: 2026-11-04
+last-updated: 2026-11-06
 ---
 
 # Почтовая сессия проекта: `vdx ai --intercom`
@@ -534,7 +534,10 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [x] `reply` на `intercom-session-name-vdx` (`-outcome`, 2026-11-03); письмо ai-dev-plugins о `@vdx_stays` —
       `ai-dev-plugins/vdx-stays-option`; их итог ждём, срока нет
 - [ ] Ответ ai-dev-plugins на `vdx-stays-option`: `intercom close` не обещает закрытия, строка старта и побудка для
-      сессии с `@vdx_stays`
+      сессии с `@vdx_stays`. Письмо взято 2026-11-03 в их кристалл `intercom-session-stays` (`ready`, код не тронут).
+      2026-11-06 владелец: «Окей да погнали» — письмо `ai-dev-plugins/intercom-session-stays-start` (начать сейчас,
+      срока владелец не назвал), их сессия intercom `vdm@m3-intercom` поднята; ждём `reply`: версия vdm и чья живая
+      проверка
 - [x] Живьём на 0.48.0, запуск письмом: `vdm@lft-intercom` (2026-11-03, поднята письмом `vdx-stays-option`):
       суффикс, `DISABLE_AUTO_UPDATE=true` и `VDX_INTERCOM=1` в панели, `@vdx_stays` нет; письма разобрала, закрылась
       сама за 360 с, в транскрипте «the intercom session closes in 2 s»
