@@ -536,8 +536,11 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [ ] Ответ ai-dev-plugins на `vdx-stays-option`: `intercom close` не обещает закрытия, строка старта и побудка для
       сессии с `@vdx_stays`. Письмо взято 2026-11-03 в их кристалл `intercom-session-stays` (`ready`, код не тронут).
       2026-11-06 владелец: «Окей да погнали» — письмо `ai-dev-plugins/intercom-session-stays-start` (начать сейчас,
-      срока владелец не назвал), их сессия intercom `vdm@m3-intercom` поднята; ждём `reply`: версия vdm и чья живая
-      проверка
+      срока владелец не назвал), их сессия intercom `vdm@m3-intercom` поднята. Итог `intercom-session-stays-start-outcome`
+      (2026-11-06): кристалл у них `in-progress` (их DL #3), код не начат — сессия intercom код не правит, а в их дереве
+      с 05.11 ждёт непрогнанная строка коммита (`PROJECT_CHANGELOG.md`, `tests/gates.test.sh`; сессии `vdm@lft`,
+      `vdm@lft-3` на lft ждали владельца). Тот же день владелец прогнал строку в `vdm@lft-3` и отдал ей кристалл, она
+      начала. Мяч — ai-dev-plugins: правка, версия vdm, итог ответом на `vdx-stays-option`, срока нет
 - [x] Живьём на 0.48.0, запуск письмом: `vdm@lft-intercom` (2026-11-03, поднята письмом `vdx-stays-option`):
       суффикс, `DISABLE_AUTO_UPDATE=true` и `VDX_INTERCOM=1` в панели, `@vdx_stays` нет; письма разобрала, закрылась
       сама за 360 с, в транскрипте «the intercom session closes in 2 s»
@@ -550,9 +553,12 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       владельца ⏰ 2026-11-14, обязательство у space-hq
 - [x] Живьём на выпущенном, настоящий claude: письмо `lft-disk-syncthing-stopped-0411` подняло `nas-info@lft-intercom`, два старта с разрывом
       0,5 с (lft, 0.49.2, 2026-11-04 16:03 EST): оба кода 0, у второго «another start got there first», одно окно `%170`, один claude
-- [ ] Живьём на 0.48.0, поднятая руками: `vdx ai --intercom` из терминала — `@vdx_stays` = 1, `--close` панель не
-      закрывает — when: владелец поднял такую сессию (срока нет); check:
-      `tmux ls -F '#{session_name} #{@vdx_stays}' | grep -- -intercom`
+- [x] Живьём, поднятая руками (m3, vdx 0.51.1, vdm 2.77.2, 2026-11-06): владелец поднял `lime-hq@m3-intercom` и
+      `mediko-hq@m3-intercom` в 15:13 EST — у обеих `@vdx_stays` = 1. lime-hq разобрала письмо и вызвала `intercom
+      close`: «✓ lime-hq@m3-intercom %239: the user started this intercom session — it stays and waits for a wake»,
+      панель осталась (транскрипт `ee3a0bb2`); строка intercom перед ней ещё прежняя, «inbox handled … vdx ai
+      --close» — правка ai-dev-plugins не вышла. mediko-hq разобрала письмо и `close` не звала. Строку intercom
+      после их выпуска — проверить на следующей такой сессии
 - [ ] `vdx ai --restore`: поднимать ли сессию с `@vdx_stays` после падения tmux — `vdx-ai-predictable` записал, что
       решение по Sidetrack #7 может это поменять; нужен режим в записи панели и новый запуск с `VDX_INTERCOM=1`
 - [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
