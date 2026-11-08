@@ -879,8 +879,13 @@ with exit 2 and runs nothing`); отдельный прогон файла и с
       `c3c6f94` и соседний `83304b0` (кристалл intercom-session-mode, его `vdx push` перезаписал `vdx-gate/main`)
       красные: `cli (node 24)` — «server exited unexpectedly» у `tmux new-session` сразу после `kill-server` прошлого
       теста (два разных теста; гонка обвязки, не кода). Чинится `killServer` в `ai.test.ts` — ждёт выхода сервера;
-      тег `v0.51.1` и `main` уйдут с `vdx push` починки (`--follow-tags`);
-      осталось: коммит починки, `vdx push`; после — переподключить две вкладки владельца на lft
+      тег `v0.51.1` и `main` уйдут с `vdx push` починки (`--follow-tags`) — 2026-11-06: починка `2137735`, CI зелёный
+      на обоих node, `main` на `2137735`, тег `v0.51.1` → `c3c6f94` на GitHub;
+      2026-11-06: владелец переподключил `echelon@m3-2` из cmux на m3 (метка m3 там верна); `echelon@m3-8` закрыта;
+      вкладка с lft (`ssh`, 2026-11-05 14:12, метка m3 от 0.51.0) ещё висит;
+      осталось: владелец — «я проверю потом исправление» (2026-11-08): открыть `echelon@m3-2` из терминала lft
+      (`vdx ai@m3 '/Users/vdm/AI Projects/echelon' --conversation 4449079e-f94f-406c-b65b-5e5734b0458e`); check: у
+      нового клиента `VDX_AI_SEAT=lft`, список на lft — «open here»; срока нет
       (`echelon@m3-8`, `echelon@m3-2`: их терминалы несут `VDX_AI_SEAT=m3`) и проверить, что список зовёт их
       «open here» с lft
 - [ ] `--dry-run`, который подключается к идущему агенту, пишет «session: tmux; a new session is named "<её имя>"»
