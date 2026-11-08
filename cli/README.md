@@ -61,7 +61,7 @@ vdx doctor --fix [project-path]     # write the profile's personal hooks (git.ho
 
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's intercom session
-vdx ai --restore [--dry-run]   # every agent a fallen tmux server took down on this machine, back where it was
+vdx ai --restore [--dry-run]   # every agent a fallen tmux server took down on this machine, back where it was; an intercom session — only one you started or attached to
 vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic), which opens with it as its first prompt; run by that session's agent: a new topic, nothing started
 vdx ai --hq [project-path]   # the project's HQ session, for what comes from outside (VDX_HQ=1, tmux session <name>-hq, first prompt agent.hq_args): one per project and machine, you keep it running; other starts leave it alone, --restore brings it back
 vdx ai --close [--waiting <n>]   # inside the intercom session: it ends itself (one you started or attached to from a terminal stays); n questions to you still unanswered show on the project's other tmux sessions

@@ -2416,7 +2416,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     onPath,
     processes: listProcesses,
     agentFocused: (pid) => fs.existsSync(path.join(base, `focused-${pid}`)),
-    agentMail: () => false,
+    agentMail: (pid) => fs.existsSync(path.join(base, `mail-${pid}`)),
     agentHq: (pid) => fs.existsSync(path.join(base, `hq-${pid}`)),
     sleep: sleepSync,
     confirmTimeoutMs: 5_000,
@@ -2457,12 +2457,13 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     fs.writeFileSync(
       claude(),
       '#!/bin/sh\n[ "$VDX_FOCUSED" = 1 ] && touch "$(dirname "$0")/../focused-$$"\n' +
-        '[ "$VDX_HQ" = 1 ] && touch "$(dirname "$0")/../hq-$$"\nwhile :; do sleep 1; done\n',
+        '[ "$VDX_HQ" = 1 ] && touch "$(dirname "$0")/../hq-$$"\n' +
+        '[ "$VDX_INTERCOM" = 1 ] && touch "$(dirname "$0")/../mail-$$"\nwhile :; do sleep 1; done\n',
       { mode: 0o755 },
     );
     fs.writeFileSync(
       path.join(base, 'env.yaml'),
-      `agent: {command: ${claude()}, args: [--base], resume_args: [--continue], hq_args: ["/first"]}\n` +
+      `agent: {command: ${claude()}, args: [--base], resume_args: [--continue], hq_args: ["/first"], intercom_args: ["/mail"]}\n` +
         'session: {multiplexer: tmux, name: "{project}@{host}", wrap_skills: [vdm:wrap]}\n',
     );
   });
@@ -2932,6 +2933,67 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     ]);
     expect(fs.existsSync(path.join(base, `hq-${now[0]!.proc.pid}`))).toBe(true);
     expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('👑 HQ');
+  }, 60_000);
+
+  it("--restore brings back the intercom session the person started, to stay; a letter's is left out (DL #12)", () => {
+    const session = 'proj@testhost-intercom';
+    const staysOf = () => tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_stays'])?.trim() ?? '';
+    const intercom = () =>
+      findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').filter((a) => a.pane.session === session);
+    /** The intercom session as a letter starts it, in conversation `id`, recorded by its hook. */
+    const fromLetter = (id: string) => {
+      expect(runAi({ ...opts, path: root, intercom: true }, deps())).toBe(EXIT_OK);
+      const pane = intercom()[0]!;
+      fs.mkdirSync(path.join(cc(), 'sessions'), { recursive: true });
+      fs.writeFileSync(
+        path.join(cc(), 'sessions', `${pane.proc.pid}.json`),
+        JSON.stringify({ pid: pane.proc.pid, sessionId: id, status: 'idle', statusUpdatedAt: Date.now() }),
+      );
+      writeConversation(cc(), root, id, [startedOn('testhost'), userLine('/mail')], 1);
+      hook(pane, id, { VDX_INTERCOM: '1' });
+      return pane;
+    };
+
+    // A letter's: the next letter starts one.
+    expect(fromLetter(ID.a).proc.args).toBe(`/bin/sh ${claude()} /mail --base`);
+    killServer(tmux);
+    logs = [];
+    expect(runAiRestore(true, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('nothing to bring back');
+
+    // The person attaches to the running one: it stays, and its record says so.
+    fromLetter(ID.a);
+    const person = Object.create(tmux) as typeof tmux;
+    person.attach = () => 0;
+    expect(runAi({ ...opts, path: root, intercom: true, detach: false }, { ...deps(), tmux: person })).toBe(EXIT_OK);
+    expect(staysOf()).toBe('1');
+    killServer(tmux);
+    logs = [];
+    expect(runAiRestore(true, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(
+      `  ${session}: conversation ${ID.a.slice(0, 8)}, the intercom session the user started\n` +
+        `    VDX_INTERCOM=1 ${claude()} --base --resume ${ID.a}\n`,
+    );
+
+    // A letter started one since: no second, and that one stays now.
+    fromLetter(ID.b);
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(
+      `· ${session}: not brought back — the project's intercom session runs here now (${session}); marked to stay`,
+    );
+    expect(intercom()).toHaveLength(1);
+    expect(staysOf()).toBe('1');
+
+    // With none running: back in its conversation, no first prompt, marked to stay.
+    killServer(tmux);
+    logs = [];
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('✓ 1 back');
+    const now = intercom();
+    expect(now.map((a) => a.proc.args)).toEqual([`/bin/sh ${claude()} --base --resume ${ID.b}`]);
+    expect(fs.existsSync(path.join(base, `mail-${now[0]!.proc.pid}`))).toBe(true);
+    expect(staysOf()).toBe('1');
   }, 60_000);
 
   /** A Tmux whose attach plays the terminal: `onAttach` decides what happens while it is attached. */

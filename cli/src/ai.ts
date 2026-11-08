@@ -58,6 +58,7 @@ import {
   forget,
   type LostRecord,
   lostRecords,
+  markStays,
   pruneRecords,
   recordedPanes,
   type RecordMode,
@@ -1000,8 +1001,22 @@ function sessionStays(tmux: Tmux, session: string): boolean {
 
 /** A start or an attach of the person's, from a terminal, marks the intercom session: it stays. */
 function markSessionStays(session: string, opts: AiOptions, deps: AiDeps): void {
-  if (opts.intercom && deps.interactive && !opts.detach)
-    deps.tmux.tryRun(['set-option', '-t', `=${session}:`, STAYS_OPTION, '1']);
+  if (opts.intercom && deps.interactive && !opts.detach) setStays(deps, session);
+}
+
+/**
+ * The intercom session stays: the tmux option, and the records of its panes — the option goes with
+ * a fallen server, and a restore brings the session back by its record (intercom-session-mode DL #12).
+ */
+function setStays(deps: AiDeps, session: string): void {
+  deps.tmux.tryRun(['set-option', '-t', `=${session}:`, STAYS_OPTION, '1']);
+  const server = currentServer(deps.tmux);
+  if (!server) return;
+  try {
+    markStays(deps.env, deps.home, server, session);
+  } catch {
+    // no record to mark: the hook writes one with the option at the agent's next start
+  }
 }
 
 /** The pane whose processes hold the agent `pid`; none outside tmux. */
@@ -2783,6 +2798,7 @@ function keepRecord(
         conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
         mode,
         topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+        ...(mode === 'mail' && sessionStays(deps.tmux, pane.session) ? { stays: true } : {}),
         pid,
         written: Date.now(),
       });
@@ -2822,6 +2838,7 @@ function recordRunning(deps: AiDeps, server: TmuxServer, panes: PaneInfo[], proc
       conversation: liveConversationId(deps.env, deps.home, agent.pid),
       mode,
       topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+      ...(mode === 'mail' && sessionStays(deps.tmux, pane.session) ? { stays: true } : {}),
       pid: agent.pid,
       written: Date.now(),
     });
@@ -3032,9 +3049,10 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
 }
 
 /**
- * The agents a fallen tmux server took down here (restore.ts) that are still to bring back: not a
- * intercom session — a letter starts one — and not one whose conversation runs here now. `tidy` — the
- * current server's records of panes that are gone, and those left out here, are forgotten.
+ * The agents a fallen tmux server took down here (restore.ts) that are still to bring back: not an
+ * intercom session a letter started — the next letter starts one; one the person started stays, and
+ * comes back (intercom-session-mode DL #12) — and not one whose conversation runs here now. `tidy` —
+ * the current server's records of panes that are gone, and those left out here, are forgotten.
  */
 function lostAgents(deps: AiDeps, server: TmuxServer | null, tidy: boolean): LostRecord[] {
   try {
@@ -3045,7 +3063,7 @@ function lostAgents(deps: AiDeps, server: TmuxServer | null, tidy: boolean): Los
     }
     const live = new Set((deps.liveHere ?? (() => liveSessionsHere(deps.env, deps.home)))().map((l) => l.conversation));
     return lostRecords(deps.env, deps.home, server, server?.socket ?? deps.tmux.socketName ?? 'default').filter((r) => {
-      const done = r.mode === 'mail' || (r.conversation !== null && live.has(r.conversation));
+      const done = (r.mode === 'mail' && !r.stays) || (r.conversation !== null && live.has(r.conversation));
       if (done && tidy) forget(r);
       return !done;
     });
@@ -3115,8 +3133,9 @@ interface Restored {
  * conversation, mode and topic; nothing attaches. An empty one (nothing typed since /clear) and a
  * wrapped one come back as places: a new conversation in the same session. Left out: a
  * conversation running on another machine now, or continued there since (its last machine is that
- * one), and a project folder that is gone. Each record is forgotten once tried. `dryRun` — what
- * would start, on stdout, and nothing is forgotten.
+ * one), and a project folder that is gone. The intercom session the person started comes back marked
+ * to stay; one a letter started since is not doubled — it is marked instead. Each record is forgotten
+ * once tried. `dryRun` — what would start, on stdout, and nothing is forgotten or marked.
  */
 function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Restored {
   const { tmux } = deps;
@@ -3150,7 +3169,7 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
       done(r);
       continue;
     }
-    const prepared = prepare(r.project, deps, r.mode === 'focused', false, r.mode === 'hq');
+    const prepared = prepare(r.project, deps, r.mode === 'focused', r.mode === 'mail', r.mode === 'hq');
     if (typeof prepared === 'number') {
       result.failed++;
       done(r);
@@ -3163,6 +3182,21 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
       findAgentPanes(tmux.panes(), deps.processes(), plan.projectRoot, plan.command).some((a) => hqOf(deps)(a.proc.pid))
     ) {
       say(`· ${r.session}: not brought back — the project's HQ session runs here now`);
+      result.skipped++;
+      done(r);
+      continue;
+    }
+    // One intercom session per project and machine: a letter may have started one since — it stays now.
+    const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
+    const mail = plan.intercom
+      ? findAgentPanes(tmux.panes(), deps.processes(), plan.projectRoot, plan.command).find((a) => mailOf(a.proc.pid))
+      : undefined;
+    if (mail) {
+      if (!dryRun) setStays(deps, mail.pane.session);
+      say(
+        `· ${r.session}: not brought back — the project's intercom session runs here now (${mail.pane.session}); ` +
+          (dryRun ? 'it would be marked to stay' : 'marked to stay'),
+      );
       result.skipped++;
       done(r);
       continue;
@@ -3198,7 +3232,13 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     const what = !place
       ? `conversation ${short}${c.title ? ` «${c.title.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : ''}`
       : `a new conversation — ${!c ? 'none to continue' : c.finished ? `${short} was finished with a wrap` : `nothing typed in ${short} since /clear`}`;
-    const mode = plan.focused ? `, focused${topic ? ` «${topic}»` : ''}` : plan.hq ? ', the HQ session' : '';
+    const mode = plan.focused
+      ? `, focused${topic ? ` «${topic}»` : ''}`
+      : plan.hq
+        ? ', the HQ session'
+        : plan.intercom
+          ? ', the intercom session the user started'
+          : '';
     if (dryRun) {
       deps.out(`  ${session}: ${what}${mode}\n    ${line}\n`);
       result.started++;
@@ -3207,8 +3247,9 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     deps.log(`▶ ${session}: ${what}${mode}`);
     let ok = false;
     try {
-      const paneId = tmux.newSession(session, plan.projectRoot, tmuxShellCommand(line, deps.shell, true));
+      const paneId = tmux.newSession(session, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
       if (topic) setSessionTopic(tmux, session, topic);
+      if (plan.intercom) setStays(deps, session);
       ok = settleResumed(plan, paneId, deps);
     } catch (e) {
       deps.log(`✗ ${session}: tmux did not start it — ${errorMessage(e)}`);

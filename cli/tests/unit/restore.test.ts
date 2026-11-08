@@ -6,6 +6,7 @@ import {
   currentServer,
   forget,
   lostRecords,
+  markStays,
   pruneRecords,
   type SessionRecord,
   socketDir,
@@ -85,6 +86,27 @@ describe('restore records: what ran in tmux, by server', () => {
     const [only, ...rest] = lostRecords(env, home, null, 'default');
     expect(rest).toEqual([]);
     expect(only).toMatchObject({ conversation: ID.b, topic: 'new topic' });
+  });
+
+  it("the person attached to an intercom session: its panes' records say it stays; other sessions' do not (DL #12)", () => {
+    const s = server(100, 1);
+    writeRecord(env, home, s, record({ session: 'proj@m3-intercom', pane: '%1', mode: 'mail' }));
+    writeRecord(env, home, s, record({ session: 'proj@m3', pane: '%2' }));
+    writeRecord(env, home, s, record({ session: 'other@m3-intercom', pane: '%3', mode: 'mail' }));
+    markStays(env, home, s, 'proj@m3-intercom');
+    markStays(env, home, s, 'proj@m3');
+    expect(lostRecords(env, home, null, 'default').map((r) => [r.pane, r.stays ?? false])).toEqual([
+      ['%3', false],
+      ['%2', false],
+      ['%1', true],
+    ]);
+    // A record without the field — written by vdx before 0.52 — does not stay; one with a wrong value is not trusted.
+    const dir = path.join(socketDir(env, home, 'default'), '100-1');
+    fs.writeFileSync(
+      path.join(dir, '4.json'),
+      JSON.stringify({ ...record({ pane: '%4', mode: 'mail' }), stays: 'yes' }),
+    );
+    expect(lostRecords(env, home, null, 'default').map((r) => r.pane)).not.toContain('%4');
   });
 
   it('pruned while the server lives: a pane gone, or its agent gone, is not brought back later', () => {

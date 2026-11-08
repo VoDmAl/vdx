@@ -40,6 +40,8 @@ export interface SessionRecord {
   mode: RecordMode;
   /** A focused session's topic; null — none. */
   topic: string | null;
+  /** An intercom session the person started or attached to: it stays, and a restore brings it back. */
+  stays?: boolean;
   /** The agent's process. */
   pid: number;
   /** When the hook wrote it, ms. */
@@ -102,14 +104,17 @@ function parseRecord(text: string): SessionRecord | null {
   const conversation = at(data, 'conversation');
   const mode = at(data, 'mode');
   const topic = at(data, 'topic');
+  const stays = at(data, 'stays');
   const pid = at(data, 'pid');
   const written = at(data, 'written');
   if (!session || !pane || !/^%\d+$/.test(pane) || !project || !path.isAbsolute(project)) return null;
   if (conversation !== null && !(typeof conversation === 'string' && isConversationId(conversation))) return null;
   if (!MODES.includes(mode as RecordMode)) return null;
   if (topic !== null && typeof topic !== 'string') return null;
+  if (stays !== undefined && typeof stays !== 'boolean') return null;
   if (typeof pid !== 'number' || !Number.isInteger(pid) || typeof written !== 'number') return null;
-  return { session, pane, project, conversation, mode: mode as RecordMode, topic, pid, written };
+  const record: SessionRecord = { session, pane, project, conversation, mode: mode as RecordMode, topic, pid, written };
+  return stays === true ? { ...record, stays } : record;
 }
 
 function readRecords(dir: string): { record: SessionRecord; file: string }[] {
@@ -157,6 +162,13 @@ export function updateTopic(
   const dir = serverDir(env, home, server);
   const found = readRecords(dir).find((r) => r.record.pane === pane);
   if (found) writeRecord(env, home, server, { ...found.record, topic });
+}
+
+/** The person attached to an intercom session that runs: the records of its panes say it stays. */
+export function markStays(env: NodeJS.ProcessEnv, home: string, server: TmuxServer, session: string): void {
+  for (const { record } of readRecords(serverDir(env, home, server)))
+    if (record.session === session && record.mode === 'mail' && !record.stays)
+      writeRecord(env, home, server, { ...record, stays: true });
 }
 
 /**

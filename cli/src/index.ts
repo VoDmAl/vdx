@@ -187,9 +187,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 project, without a question: each in its tmux session (its old
                 name, or the next free one), conversation, mode and topic, attached
                 to by nobody. One with nothing typed since /clear, or finished with
-                a wrap, comes back in a new conversation, as a place. Left out: the
-                intercom session, a conversation running now (here or on another
-                machine) or continued on another machine since. With --dry-run:
+                a wrap, comes back in a new conversation, as a place. The intercom
+                session you started or attached to comes back, to stay; one a
+                letter started is left out, and a running one is not doubled. Left
+                out: a conversation running now (here or on another machine) or
+                continued on another machine since. With --dry-run:
                 what it would start. A plain start offers the same as r. A
                 terminal vdx ai attached waits for its session when the server
                 falls under it, and attaches again once a restore brings it back
