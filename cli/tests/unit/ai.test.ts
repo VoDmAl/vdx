@@ -2395,6 +2395,47 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(agents()).toHaveLength(1);
     }, 30_000);
   });
+
+  // echelon, 2026-11-08: exit 4 «expected prompt not seen» over an empty pane, the channels prompt on it
+  // seconds later, and the intercom session waiting on it with nobody at it.
+  describe('a prompt that comes late', () => {
+    const session = 'proj@testhost-intercom';
+    /** A login shell as slow as `zsh -lic` on a busy machine. */
+    const slowLogin = (seconds: number) => {
+      const login = path.join(base, `slow-login-${seconds}`);
+      fs.writeFileSync(login, `#!/bin/sh\nsleep ${seconds}\nexec /bin/sh "$@"\n`, { mode: 0o755 });
+      return login;
+    };
+
+    beforeEach(() => {
+      writeProfile(['--base'], true, ['/first prompt']);
+      killServer(tmux);
+      logs = [];
+    });
+
+    it('a login shell slower than 5 s: the prompt is waited for while the start is under way', () => {
+      const start = { ...opts, path: root, intercom: true, detach: true };
+      expect(runAi(start, { ...deps(), shell: slowLogin(6) })).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
+    }, 40_000);
+
+    it('the wait ends as the agent comes up: one more look answers the prompt', () => {
+      const start = { ...opts, path: root, intercom: true, detach: true };
+      expect(runAi(start, { ...deps(), shell: slowLogin(2), confirmTimeoutMs: 1_000 })).toBe(EXIT_OK);
+      expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
+    }, 30_000);
+
+    it('a detached start finds the agent on a prompt nobody answered: it answers it', () => {
+      const line = `VDX_INTERCOM=1 ${path.join(base, 'fake-agent')} '/first prompt' --base --chan plugin:x@y`;
+      const pane = tmux.newSession(session, root, tmuxShellCommand(line, '/bin/sh', false));
+      for (let i = 0; i < 50 && !tmux.capture(pane)?.includes('FAKE PROMPT'); i++) sleepSync(100);
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, deps())).toBe(EXIT_OK);
+      const out = logs.join('\n');
+      expect(out).toContain(`✓ ${session}: already running with the profile, the intercom session`);
+      expect(out).toContain('✓ answered "FAKE PROMPT" with Enter');
+      expect(tmux.capture(pane)).toContain('READY');
+    }, 30_000);
+  });
 });
 
 describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmux (isolated server)', () => {

@@ -947,9 +947,14 @@ export class Tmux {
     return spawnSync('tmux', this.argv(args), { stdio: 'inherit', env }).status ?? 1;
   }
 
+  /** A tmux command for a person to run, on this server. */
+  commandHint(args: string[]): string {
+    return commandLine('tmux', this.argv(args));
+  }
+
   /** How a person reaches the session from another terminal. */
   attachHint(session: string): string {
-    return `tmux ${this.socket ? `-L ${this.socket} ` : ''}attach -t ${shellQuote(`=${session}`)}`;
+    return this.commandHint(['attach', '-t', `=${session}`]);
   }
 }
 
@@ -1202,6 +1207,7 @@ function renderPlan(
 
 function lastLines(screen: string | null, n: number): string {
   const lines = (screen ?? '').split('\n').filter((l) => l.trim() !== '');
+  if (lines.length === 0) return '    | (nothing on it)';
   return lines
     .slice(-n)
     .map((l) => `    | ${l}`)
@@ -1214,6 +1220,41 @@ function findAgentInPane(plan: LaunchPlan, paneId: string, deps: AiDeps): ProcIn
   return processTree(deps.processes(), pid).find((p) => isAgentProcess(p, plan.command)) ?? null;
 }
 
+/**
+ * The pane still runs the agent's start: the agent, or the login shell whose command line names it
+ * (`zsh -lic '<agent> …'`). The shell a pane keeps after its agent (`exec zsh -l`) does not.
+ */
+function startAlive(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean {
+  const pid = deps.tmux.panePid(paneId);
+  if (pid === null) return false;
+  const name = path.basename(plan.command);
+  return processTree(deps.processes(), pid).some((p) => p.args.includes(name));
+}
+
+/**
+ * One look at the pane for the prompts still pending: one on screen is answered and leaves the list.
+ * 'stuck' — it stayed on screen after its keys; null — none of them is on screen.
+ */
+function answerOnScreen(pending: ConfirmRule[], paneId: string, deps: AiDeps): 'answered' | 'stuck' | null {
+  const { tmux, log } = deps;
+  const screen = tmux.capture(paneId);
+  const i = pending.findIndex((c) => screen?.includes(c.screen));
+  if (i < 0) return null;
+  const rule = pending.splice(i, 1)[0]!;
+  for (const key of rule.keys) {
+    tmux.sendKey(paneId, key);
+    deps.sleep(250);
+  }
+  const goneBy = Date.now() + 5_000;
+  while (Date.now() < goneBy && tmux.capture(paneId)?.includes(rule.screen)) deps.sleep(200);
+  if (tmux.capture(paneId)?.includes(rule.screen)) {
+    log(`✗ "${rule.screen}" is still on screen after ${rule.keys.join(' ')}`);
+    return 'stuck';
+  }
+  log(`✓ answered "${rule.screen}" with ${rule.keys.join(' ')}`);
+  return 'answered';
+}
+
 type SettleResult = 'ok' | 'not-running' | 'failed';
 
 /**
@@ -1224,28 +1265,16 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
   const { tmux, log } = deps;
   const pending = [...plan.confirm];
   const deadline = Date.now() + deps.confirmTimeoutMs;
-  const agentGrace = Date.now() + Math.min(5_000, deps.confirmTimeoutMs);
-  let screen: string | null = null;
-
+  // The prompts are waited for while the start is under way, up to the deadline: the login shell and
+  // the agent come up slower on a busy machine. A wait cut at 5 s with no agent in the pane yet left an
+  // intercom session on the channels prompt with nobody at it, and exit 4 (echelon, 2026-11-08). An
+  // agent that quits — at its first prompt, or with nothing to resume — ends the wait.
+  const grace = Date.now() + Math.min(2_000, deps.confirmTimeoutMs);
   while (pending.length > 0 && Date.now() < deadline) {
-    screen = tmux.capture(paneId);
-    const i = pending.findIndex((c) => screen?.includes(c.screen));
-    if (i >= 0) {
-      const rule = pending.splice(i, 1)[0]!;
-      for (const key of rule.keys) {
-        tmux.sendKey(paneId, key);
-        deps.sleep(250);
-      }
-      const goneBy = Date.now() + 5_000;
-      while (Date.now() < goneBy && tmux.capture(paneId)?.includes(rule.screen)) deps.sleep(200);
-      if (tmux.capture(paneId)?.includes(rule.screen)) {
-        log(`✗ "${rule.screen}" is still on screen after ${rule.keys.join(' ')}`);
-        return 'failed';
-      }
-      log(`✓ answered "${rule.screen}" with ${rule.keys.join(' ')}`);
-      continue;
-    }
-    if (Date.now() > agentGrace && !findAgentInPane(plan, paneId, deps)) break;
+    const looked = answerOnScreen(pending, paneId, deps);
+    if (looked === 'stuck') return 'failed';
+    if (looked === 'answered') continue;
+    if (Date.now() > grace && !startAlive(plan, paneId, deps)) break;
     deps.sleep(300);
   }
 
@@ -1271,12 +1300,23 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
     log(lastLines(tmux.capture(paneId), 8));
     return 'not-running';
   }
+  // The prompt may come as the wait ends: one more look before giving up on it.
+  for (;;) {
+    if (pending.length === 0) break;
+    const looked = answerOnScreen(pending, paneId, deps);
+    if (looked === 'stuck') return 'failed';
+    if (looked === null) break;
+  }
   if (pending.length > 0) {
     log(
-      `✗ expected prompt not seen: ${pending.map((c) => `"${c.screen}"`).join(', ')} — ` +
+      `✗ expected prompt not seen in ${Math.round(deps.confirmTimeoutMs / 1000)} s: ${pending.map((c) => `"${c.screen}"`).join(', ')} — ` +
         'the agent may be waiting on another question. The pane shows:',
     );
-    log(lastLines(screen ?? tmux.capture(paneId), 8));
+    log(lastLines(tmux.capture(paneId), 8));
+    log(
+      `  ${path.basename(plan.command)} keeps running in ${paneId} (pid ${proc.pid}): answer it there, ` +
+        `or stop it — ${tmux.commandHint(['kill-pane', '-t', paneId])}`,
+    );
     return 'failed';
   }
   const missing = missingArgs(proc.args, plan.args);
@@ -3863,7 +3903,28 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
             : '';
       log(`✓ ${current.pane.session}: already running with the profile${mode} — ${current.proc.args}`);
       attachTopic();
-      return finish(true, current.pane.session, current.pane.paneId, opts, deps, runningFocused || plan.hq, plan.seat);
+      // Nobody sits at a detached start: a prompt of the profile's the agent still waits on — a start
+      // gave up on it before it came (echelon, 2026-11-08) — is answered now.
+      let stuck = false;
+      if (!deps.interactive || opts.detach) {
+        const pending = [...plan.confirm];
+        for (;;) {
+          const looked = pending.length ? answerOnScreen(pending, current.pane.paneId, deps) : null;
+          if (looked !== 'answered') {
+            stuck = looked === 'stuck';
+            break;
+          }
+        }
+      }
+      return finish(
+        !stuck,
+        current.pane.session,
+        current.pane.paneId,
+        opts,
+        deps,
+        runningFocused || plan.hq,
+        plan.seat,
+      );
     }
     // Drift. In a terminal the person picks: the agent as it runs, or a restart
     // with the profile; without one nothing is touched, and the fix is named.
