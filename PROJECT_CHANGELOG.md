@@ -2,6 +2,15 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-11-08
+
+### Строка `attach:` работает в zsh
+
+`vdx ai --detach` печатал `tmux attach -t =<сессия>`, а zsh разворачивает голое `=слово` в путь к команде: у
+владельца строка дала `zsh: arch@lft not found`. `shellQuote` теперь берёт в кавычки слово с `=` в начале —
+`tmux attach -t '=<сессия>'` (письмо space-hq `attach-line-zsh-equals`;
+[vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md), Sidetrack #8).
+
 ## 2026-11-06
 
 ### `vdx ai --restore` поднимает сессию intercom, которую человек поднял сам

@@ -596,8 +596,12 @@ export function planLaunch(input: {
   };
 }
 
+/**
+ * One word for sh and zsh alike. `=` leads a word only in quotes: zsh expands a bare `=word` to the
+ * path of the command `word` (`tmux attach -t =arch@lft` → «zsh: arch@lft not found», space-hq 2026-11-05).
+ */
 export function shellQuote(s: string): string {
-  if (s !== '' && /^[A-Za-z0-9_/.:@%+=,-]+$/.test(s)) return s;
+  if (s !== '' && /^[A-Za-z0-9_/.:@%+,-][A-Za-z0-9_/.:@%+=,-]*$/.test(s)) return s;
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 

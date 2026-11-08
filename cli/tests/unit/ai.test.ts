@@ -493,8 +493,15 @@ describe('shell quoting', () => {
   const echoArgs = (line: string) => execFileSync('/bin/sh', ['-c', `printf '%s\\n' ${line}`], { encoding: 'utf8' });
 
   it('round-trips awkward arguments through sh', () => {
-    const args = ['plain', 'with space', "it's", '$HOME', '', 'a"b', 'plugin:echelon@echelon'];
+    const args = ['plain', 'with space', "it's", '$HOME', '', 'a"b', 'plugin:echelon@echelon', '=arch@lft', 'a=b'];
     expect(echoArgs(args.map(shellQuote).join(' '))).toBe(args.join('\n') + '\n');
+  });
+
+  it('quotes a word that starts with =: zsh expands a bare =word to a command path', () => {
+    expect(shellQuote('=limeflow@lft-intercom')).toBe("'=limeflow@lft-intercom'");
+    expect(shellQuote('--x=y')).toBe('--x=y');
+    expect(new Tmux().attachHint('limeflow@lft-intercom')).toBe("tmux attach -t '=limeflow@lft-intercom'");
+    expect(new Tmux('sock').attachHint('arch@lft')).toBe("tmux -L sock attach -t '=arch@lft'");
   });
 
   it('wraps the agent in a login shell that stays open after it exits', () => {
