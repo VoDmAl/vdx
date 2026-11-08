@@ -2138,7 +2138,7 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
 /** What a plain start of Claude Code comes to, after the list or without it. */
 type BoardOutcome =
   | { kind: 'attach'; agent: AgentPane; open: boolean; lines: string[] }
-  | { kind: 'remote'; host: string; conversation: string | null; lines: string[] }
+  | { kind: 'remote'; host: string; conversation: string | null; hq?: boolean; lines: string[] }
   | { kind: 'continue'; choice: ConversationChoice }
   | { kind: 'new'; focused: boolean; lines: string[] }
   | { kind: 'abort'; lines: string[] }
@@ -2160,7 +2160,7 @@ function boardStart(
   plan: LaunchPlan,
   deps: AiDeps,
   local: AgentPane[],
-  /** The project's HQ session here: named on the list, and no key leads to it. */
+  /** The project's HQ session here: a row of the list, its number attaches to it as it is. */
   hqPanes: AgentPane[],
   procs: ProcInfo[],
   wrapSkills: readonly string[],
@@ -2175,7 +2175,7 @@ function boardStart(
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
-  const paneOf = new Map(local.map((a) => [a.proc.pid, a]));
+  const paneOf = new Map([...local, ...hqPanes].map((a) => [a.proc.pid, a]));
   const copy = (id: string | null) =>
     id ? conversationById({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, id, wrapSkills }) : null;
   const there: AgentFact[] = [];
@@ -2263,6 +2263,9 @@ function boardStart(
     seatOf,
   );
   const working = agents.filter((a) => !a.mail && !a.hq);
+  // The HQ session is a choice of its own where no terminal at this seat shows it: the plain cases
+  // below are plain only without one.
+  const hqToPick = agents.filter((a) => a.hq && !openAtSeat(a, plan.seat));
   const busy = new Set(working.map((a) => a.conversation));
   // A conversation running there is written right now: its copy here is a few seconds behind, and
   // it is an agent's row, not one to continue.
@@ -2274,6 +2277,10 @@ function boardStart(
       const a = pick.agent;
       const pane = paneOf.get(a.pid);
       if (pane) return { kind: 'attach', agent: pane, open: openAtSeat(a, plan.seat), lines: why };
+      // The HQ session there is reached by its flag: by its conversation, a vdx there would start
+      // a second agent in it next to the HQ session.
+      if (a.hq && !sameMachine(a.machine, plan.host))
+        return { kind: 'remote', host: a.machine, conversation: null, hq: true, lines: why };
       if (sameMachine(a.machine, plan.host)) {
         const c = conversationOf(a);
         if (!c) return { kind: 'abort', lines: [...why, `vdx cannot read the conversation of pid ${a.pid}`] };
@@ -2315,6 +2322,10 @@ function boardStart(
   // which attaches to it, on its machine; a conversation nobody runs, continued there.
   const reachOf = (p: Pick): string | null => {
     if (p.kind !== 'agent' && p.kind !== 'conversation') return null;
+    if (p.kind === 'agent' && p.agent.hq)
+      return sameMachine(p.agent.machine, plan.seat)
+        ? `vdx ai ${k.rootOn(p.agent.machine)} --hq`
+        : `vdx ai@${p.agent.machine} ${k.root} --hq`;
     if (p.kind === 'agent' && (!p.agent.session || !p.agent.conversation)) return null;
     const id = p.kind === 'agent' ? p.agent.conversation! : p.conversation.id;
     const m = p.kind === 'agent' ? p.agent.machine : p.machine;
@@ -2460,7 +2471,8 @@ function boardStart(
 
   // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
   // shows already. A search is a choice, and so is what tmux took down.
-  const only = working.length === 1 && find === undefined && restore === 0 && !alwaysList ? working[0]! : null;
+  const plain = find === undefined && restore === 0 && !alwaysList && hqToPick.length === 0;
+  const only = working.length === 1 && plain ? working[0]! : null;
   if (only && !openAtSeat(only, plan.seat)) {
     const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
     return outcomeOf({ kind: 'agent', agent: only }, [
@@ -2468,7 +2480,7 @@ function boardStart(
       ...k.silent,
     ]);
   }
-  if (working.length === 0 && find === undefined && restore === 0 && !alwaysList) {
+  if (working.length === 0 && plain) {
     const newest = continuable[0];
     if (!newest)
       return outcomeOf({ kind: 'new', focused: false }, [
@@ -2571,8 +2583,8 @@ interface Prepared {
   profilePath: string | null;
   profileDir: string;
   plan: LaunchPlan;
-  /** The same plan for a focused session or a plain one. */
-  replan: (focused: boolean) => LaunchPlan;
+  /** The same plan for a focused session or a plain one; `hq` — for the HQ session, picked on the list. */
+  replan: (focused: boolean, hq?: boolean) => LaunchPlan;
 }
 
 /** The project, the profile and the launch plan for `pathArg`; an exit code when there is none. */
@@ -2619,7 +2631,7 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
   // terminal at this machine — a terminal from another machine was marked with the wrong seat (2026-11-05).
   const host = hostLabel(deps.env);
   const seat = seatLabel(deps.env);
-  const replan = (asFocused: boolean) =>
+  const replan = (asFocused: boolean, asHq = hq) =>
     planLaunch({
       environment,
       profilePath,
@@ -2631,7 +2643,7 @@ function prepare(pathArg: string, deps: AiDeps, focused = false, intercom = fals
       seat,
       focused: asFocused,
       intercom,
-      hq,
+      hq: asHq,
     });
   let plan: LaunchPlan;
   try {
@@ -3625,7 +3637,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       case 'remote':
         for (const l of outcome.lines) log(l);
         return runAiRemote(
-          { ...opts, path: projectRoot, conversation: outcome.conversation ?? undefined },
+          { ...opts, path: projectRoot, conversation: outcome.conversation ?? undefined, hq: outcome.hq || opts.hq },
           outcome.host,
           deps,
           plan.seat,
@@ -3710,10 +3722,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     current = picked;
   }
   // A running agent keeps its mode: plain `vdx ai` takes a focused one as it is,
-  // and the rules it leaves out are not missing from it.
+  // and the rules it leaves out are not missing from it. So with the HQ session picked on the list.
   const runningFocused = current ? focusedOf(current.proc.pid) : false;
   if (current && !opts.restart && runningFocused && !plan.focused) {
     plan = { ...prepared.replan(true), resumeArgs: plan.resumeArgs };
+  }
+  if (current && !opts.restart && !plan.hq && hqAgent(current.proc.pid)) {
+    plan = { ...prepared.replan(false, true), resumeArgs: plan.resumeArgs };
   }
 
   // What a start continues. A restart keeps the conversation the agent is in.

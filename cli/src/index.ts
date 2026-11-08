@@ -146,8 +146,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 you. The agent, its hooks and MCP servers get VDX_HQ=1, the
                 profile's \`wakes\` rules stay, and it opens with agent.hq_args (its
                 first prompt). Its sign: @vdx_topic and, attached from a cmux
-                terminal, the workspace's description. Every other start leaves it
-                alone, the list names it, and --restore brings it back. --restart
+                terminal, the workspace's description. --hq only narrows the
+                choice to it: on a plain start's list it is a row whose number
+                attaches to it as it is (0.52); Enter, a start without a terminal,
+                --new and --focused leave it alone. --restore brings it back. --restart
                 keeps its conversation, with --new it gets a new one;
                 --conversation <id> brings it back to that one. Not with
                 --focused or --intercom; --close is not for it

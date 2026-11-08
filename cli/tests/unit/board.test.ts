@@ -186,7 +186,7 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
       ],
       [conv(ID.b, { finished: true }), conv(ID.c)],
     ).lines.join('\n');
-    expect(text).toContain('proj@m3  ⏳🎯 focused «search» · working');
+    expect(text).toMatch(/proj@m3 +⏳🎯 focused «search» · working/);
     // A focused session with no topic says so.
     expect(board([agent({ focused: true })]).lines.join('\n')).toContain('proj@m3  💤🎯 focused (no topic) · idle');
     expect(text).toContain('proj@m3-intercom  💤📬 the intercom session');
@@ -211,21 +211,27 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
   });
 });
 
+// The owner, 2026-11-05 (nas-info): «I would expect to reach the HQ through vdx ai without --hq too;
+// the flag should only narrow the choice».
 describe('buildBoard: the HQ session', () => {
-  it('is a line with its state and its own command, not a row, and not in the count', () => {
+  it("is a row with a number after the person's agents, in the count; Enter does not go to it", () => {
     const b = board([
-      agent({ hq: true, session: 'proj@m3-hq', status: 'busy' }),
+      agent({ hq: true, session: 'proj@m3-hq', status: 'busy', activeAt: now.getTime() }),
       agent({ pid: 2, conversation: ID.b }),
     ]);
-    expect(b.rows).toHaveLength(1);
-    expect(b.lines[0]).toMatch(/1 running/);
-    expect(b.lines.join('\n')).toContain('proj@m3-hq  ⏳👑 the HQ session · working — vdx ai --hq');
+    expect(b.rows.map((r) => r.kind === 'agent' && r.agent.session)).toEqual(['proj@m3', 'proj@m3-hq']);
+    expect(b.lines[0]).toMatch(/2 running/);
+    expect(b.lines.join('\n')).toContain('  2) m3   proj@m3-hq  ⏳👑 the HQ session · working');
+    expect(b.enter).toBe(0);
+    // Alone, empty or with work in it, it is still not Enter's.
+    expect(board([agent({ hq: true, session: 'proj@m3-hq', status: 'busy' })]).enter).toBe('new');
+    expect(board([agent({ hq: true, session: 'proj@m3-hq', empty: true })]).enter).toBe('new');
   });
 
-  it('on another machine, its command names the machine; a terminal showing it is said', () => {
+  it('on another machine, a row too; a terminal showing it is said', () => {
     const b = board([agent({ machine: 'lft', hq: true, session: 'proj@lft-hq', openAt: ['m3'] })]);
-    expect(b.rows).toHaveLength(0);
-    expect(b.lines.join('\n')).toContain('the HQ session · idle   open here — vdx ai@lft --hq');
+    expect(b.rows).toHaveLength(1);
+    expect(b.lines.join('\n')).toContain('1) lft  proj@lft-hq  💤👑 the HQ session · idle   open here');
   });
 });
 

@@ -2939,14 +2939,39 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('back');
   }, 30_000);
 
-  it('the list names the HQ session here with no key to it, and Enter does not lead there', () => {
-    hqIn(ID.a);
+  // The owner, 2026-11-05 (nas-info): plain `vdx ai` reaches the HQ session too; --hq only narrows the choice.
+  it('the HQ session is a row of the list: its number attaches to it as it is; Enter does not lead there', () => {
+    const hq = hqIn(ID.a);
     agentIn('proj@testhost', ID.b, [startedOn('testhost'), userLine('work')]);
     expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/proj — 1 running/);
-    expect(text()).toContain('proj@testhost-hq  💤👑 the HQ session · idle — vdx ai --hq');
+    expect(text()).toMatch(/proj — 2 running/);
     expect(text()).toMatch(/1\) testhost proj@testhost +💤 idle/);
-    expect(text()).not.toMatch(/\d\) testhost proj@testhost-hq/);
+    expect(text()).toMatch(/2\) testhost proj@testhost-hq {2}💤👑 the HQ session · idle\n+ {7}vdx ai \S+ --hq\n/);
+
+    // At a terminal its number takes it, in its mode: no drift, no second agent.
+    logs = [];
+    answers = ['2'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`✓ proj@testhost-hq: already running with the profile, the HQ session — ${hq.proc.args}`);
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toHaveLength(2);
+
+    // Enter is the person's agent; with no terminal the HQ session is left to --hq.
+    logs = [];
+    answers = [''];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(text()).toContain('✓ proj@testhost: already running with the profile —');
+    logs = [];
+    expect(runAi({ ...opts, path: root }, { ...deps(), interactive: false })).toBe(EXIT_OK);
+    expect(text()).toContain('✓ proj@testhost: already running with the profile —');
+  }, 30_000);
+
+  it('the HQ session alone, open in no terminal here: a choice — the list, not a silent start', () => {
+    hqIn(ID.a);
+    answers = ['1'];
+    expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+    expect(answers).toHaveLength(0);
+    expect(text()).toContain('✓ proj@testhost-hq: already running with the profile, the HQ session');
+    expect(findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')).toHaveLength(1);
   }, 30_000);
 
   it('--restore brings the HQ session back in its conversation, mode and sign — unless one runs now', () => {

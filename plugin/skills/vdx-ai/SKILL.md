@@ -105,7 +105,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
 | `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+), which opens a new conversation as its first prompt (vdx 0.49+); run inside the focused session by its agent — a new topic, nothing started |
 | `vdx ai --intercom [--detach] [path]` | the project's intercom session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
-| `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; every other start leaves it alone, `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one |
+| `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; `--hq` only narrows the choice — on a plain start's list it is a row whose number attaches to it as it is (vdx 0.52+), Enter and a start without a terminal leave it alone; `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one |
 | `vdx ai --close [--waiting <n>]` | inside the intercom session: it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |

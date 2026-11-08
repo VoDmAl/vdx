@@ -228,7 +228,7 @@ export function buildBoard(input: BoardInput): Board {
     const command = input.reach?.(p);
     for (const l of [found, command]) if (l) lines.push(`       ${l}`);
   };
-  const width = Math.max(0, ...agents.map((a) => (a.session ?? `pid ${a.pid}`).length));
+  const width = Math.max(0, ...[...agents, ...hq].map((a) => (a.session ?? `pid ${a.pid}`).length));
   // A machine's mark before its label; with marks in the profile, a machine without one keeps the column.
   const icons = Object.entries(input.machineIcons ?? {});
   const mark = (machine: string | null) => {
@@ -259,13 +259,18 @@ export function buildBoard(input: BoardInput): Board {
     lines.push(
       `     ${mark(a.machine)}${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  ${signs(a)} the intercom session — not yours to attach`,
     );
-  // The person sits at this one, so it is named — and no key leads to it: its own command does.
+  // The person sits at the HQ session too: a row with a number, after their agents, and its
+  // number attaches to it as it is — `--hq` only narrows the choice to it (nas-info for the owner,
+  // 2026-11-05). Enter does not go to it.
   for (const a of hq) {
+    const row: Pick = { kind: 'agent', agent: a };
+    rows.push(row);
+    const where = (a.session ?? `pid ${a.pid}`).padEnd(width);
     const open = openWord(a, seat);
     lines.push(
-      `     ${mark(a.machine)}${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}` +
-        ` — vdx ai${same(a.machine, seat) ? '' : `@${a.machine}`} --hq`,
+      `  ${rows.length}) ${mark(a.machine)}${a.machine.padEnd(4)} ${where}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}`,
     );
+    under(row, a.conversation);
   }
   if (shown.length) lines.push('  conversations nobody runs:');
   for (const c of shown) {
@@ -302,16 +307,18 @@ export function buildBoard(input: BoardInput): Board {
     ? (pickAt((p) => !(p.kind === 'agent' && openAtSeat(p.agent, seat))) ?? (rows.length ? 0 : 'new'))
     : restore > 0
       ? 'restore'
-      : (pickAt((p) => p.kind === 'agent' && freeWork(p.agent, seat)) ??
+      : (pickAt((p) => p.kind === 'agent' && !p.agent.hq && freeWork(p.agent, seat)) ??
         pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
-        pickAt((p) => p.kind === 'agent' && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty') ??
+        pickAt(
+          (p) => p.kind === 'agent' && !p.agent.hq && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty',
+        ) ??
         'new');
 
   const unread = all ? 0 : (input.unread ?? 0);
   const hidden = idleAll.length - shown.length + unread;
   const head = input.find
     ? `${input.project} — ${quoted(input.find.phrase)} in ${rows.length} of ${input.find.searched} conversations`
-    : `${input.project} — ${agents.length} running, ${input.total} conversation${input.total === 1 ? '' : 's'}` +
+    : `${input.project} — ${agents.length + hq.length} running, ${input.total} conversation${input.total === 1 ? '' : 's'}` +
       (input.limit === 'all' ? '' : ` (${shown.length} shown)`);
   const behind = input.behind?.size ?? 0;
   const notes = [
