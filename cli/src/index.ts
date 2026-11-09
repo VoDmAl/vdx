@@ -165,6 +165,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --restart     restart the running agent in its pane — applies a changed profile;
                 with --new, --focused or --conversation, it is replaced by that;
                 with --intercom, the intercom session gets a new conversation.
+                Run inside an agent's session (its shell, ! at its prompt), it
+                restarts that session, from a vdx apart from its pane, output in
+                ~/.cache/vdx/restart/<session>.log; a focused one only with
+                --focused. With several agents here, none its own and no
+                terminal: nothing restarted, the line for each (0.52.1).
                 Without it, an agent running without the profile's flags is
                 a question in a terminal: Enter attaches to it as is, r
                 restarts it, q leaves it

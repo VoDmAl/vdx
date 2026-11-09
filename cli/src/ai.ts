@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import YAML from 'js-yaml';
 import { evalPredicate } from './evaluator.ts';
 import { GIT_HOOK_EVENTS } from './hooks.ts';
@@ -219,6 +219,11 @@ const ENVIRONMENT_ENV_VAR = 'VDX_ENVIRONMENT';
 const HOST_ENV_VAR = 'VDX_HOST';
 /** Set by `vdx ai@<host>` for the vdx it starts there: the machine the person sits at. */
 const SEAT_ENV_VAR = 'VDX_AI_FROM';
+/**
+ * Set for the `vdx ai --restart` a session hands its own restart to: the pane to restart. Run inside
+ * that pane, vdx would go down with it (vdx-ai-predictable Sidetrack #9).
+ */
+const RESTART_PANE_ENV_VAR = 'VDX_AI_RESTART_PANE';
 /**
  * `1` in the environment of an agent started with `vdx ai --focused`, and so of
  * its hooks and MCP servers: nothing wakes this session or reads its inbox for it.
@@ -1062,6 +1067,11 @@ export interface AiDeps {
   ssh?: (args: string[], capture: boolean) => { status: number; stdout: string } | null;
   /** Claude Code processes alive on this machine; read from its session files when not given. */
   liveHere?: () => LiveSession[];
+  /**
+   * Start `vdx <args>` apart from this process and its terminal, output into `logFile`: a session's
+   * restart of its own pane goes on there. The child's pid; null — it did not start.
+   */
+  handOff?: (args: string[], env: NodeJS.ProcessEnv, logFile: string) => number | null;
   /** What the agent process `pid` lags behind; read from Claude Code's files when not given. */
   lag?: (pid: number, projectRoot: string, command: string) => Lag | null;
 }
@@ -1340,6 +1350,36 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
   deps.log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${line}`);
   deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
   return settle(plan, paneId, deps) === 'ok';
+}
+
+/**
+ * `vdx <args>` in a session of its own (setsid), its output into `logFile`: what a pane's own restart
+ * goes on in. A process of the pane's session goes down with `respawn-pane -k`; one of its own does not.
+ */
+export function handOffRestart(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  logFile: string,
+  script: string | undefined = process.argv[1],
+): number | null {
+  if (!script) return null;
+  try {
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const fd = fs.openSync(logFile, 'w');
+    try {
+      const child = spawn(process.execPath, [...process.execArgv, script, ...args], {
+        detached: true,
+        stdio: ['ignore', fd, fd],
+        env,
+      });
+      child.unref();
+      return child.pid ?? null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
 }
 
 /** As long as a start waits for its own agent (settle): past that, the start that opened the pane has given up on it. */
@@ -3493,6 +3533,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   delete deps.env[FOCUSED_ENV_VAR];
   delete deps.env[INTERCOM_ENV_VAR];
   delete deps.env[HQ_ENV_VAR];
+  const handedPane = deps.env[RESTART_PANE_ENV_VAR] ?? null;
+  delete deps.env[RESTART_PANE_ENV_VAR];
   // Under `vdx ai@<host>` the person is not here: this machine goes by its name.
   const atSeat = sameMachine(plan.seat, plan.host);
   const here = atSeat ? `here, on ${plan.host}` : `on ${plan.host}`;
@@ -3717,6 +3759,55 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       reused = true;
       log(`♻ ${pane.pane.session}: nothing typed in it since /clear — the new conversation goes there`);
     }
+  }
+  // --restart run inside an agent of the project — its shell, `!` at its prompt — is about that agent,
+  // never the newest: the newest was another person's session (t23b-program, 2026-11-08). The restart
+  // such a session hands off names its pane.
+  const self = opts.restart
+    ? handedPane
+      ? agentsHere.find((a) => a.pane.paneId === handedPane)
+      : agentsHere.find((a) => a.proc.pid === findOwnAgent(procs, selfPid, plan.command)?.pid)
+    : undefined;
+  if (self && !current && !opts.conversation) {
+    const restartLine = (flag: string, conversation?: string | null) =>
+      `vdx ai${flag} --restart ${shellQuote(projectRoot)}${conversation ? ` --conversation ${conversation}` : ''}`;
+    if (!running.includes(self)) {
+      const flag = hqAgent(self.proc.pid) ? ' --hq' : ' --intercom';
+      log(
+        `vdx ai --restart: ${self.pane.session} is ${flag === ' --hq' ? "the project's HQ session" : "the project's intercom session"}` +
+          ` — nothing restarted; it: ${restartLine(flag)}`,
+      );
+      return EXIT_USAGE;
+    }
+    if (focusedOf(self.proc.pid) && !plan.focused) {
+      const id = conversationOf(self);
+      log(
+        `vdx ai --restart: ${self.pane.session} is focused, and a plain --restart makes it a plain session — nothing restarted`,
+      );
+      log(`  focused, in a new conversation: ${restartLine(' --focused')}`);
+      if (id) log(`  focused, in this conversation: ${restartLine(' --focused', id)}`);
+      if (id) log(`  plain, in this conversation:   ${restartLine('', id)}`);
+      return EXIT_USAGE;
+    }
+    current = self;
+  }
+  // Several agents and nobody to ask: a guess would stop a session someone works in.
+  if (opts.restart && !current && running.length > 1 && (!deps.interactive || opts.dryRun)) {
+    log(
+      `vdx ai --restart: ${running.length} agents of this project run here, and nobody to ask which — nothing restarted:`,
+    );
+    for (const a of running) {
+      const id = conversationOf(a);
+      const focused = focusedOf(a.proc.pid);
+      const topic = focused ? sessionTopic(tmux, a.pane.session) : null;
+      log(`  ${a.pane.session} ${a.pane.paneId}${focused ? ` — focused${topic ? ` «${topic}»` : ''}` : ''}`);
+      log(
+        id
+          ? `    vdx ai${focused ? ' --focused' : ''} --restart ${shellQuote(projectRoot)} --conversation ${id}`
+          : `    its conversation is not known here — at a terminal vdx ai --restart ${shellQuote(projectRoot)} asks which; from its own prompt: ! vdx ai --restart`,
+      );
+    }
+    return opts.dryRun ? EXIT_OK : EXIT_USAGE;
   }
   if (!onBoard && !current && !alongside && running.length > 0) {
     const picked = pickAgent(running, focusedOf, deps, !opts.dryRun);
@@ -4006,6 +4097,44 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   const topicSaid = () => {
     if (topic) log(topic.text ? `🎯 topic «${topic.text}» (${topic.from})` : `🎯 no topic yet — ${topic.from}`);
   };
+
+  // The pane vdx runs in: its restart would take this vdx down before it answers the new agent's
+  // prompts. It goes on in a vdx of its own, apart from the pane, with what it says in a file.
+  if (current && current === self && !handedPane) {
+    const logFile = path.join(
+      deps.home,
+      '.cache',
+      'vdx',
+      'restart',
+      `${current.pane.session.replace(/[^\w@.-]/g, '_')}.log`,
+    );
+    const args = [
+      'ai',
+      projectRoot,
+      '--restart',
+      ...(opts.fresh ? ['--new'] : []),
+      ...(opts.conversation ? ['--conversation', opts.conversation] : []),
+      ...(opts.focused ? ['--focused', ...(opts.topic ? [opts.topic] : [])] : []),
+      ...(opts.hq ? ['--hq'] : []),
+      ...(opts.intercom ? ['--intercom'] : []),
+      '--detach',
+    ];
+    const pid = (deps.handOff ?? handOffRestart)(
+      args,
+      { ...deps.env, [RESTART_PANE_ENV_VAR]: current.pane.paneId },
+      logFile,
+    );
+    if (pid === null) {
+      log(`✗ ${current.pane.session}: the restart could not go on apart from this session — nothing restarted`);
+      log(`  from another terminal: vdx ai${opts.focused ? ' --focused' : ''} --restart ${shellQuote(projectRoot)}`);
+      return EXIT_LAUNCH_FAILED;
+    }
+    log(
+      `↻ ${current.pane.session} ${current.pane.paneId}: this is the session vdx runs in — it restarts from outside it ` +
+        `(pid ${pid}) and stops now; what that says: ${logFile}`,
+    );
+    return EXIT_OK;
+  }
 
   if (current) {
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);

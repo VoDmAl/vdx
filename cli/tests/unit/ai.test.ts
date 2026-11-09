@@ -47,6 +47,7 @@ import {
   type RemoteReport,
   clientSeat,
   shellQuote,
+  handOffRestart,
   sleepSync,
   tmuxShellCommand,
   unreadableFolders,
@@ -478,6 +479,34 @@ describe('freeSessionName', () => {
     // Two agents in one session (windows, before vdx-ai DL #36) still take one name.
     expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft', 'vdx@lft-2'))).toBe('vdx@lft-3');
     expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft-3'))).toBe('vdx@lft-2');
+  });
+});
+
+describe('handOffRestart', () => {
+  it('runs vdx apart, in a session of its own, with the env it is given and its output in the file', () => {
+    const dir = tmpDir('vdx-handoff-');
+    try {
+      const script = path.join(dir, 'fake-vdx.cjs');
+      fs.writeFileSync(
+        script,
+        "const { execFileSync } = require('node:child_process');\n" +
+          "const pgid = execFileSync('ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8' }).trim();\n" +
+          'console.log(JSON.stringify({ args: process.argv.slice(2), pane: process.env.VDX_AI_RESTART_PANE, own: pgid === String(process.pid) }));\n',
+      );
+      const log = path.join(dir, 'restart', 'x.log');
+      const pid = handOffRestart(['ai', '/p', '--restart'], { ...process.env, VDX_AI_RESTART_PANE: '%9' }, log, script);
+      expect(pid).toBeGreaterThan(0);
+      for (let i = 0; i < 50 && !(fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('}')); i++)
+        sleepSync(100);
+      expect(JSON.parse(fs.readFileSync(log, 'utf8'))).toEqual({
+        args: ['ai', '/p', '--restart'],
+        pane: '%9',
+        own: true,
+      });
+      expect(handOffRestart([], process.env, log, '')).toBeNull();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1968,8 +1997,16 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root }, withStarts)).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain(`taking the newest, proj@testhost ${plain.pane.paneId}`);
 
-    // --restart --focused replaces the agent it picks with a new focused conversation.
-    expect(runAi({ ...opts, path: root, focused: true, restart: true }, withStarts)).toBe(EXIT_OK);
+    // --restart guesses no agent to stop: without a terminal it names how to reach each (DL #18).
+    logs = [];
+    expect(runAi({ ...opts, path: root, focused: true, restart: true }, withStarts)).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('2 agents of this project run here, and nobody to ask which — nothing restarted');
+    expect(logs.join('\n')).toContain(`at a terminal vdx ai --restart ${shellQuote(root)} asks which`);
+    expect(agents().find((a) => a.pane.paneId === plain.pane.paneId)?.proc.pid).toBe(plain.proc.pid);
+
+    // At a terminal --restart --focused replaces the agent picked with a new focused conversation.
+    const atTerminal = { ...withStarts, interactive: true, ask: () => '' };
+    expect(runAi({ ...opts, path: root, focused: true, restart: true, detach: true }, atTerminal)).toBe(EXIT_OK);
     const replaced = agents().find((a) => a.pane.paneId === plain.pane.paneId)!;
     expect(replaced.proc.args).toMatch(/fake-agent --base$/);
     expect(deps().agentFocused!(replaced.proc.pid)).toBe(true);
@@ -2577,6 +2614,73 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAi({ ...opts, path: root, focused: true, topic: 'other' }, deps())).toBe(EXIT_OK);
     expect(text()).not.toContain('is the focused session on');
     expect(tmux.hasSession('proj@testhost-3')).toBe(true);
+  });
+
+  // t23b-program, 2026-11-08: `! vdx ai --restart` typed in one session restarted the newest of three.
+  describe('--restart from inside a session', () => {
+    const three = () => [
+      agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('one')]),
+      agentIn('proj@testhost-2', ID.b, [startedOn('testhost'), userLine('two')]),
+      agentIn('proj@testhost-3', ID.c, [startedOn('testhost'), userLine('three')]),
+    ];
+    /** This vdx as a process under the agent of `agentPid`: what `!` at its prompt runs. */
+    const inside = (agentPid: number) => () => [
+      ...listProcesses(),
+      { pid: 9_999_991, ppid: agentPid, args: 'node vdx ai --restart' },
+    ];
+    const pids = () =>
+      findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')
+        .map((a) => `${a.pane.session} ${a.proc.pid}`)
+        .sort();
+
+    it('is about that session: it goes on apart from its pane, and the restart handed on restarts that pane', () => {
+      const middle = three()[1]!;
+      const before = pids();
+      const handed: { args: string[]; pane: string | undefined; log: string }[] = [];
+      const d: AiDeps = {
+        ...deps(),
+        interactive: false,
+        processes: inside(middle.proc.pid),
+        handOff: (args, env, log) => (handed.push({ args, pane: env['VDX_AI_RESTART_PANE'], log }), 4242),
+      };
+      expect(runAi({ ...opts, path: root, restart: true, detach: false }, d, 9_999_991)).toBe(EXIT_OK);
+      const logFile = path.join(base, '.cache', 'vdx', 'restart', 'proj@testhost-2.log');
+      expect(handed).toEqual([{ args: ['ai', root, '--restart', '--detach'], pane: middle.pane.paneId, log: logFile }]);
+      expect(text()).toContain(`↻ proj@testhost-2 ${middle.pane.paneId}: this is the session vdx runs in`);
+      expect(text()).toContain(`(pid 4242) and stops now; what that says: ${logFile}`);
+      expect(pids()).toEqual(before);
+
+      // The restart handed on: that pane, in its conversation; the others as they were.
+      logs = [];
+      const env = { ...deps().env, VDX_AI_RESTART_PANE: middle.pane.paneId };
+      expect(runAi({ ...opts, path: root, restart: true }, { ...deps(), interactive: false, env })).toBe(EXIT_OK);
+      expect(text()).toContain(`↻ proj@testhost-2 ${middle.pane.paneId}: restarting — `);
+      expect(text()).toContain(`--resume ${ID.b}`);
+      const after = pids();
+      const others = (l: string[]) => l.filter((x) => !x.startsWith('proj@testhost-2 '));
+      expect(others(after)).toEqual(others(before));
+      expect(after).not.toEqual(before);
+    }, 30_000);
+
+    it('with no session of its own and nobody to ask: no guess — the line for each', () => {
+      three();
+      const before = pids();
+      expect(runAi({ ...opts, path: root, restart: true }, { ...deps(), interactive: false })).toBe(EXIT_USAGE);
+      expect(text()).toContain('3 agents of this project run here, and nobody to ask which — nothing restarted');
+      for (const id of [ID.a, ID.b, ID.c])
+        expect(text()).toContain(`vdx ai --restart ${shellQuote(root)} --conversation ${id}`);
+      expect(pids()).toEqual(before);
+    }, 30_000);
+
+    it('a focused one: a plain --restart would make it plain — nothing restarted, the lines that keep it', () => {
+      const pane = focusedIn('proj@testhost', ID.a, 'search');
+      const d = { ...deps(), interactive: false, processes: inside(pane.proc.pid) };
+      expect(runAi({ ...opts, path: root, restart: true }, d, 9_999_991)).toBe(EXIT_USAGE);
+      expect(text()).toContain(
+        `focused, in this conversation: vdx ai --focused --restart ${shellQuote(root)} --conversation ${ID.a}`,
+      );
+      expect(pids()).toEqual([`proj@testhost ${pane.proc.pid}`]);
+    }, 30_000);
   });
 
   /** A start from another machine (`vdx ai@testhost` from lft): what seat each attach marks its terminal with. */

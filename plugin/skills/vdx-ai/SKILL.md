@@ -100,7 +100,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --restore [--dry-run]` | after the tmux server fell (a crash, a kill-server, a reboot): every agent it took down on this machine, of every project, back in its tmux session, conversation, mode and topic; nothing attaches (vdx 0.46+). An intercom session comes back only when the user started or attached to it, and stays (vdx 0.52+). It starts agents nobody sits at, as `--intercom --detach` does: run `--dry-run` first and name what it will start; a plain `vdx ai` in a terminal offers the same as `r` |
 | `vdx ai --dry-run [path]` | the plan (agent, flags, matched conditions) and the project's running agents; starts nothing — safe to run |
 | `vdx ai --check [path]` | this session against the profile, and against the installed Claude Code and plugins; what the session-start hook prints |
-| `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags |
+| `vdx ai --restart [path]` | restart the running agent in its tmux pane with the profile's flags; run inside an agent's session (`!` at its prompt) it restarts that session (vdx 0.52.1+) — a focused one only with `--focused` |
 | `vdx ai --new [path]` | a new conversation instead of continuing the last one; from vdx 0.25 next to a running agent, which runs on |
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
 | `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+), which opens a new conversation as its first prompt (vdx 0.49+); run inside the focused session by its agent — a new topic, nothing started |
