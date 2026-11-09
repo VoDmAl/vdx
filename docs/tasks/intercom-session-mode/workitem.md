@@ -578,7 +578,12 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [x] `vdx ai --restore` поднимает сессию с `@vdx_stays` (DL #12, владелец 2026-11-06): поле `stays` в записи
       (`restore.ts`, `markStays`), запуск с `VDX_INTERCOM=1`, идущую не удваивает; тесты (мутация «пропускать каждую
       `mail`» ловится), справка, README, спека, скилл (плагин 0.15.1), PROJECT_CHANGELOG
-- [ ] Выпуск CLI (minor, 0.52.0) с DL #12 и плагина 0.15.1; на lft и m3
+- [x] Выпуск CLI (minor, 0.52.0) с DL #12 и плагина 0.15.1; на lft и m3 — 2026-11-08: 0.52.0 в npm (`295d3fe`, тег
+      `v0.52.0`, CI зелёный), на m3 и lft — 0.52.0 (`npm update -g --prefer-online`); плагин на `main` — уже 0.15.2
+- [ ] Записи до 0.52 без `stays` (найдено 2026-11-08 на m3: у `lime-hq@m3-intercom`, `mediko-hq@m3-intercom`
+      `@vdx_stays` = 1, в записях метки нет — `--restore` их пропустил бы): `recordRunning` дописывает метку в
+      записи всех сессий с `@vdx_stays`; тест с мутацией. Выпуск patch 0.52.1; после — check на m3:
+      `grep -l '"mode":"mail"' ~/.local/state/vdx/tmux/*/*/*.json | xargs jq -c '{session,stays}'`
 - [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано

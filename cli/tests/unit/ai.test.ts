@@ -3067,6 +3067,23 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(now.map((a) => a.proc.args)).toEqual([`/bin/sh ${claude()} --base --resume ${ID.b}`]);
     expect(fs.existsSync(path.join(base, `mail-${now[0]!.proc.pid}`))).toBe(true);
     expect(staysOf()).toBe('1');
+
+    // A record without the mark — written by vdx before 0.52 — learns it at the next pass of vdx here.
+    writeRecord({}, base, currentServer(tmux)!, {
+      session,
+      pane: now[0]!.pane.paneId,
+      project: root,
+      conversation: ID.b,
+      mode: 'mail',
+      topic: null,
+      pid: now[0]!.proc.pid,
+      written: Date.now(),
+    });
+    expect(runAiRestore(false, deps())).toBe(EXIT_OK);
+    killServer(tmux);
+    logs = [];
+    expect(runAiRestore(true, deps())).toBe(EXIT_OK);
+    expect(text()).toContain(`  ${session}: conversation ${ID.b.slice(0, 8)}, the intercom session the user started`);
   }, 60_000);
 
   /** A Tmux whose attach plays the terminal: `onAttach` decides what happens while it is attached. */

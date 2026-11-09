@@ -2854,7 +2854,6 @@ function keepRecord(
         conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
         mode,
         topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
-        ...(mode === 'mail' && sessionStays(deps.tmux, pane.session) ? { stays: true } : {}),
         pid,
         written: Date.now(),
       });
@@ -2877,7 +2876,9 @@ function recordModeOf(deps: AiDeps, pid: number): RecordMode {
  * and not started, resumed or cleared since, so the hook has not written one, and a restore would
  * not know them (vdx-ai-predictable DL #12). What the hook writes from inside, read from outside:
  * the project from the pane's folder, the conversation from Claude Code's session file, the mode
- * from the process's environment, the topic from the tmux session.
+ * from the process's environment, the topic from the tmux session. Then every intercom session marked
+ * to stay: its records say so — the hook's own record too, and one written before vdx kept the mark
+ * in them (0.52) (intercom-session-mode DL #12).
  */
 function recordRunning(deps: AiDeps, server: TmuxServer, panes: PaneInfo[], procs: ProcInfo[]): void {
   const have = recordedPanes(deps.env, deps.home, server);
@@ -2894,11 +2895,15 @@ function recordRunning(deps: AiDeps, server: TmuxServer, panes: PaneInfo[], proc
       conversation: liveConversationId(deps.env, deps.home, agent.pid),
       mode,
       topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
-      ...(mode === 'mail' && sessionStays(deps.tmux, pane.session) ? { stays: true } : {}),
       pid: agent.pid,
       written: Date.now(),
     });
   }
+  const marked = (deps.tmux.tryRun(['list-sessions', '-F', `#{session_name}\t#{${STAYS_OPTION}}`]) ?? '')
+    .split('\n')
+    .filter((l) => l.endsWith('\t1'))
+    .map((l) => l.slice(0, -2));
+  for (const session of marked) markStays(deps.env, deps.home, server, session);
 }
 
 /**
