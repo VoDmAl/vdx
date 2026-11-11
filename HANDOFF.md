@@ -39,7 +39,7 @@
 | `vdx publish <patch\|minor\|major>` | выпуск одной командой: вход в npm, bump, publish, тег, push, ожидание registry |
 | `vdx push [path]` | push ветки; ветка на GitHub с обязательными проверками получает коммит через `vdx-gate/<ветка>`, когда CI его проверил (с 0.31) |
 | `vdx doctor [path]` | окружение и хуки, токен GitHub у репо на GitHub, где память Claude Code; `--check` для хука плагина, `--fix` пишет личные хуки в `~/.gitconfig` и переносит память в `.claude/memory/` (с 0.37) |
-| `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--intercom`, `--hq` (с 0.49), `--restart`, `--detach`, `--dry-run`, `--list`, `--find`, `--check`; `vdx ai --restore` — агенты, которых унёс упавший tmux (с 0.46) |
+| `vdx ai[@host] [path]` | агент в tmux по личному профилю; `--new`, `--conversation`, `--focused`, `--intercom`, `--hq` (с 0.49), `--restart`, `--detach`, `--dry-run`, `--list`, `--find`, `--check`; `vdx ai --restore` — агенты, которых унёс упавший tmux (с 0.46); `vdx ai --tab` — вкладка cmux обратно в свою сессию после перезапуска cmux (с 0.53) |
 | `vdx-mcp` | MCP-сервер для агента (`vdx_audit`, `vdx_build`, …) |
 
 У каждой команды есть `--help`; чужой аргумент — отказ, exit 2.

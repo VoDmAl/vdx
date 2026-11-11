@@ -40,10 +40,13 @@ import {
   runAi,
   runAiCheck,
   runAiClose,
+  runAiRemote,
   runAiReport,
   runAiRestore,
   runAiState,
+  runAiTab,
   STATE_OPTION,
+  tabRecordDir,
   type RemoteReport,
   clientSeat,
   shellQuote,
@@ -2471,6 +2474,124 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(out).toContain(`✓ ${session}: already running with the profile, the intercom session`);
       expect(out).toContain('✓ answered "FAKE PROMPT" with Enter');
       expect(tmux.capture(pane)).toContain('READY');
+    }, 30_000);
+  });
+
+  // nas-info, 2026-11-05: after cmux restarted, 16 of 22 tabs stayed out of their sessions (DL #19).
+  describe('a cmux tab goes back into its session', () => {
+    const session = 'proj@testhost';
+    const record = (surface: string) => path.join(tabRecordDir(base), `${surface}.json`);
+    /** The person's terminal: what it attaches to, and what the tab's record says meanwhile. */
+    const terminal = (surface?: string) => {
+      const attached: { session: string; noted: unknown }[] = [];
+      const t = Object.create(tmux) as typeof tmux;
+      t.attach = (name: string) => {
+        const f = surface ? record(surface) : null;
+        attached.push({ session: name, noted: f && fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null });
+        return 0;
+      };
+      return { t, attached };
+    };
+    const inTab = (surface: string | null, t: Tmux, extra: Record<string, string> = {}): AiDeps => ({
+      ...deps(),
+      interactive: true,
+      tmux: t,
+      env: { ...deps().env, ...(surface ? { CMUX_SURFACE_ID: surface } : {}), ...extra },
+    });
+
+    beforeAll(() => {
+      writeProfile(['--base']);
+      killServer(tmux);
+      logs = [];
+      expect(runAi({ ...opts, path: root, detach: true }, deps())).toBe(EXIT_OK);
+    }, 30_000);
+    beforeEach(() => fs.rmSync(tabRecordDir(base), { recursive: true, force: true }));
+
+    it('vdx ai notes the session while it holds the attach in a cmux tab, and drops the note after', () => {
+      const { t, attached } = terminal('SURF-1');
+      expect(runAi({ ...opts, path: root }, inTab('SURF-1', t))).toBe(EXIT_OK);
+      expect(attached).toHaveLength(1);
+      expect(attached[0]).toMatchObject({ session, noted: { kind: 'here', surface: 'SURF-1', session, socket } });
+      expect(fs.existsSync(record('SURF-1'))).toBe(false);
+      // Inside tmux the tab is tmux's, not cmux's: nothing noted.
+      const inner = terminal('SURF-1');
+      expect(runAi({ ...opts, path: root }, inTab('SURF-1', inner.t, { TMUX: '/tmp/x,1,0' }))).toBe(EXIT_OK);
+      expect(inner.attached).toEqual([{ session, noted: null }]);
+    }, 30_000);
+
+    it('gone down with cmux, the note stays: --tab goes back into that session, then drops it', () => {
+      fs.mkdirSync(tabRecordDir(base), { recursive: true });
+      fs.writeFileSync(record('SURF-2'), JSON.stringify({ kind: 'here', surface: 'SURF-2', session, socket, at: 1 }));
+      const { t, attached } = terminal('SURF-2');
+      logs = [];
+      expect(runAiTab('.', inTab('SURF-2', t))).toBe(EXIT_OK);
+      expect(attached.map((a) => a.session)).toEqual([session]);
+      expect(logs.join('\n')).toContain(`↩ ${session}: back into the session this tab showed`);
+      expect(fs.existsSync(record('SURF-2'))).toBe(false);
+
+      // No note — a new tab: nothing, and nothing said.
+      logs = [];
+      const none = terminal('SURF-3');
+      expect(runAiTab('.', inTab('SURF-3', none.t))).toBe(EXIT_OK);
+      expect(none.attached).toEqual([]);
+      expect(logs).toEqual([]);
+
+      // The session is not there (tmux fell, no restore yet): exit 4, the note stays for the next shell.
+      fs.writeFileSync(
+        record('SURF-4'),
+        JSON.stringify({ kind: 'here', surface: 'SURF-4', session: 'proj@gone', socket, at: 1 }),
+      );
+      const gone = terminal('SURF-4');
+      expect(runAiTab('.', inTab('SURF-4', gone.t))).toBe(EXIT_LAUNCH_FAILED);
+      expect(logs.join('\n')).toContain('proj@gone, which this tab showed, is not running');
+      expect(fs.existsSync(record('SURF-4'))).toBe(true);
+      expect(runAiTab('.', { ...inTab('SURF-4', gone.t), interactive: false })).toBe(EXIT_USAGE);
+    }, 30_000);
+
+    it('a session on another machine: marked @vdx_tab by the vdx there, found by the mark over ssh', () => {
+      // There: the vdx that `vdx ai@<host>` starts gets the tab's mark and puts it on its session.
+      const there = terminal();
+      expect(runAi({ ...opts, path: root }, inTab(null, there.t, { VDX_AI_CMUX: 'abc123' }))).toBe(EXIT_OK);
+      const option = (o: string) => tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, o])?.trim();
+      expect(option('@vdx_tab')).toBe('abc123');
+      expect(option('@vdx_cmux')).toBe(''); // no topic: the topic's watcher has nothing to poll for
+      const back = terminal();
+      expect(runAiTab('/somewhere', inTab(null, back.t, { VDX_AI_CMUX: 'abc123' }))).toBe(EXIT_OK);
+      expect(back.attached.map((a) => a.session)).toEqual([session]);
+      logs = [];
+      expect(runAiTab('.', inTab(null, back.t, { VDX_AI_CMUX: 'fff999' }))).toBe(EXIT_LAUNCH_FAILED);
+      expect(logs.join('\n')).toContain("carries this tab's mark");
+
+      // Here, on the tab's machine: --tab runs `vdx ai@<host> <path> --tab` with the mark from the note.
+      fs.mkdirSync(tabRecordDir(base), { recursive: true });
+      fs.writeFileSync(
+        record('SURF-5'),
+        JSON.stringify({ kind: 'there', surface: 'SURF-5', host: 'm3', project: root, token: 'abc123', at: 1 }),
+      );
+      const calls: { script: string; noted: boolean }[] = [];
+      const ssh = (args: string[]) => {
+        calls.push({ script: args[2]!, noted: fs.existsSync(record('SURF-5')) });
+        return { status: 0, stdout: '' };
+      };
+      expect(runAiTab('.', { ...inTab('SURF-5', tmux), ssh })).toBe(EXIT_OK);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.script).toContain('export VDX_AI_CMUX=abc123; ');
+      expect(calls[0]!.script).toMatch(/exec vdx ai \S+ --tab$/);
+      expect(calls[0]!.noted).toBe(true);
+      expect(fs.existsSync(record('SURF-5'))).toBe(false);
+
+      // vdx ai@<host> itself, with a mark: the note while ssh runs, none after.
+      const seen: unknown[] = [];
+      const ssh2 = () => {
+        seen.push(JSON.parse(fs.readFileSync(record('SURF-6'), 'utf8')));
+        return { status: 0, stdout: '' };
+      };
+      expect(runAiRemote({ ...opts, path: root }, 'm3', { ...inTab('SURF-6', tmux), ssh: ssh2 }, 'lft', 'abc123')).toBe(
+        EXIT_OK,
+      );
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ kind: 'there', host: 'm3', token: 'abc123', surface: 'SURF-6' });
+      expect(fs.existsSync(record('SURF-6'))).toBe(false);
     }, 30_000);
   });
 });

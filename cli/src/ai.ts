@@ -984,6 +984,8 @@ export interface AiOptions {
   list?: boolean;
   /** `--find <phrase>`: the list of the conversations whose replies have it (vdx-ai-predictable P5). */
   find?: string;
+  /** `--tab`: back into the session this cmux tab showed before cmux restarted (vdx-ai-predictable DL #19). */
+  tab?: boolean;
 }
 
 /** A topic is one line: it goes into a tmux option, a terminal's title and a transcript line. */
@@ -1423,6 +1425,75 @@ function startUnderWay(
   }
 }
 
+/** The tmux session option a `vdx ai@<host>` from a cmux tab marks its session with: `--tab` finds it by it. */
+const TAB_OPTION = '@vdx_tab';
+/** A record of a tab closed by hand stays behind (its vdx ai went down with it): after this long it goes. */
+const TAB_RECORD_DAYS = 30;
+
+/**
+ * What a cmux tab shows while `vdx ai` holds the attach in it (vdx-ai-predictable DL #19): a session here,
+ * or one on another machine, marked `@vdx_tab` = token. A `vdx ai` that goes down with cmux leaves it,
+ * and the tab's shell, started again, goes back with `vdx ai --tab`.
+ */
+type TabRecord =
+  | { kind: 'here'; surface: string; session: string; socket: string | null; at: number }
+  | { kind: 'there'; surface: string; host: string; project: string; token: string; at: number };
+
+export function tabRecordDir(home: string): string {
+  return path.join(home, '.local', 'state', 'vdx', 'cmux-tabs');
+}
+
+/** The cmux tab this process runs in, outside tmux; null — not one. */
+function cmuxSurface(env: NodeJS.ProcessEnv): string | null {
+  const surface = env['CMUX_SURFACE_ID']?.trim();
+  return surface && !env['TMUX'] && /^[A-Za-z0-9-]+$/.test(surface) ? surface : null;
+}
+
+/** Note what this cmux tab shows; the function returned forgets it. Outside a cmux tab: nothing. */
+function noteTab(
+  deps: AiDeps,
+  what:
+    | { kind: 'here'; session: string; socket: string | null }
+    | { kind: 'there'; host: string; project: string; token: string },
+): () => void {
+  const surface = cmuxSurface(deps.env);
+  if (!surface) return () => {};
+  const dir = tabRecordDir(deps.home);
+  const file = path.join(dir, `${surface}.json`);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of fs.readdirSync(dir)) {
+      const old = path.join(dir, f);
+      try {
+        if (Date.now() - fs.statSync(old).mtimeMs > TAB_RECORD_DAYS * 86_400_000) fs.rmSync(old, { force: true });
+      } catch {
+        // gone already
+      }
+    }
+    fs.writeFileSync(file, JSON.stringify({ ...what, surface, at: Date.now() }) + '\n');
+  } catch {
+    return () => {};
+  }
+  return () => fs.rmSync(file, { force: true });
+}
+
+function readTabRecord(home: string, surface: string): TabRecord | null {
+  try {
+    const r = JSON.parse(fs.readFileSync(path.join(tabRecordDir(home), `${surface}.json`), 'utf8')) as TabRecord;
+    if (r.kind === 'here' && typeof r.session === 'string') return r;
+    if (
+      r.kind === 'there' &&
+      typeof r.host === 'string' &&
+      typeof r.project === 'string' &&
+      /^[0-9a-f]+$/.test(r.token)
+    )
+      return r;
+  } catch {
+    // no record, or not one
+  }
+  return null;
+}
+
 /**
  * Attach to the session, or name how. Attached in cmux to a session with a topic — a focused one,
  * an HQ one — the workspace shows it while vdx holds the attach (focused-topic DL #6); under `vdx ai@<host>` the session gets
@@ -1443,8 +1514,11 @@ function finish(
     deps.tmux.focus(paneId);
     const insideTmux = Boolean(deps.env['TMUX']);
     const token = deps.env[CMUX_TOKEN_ENV_VAR];
-    if (withTopic && token && /^[0-9a-f]+$/.test(token))
-      deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
+    if (token && /^[0-9a-f]+$/.test(token)) {
+      // The tab's mark goes on any session; the topic's only where there is one — its watcher would poll for good.
+      deps.tmux.tryRun(['set-option', '-t', `=${session}:`, TAB_OPTION, token]);
+      if (withTopic) deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
+    }
     const attach = () => {
       const watch =
         withTopic && !insideTmux ? watchTopic(deps.env, { session, socket: deps.tmux.socketName }, deps.home) : null;
@@ -1455,14 +1529,19 @@ function finish(
     // The tmux server fell under the attach — a crash, a kill-server: its session comes back with
     // `vdx ai --restore`, and this terminal with it (vdx-ai-predictable DL #11). A detach leaves the
     // server as it was, and so does a switch-client inside tmux.
-    let before = insideTmux ? null : currentServer(deps.tmux);
-    let status = attach();
-    while (before && fellUnder(before, session, deps)) {
-      if (!awaitSession(session, before, deps)) return status;
-      before = currentServer(deps.tmux);
-      status = attach();
+    const forget = noteTab(deps, { kind: 'here', session, socket: deps.tmux.socketName });
+    try {
+      let before = insideTmux ? null : currentServer(deps.tmux);
+      let status = attach();
+      while (before && fellUnder(before, session, deps)) {
+        if (!awaitSession(session, before, deps)) return status;
+        before = currentServer(deps.tmux);
+        status = attach();
+      }
+      return status;
+    } finally {
+      forget();
     }
-    return status;
   }
   deps.log(`attach: ${deps.tmux.attachHint(session)}`);
   return ok ? EXIT_OK : EXIT_LAUNCH_FAILED;
@@ -1553,6 +1632,7 @@ export function remoteAiArgs(input: {
     opts.list && '--list',
     opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
+    opts.tab && '--tab',
   ].filter((f): f is string => Boolean(f));
   const v = shellQuote(version);
   const script =
@@ -1686,11 +1766,18 @@ export function ensureMemory(
 }
 
 /** `from` — where the person sits; a vdx that `vdx ai@<host>` started passes its own on. */
-export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: string = seatLabel(deps.env)): number {
+export function runAiRemote(
+  opts: AiOptions,
+  host: string,
+  deps: AiDeps,
+  from: string = seatLabel(deps.env),
+  /** `--tab`: the mark the tab's session there carries, from the tab's record. */
+  tabToken?: string,
+): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
   // In cmux the workspace shows the topic of the focused session the vdx there attaches to.
-  const token = tty ? cmuxToken(deps.env) : null;
+  const token = tty ? (tabToken ?? cmuxToken(deps.env)) : null;
   const args = remoteAiArgs({
     host,
     from,
@@ -1705,7 +1792,9 @@ export function runAiRemote(opts: AiOptions, host: string, deps: AiDeps, from: s
     `→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`,
   );
   const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
+  const forget = token ? noteTab(deps, { kind: 'there', host, project: projectPath, token }) : () => {};
   const res = (deps.ssh ?? runSsh)(args, false);
+  forget();
   watch?.stop();
   if (res === null) {
     deps.log('vdx ai: `ssh` not found on PATH');
@@ -3087,6 +3176,64 @@ export function runAiCheck(
   lines.push(problems.join(' '));
   deps.out(lines.join('\n') + '\n');
   return EXIT_DRIFT;
+}
+
+/**
+ * `vdx ai --tab`: the shell of a cmux tab, started again after cmux restarted, goes back into the session
+ * the tab showed — its record (DL #19): a session here, or `vdx ai@<host> --tab` with the mark. Run there,
+ * over ssh, it finds the session marked `@vdx_tab` with this terminal's mark. No record: nothing, exit 0.
+ */
+export function runAiTab(pathArg: string, deps: AiDeps): number {
+  const { log } = deps;
+  const opts: AiOptions = { path: pathArg, restart: false, fresh: false, detach: false, dryRun: false, tab: true };
+  if (!deps.interactive) {
+    log('vdx ai --tab: attaches this terminal — run it in one');
+    return EXIT_USAGE;
+  }
+  const token = deps.env[CMUX_TOKEN_ENV_VAR]?.trim();
+  const surface = cmuxSurface(deps.env);
+  // Over ssh from the tab's machine: the session that carries its mark.
+  if (!surface && token && /^[0-9a-f]+$/.test(token)) {
+    const out = deps.tmux.tryRun(['list-sessions', '-F', `#{session_name}\t#{${TAB_OPTION}}`]) ?? '';
+    const session = out
+      .split('\n')
+      .map((l) => l.split('\t'))
+      .find(([, mark]) => mark === token)?.[0];
+    if (!session) {
+      log(
+        `✗ no tmux session on ${hostLabel(deps.env)} carries this tab's mark — it may have gone with the tmux server`,
+      );
+      return EXIT_LAUNCH_FAILED;
+    }
+    const pane = deps.tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{pane_id}'])?.trim() ?? '';
+    return finish(true, session, pane, opts, deps, Boolean(sessionTopic(deps.tmux, session)), seatLabel(deps.env));
+  }
+  if (!surface) return EXIT_OK;
+  const record = readTabRecord(deps.home, surface);
+  if (!record) return EXIT_OK;
+  if (record.kind === 'there') {
+    log(`↩ this tab showed a session on ${record.host} — back into it`);
+    return runAiRemote({ ...opts, path: record.project }, record.host, deps, seatLabel(deps.env), record.token);
+  }
+  const here: AiDeps = record.socket === deps.tmux.socketName ? deps : { ...deps, tmux: new Tmux(record.socket) };
+  if (!here.tmux.hasSession(record.session)) {
+    log(
+      `✗ ${record.session}, which this tab showed, is not running — after tmux fell, vdx ai --restore brings it back; ` +
+        'this tab tries again in its next shell',
+    );
+    return EXIT_LAUNCH_FAILED;
+  }
+  log(`↩ ${record.session}: back into the session this tab showed`);
+  const pane = here.tmux.tryRun(['display-message', '-p', '-t', `=${record.session}:`, '#{pane_id}'])?.trim() ?? '';
+  return finish(
+    true,
+    record.session,
+    pane,
+    opts,
+    here,
+    Boolean(sessionTopic(here.tmux, record.session)),
+    seatLabel(deps.env),
+  );
 }
 
 /**

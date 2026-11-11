@@ -47,6 +47,7 @@ import {
   runAiState,
   runAiRestore,
   runAiClose,
+  runAiTab,
   runAiReport,
   runAiRemote,
   defaultDeps,
@@ -202,6 +203,13 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 what it would start. A plain start offers the same as r. A
                 terminal vdx ai attached waits for its session when the server
                 falls under it, and attaches again once a restore brings it back
+  --tab         for the shell of a cmux tab, started again after cmux restarted: back
+                into the session the tab showed. vdx ai, while it holds an attach in a
+                cmux tab, notes the session in ~/.local/state/vdx/cmux-tabs/
+                <CMUX_SURFACE_ID>.json and drops the note when the attach ends;
+                gone down with cmux, it leaves it. A session on another machine
+                (vdx ai@<host>) is found there by the mark @vdx_tab. No note: nothing,
+                exit 0; the session not running: exit 4, the note stays (0.53)
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
@@ -421,7 +429,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run]',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run] | vdx ai --tab',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: [
@@ -438,6 +446,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'report',
       'restore',
       'state',
+      'tab',
     ],
     values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
@@ -896,6 +905,17 @@ function cmdAi(opts: ParsedArgs): void {
       process.exit(2);
     }
     process.exit(runAiRestore(opts.flags['dry-run'] === true, defaultDeps()));
+  }
+  if (opts.flags.tab === true) {
+    // The shell of a cmux tab after cmux restarted (or the vdx there, over ssh): nothing else to say.
+    const others = Object.keys(opts.flags).filter((f) => f !== 'tab');
+    if (others.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        `vdx ai: --tab takes nothing else (not ${opts.cmd !== 'ai' ? opts.cmd : `--${others.join(', --')}`}) — the tab's note says where it goes\n`,
+      );
+      process.exit(2);
+    }
+    process.exit(runAiTab(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
   }
   if (opts.flags.report === true) {
     // What another machine's vdx asks over ssh: this machine's facts on the project, as JSON.
