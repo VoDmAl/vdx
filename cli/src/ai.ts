@@ -498,12 +498,18 @@ export function renderSessionName(template: string, vars: Record<string, string>
 
 /**
  * The session for an agent started next to running ones: `name`, `name-2`, `name-3`… — the
- * first no agent of the project runs in (absent, or a shell left behind). Each agent has a
- * session of its own: tmux keeps one current window per session, and an agent started as a
- * window next to another moved every terminal on the session to it (vdx-ai DL #36).
+ * first no agent of the project runs in (absent, or a shell left behind) and no other terminal
+ * shows (`viewed`). Each agent has a session of its own: tmux keeps one current window per
+ * session, and an agent started as a window next to another moved every terminal on the session
+ * to it (vdx-ai DL #36). A session with no agent of the project here may still be on someone's
+ * screen — ssh to an agent on another machine in its windows (vdx-ai-predictable Sidetrack #13).
  */
-export function freeSessionName(name: string, running: { pane: { session: string } }[]): string {
-  const busy = new Set(running.map((a) => a.pane.session));
+export function freeSessionName(
+  name: string,
+  running: { pane: { session: string } }[],
+  viewed: ReadonlySet<string> = new Set(),
+): string {
+  const busy = new Set([...running.map((a) => a.pane.session), ...viewed]);
   for (let n = 1; ; n++) {
     const candidate = n === 1 ? name : `${name}-${n}`;
     if (!busy.has(candidate)) return candidate;
@@ -1947,6 +1953,28 @@ function keepState(
 function ownPane(env: NodeJS.ProcessEnv): string | null {
   const pane = env['TMUX_PANE']?.trim();
   return env['TMUX'] && pane && /^%\d+$/.test(pane) ? pane : null;
+}
+
+/** The session of the server `tmux` talks to that this process runs in; null — not in one of its. */
+function ownSession(tmux: Tmux, env: NodeJS.ProcessEnv): string | null {
+  const pane = ownPane(env);
+  // TMUX is `<socket>,<server pid>,<session>`: a pane id of another server names another pane.
+  const server = currentServer(tmux);
+  if (!pane || !server || env['TMUX']?.split(',')[1] !== String(server.pid)) return null;
+  return tmux.panes().find((p) => p.paneId === pane)?.session ?? null;
+}
+
+/**
+ * The sessions a terminal other than this one shows: a window vdx starts there, and the focus it
+ * puts on it, would move that terminal too (vdx-ai-predictable Sidetrack #13). Started inside tmux,
+ * one terminal on its own session is the person's own.
+ */
+function viewedElsewhere(tmux: Tmux, env: NodeJS.ProcessEnv): Set<string> {
+  const count = new Map<string, number>();
+  for (const c of tmux.clients()) count.set(c.session, (count.get(c.session) ?? 0) + 1);
+  const own = ownSession(tmux, env);
+  if (own !== null && count.has(own)) count.set(own, count.get(own)! - 1);
+  return new Set([...count].filter(([, n]) => n > 0).map(([s]) => s));
 }
 
 /**
@@ -4043,7 +4071,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
         multiplexer,
         running,
         focusedOf,
-        freeSessionName(plan.sessionName, alongside ? running : []),
+        freeSessionName(plan.sessionName, alongside ? running : [], viewedElsewhere(tmux, deps.env)),
         asideWords,
         topic,
       ),
@@ -4333,7 +4361,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     log('note: the profile has no agent.hq_args — the HQ session starts with no first prompt');
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
-  const session = freeSessionName(plan.sessionName, running);
+  const session = freeSessionName(plan.sessionName, running, viewedElsewhere(tmux, deps.env));
   // One intercom or HQ session per project and machine holds for two starts at once too: letters
   // come in pairs, and each sender starts it (intercom-session-mode DL #11).
   const single = plan.intercom || plan.hq;

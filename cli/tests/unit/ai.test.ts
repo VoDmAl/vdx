@@ -483,6 +483,10 @@ describe('freeSessionName', () => {
     expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft', 'vdx@lft-2'))).toBe('vdx@lft-3');
     expect(freeSessionName('vdx@lft', at('vdx@lft', 'vdx@lft-3'))).toBe('vdx@lft-2');
   });
+  it('…and one no other terminal shows (vdx-ai-predictable Sidetrack #13)', () => {
+    expect(freeSessionName('vdx@lft', [], new Set(['vdx@lft']))).toBe('vdx@lft-2');
+    expect(freeSessionName('vdx@lft', at('vdx@lft'), new Set(['vdx@lft-2']))).toBe('vdx@lft-3');
+  });
 });
 
 describe('handOffRestart', () => {
@@ -1766,6 +1770,45 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agents().find((a) => a.proc.pid === running!.proc.pid)?.proc.args).toBe(running!.proc.args);
     tmux.tryRun(['kill-pane', '-t', added.pane.paneId]);
   });
+
+  // nas-info, 2026-11-11 (letter tmux-session-busy-remote-relay): on m3 `vdx ai --new` took nas-info@m3 — no agent
+  // of the project in it, but its windows held ssh to the agents on lft, and another tab was on it. The window
+  // vdx started there became that tab's too.
+  it('a session another terminal shows is not taken for a new agent; one on the terminal vdx runs in is', () => {
+    writeProfile(['--base']);
+    killServer(tmux);
+    const shell = tmux.newSession('proj@testhost', root, 'sleep 600');
+    const seen = (clients: { session: string; pid: number }[]) => {
+      const t = Object.create(tmux) as typeof tmux;
+      t.clients = () => clients;
+      return t;
+    };
+    const windows = (s: string) =>
+      tmux
+        .run(['list-windows', '-t', `=${s}`, '-F', '#{pane_id}'])
+        .trim()
+        .split('\n');
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+
+    expect(
+      runAi({ ...opts, path: root, fresh: true }, { ...deps(), tmux: seen([{ session: 'proj@testhost', pid: 1 }]) }),
+    ).toBe(EXIT_OK);
+    expect(agents().map((a) => a.pane.session)).toEqual(['proj@testhost-2']);
+    expect(windows('proj@testhost')).toEqual([shell]);
+
+    // Started inside tmux, in that very session: the one terminal on it is the person's own.
+    tmux.tryRun(['kill-session', '-t', '=proj@testhost-2']);
+    const d = deps();
+    const inside = { ...d.env, TMUX: `/tmp/x,${currentServer(tmux)!.pid},0`, TMUX_PANE: shell };
+    expect(
+      runAi(
+        { ...opts, path: root, fresh: true },
+        { ...d, env: inside, tmux: seen([{ session: 'proj@testhost', pid: 1 }]) },
+      ),
+    ).toBe(EXIT_OK);
+    expect(agents().map((a) => a.pane.session)).toEqual(['proj@testhost']);
+    expect(logs.join('\n')).toContain('▶ proj@testhost (new window)');
+  }, 30_000);
 
   it('--restart --new replaces the agent in the same pane with a new conversation', () => {
     writeProfile(['--base', '--extra']);
