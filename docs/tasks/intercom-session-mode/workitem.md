@@ -60,6 +60,10 @@ last-updated: 2026-11-06
 **Два старта разом — один агент** (DL #11, 0.49.2, 2026-11-04): второй ждёт агента первого, зависший заменяется в той же
 панели.
 
+**После падения tmux поднятая человеком возвращается** (DL #12, 0.52.0; записи до 0.52 — 0.52.1, 2026-11-10): метка
+`stays` в записи панели. Ждём ai-dev-plugins: `intercom close` в такой сессии не обещает закрытия (их кристалл
+`intercom-session-stays`, срока нет).
+
 **Выпущено в 0.36.0 (2026-10-22), спало с 2026-10-22 по 2026-11-04.** Проверено на выпущенном
 (DL #8); ai-dev-plugins и nas-info ответили. Ответ echelon отправлен. Открыто: побег #2; #7–#9 — до
 выпуска и ответов ai-dev-plugins.
@@ -580,11 +584,18 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       `mail`» ловится), справка, README, спека, скилл (плагин 0.15.1), PROJECT_CHANGELOG
 - [x] Выпуск CLI (minor, 0.52.0) с DL #12 и плагина 0.15.1; на lft и m3 — 2026-11-08: 0.52.0 в npm (`295d3fe`, тег
       `v0.52.0`, CI зелёный), на m3 и lft — 0.52.0 (`npm update -g --prefer-online`); плагин на `main` — уже 0.15.2
-- [ ] Записи до 0.52 без `stays` (найдено 2026-11-08 на m3: у `lime-hq@m3-intercom`, `mediko-hq@m3-intercom`
+- [x] Записи до 0.52 без `stays` (найдено 2026-11-08 на m3: у `lime-hq@m3-intercom`, `mediko-hq@m3-intercom`
       `@vdx_stays` = 1, в записях метки нет — `--restore` их пропустил бы): `recordRunning` дописывает метку в
-      записи всех сессий с `@vdx_stays`; тест с мутацией — `e67ce76` в `main` 2026-11-08, выходит в 0.52.1 (выпуск готовит
-      соседняя сессия `vdx-31`, поверх — её `95a7d03`); после установки — check на m3:
-      `grep -l '"mode":"mail"' ~/.local/state/vdx/tmux/*/*/*.json | xargs jq -c '{session,stays}'`
+      записи всех сессий с `@vdx_stays`; тест с мутацией — `e67ce76`. Выпуск 0.52.1 — владелец 2026-11-10 (`33027d8`,
+      тег `v0.52.1`), на m3 и lft 0.52.1. На lft `npm update -g` оставил пакет без файлов `smol-toml` (`vdx` падал с
+      `ERR_MODULE_NOT_FOUND`). Вероятная причина — два `npm update -g` на lft разом: сессии `vdx-31` (21:21:41) и этой
+      (около 21:21), каждая после выпуска; чинили оба `npm install -g @vodmal/vdx-cli@0.52.1` (21:22:03 и 21:22:07).
+      Сессий lime-hq и mediko-hq к 2026-11-10 на m3 уже нет — проверять не на чем
+- [ ] Живьём на 0.52.1: в записи сессии intercom, поднятой руками, — `"stays":true`; после выпуска vdm с
+      `intercom-session-stays` — и строка `intercom close` в ней не обещает закрытия — when: владелец поднял такую
+      сессию (срока нет); check на её машине:
+      `grep -l '"mode":"mail"' ~/.local/state/vdx/tmux/*/*/*.json | xargs jq -c '{session,stays}'`, строку — в её
+      транскрипте по `intercom close`
 - [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
       (2026-10-22); запуск из `send` и `intercom close` — у них сделано
