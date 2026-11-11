@@ -118,8 +118,6 @@ export interface BoardInput {
   agents: AgentFact[];
   /** The project's conversations as read here, newest first, the intercom session's left out. */
   conversations: Conversation[];
-  /** How many conversations the project has in all, read or not. */
-  total: number;
   /** How many of them were not read: some may be the intercom session's or empty ones. */
   unread?: number;
   machineOf: (c: Conversation) => string | null;
@@ -191,8 +189,30 @@ export function stateIcon(a: AgentFact, now: Date): string {
 }
 
 /** The sidebar's mark of how the agent was started: 🎯 focused, 📬 the intercom session, 👑 the HQ session. */
-function modeIcon(a: AgentFact): string {
+function modeIcon(a: { focused?: boolean; mail?: boolean; hq?: boolean }): string {
   return a.focused ? '🎯' : a.mail ? '📬' : a.hq ? '👑' : '';
+}
+
+/** The profile's mark of a machine (`session.machine_icons`); null — none for it. */
+function machineIcon(machine: string | null, icons: Record<string, string>): string | null {
+  if (machine === null) return null;
+  return Object.entries(icons).find(([m]) => same(m, machine))?.[1] ?? null;
+}
+
+/**
+ * A running agent named as the cmux sidebar names its tmux session: the machine's mark, then the
+ * session without `@<machine>` (`~/.tmux.conf` of nas-info, `set-titles-string`). A machine with no
+ * mark keeps the whole name, which says the machine (vdx-ai-predictable Sidetrack #11). The mark
+ * stands only before what runs now: in the sidebar every row is a live session.
+ */
+export function agentLabel(
+  a: { machine: string; session: string | null; pid: number },
+  icons: Record<string, string>,
+): string {
+  const icon = machineIcon(a.machine, icons);
+  if (a.session === null) return icon ? `${icon} pid ${a.pid}` : `pid ${a.pid} on ${a.machine}`;
+  if (icon) return `${icon} ${a.session.replace(/@[A-Za-z0-9]+/, '')}`;
+  return a.session.includes('@') ? a.session : `${a.session} on ${a.machine}`;
 }
 
 function openWord(a: AgentFact, seat: string): string {
@@ -202,7 +222,8 @@ function openWord(a: AgentFact, seat: string): string {
   return places.length ? `open on ${places.join(', ')}` : '';
 }
 
-const quoted = (t: string | null) => (t ? `«${t.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : '');
+/** A title or a topic on a row: one line, at most 50 characters. */
+export const quoted = (t: string | null) => (t ? `«${t.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : '');
 
 /** A conversation nobody runs, with nothing in it to continue: left out of the list. */
 function continuable(c: Conversation): boolean {
@@ -228,19 +249,16 @@ export function buildBoard(input: BoardInput): Board {
     const command = input.reach?.(p);
     for (const l of [found, command]) if (l) lines.push(`       ${l}`);
   };
-  const width = Math.max(0, ...[...agents, ...hq].map((a) => (a.session ?? `pid ${a.pid}`).length));
-  // A machine's mark before its label; with marks in the profile, a machine without one keeps the column.
-  const icons = Object.entries(input.machineIcons ?? {});
-  const mark = (machine: string | null) => {
-    if (icons.length === 0) return '';
-    const icon = machine === null ? undefined : icons.find(([m]) => same(m, machine))?.[1];
-    return icon ? `${icon} ` : '   ';
-  };
+  // A running agent as the sidebar names it; the conversations nobody runs — their machine as a word.
+  const icons = input.machineIcons ?? {};
+  const label = (a: AgentFact) => agentLabel(a, icons);
+  const width = Math.max(0, ...[...agents, ...mail, ...hq].map((a) => label(a).length));
   const signs = (a: AgentFact) => `${stateIcon(a, now)}${modeIcon(a)}`;
+  if (agents.length + mail.length + hq.length > 0) lines.push('  running now:');
+  else if (!input.find) lines.push('  nothing runs now');
   for (const a of agents) {
     const row: Pick = { kind: 'agent', agent: a };
     rows.push(row);
-    const where = (a.session ?? `pid ${a.pid}`).padEnd(width);
     // A focused session with no topic says so: started before topics (0.41), or the agent never set one.
     const what = [
       a.focused ? `focused ${a.topic ? quoted(a.topic) : '(no topic)'}` : '',
@@ -250,48 +268,54 @@ export function buildBoard(input: BoardInput): Board {
       .filter(Boolean)
       .join(' · ');
     const open = openWord(a, seat);
-    lines.push(
-      `  ${rows.length}) ${mark(a.machine)}${a.machine.padEnd(4)} ${where}  ${signs(a)} ${what}${open ? `   ${open}` : ''}`,
-    );
+    lines.push(`  ${rows.length}) ${label(a).padEnd(width)}  ${signs(a)} ${what}${open ? `   ${open}` : ''}`);
     under(row, a.conversation);
   }
   for (const a of mail)
-    lines.push(
-      `     ${mark(a.machine)}${a.machine.padEnd(4)} ${a.session ?? `pid ${a.pid}`}  ${signs(a)} the intercom session — not yours to attach`,
-    );
+    lines.push(`     ${label(a).padEnd(width)}  ${signs(a)} the intercom session — not yours to attach`);
   // The person sits at the HQ session too: a row with a number, after their agents, and its
   // number attaches to it as it is — `--hq` only narrows the choice to it (nas-info for the owner,
   // 2026-11-05). Enter does not go to it.
   for (const a of hq) {
     const row: Pick = { kind: 'agent', agent: a };
     rows.push(row);
-    const where = (a.session ?? `pid ${a.pid}`).padEnd(width);
     const open = openWord(a, seat);
     lines.push(
-      `  ${rows.length}) ${mark(a.machine)}${a.machine.padEnd(4)} ${where}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}`,
+      `  ${rows.length}) ${label(a).padEnd(width)}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}`,
     );
     under(row, a.conversation);
   }
-  if (shown.length) lines.push('  conversations nobody runs:');
-  for (const c of shown) {
-    const machine = input.behind?.get(c.id) ?? input.machineOf(c);
+
+  const unread = all ? 0 : (input.unread ?? 0);
+  const hidden = idleAll.length - shown.length + unread;
+  if (shown.length)
+    lines.push(
+      hidden > 0
+        ? `  conversations nobody runs — the ${shown.length} newest of ${unread ? 'up to ' : ''}${idleAll.length + unread}:`
+        : '  conversations nobody runs:',
+    );
+  const machines = shown.map((c) => input.behind?.get(c.id) ?? input.machineOf(c));
+  const ages = shown.map((c) => describeAge(c.updated, now));
+  const ageWidth = Math.max(0, ...ages.map((a) => a.length));
+  const machineWidth = Math.max(0, ...machines.map((m) => (m ?? '?').length));
+  shown.forEach((c, i) => {
+    const machine = machines[i]!;
     const row: Pick = { kind: 'conversation', conversation: c, machine };
     rows.push(row);
+    const behind = input.behind?.has(c.id) ?? false;
     const state = [
-      input.behind?.has(c.id)
-        ? `not here yet from ${machine} — continues there`
-        : c.finished
-          ? '✅ finished (wrap)'
-          : 'cut off',
+      behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished (wrap)' : 'cut off',
       machine === null && 'machine unknown',
     ]
       .filter(Boolean)
       .join(', ');
+    const what = [c.topic ? `focused ${quoted(c.topic)}` : '', state, quoted(c.title)].filter(Boolean).join(' · ');
+    const marks = `${c.finished && !behind ? '✅' : ''}${modeIcon({ focused: c.topic !== null })}`;
     lines.push(
-      `  ${rows.length}) ${mark(machine)}${(machine ?? '?').padEnd(4)} ${describeAge(c.updated, now)}  ${c.id.slice(0, 8)}  ${state}${c.title ? ` · ${quoted(c.title)}` : ''}`,
+      `  ${rows.length}) ${ages[i]!.padEnd(ageWidth)}  ${(machine ?? '?').padEnd(machineWidth)}  ${marks ? `${marks} ` : ''}${what}`,
     );
     under(row, c.id);
-  }
+  });
 
   // Enter: the agent with work in it nobody at this seat looks at, the last active; else the
   // newest conversation cut off; else an agent waiting for a first prompt; else a new one.
@@ -314,12 +338,9 @@ export function buildBoard(input: BoardInput): Board {
         ) ??
         'new');
 
-  const unread = all ? 0 : (input.unread ?? 0);
-  const hidden = idleAll.length - shown.length + unread;
   const head = input.find
     ? `${input.project} — ${quoted(input.find.phrase)} in ${rows.length} of ${input.find.searched} conversations`
-    : `${input.project} — ${agents.length + hq.length} running, ${input.total} conversation${input.total === 1 ? '' : 's'}` +
-      (input.limit === 'all' ? '' : ` (${shown.length} shown)`);
+    : input.project;
   const behind = input.behind?.size ?? 0;
   const notes = [
     ...(input.silent ?? []).map((m) => `  note: ${m} does not answer over ssh — what runs there is not known`),

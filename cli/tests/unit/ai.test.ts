@@ -964,8 +964,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     answers = [''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual([]);
-    expect(text()).toMatch(/1\) m3 +5 min ago {2}bbbbbbbb {2}cut off/);
-    expect(text()).toMatch(/2\) lft +30 min ago {2}aaaaaaaa {2}cut off/);
+    expect(text()).toMatch(/1\) 5 min ago +m3 +cut off/);
+    expect(text()).toMatch(/2\) 30 min ago +lft +cut off/);
     expect(text()).toContain('Enter → 1');
     expect(sshCalls[0]!.args.slice(0, 5)).toEqual(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'm3']);
     // The vdx there reports on the project; an older one, or none — the script of live sessions.
@@ -1052,7 +1052,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     conv(ID.b, null, 55);
     answers = ['', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/1\) \? +55 min ago {2}bbbbbbbb {2}cut off, machine unknown/);
+    expect(text()).toMatch(/1\) 55 min ago +\? +cut off, machine unknown/);
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     expect(sshCalls).toEqual([]); // no machine to ask: none is named
     answers = ['', ''];
@@ -1100,7 +1100,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     // It runs in a terminal here: Enter passes it by (DL #2); picked, it asks.
     answers = ['1', ''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
-    expect(text()).toMatch(/1\) lft +pid 4242 {2}⏳ working · «prompt aaaa» {3}open here/);
+    expect(text()).toMatch(/1\) pid 4242 on lft {2}⏳ working · «prompt aaaa» {3}open here/);
     expect(text()).toContain('Enter → n');
     answers = ['1', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
@@ -1352,8 +1352,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       conv(ID.b, 'lft', 60);
       answers = [''];
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-      expect(text()).toMatch(/1\) lft +5 min ago {2}aaaaaaaa {2}✅ finished \(wrap\)/);
-      expect(text()).toMatch(/2\) lft .*bbbbbbbb {2}cut off/);
+      expect(text()).toMatch(/1\) 5 min ago +lft +✅ finished \(wrap\)/);
+      expect(text()).toMatch(/2\) .* lft +cut off/);
       expect(text()).toContain('Enter → 2');
       expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     });
@@ -1364,7 +1364,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = [''];
       const d = report({ agents: [agentThere({ openAt: ['m3', '?'] })] });
       expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
-      expect(text()).toMatch(/1\) m3 +proj@m3 {2}💤 idle · «On m3» {3}open here/);
+      expect(text()).toMatch(/1\) proj@m3 {2}💤 idle · «On m3» {3}open here/);
       expect(text()).toContain('Enter → 2');
       expect(remoteRuns()).toEqual([]);
     });
@@ -1387,7 +1387,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = [''];
       const d = report({ agents: [agentThere({ openAt: ['lft'] })] });
       expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
-      expect(text()).toMatch(/1\) m3 +proj@m3 {2}💤 idle · «On m3» {3}open here/);
+      expect(text()).toMatch(/1\) proj@m3 {2}💤 idle · «On m3» {3}open here/);
       expect(text()).toContain('Enter → 2');
       expect(runs()).toEqual([`--base --resume ${ID.a}`]);
       expect(remoteRuns()).toEqual([]);
@@ -1415,10 +1415,10 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         transcripts: [behind],
       });
       expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
-      expect(text()).toMatch(/1\) m3 +proj@m3-2 {2}⏳🎯 focused «search» · working · «Focused»/);
-      expect(text()).toMatch(/2\) m3 +proj@m3 {4}💤 draft \(12 chars\) · «On m3» {3}open on m3/);
-      expect(text()).toMatch(/3\) m3 +30 min ago {2}aaaaaaaa {2}not here yet from m3 — continues there/);
-      expect(text()).toMatch(/4\) m3 +40 min ago {2}bbbbbbbb {2}cut off/);
+      expect(text()).toMatch(/1\) proj@m3-2 {2}⏳🎯 focused «search» · working · «Focused»/);
+      expect(text()).toMatch(/2\) proj@m3 {4}💤 draft \(12 chars\) · «On m3» {3}open on m3/);
+      expect(text()).toMatch(/3\) 30 min ago +m3 +not here yet from m3 — continues there/);
+      expect(text()).toMatch(/4\) 40 min ago +m3 +cut off/);
       expect(text()).toContain('note: 1 conversation not here yet from another machine (sync behind)');
       expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
       expect(runs()).toEqual([]);
@@ -1439,7 +1439,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = ['a', 'n'];
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(text()).toContain('a all (1 more)');
-      expect(text()).toMatch(/6\) lft .*22222222/);
+      expect(text()).toMatch(/6\) 15 min ago +lft +cut off/);
       expect(runs()).toEqual(['--base']);
     });
 
@@ -1449,7 +1449,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = ['should not be read'];
       expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
       expect(answers).toHaveLength(1);
-      expect(text()).toMatch(/— 0 running, 2 conversations \(2 shown\)/);
+      expect(text()).toMatch(/\n+ {2}nothing runs now\n+ {2}conversations nobody runs:\n/);
       // Under each row, the command that reaches it from this seat (Sidetrack #7); no question, so no keys.
       expect(text()).toContain(`       vdx ai ${shellQuote(root)} --conversation ${ID.a}`);
       expect(text()).toContain(`       vdx ai@m3 ${shellQuote(root)} --conversation ${ID.b}`);
@@ -1476,9 +1476,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
         expect(text()).toContain('Enter → 1 · /<phrase> find · n new · f new focused');
         expect(text()).toContain('has «nothing like it» — searched what you and the agent said in 2 conversations');
-        expect(text()).toMatch(
-          /— «17 НЕЗАЯВЛЕННЫХ» in 1 of 2 conversations\n.*\n {2}1\) lft .*bbbbbbbb {2}✅ finished \(wrap\)/,
-        );
+        expect(text()).toMatch(/— «17 НЕЗАЯВЛЕННЫХ» in 1 of 2 conversations\n.*\n {2}1\) .* lft +✅ finished \(wrap\)/);
         expect(text()).toContain('       agent: «Список для ответа готов: 17 незаявленных»');
         expect(runs()).toEqual([`--base --resume ${ID.b}`]);
         expect(remoteRuns()).toEqual([]);
@@ -1756,7 +1754,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agents()).toHaveLength(1);
     expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain(
-      `note: proj@testhost ${running!.pane.paneId} keeps running ${path.join(base, 'fake-agent')} — ` +
+      `note: proj@testhost keeps running ${path.join(base, 'fake-agent')} — ` +
         'starting another one next to it, in a new conversation',
     );
     expect(agents()).toHaveLength(2);
@@ -2701,8 +2699,9 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     agentIn('proj@testhost-2', ID.b, [startedOn('testhost'), userLine('other work')]);
     answers = ['2'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/proj — 2 running/);
-    expect(text()).toMatch(/1\) testhost proj@testhost(-2)? +💤 idle/);
+    expect(text()).toMatch(
+      /running now:\n+ {2}1\) proj@testhost(-2)? +💤 idle.*\n+ {2}2\) proj@testhost(-2)? +💤 idle/,
+    );
     expect(text()).toMatch(/✓ proj@testhost(-2)?: already running with the profile/);
     expect(tmux.panes()).toHaveLength(2);
   });
@@ -2853,7 +2852,8 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       answers = ['1'];
       expect(runAi({ ...opts, path: root }, always())).toBe(EXIT_OK);
       expect(answers).toEqual([]);
-      expect(text()).toMatch(/proj — 1 running/);
+      expect(text()).toMatch(/running now:\n+ {2}1\) proj@testhost +💤 idle/);
+      expect(text()).not.toMatch(/ {2}2\) proj@testhost/);
       expect(text()).not.toContain('the only agent of proj runs here');
       expect(text()).toContain('✓ proj@testhost: already running with the profile');
     });
@@ -2993,7 +2993,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     killServer(tmux);
     answers = [''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toContain('⚠ no tmux server runs here — before that 1 agent of proj ran: proj@testhost\n');
+    expect(text()).toContain('⚠ no tmux server runs here — before that 1 agent of proj ran:\n     proj@testhost\n');
     expect(text()).not.toContain('vdx ai --restore brings back');
     expect(text()).toContain('Enter → r · r bring back the agent tmux took down');
     expect(text()).toContain(`▶ proj@testhost: conversation ${ID.a.slice(0, 8)}`);
@@ -3026,6 +3026,27 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     ]);
   }, 30_000);
 
+  // The owner, 2026-11-11: `vdx ai@lft --new` from m3 printed «tmux here», a whole paragraph of a topic and
+  // `vdx ai --restore`, which on m3 brings back m3's (vdx-ai-predictable Sidetrack #10).
+  it('a start past the list says what tmux took down from where the person sits, as the list names agents', () => {
+    const topic =
+      'Кристалл outgoing-vs-unread, Sidetrack #7 по DL #17: новая задача Jira и связь, переход без комментария';
+    const a = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+    tmux.run(['set-option', '-t', '=proj@testhost:', '@vdx_topic', topic]);
+    hook(a, ID.a, { VDX_FOCUSED: '1' });
+    hook(agentIn('proj@testhost-2', ID.b, [startedOn('testhost'), userLine('more')]), ID.b);
+    killServer(tmux);
+    const d = deps();
+    expect(
+      runAi({ ...opts, path: root, fresh: true, dryRun: true }, { ...d, env: { ...d.env, VDX_AI_FROM: 'm3' } }),
+    ).toBe(EXIT_OK);
+    expect(text()).toContain(
+      '⚠ no tmux server runs on testhost — before that 2 agents of proj ran:\n' +
+        `     proj@testhost  🎯 focused «${topic.slice(0, 50)}»\n     proj@testhost-2\n` +
+        '  ssh testhost vdx ai --restore brings back both — each in its tmux session',
+    );
+  }, 30_000);
+
   it('--restore: every project, focused with its topic, an empty one as a place; one continued elsewhere left out', () => {
     const a = agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
     tmux.run(['set-option', '-t', '=proj@testhost:', '@vdx_topic', 'search']);
@@ -3049,9 +3070,8 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
 
     // The project's start says what tmux took down, of it and of the others, and how to bring all back.
     expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
-    expect(text()).toContain(
-      '⚠ no tmux server runs here — before that 3 agents of proj ran: proj@testhost «search», proj@testhost-2, ' +
-        'proj@testhost-3; and 1 of other projects',
+    expect(text()).toMatch(
+      /⚠ no tmux server runs here — before that 3 agents of proj ran, and 1 of other projects:\n+ {5}proj@testhost {2}🎯 focused «search»\n+ {5}proj@testhost-2\n+ {5}proj@testhost-3\n/,
     );
     expect(text()).toContain('vdx ai --restore brings back all 4');
 
@@ -3169,9 +3189,9 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     const hq = hqIn(ID.a);
     agentIn('proj@testhost', ID.b, [startedOn('testhost'), userLine('work')]);
     expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/proj — 2 running/);
-    expect(text()).toMatch(/1\) testhost proj@testhost +💤 idle/);
-    expect(text()).toMatch(/2\) testhost proj@testhost-hq {2}💤👑 the HQ session · idle\n+ {7}vdx ai \S+ --hq\n/);
+    expect(text()).toContain('running now:');
+    expect(text()).toMatch(/1\) proj@testhost +💤 idle/);
+    expect(text()).toMatch(/2\) proj@testhost-hq {2}💤👑 the HQ session · idle\n+ {7}vdx ai \S+ --hq\n/);
 
     // At a terminal its number takes it, in its mode: no drift, no second agent.
     logs = [];
@@ -3390,6 +3410,22 @@ describe('vdx ai@host', () => {
       `--find 'it'\\''s here'`,
     );
     expect(remoteAiArgs({ ...base, opts: { ...opts, hq: true }, tty: true })[2]).toContain(' --hq');
+  });
+
+  it('the line before ssh names every flag the vdx there gets (vdx-ai-predictable Sidetrack #10)', () => {
+    const said: string[] = [];
+    const d = {
+      env: {},
+      home: '/h',
+      interactive: false,
+      version: '1.0.0',
+      log: (l: string) => said.push(l),
+      ssh: () => ({ status: 0, stdout: '' }),
+    } as unknown as AiDeps;
+    expect(runAiRemote({ ...opts, path: '/h/p', fresh: true, focused: true, topic: 'two words' }, 'm3', d, 'lft')).toBe(
+      0,
+    );
+    expect(said[0]).toMatch(/^→ m3: vdx ai \S+ --new --focused 'two words'$/);
   });
 
   describe('the remote script, run by a shell against a stub vdx', () => {

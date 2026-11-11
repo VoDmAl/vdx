@@ -157,11 +157,14 @@ session:
     machines: [lft, m3]
   ```
 
-- `machine_icons` (с 0.51) — значок машины в списке `vdx ai`, перед её меткой: тот же, что
-  показывает сайдбар cmux (у владельца его заголовок в `~/.tmux.conf` ведёт nas-info). Ключ —
-  метка машины (без учёта регистра), значение — до 4 символов без пробелов. Машина без значка и
-  неизвестная (`?`) держат колонку пробелами; без ключа колонки нет. Значки состояний и режимов
-  vdx знает сам (ниже, «Один список»): названия машин владельца — в профиле, не в коде.
+- `machine_icons` (с 0.51) — значок машины в списке `vdx ai`: тот же, что показывает сайдбар
+  cmux (у владельца его заголовок в `~/.tmux.conf` ведёт nas-info). Ключ — метка машины (без
+  учёта регистра), значение — до 4 символов без пробелов. С 0.53 значок стоит только перед тем,
+  что идёт сейчас, как в сайдбаре, где каждая строка — живая сессия: строка идущего агента
+  начинается, как его заголовок там, — значок и имя сессии без `@<машина>`; машина без значка
+  (и профиль без ключа) — полное имя сессии. У разговора, который никто не ведёт, машина —
+  словом. Значки состояний и режимов vdx знает сам (ниже, «Один список»): названия машин
+  владельца — в профиле, не в коде.
 
   ```yaml
   session:
@@ -664,17 +667,21 @@ over ssh — what runs there is not known`` — под списком, до вы
 Иначе — список:
 
 ```
-echelon — 2 running, 84 conversations (5 shown)
-  1) 🟢 lft  echelon@lft    ✋ waiting · «…»                  open on m3
-  2) 🔹 m3   echelon@m3-2   ⏳🎯 focused «тема» · working · «…»
-  conversations nobody runs:
-  3) 🟢 lft  41 min ago  fddfae87  cut off · «…»
-  4) 🔹 m3   yesterday 14:05  87ef7ad2  ✅ finished (wrap) · «…»
+echelon
+  running now:
+  1) 🟢 echelon    ✋ waiting · «…»                  open on m3
+  2) 🔹 echelon-2  ⏳🎯 focused «тема» · working · «…»
+  conversations nobody runs — the 5 newest of up to 59:
+  3) 41 min ago       lft  cut off · «…»
+  4) yesterday 14:05  m3   ✅🎯 focused «тема» · finished (wrap) · «…»
+  …
   Enter → 2 · a all (up to 54 more) · /<phrase> find · n new · f new focused
 ```
 
-- Сначала идущие агенты всех машин, по последней активности (файл сессии
-  Claude Code): состояние — `working` (busy или `!`-команда), `waiting`, `draft
+- Сначала, под `running now:` (`nothing runs now` — не идёт ничего), идущие агенты всех
+  машин, по последней активности (файл сессии Claude Code); строка начинается, как заголовок
+  сайдбара cmux, — значок машины и имя сессии без `@<машина>` (с 0.53, `session.machine_icons`
+  выше): состояние — `working` (busy или `!`-команда), `waiting`, `draft
   (N chars)` (текст в строке ввода, не отправлен; тусклая подсказка Claude Code
   не в счёт), `empty` (после `/clear` ничего не набрано, транскрипта ещё нет — тоже),
   `finished (wrap)`, `idle N d`; и чей терминал его показывает: `open here`,
@@ -687,12 +694,14 @@ echelon — 2 running, 84 conversations (5 shown)
   вместо него «open here / open on». Сутки список считает по `statusUpdatedAt` файла сессии,
   сайдбар — по времени конца хода. Сессия intercom и HQ-сессия — строкой без номера; у HQ-сессии в строке
   состояние и команда входа.
-- Потом разговоры, которые никто не ведёт, по свежести: `cut off` (без wrap) или
-  `✅ finished (wrap)`, у каждого машина (со значком из `session.machine_icons`); `?` и `machine unknown` — машина не
-  известна. Пустые не показываются, как и запуски Claude Code через SDK (`entrypoint`
+- Потом разговоры, которые никто не ведёт, по свежести: когда, машина словом — значка нет, он
+  только у того, что идёт (с 0.53), — и `cut off` (без wrap) или `✅ finished (wrap)`; у focused —
+  🎯 и последняя тема (`focused «тема»`); `?` и `machine unknown` — машина не известна. id
+  разговора в строке нет (с 0.53): команда с ним — под строкой в `--list`. Пустые не показываются, как и запуски Claude Code через SDK (`entrypoint`
   на `sdk`: ревью, агенты хуков — с 0.44.1): это не разговоры человека. Сводка компакции
-  — не набранный промпт (с 0.45): разговор, сжатый после wrap, остаётся `finished`. Заголовок — сколько идёт, сколько разговоров
-  у проекта, сколько показано; `a` — все (читаются все транскрипты).
+  — не набранный промпт (с 0.45): разговор, сжатый после wrap, остаётся `finished`. Над ними — сколько показано из скольких
+  (`up to`, пока прочитаны не все транскрипты; до 0.53 — в первой строке, с числом всех разговоров
+  проекта); `a` — все (читаются все транскрипты).
 - Enter — отмеченная строка: агент с работой, которого не показывает терминал
   этого места; иначе самый свежий оборванный разговор; иначе пустая сессия;
   иначе новый. Открытую с этого места Enter не берёт никогда; выбранная цифрой —
@@ -738,7 +747,7 @@ here» на своём месте, и Enter не ведёт во вторую в
 ```
 echelon — «17 незаявленных» in 1 of 90 conversations
   conversations nobody runs:
-  1) lft  yesterday 19:48  e688b407  finished (wrap) · «Сессия intercom в t23b-program …»
+  1) yesterday 19:48  lft  ✅ finished (wrap) · «Сессия intercom в t23b-program …»
        agent: «…вой прогон.** - space-hq: 17 незаявленных, 12 из них открываются учётк…» (2 replies have it)
   Enter → 1 · a the whole list · /<phrase> another search · n new · f new focused
 ```
@@ -817,12 +826,22 @@ vdx-ai-predictable, P6, DL #9).
 выбирает ничего:
 
 ```
-⚠ tmux here was started again today 04:01 — before that 3 agents of vdx ran: vdx@lft, vdx@lft-2 «тема», vdx@lft-3; and 11 of other projects
+⚠ tmux here was started again today 04:01 — before that 3 agents of vdx ran, and 11 of other projects:
+     🟢 vdx
+     🟢 vdx-2  🎯 focused «тема»
+     🟢 vdx-3
   vdx ai --restore brings back all 14 — each in its tmux session, conversation, mode and topic; --dry-run: what it would start
-vdx — 0 running, 31 conversations (5 shown)
+vdx
+  nothing runs now
+  conversations nobody runs — the 5 newest of up to 31:
   …
   Enter → r · r bring back the 3 agents tmux took down · /<phrase> find · n new · f new focused
 ```
+
+Агенты — строками, как в списке: значок машины, имя сессии, режим, тема до 50 знаков (с 0.53; до того —
+одной строкой, тема целиком). Старт мимо списка (`--new`, `--focused`, `--conversation`, `--restart`)
+печатает те же строки. Запущенный с другой машины (`vdx ai@lft`) говорит с места человека: `tmux on lft` и
+`ssh lft vdx ai --restore` (с 0.53) — `vdx ai --restore`, набранный там, поднял бы агентов своей машины.
 
 `r` (и Enter) поднимает агентов проекта, а в проекте, где истинен `session.restore_all`,
 — всех агентов машины; дальше старт идёт, как с тем, что теперь идёт. Цифра, `n`, `f`,

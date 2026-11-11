@@ -55,7 +55,6 @@ const board = (agents: AgentFact[], conversations: Conversation[] = [], extra = 
     seat: 'm3',
     agents,
     conversations,
-    total: conversations.length + agents.length,
     machineOf: (c) => c.machine,
     now,
     ...extra,
@@ -129,12 +128,28 @@ describe('buildBoard: one list, Enter marked', () => {
       seat: 'm3',
       agents: [],
       conversations: many,
-      total: 54,
       machineOf: (c) => c.machine,
       now,
     });
-    expect(b.lines[0]).toBe('proj — 0 running, 54 conversations (5 shown)');
+    expect(b.lines.slice(0, 3)).toEqual([
+      'proj',
+      '  nothing runs now',
+      '  conversations nobody runs — the 5 newest of 6:',
+    ]);
     expect(b.lines.at(-1)).toContain('a all (1 more)');
+    // Some not read: how many there are is a bound.
+    const unread = buildBoard({
+      project: 'proj',
+      host: 'm3',
+      seat: 'm3',
+      agents: [],
+      conversations: many,
+      unread: 3,
+      machineOf: (c) => c.machine,
+      now,
+    });
+    expect(unread.lines[2]).toBe('  conversations nobody runs — the 5 newest of up to 9:');
+    expect(unread.lines.at(-1)).toContain('a all (up to 4 more)');
     expect(b.rows).toHaveLength(5);
   });
 
@@ -144,7 +159,7 @@ describe('buildBoard: one list, Enter marked', () => {
       [conv(ID.a), conv(ID.b, { machine: null }), conv(ID.c, { bornClear: true, typed: 0 }), conv(ID.d)],
     );
     expect(b.rows.map((r) => (r.kind === 'conversation' ? r.conversation.id : r.kind))).toEqual(['agent', ID.b, ID.d]);
-    expect(b.lines.join('\n')).toMatch(/\? .*bbbbbbbb {2}cut off, machine unknown/);
+    expect(b.lines.join('\n')).toContain('  2) today 11:00  ?    cut off, machine unknown · «t bbbb»');
   });
 
   it('a conversation whose copy here is behind continues on its machine, and the list says so', () => {
@@ -190,24 +205,52 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
     // A focused session with no topic says so.
     expect(board([agent({ focused: true })]).lines.join('\n')).toContain('proj@m3  💤🎯 focused (no topic) · idle');
     expect(text).toContain('proj@m3-intercom  💤📬 the intercom session');
-    expect(text).toContain('proj@m3-hq  🆕👑 the HQ session · empty');
-    expect(text).toMatch(/bbbbbbbb {2}✅ finished \(wrap\)/);
-    expect(text).toMatch(/cccccccc {2}cut off/);
+    expect(text).toMatch(/proj@m3-hq +🆕👑 the HQ session · empty/);
+    expect(text).toContain('today 11:00  lft  ✅ finished (wrap) · «t bbbb»');
+    expect(text).toContain('today 11:00  lft  cut off · «t cccc»');
   });
 
-  it("a machine's mark from the profile before its label; a machine without one, or not known, keeps the column", () => {
-    const icons = { M3: '🔹', lft: '🟢' };
+  it('a focused conversation nobody runs shows its mode and its last topic; no id on the row', () => {
     const text = board(
-      [agent(), agent({ machine: 'lft', session: 'proj@lft', pid: 200 })],
-      [conv(ID.b, { machine: 'other' }), conv(ID.c, { machine: null })],
-      { machineIcons: icons },
+      [],
+      [conv(ID.b, { topic: 'sidebar marks', finished: true }), conv(ID.c, { topic: 'search' })],
     ).lines.join('\n');
-    expect(text).toMatch(/1\) 🔹 m3 {3}proj@m3 /);
-    expect(text).toMatch(/2\) 🟢 lft {2}proj@lft /);
-    expect(text).toMatch(/3\) {4}other .*bbbbbbbb/);
-    expect(text).toMatch(/4\) {4}\? {4}.*cccccccc/);
-    // No marks in the profile: no column.
-    expect(board([agent()]).lines.join('\n')).toMatch(/1\) m3 {3}proj@m3 /);
+    expect(text).toContain('1) today 11:00  lft  ✅🎯 focused «sidebar marks» · finished (wrap) · «t bbbb»');
+    expect(text).toContain('2) today 11:00  lft  🎯 focused «search» · cut off · «t cccc»');
+    expect(text).not.toMatch(/bbbbbbbb|cccccccc/);
+  });
+
+  // The owner, 2026-11-11: «яркие иконки в начале - супер. Но нихрена не ясно какая реально сейчас работает».
+  it("a machine's mark stands only before what runs now, which is named as the sidebar names it (Sidetrack #11)", () => {
+    const icons = { M3: '🔹', lft: '🟢' };
+    const b = board(
+      [
+        agent({ focused: true, topic: 'cmux' }),
+        agent({ machine: 'lft', session: 'proj@lft-2', pid: 200, conversation: ID.d }),
+        agent({
+          machine: 'other',
+          session: 'proj@other',
+          pid: 300,
+          conversation: '55555555-5555-4555-8555-555555555555',
+        }),
+      ],
+      [conv(ID.b), conv(ID.c, { machine: null })],
+      { machineIcons: icons },
+    );
+    expect(b.lines).toEqual([
+      'proj',
+      '  running now:',
+      '  1) 🔹 proj     💤🎯 focused «cmux» · idle · «Work»',
+      '  2) 🟢 proj-2   💤 idle · «Work»',
+      '  3) proj@other  💤 idle · «Work»',
+      '  conversations nobody runs:',
+      '  4) today 11:00  lft  cut off · «t bbbb»',
+      '  5) today 11:00  ?    cut off, machine unknown · «t cccc»',
+      '  Enter → 1 · /<phrase> find · n new · f new focused',
+    ]);
+    // No marks in the profile: the session's whole name says the machine; one with no tmux, its pid.
+    expect(board([agent()]).lines[2]).toBe('  1) proj@m3  💤 idle · «Work»');
+    expect(board([agent({ session: null })]).lines[2]).toBe('  1) pid 100 on m3  💤 idle · «Work»');
   });
 });
 
@@ -220,8 +263,8 @@ describe('buildBoard: the HQ session', () => {
       agent({ pid: 2, conversation: ID.b }),
     ]);
     expect(b.rows.map((r) => r.kind === 'agent' && r.agent.session)).toEqual(['proj@m3', 'proj@m3-hq']);
-    expect(b.lines[0]).toMatch(/2 running/);
-    expect(b.lines.join('\n')).toContain('  2) m3   proj@m3-hq  ⏳👑 the HQ session · working');
+    expect(b.lines[1]).toBe('  running now:');
+    expect(b.lines.join('\n')).toContain('  2) proj@m3-hq  ⏳👑 the HQ session · working');
     expect(b.enter).toBe(0);
     // Alone, empty or with work in it, it is still not Enter's.
     expect(board([agent({ hq: true, session: 'proj@m3-hq', status: 'busy' })]).enter).toBe('new');
@@ -231,7 +274,7 @@ describe('buildBoard: the HQ session', () => {
   it('on another machine, a row too; a terminal showing it is said', () => {
     const b = board([agent({ machine: 'lft', hq: true, session: 'proj@lft-hq', openAt: ['m3'] })]);
     expect(b.rows).toHaveLength(1);
-    expect(b.lines.join('\n')).toContain('1) lft  proj@lft-hq  💤👑 the HQ session · idle   open here');
+    expect(b.lines.join('\n')).toContain('1) proj@lft-hq  💤👑 the HQ session · idle   open here');
   });
 });
 
@@ -246,9 +289,9 @@ describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
     const b = board([agent({ openAt: ['m3'] })], [conv(ID.c, { finished: true })], { find });
     const text = b.lines.join('\n');
     expect(b.lines[0]).toBe('proj — «the needle» in 2 of 29 conversations');
-    expect(text).toMatch(/1\) m3 +proj@m3 {2}💤 idle · «Work» {3}open here\n {7}you: «where is the needle\?»/);
-    expect(text).toMatch(
-      /2\) lft .*cccccccc {2}✅ finished \(wrap\).*\n {7}agent: «the needle is here» \(2 replies have it\)/,
+    expect(text).toMatch(/1\) proj@m3 {2}💤 idle · «Work» {3}open here\n {7}you: «where is the needle\?»/);
+    expect(text).toContain(
+      '2) today 11:00  lft  ✅ finished (wrap) · «t cccc»\n       agent: «the needle is here» (2 replies have it)',
     );
     expect(b.enter).toBe(1);
     expect(b.lines.at(-1)).toBe('  Enter → 2 · a the whole list · /<phrase> another search · n new · f new focused');
@@ -261,7 +304,7 @@ describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
     });
     expect(b.lines.slice(1)).toEqual([
       '  conversations nobody runs:',
-      `  1) lft  today 11:00  cccccccc  cut off · «t cccc»`,
+      '  1) today 11:00  lft  cut off · «t cccc»',
       '       agent: «the needle is here» (2 replies have it)',
       `       vdx ai@lft x --conversation ${ID.c}`,
     ]);

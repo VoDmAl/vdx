@@ -68,6 +68,7 @@ import {
 } from './restore.ts';
 import {
   type AgentFact,
+  agentLabel,
   type Board,
   buildBoard,
   enterKey,
@@ -75,6 +76,7 @@ import {
   inputDraft,
   openAtSeat,
   type Pick,
+  quoted,
   readAnswer,
   settledState,
 } from './board.ts';
@@ -1601,6 +1603,24 @@ export function remotePathWord(abs: string, home: string): string {
   return `"$HOME"/${shellQuote(rel)}`;
 }
 
+/** The flags `vdx ai@<host>` hands the vdx there, after the path; the line it prints names them all. */
+function remoteFlags(opts: AiOptions): string[] {
+  return [
+    opts.fresh && '--new',
+    // After the path: the word after --focused is then the topic there, never the path.
+    opts.focused && (opts.topic ? `--focused ${shellQuote(opts.topic)}` : '--focused'),
+    opts.intercom && '--intercom',
+    opts.hq && '--hq',
+    opts.restart && '--restart',
+    opts.detach && '--detach',
+    opts.dryRun && '--dry-run',
+    opts.list && '--list',
+    opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
+    opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
+    opts.tab && '--tab',
+  ].filter((f): f is string => Boolean(f));
+}
+
 /**
  * The ssh argv for `vdx ai@<host>`: the same `vdx ai` on the host, in its own
  * tmux there. The path goes first: an older vdx hands the token after a flag it
@@ -1620,20 +1640,7 @@ export function remoteAiArgs(input: {
   cmuxToken?: string | null;
 }): string[] {
   const { host, opts, version } = input;
-  const flags = [
-    opts.fresh && '--new',
-    // After the path: the word after --focused is then the topic there, never the path.
-    opts.focused && (opts.topic ? `--focused ${shellQuote(opts.topic)}` : '--focused'),
-    opts.intercom && '--intercom',
-    opts.hq && '--hq',
-    opts.restart && '--restart',
-    opts.detach && '--detach',
-    opts.dryRun && '--dry-run',
-    opts.list && '--list',
-    opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
-    opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
-    opts.tab && '--tab',
-  ].filter((f): f is string => Boolean(f));
+  const flags = remoteFlags(opts);
   const v = shellQuote(version);
   const script =
     `v=$(vdx --version 2>/dev/null) || v='older than 0.13.1'; ` +
@@ -1788,9 +1795,7 @@ export function runAiRemote(
     tty,
     cmuxToken: token,
   });
-  deps.log(
-    `→ ${host}: vdx ai ${shellQuote(projectPath)}${opts.conversation ? ` --conversation ${opts.conversation}` : ''}`,
-  );
+  deps.log(`→ ${host}: vdx ai ${[shellQuote(projectPath), ...remoteFlags(opts)].join(' ')}`);
   const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
   const forget = token ? noteTab(deps, { kind: 'there', host, project: projectPath, token }) : () => {};
   const res = (deps.ssh ?? runSsh)(args, false);
@@ -2470,7 +2475,6 @@ function boardStart(
       seat: plan.seat,
       agents,
       conversations: limit === 'all' ? everyOne() : k.all,
-      total: files.size,
       unread: files.size - k.all.length - k.asideCount,
       machineOf,
       behind,
@@ -2507,7 +2511,6 @@ function boardStart(
       seat: plan.seat,
       agents: ran,
       conversations,
-      total: files.size,
       machineOf,
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
@@ -3327,9 +3330,9 @@ interface LostHere {
   all: LostRecord[];
   /** What `r` brings back: the project's own, or every one where session.restore_all holds (DL #4). */
   mine: LostRecord[];
-  /** What tmux did and who ran before it. */
-  line: string;
-  /** The command that brings back every one. */
+  /** What tmux did and who ran before it: a line, then a row for each, named as the list names agents. */
+  lines: string[];
+  /** The command that brings back every one, typed where the person sits. */
   hint: string;
 }
 
@@ -3344,26 +3347,42 @@ function lostHere(deps: AiDeps, plan: LaunchPlan, environment: Environment, tidy
   const root = realpathOr(plan.projectRoot);
   const mine = everyOne ? all : all.filter((r) => realpathOr(r.project) === root);
   const agents = (n: number) => `${n} agent${n === 1 ? '' : 's'}`;
-  const named = (rs: LostRecord[]) =>
-    rs
-      .slice(0, 6)
-      .map((r) => `${r.session}${r.mode === 'focused' && r.topic ? ` «${r.topic}»` : ''}`)
-      .join(', ') + (rs.length > 6 ? `, … (${rs.length - 6} more)` : '');
+  // Said from where the person sits: `vdx ai@<host>` runs this on the host (vdx-ai-predictable Sidetrack #10).
+  const here = sameMachine(plan.host, plan.seat);
+  const where = here ? 'here' : `on ${plan.host}`;
+  const icons = environment.session?.machine_icons ?? {};
+  const row = (r: LostRecord) => {
+    const mode =
+      r.mode === 'focused'
+        ? `🎯 focused ${r.topic ? quoted(r.topic) : '(no topic)'}`
+        : r.mode === 'mail'
+          ? '📬 the intercom session'
+          : r.mode === 'hq'
+            ? '👑 the HQ session'
+            : '';
+    return `     ${agentLabel({ machine: plan.host, session: r.session, pid: r.pid }, icons)}${mode ? `  ${mode}` : ''}`;
+  };
+  const listed = mine.length === 0 ? all : mine;
   const when = server
-    ? `tmux here was started again ${describeAge(new Date(server.started * 1000))}`
-    : 'no tmux server runs here';
+    ? `tmux ${where} was started again ${describeAge(new Date(server.started * 1000))}`
+    : `no tmux server runs ${where}`;
   const others = all.length - mine.length;
   const ran =
     mine.length === 0
-      ? `${agents(others)} of other projects ran: ${named(all)}`
-      : `${agents(mine.length)}${everyOne ? '' : ` of ${plan.project}`} ran: ${named(mine)}` +
-        (others > 0 ? `; and ${others} of other projects` : '');
+      ? `${agents(others)} of other projects ran`
+      : `${agents(mine.length)}${everyOne ? '' : ` of ${plan.project}`} ran` +
+        (others > 0 ? `, and ${others} of other projects` : '');
+  const count = all.length === 1 ? 'it' : all.length === 2 ? 'both' : `all ${all.length}`;
   return {
     all,
     mine,
-    line: `⚠ ${when} — before that ${ran}`,
+    lines: [
+      `⚠ ${when} — before that ${ran}:`,
+      ...listed.slice(0, 6).map(row),
+      ...(listed.length > 6 ? [`     … and ${listed.length - 6} more`] : []),
+    ],
     hint:
-      `  vdx ai --restore brings back ${all.length === 1 ? 'it' : `all ${all.length}`} — each in its tmux session, ` +
+      `  ${here ? '' : `ssh ${plan.host} `}vdx ai --restore brings back ${count} — each in its tmux session, ` +
       `conversation, mode and topic; --dry-run: what it would start`,
   };
 }
@@ -3789,7 +3808,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   let boardNew = false;
   // Any other start says what tmux took down, with the command that brings it back.
   if (lost && !onBoard) {
-    log(lost.line);
+    for (const l of lost.lines) log(l);
     log(lost.hint);
   }
   if (onBoard) {
@@ -3805,7 +3824,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     const offer = ask && !listed ? (lost?.mine.length ?? 0) : 0;
     if (lost) {
       const say = (l: string) => (listed ? deps.out(`${l}\n`) : log(l));
-      say(lost.line);
+      for (const l of lost.lines) say(l);
       if (offer === 0 || offer < lost.all.length) say(lost.hint);
     }
     const outcome = boardStart(
@@ -4121,7 +4140,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   }
 
   if (alongside) {
-    const others = running.map((r) => `${r.pane.session} ${r.pane.paneId}`).join(', ');
+    const icons = environment.session?.machine_icons ?? {};
+    const names = running.map((r) =>
+      agentLabel({ machine: plan.host, session: r.pane.session, pid: r.proc.pid }, icons),
+    );
+    const others = names
+      .map((n, i) => (names.indexOf(n) === names.lastIndexOf(n) ? n : `${n} ${running[i]!.pane.paneId}`))
+      .join(', ');
     log(
       `note: ${others} keep${running.length === 1 ? 's' : ''} running ${plan.command} — starting another one next to it, ` +
         `in ${opts.conversation ? `conversation ${opts.conversation.slice(0, 8)}` : 'a new conversation'}`,
