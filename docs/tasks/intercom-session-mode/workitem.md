@@ -582,7 +582,8 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       `v0.52.0`, CI зелёный), на m3 и lft — 0.52.0 (`npm update -g --prefer-online`); плагин на `main` — уже 0.15.2
 - [ ] Записи до 0.52 без `stays` (найдено 2026-11-08 на m3: у `lime-hq@m3-intercom`, `mediko-hq@m3-intercom`
       `@vdx_stays` = 1, в записях метки нет — `--restore` их пропустил бы): `recordRunning` дописывает метку в
-      записи всех сессий с `@vdx_stays`; тест с мутацией. Выпуск patch 0.52.1; после — check на m3:
+      записи всех сессий с `@vdx_stays`; тест с мутацией — `e67ce76` в `main` 2026-11-08, выходит в 0.52.1 (выпуск готовит
+      соседняя сессия `vdx-31`, поверх — её `95a7d03`); после установки — check на m3:
       `grep -l '"mode":"mail"' ~/.local/state/vdx/tmux/*/*/*.json | xargs jq -c '{session,stays}'`
 - [x] Sidetrack #9: комментарий профиля — в сете v1.12.0 (2026-11-03)
 - [x] Sidetrack #3: ответ ai-dev-plugins — только с `intercom.mail-session: true`
