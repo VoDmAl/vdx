@@ -540,10 +540,14 @@ describe('shell quoting', () => {
     expect(new Tmux('sock').attachHint('arch@lft')).toBe("tmux -L sock attach -t '=arch@lft'");
   });
 
-  it('wraps the agent in a login shell that stays open after it exits', () => {
+  it('wraps the agent in a login shell that stays open after it exits, and says first which tmux session it is', () => {
     const line = commandLine('claude', ['--dangerously-skip-permissions']);
+    const said = `printf '\\n[vdx] the agent quit: this pane is tmux session %s; detach: Ctrl-B d\\n' "$(tmux display-message -p '#S')"`;
     expect(tmuxShellCommand(line, '/bin/zsh')).toBe(
-      "exec env DISABLE_AUTO_UPDATE=true /bin/zsh -lic 'claude --dangerously-skip-permissions; exec /bin/zsh -l'",
+      `exec env DISABLE_AUTO_UPDATE=true /bin/zsh -lic ${shellQuote(`claude --dangerously-skip-permissions; ${said}; exec /bin/zsh -l`)}`,
+    );
+    expect(tmuxShellCommand(line, '/bin/zsh', false)).toBe(
+      "exec env DISABLE_AUTO_UPDATE=true /bin/zsh -lic 'claude --dangerously-skip-permissions'",
     );
     expect(tmuxShellCommand(line, null)).toBe(line);
   });
@@ -3469,6 +3473,74 @@ describe('vdx ai@host', () => {
       0,
     );
     expect(said[0]).toMatch(/^→ m3: vdx ai \S+ --new --focused 'two words'$/);
+  });
+
+  // nas-info, 2026-11-11 (letter ai-peer-inside-tmux-nests): `vdx ai@lft --hq` typed in a pane of global-auth-gap@m3-hq
+  // put lft's tmux client inside m3's — two status lines, the prefix taken by the outer one.
+  describe('typed in a tmux pane here, to attach: no tmux inside tmux', () => {
+    const inPane = (terminals: { session: string; pid: number; tty?: string }[], interactive = true) => {
+      const ran: string[][] = [];
+      const said: string[] = [];
+      let sshed = false;
+      const tmux = {
+        socketName: null,
+        tryRun: (args: string[]) => {
+          ran.push(args);
+          return args[0] === 'display-message' ? '4242\t1700000000\t/tmp/tmux-501/default\n' : '';
+        },
+        panes: () => [{ session: 'proj@m3-hq', paneId: '%7', panePid: 1, cwd: '/h' }],
+        clients: () => terminals,
+      };
+      const d = {
+        env: { TMUX: '/tmp/tmux-501/default,4242,3', TMUX_PANE: '%7' },
+        home: '/h',
+        interactive,
+        version: '1.0.0',
+        log: (l: string) => said.push(l),
+        ssh: () => {
+          sshed = true;
+          return { status: 0, stdout: '' };
+        },
+        tmux,
+      } as unknown as AiDeps;
+      const status = runAiRemote({ ...opts, path: '/h/p', hq: true }, 'lft', d, 'm3');
+      return { status, ran, said, sshed: () => sshed };
+    };
+
+    it("the terminal's tmux client gives way to the same command, run in the terminal itself", () => {
+      const r = inPane([{ session: 'proj@m3-hq', pid: 9, tty: '/dev/ttys004' }]);
+      expect(r.status).toBe(EXIT_OK);
+      expect(r.sshed()).toBe(false);
+      expect(r.ran).toContainEqual([
+        'detach-client',
+        '-t',
+        '/dev/ttys004',
+        '-E',
+        expect.stringMatching(/^vdx ai@lft \S+ --hq$/),
+      ]);
+      expect(r.said[0]).toMatch(
+        /^→ lft: vdx ai@lft \S+ --hq — in this terminal, in place of its tmux client; proj@m3-hq stays/,
+      );
+    });
+
+    it('two terminals on the session: which one typed it is not known — nothing detached, the line says how', () => {
+      const r = inPane([
+        { session: 'proj@m3-hq', pid: 9, tty: '/dev/ttys004' },
+        { session: 'proj@m3-hq', pid: 10, tty: '/dev/ttys042' },
+      ]);
+      expect(r.status).toBe(EXIT_LAUNCH_FAILED);
+      expect(r.sshed()).toBe(false);
+      expect(r.ran.some((a) => a[0] === 'detach-client')).toBe(false);
+      expect(r.said[0]).toMatch(
+        /tmux pane of proj@m3-hq, and lft's tmux would open inside it — nothing started; detach \(Ctrl-B d\)/,
+      );
+    });
+
+    it('nobody to attach (no terminal, as with `!` in Claude Code): ssh as before', () => {
+      const r = inPane([{ session: 'proj@m3-hq', pid: 9, tty: '/dev/ttys004' }], false);
+      expect(r.sshed()).toBe(true);
+      expect(r.ran.some((a) => a[0] === 'detach-client')).toBe(false);
+    });
   });
 
   describe('the remote script, run by a shell against a stub vdx', () => {

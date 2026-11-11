@@ -630,10 +630,16 @@ export function commandLine(command: string, args: string[]): string {
  * `-i` runs `.zshrc`, where oh-my-zsh may ask about an update and wait: nobody may be at the
  * pane, so it is told not to ask.
  */
+/**
+ * The pane's command: the agent in a login shell, which stays open after it quits. The shell left
+ * looks like a terminal's own, and a `vdx ai@<host>` typed there opened another tmux inside this one
+ * (nas-info, ai-peer-inside-tmux-nests): a line says where the pane is first.
+ */
 export function tmuxShellCommand(line: string, shell: string | null, keepShell = true): string {
   if (!shell) return line;
   const sh = shellQuote(shell);
-  return `exec env DISABLE_AUTO_UPDATE=true ${sh} -lic ${shellQuote(keepShell ? `${line}; exec ${sh} -l` : line)}`;
+  const said = `printf '\\n[vdx] the agent quit: this pane is tmux session %s; detach: Ctrl-B d\\n' "$(tmux display-message -p '#S')"`;
+  return `exec env DISABLE_AUTO_UPDATE=true ${sh} -lic ${shellQuote(keepShell ? `${line}; ${said}; exec ${sh} -l` : line)}`;
 }
 
 export interface PaneInfo {
@@ -929,12 +935,12 @@ export class Tmux {
     return this.tryRun(['capture-pane', '-p', '-e', '-t', paneId]);
   }
 
-  /** The terminals attached to the server: each one's session and its tmux client process. */
-  clients(): { session: string; pid: number }[] {
-    const out = this.tryRun(['list-clients', '-F', '#{client_session}\t#{client_pid}']);
+  /** The terminals attached to the server: each one's session, its tmux client process and its terminal. */
+  clients(): { session: string; pid: number; tty?: string }[] {
+    const out = this.tryRun(['list-clients', '-F', '#{client_session}\t#{client_pid}\t#{client_tty}']);
     return (out ?? '').split('\n').flatMap((line) => {
-      const [session, pid] = line.split('\t');
-      return session && pid && /^\d+$/.test(pid) ? [{ session, pid: Number(pid) }] : [];
+      const [session, pid, tty] = line.split('\t');
+      return session && pid && /^\d+$/.test(pid) ? [{ session, pid: Number(pid), ...(tty ? { tty } : {}) }] : [];
     });
   }
 
@@ -1778,6 +1784,30 @@ export function ensureMemory(
   }
 }
 
+/**
+ * `vdx ai@<host>` typed in a tmux pane here, to attach: ssh would open the host's tmux inside this one —
+ * two status lines, the prefix caught by the outer one, the cmux sidebar naming the outer session
+ * (nas-info, ai-peer-inside-tmux-nests). The terminal's tmux client gives way to the same command
+ * instead (`detach-client -E`): it runs in the terminal itself, with the terminal's environment, and
+ * the session here stays as it was. With other terminals on the session, which one typed it is not
+ * known: nothing is detached, and the line says how.
+ */
+function giveWayInTmux(opts: AiOptions, host: string, projectPath: string, deps: AiDeps): number {
+  const own = ownSession(deps.tmux, deps.env);
+  const terminals = own ? deps.tmux.clients().filter((c) => c.session === own) : [];
+  const line = `vdx ai@${host} ${[shellQuote(projectPath), ...remoteFlags(opts)].join(' ')}`;
+  const tty = terminals.length === 1 ? terminals[0]!.tty : undefined;
+  if (tty && deps.tmux.tryRun(['detach-client', '-t', tty, '-E', line]) !== null) {
+    deps.log(`→ ${host}: ${line} — in this terminal, in place of its tmux client; ${own} stays as it was`);
+    return EXIT_OK;
+  }
+  deps.log(
+    `vdx ai: this is a tmux pane${own ? ` of ${own}` : ''}, and ${host}'s tmux would open inside it — nothing started; ` +
+      `detach (Ctrl-B d) and run in the terminal: ${line}`,
+  );
+  return EXIT_LAUNCH_FAILED;
+}
+
 /** `from` — where the person sits; a vdx that `vdx ai@<host>` started passes its own on. */
 export function runAiRemote(
   opts: AiOptions,
@@ -1789,6 +1819,7 @@ export function runAiRemote(
 ): number {
   const projectPath = resolveProjectRoot(opts.path) ?? path.resolve(opts.path);
   const tty = deps.interactive && !opts.detach && !opts.dryRun;
+  if (tty && deps.env['TMUX']) return giveWayInTmux(opts, host, projectPath, deps);
   // In cmux the workspace shows the topic of the focused session the vdx there attaches to.
   const token = tty ? (tabToken ?? cmuxToken(deps.env)) : null;
   const args = remoteAiArgs({
