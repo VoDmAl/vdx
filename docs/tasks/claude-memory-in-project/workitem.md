@@ -882,8 +882,22 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       корнях останутся (решение владельца), даты нет — после миграции памяти по списку и разбора EPERM на
       внешних томах m3. Ответ им — `root-move-vdx-side-outcome-outcome` (2026-10-25): 0.39.2 на lft и m3
       (`vdx --version` на обеих), профиль не меняется, миграция со стороны vdx закончена
-- [ ] DL #23: выпуск CLI 0.54 и сет v1.14.0 (тег, push), станции; итог t23b-program `reply` на `private-personal-hosts`
-      (где ключ — в профиле, их хост уже покрыт); письмо nas-info — проверка зоны `zt.vorobyev.name`
+- [x] DL #23: выпуск CLI 0.54 и сет v1.14.0 (тег, push), станции; итог t23b-program `reply` на `private-personal-hosts`
+      (где ключ — в профиле, их хост уже покрыт); письмо nas-info — проверка зоны `zt.vorobyev.name` — 2026-11-11: сет
+      `c2e5225`, тег `v1.14.0`; CLI `0ba8fb9`, выпуск 0.54.0 (`f6365a2`), m3 и lft — 0.54.0; на checkout t23b-program
+      `memoryReaders` — `only: true`; итог t23b-program отправлен; письмо nas-info `zt-zone-stays-owners` отправлено, их
+      сессия intercom поднята на lft
+- [x] Ответ nas-info на `zt-zone-stays-owners`: где живёт проверка зоны `zt.vorobyev.name` (или «держать нельзя» — тогда
+      NAS в профиле иначе); срока нет — when: их ответ; check: `/vdm:intercom check` — 2026-11-12: держать можно;
+      суточная `cloudflare.zt_zone` на nyc (`checks/cloudflare.sh`): все записи под зоной — только A без прокси, в сети
+      ZeroTier (сейчас 10.243.0.0/16), имя объявлено; нарушение — error на дашборде; их кристалл `zt-zone-owners`. Уже
+      нарушает: `graphite.zt.vorobyev.name` — CNAME на nyc с прокси Cloudflare (снаружи адреса Cloudflare), не
+      используется — удалить или снять прокси решает владелец до включения проверки. Не поймает: чужой узел, которому
+      владелец одобрил членство в сети
+- [ ] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-19
+      (due: 2026-11-19); check: `/vdm:intercom check`. 2026-11-12: `graphite.zt.vorobyev.name` — владелец «удаляй»
+      (живой Graphite — `graphite.vorobyev.name`, этот нигде не упомянут и снаружи не работает); письмо nas-info
+      `graphite-zt-delete`: удалить и назвать из журнала Cloudflare, кто и когда завёл
 - [ ] Sidetrack #6: к дате смены корня (её назовёт nas-info; обещано им 2026-10-24) — скрипт `vdx doctor
       --fix` по проектам корня (готов, `root-move-fix.sh`, 2026-10-24) — nas-info с командой. Профиль не
       меняется: ссылки останутся (2026-10-25). Кристалл открыт до него (DL #16)

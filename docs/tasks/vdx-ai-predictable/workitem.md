@@ -794,7 +794,8 @@ m3, оба `tmux-256color`); как вкладки входят в tmux — `vdx
    pane is tmux session <имя>; detach: Ctrl-B d» (`tmuxShellCommand`; имя — `tmux display-message` в момент выхода).
 **Why:** вложенный клиент — две строки статуса, префикс у внешнего, ширина прыгает при `window-size latest`, сайдбар
 называет внешнюю сессию; а панель после выхода агента выглядела как шелл вкладки.
-**Implication:** CLI patch 0.53.1. Строка выхода — только у панелей, запущенных после выпуска. Итог nas-info — `reply`.
+**Implication:** CLI patch 0.53.1 — вышло в 0.54.0 (2026-11-11), вместе с `*.<домен>` (claude-memory-in-project DL #23).
+Строка выхода — только у панелей, запущенных после выпуска. Итог nas-info — `reply`.
 
 ## Sidetracks
 
@@ -1245,8 +1246,12 @@ workspace, не в заголовке; в списке 👑 остаётся р�
 - [x] см. Sidetrack #13 — `vdx ai --new` берёт сессию с ssh-подключениями к агентам другой машины и чужим клиентом
       (письмо nas-info `tmux-session-busy-remote-relay`, взято): `freeSessionName`, тест в tmux, итог nas-info — `reply` —
       2026-11-11: DL #21
-- [ ] см. Sidetrack #14 — `vdx ai@<машина>` из панели tmux: клиент терминала уступает место (DL #22); выпуск 0.53.1,
-      станции, итог nas-info `reply` на `ai-peer-inside-tmux-nests`
+- [x] см. Sidetrack #14 — `vdx ai@<машина>` из панели tmux: клиент терминала уступает место (DL #22); выпуск 0.53.1,
+      станции, итог nas-info `reply` на `ai-peer-inside-tmux-nests` — 2026-11-11: `c70c037`; итог nas-info отправлен;
+      вышло в 0.54.0, не 0.53.1 (`f6365a2`, тег `v0.54.0`, вместе с `*.<домен>` в `git.personal_hosts`), m3 и lft — 0.54.0
+- [ ] DL #22 вживую: `vdx ai@lft` из панели tmux на m3 — во вкладке одна строка статуса, новый клиент на lft не
+      `tmux-256color`; строка «[vdx] the agent quit…» в панели, где агент вышел; срока нет — when: владелец так наберёт
+      (или nas-info проверит, как предложил); check: `ssh lft tmux list-clients -F '#{client_termname} #{session_name}'`
 - [x] DL #20 вживую: на 0.53 голый `vdx ai` в nas-info на m3 — `running now:`, значок машины только у идущих, у
       разговоров машина словом; срока нет — when: 0.53 на станциях — 2026-11-11: `ssh m3 vdx ai --list <nas-info>` на
       0.53.0 — `running now:` (🟢 nas-info-2, 🔹 nas-info-2, 🟢 nas-info), разговоры `yesterday 21:07   m3   cut off …`,
