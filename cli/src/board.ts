@@ -2,8 +2,9 @@ import { type Conversation, describeAge, isEmpty } from './conversations.ts';
 
 /**
  * The one list `vdx ai` shows when a start is not plain (vdx-ai-predictable): the project's
- * agents running on every machine, then its conversations nobody runs — each with its
- * machine and its state, and the row Enter takes marked. Before it, one line said which
+ * agents running on every machine, then its conversations nobody runs — each group under its
+ * title, its rows in columns: the machine, the state, the mode, one caption; the row Enter takes
+ * has an arrow. Before it, one line said which
  * agent ran here, another which conversations there were, and a start could attach to an
  * agent a terminal at the same seat already showed.
  *
@@ -135,6 +136,8 @@ export interface BoardInput {
   find?: { phrase: string; searched: number; around: Map<string, string> };
   /** Nobody is asked: under each row the command that reaches it, and no keys. */
   reach?: (p: Pick) => string | null;
+  /** The command that reaches a row, for the picker's panel: the person is asked, and may want it for another terminal. */
+  command?: (p: Pick) => string | null;
   /**
    * How many agents a fallen tmux server took down that `r` brings back (vdx-ai-predictable P6):
    * then Enter is `r`, unless a search was asked for.
@@ -142,6 +145,16 @@ export interface BoardInput {
   restore?: number;
   /** The profile's `session.machine_icons`: a machine's mark before its label, as the cmux sidebar shows it. */
   machineIcons?: Record<string, string>;
+  /** Lines the start adds under the list, each said as a note: what tmux took down of other projects. */
+  footnotes?: string[];
+  /** Who `r` brings back, as the start says it above the list: the panel of that row in the picker. */
+  restoreDetail?: string[];
+  /** The list goes to a terminal: group titles bold, the lines under a row dim. */
+  color?: boolean;
+  /** The terminal's width: a caption is cut so its row stays one line. Not known — 60 cells a caption. */
+  columns?: number;
+  /** The width the picker leaves its rows, beside its panel; not given — the terminal's. */
+  pickerColumns?: number;
   now?: Date;
 }
 
@@ -152,6 +165,16 @@ export interface Board {
   enter: number | 'new' | 'restore';
   /** What `r` brings back; 0 — nothing, no such key. */
   restore: number;
+  /** The list for a picker with a cursor (picker.ts): its header, its rows, where the cursor starts. */
+  picker: { header: string[]; items: PickerItem[]; cursor: number };
+}
+
+/** A row of the picker: a group's title takes nothing; `new`, `all` and `restore` are rows too. */
+interface PickerItem {
+  text: string;
+  pick: Pick | null;
+  /** The panel beside the list while the cursor is on the row. */
+  detail: string[];
 }
 
 const SHOWN = 5;
@@ -164,7 +187,6 @@ function byActivity(a: AgentFact, b: AgentFact): number {
 function stateWord(a: AgentFact, now: Date): string {
   const s = agentState(a);
   if (s === 'draft') return `draft (${a.draft} chars)`;
-  if (s === 'finished') return 'finished (wrap)';
   if (s === 'idle' && a.activeAt !== null) {
     const days = Math.floor((now.getTime() - a.activeAt) / 86_400_000);
     if (days >= 1) return `idle ${days} d`;
@@ -222,17 +244,78 @@ function openWord(a: AgentFact, seat: string): string {
   return places.length ? `open on ${places.join(', ')}` : '';
 }
 
-/** A title or a topic on a row: one line, at most 50 characters. */
+/** A title or a topic inside a sentence: one line, at most 50 characters. */
 export const quoted = (t: string | null) => (t ? `«${t.replace(/\s+/g, ' ').trim().slice(0, 50)}»` : '');
+
+const EMOJI_RE = /\p{Emoji_Presentation}/u;
+
+/**
+ * The terminal cells a text takes: an emoji and a CJK character two, a variation selector or a
+ * joiner none. `padEnd` counts UTF-16 units, and a column after 🕸️ or a Cyrillic title drifts.
+ */
+export function cells(text: string): number {
+  let n = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    if (c === 0xfe0f || c === 0x200d) continue;
+    const wide =
+      c >= 0x1f000 ||
+      EMOJI_RE.test(ch) ||
+      (c >= 0x1100 && c <= 0x115f) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0xff00 && c <= 0xff60);
+    n += wide ? 2 : 1;
+  }
+  return n;
+}
+
+const pad = (text: string, width: number) => text + ' '.repeat(Math.max(0, width - cells(text)));
+
+/** A row's caption: one line, cut to `room` cells with `…` — a cut that shows. */
+export function clip(text: string | null, room: number): string {
+  const t = (text ?? '').replace(/\s+/g, ' ').trim();
+  if (cells(t) <= room) return t;
+  let out = '';
+  for (const ch of t) {
+    if (cells(out + ch) > room - 1) break;
+    out += ch;
+  }
+  return `${out.trimEnd()}…`;
+}
 
 /** A conversation nobody runs, with nothing in it to continue: left out of the list. */
 function continuable(c: Conversation): boolean {
   return !isEmpty(c);
 }
 
+/** One row before it is a line: the columns of its group, then the caption. */
+interface Row {
+  /** What its number takes; null — a line with no number (the intercom session). */
+  pick: Pick | null;
+  /** Its conversation: what a search found in it goes under the row. */
+  id: string | null;
+  /** The columns before the state: an agent's name; a conversation's machine and age. */
+  lead: string[];
+  icon: string;
+  word: string;
+  mode: string;
+  /** The title, or the topic of one with no title. */
+  text: string;
+  /** Which terminal shows it. */
+  tail: string;
+}
+
+/** A column is as wide as its widest cell — but one cell longer than this does not push the others away. */
+const COLUMN_CAP = 24;
+/** A caption's room when the terminal's width is not known. */
+const CAPTION_ROOM = 60;
+
 export function buildBoard(input: BoardInput): Board {
   const now = input.now ?? new Date();
   const seat = input.seat;
+  const bold = (s: string) => (input.color ? `${ESC}[1m${s}${ESC}[22m` : s);
+  const dim = (s: string) => (input.color ? `${ESC}[2m${s}${ESC}[22m` : s);
   const agents = input.agents.filter((a) => !a.mail && !a.hq).sort(byActivity);
   const mail = input.agents.filter((a) => a.mail);
   const hq = input.agents.filter((a) => a.hq);
@@ -241,81 +324,51 @@ export function buildBoard(input: BoardInput): Board {
   const all = input.limit === 'all' || input.find !== undefined;
   const shown = all ? idleAll : idleAll.slice(0, typeof input.limit === 'number' ? input.limit : SHOWN);
 
-  const rows: Pick[] = [];
-  const lines: string[] = [];
-  // Under a row: what a search found in it, and the command that reaches it when nobody is asked.
-  const under = (p: Pick, id: string | null) => {
-    const found = id ? input.find?.around.get(id) : undefined;
-    const command = input.reach?.(p);
-    for (const l of [found, command]) if (l) lines.push(`       ${l}`);
-  };
   // A running agent as the sidebar names it; the conversations nobody runs — their machine as a word.
   const icons = input.machineIcons ?? {};
-  const label = (a: AgentFact) => agentLabel(a, icons);
-  const width = Math.max(0, ...[...agents, ...mail, ...hq].map((a) => label(a).length));
-  const signs = (a: AgentFact) => `${stateIcon(a, now)}${modeIcon(a)}`;
-  if (agents.length + mail.length + hq.length > 0) lines.push('  running now:');
-  else if (!input.find) lines.push('  nothing runs now');
-  for (const a of agents) {
-    const row: Pick = { kind: 'agent', agent: a };
-    rows.push(row);
-    // A focused session with no topic says so: started before topics (0.41), or the agent never set one.
-    const what = [
-      a.focused ? `focused ${a.topic ? quoted(a.topic) : '(no topic)'}` : '',
-      stateWord(a, now),
-      quoted(a.title),
-    ]
-      .filter(Boolean)
-      .join(' · ');
-    const open = openWord(a, seat);
-    lines.push(`  ${rows.length}) ${label(a).padEnd(width)}  ${signs(a)} ${what}${open ? `   ${open}` : ''}`);
-    under(row, a.conversation);
-  }
-  for (const a of mail)
-    lines.push(`     ${label(a).padEnd(width)}  ${signs(a)} the intercom session — not yours to attach`);
+  const agentRow = (a: AgentFact): Row => ({
+    pick: a.mail ? null : { kind: 'agent', agent: a },
+    id: a.conversation,
+    lead: [agentLabel(a, icons)],
+    icon: stateIcon(a, now),
+    word: stateWord(a, now),
+    mode: modeIcon(a),
+    // One caption: the title, else the topic. A focused session with no topic says so: started
+    // before topics (0.41), or the agent never set one.
+    text: a.mail
+      ? 'not yours to attach'
+      : a.hq
+        ? ''
+        : [a.title ?? a.topic ?? '', a.focused && !a.topic ? '(no topic)' : ''].filter(Boolean).join(' '),
+    tail: a.mail ? '' : openWord(a, seat),
+  });
+  const machines = shown.map((c) => input.behind?.get(c.id) ?? input.machineOf(c));
+  const conversationRow = (c: Conversation, i: number): Row => {
+    const machine = machines[i]!;
+    const behind = input.behind?.has(c.id) ?? false;
+    return {
+      pick: { kind: 'conversation', conversation: c, machine },
+      id: c.id,
+      lead: [machine ?? '?', describeAge(c.updated, now)],
+      icon: c.finished && !behind ? '✅' : '',
+      word: [
+        behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished' : 'cut off',
+        machine === null && 'machine unknown',
+      ]
+        .filter(Boolean)
+        .join(', '),
+      mode: modeIcon({ focused: c.topic !== null }),
+      text: c.title ?? c.topic ?? '',
+      tail: '',
+    };
+  };
   // The person sits at the HQ session too: a row with a number, after their agents, and its
   // number attaches to it as it is — `--hq` only narrows the choice to it (nas-info for the owner,
   // 2026-11-05). Enter does not go to it.
-  for (const a of hq) {
-    const row: Pick = { kind: 'agent', agent: a };
-    rows.push(row);
-    const open = openWord(a, seat);
-    lines.push(
-      `  ${rows.length}) ${label(a).padEnd(width)}  ${signs(a)} the HQ session · ${stateWord(a, now)}${open ? `   ${open}` : ''}`,
-    );
-    under(row, a.conversation);
-  }
-
-  const unread = all ? 0 : (input.unread ?? 0);
-  const hidden = idleAll.length - shown.length + unread;
-  if (shown.length)
-    lines.push(
-      hidden > 0
-        ? `  conversations nobody runs — the ${shown.length} newest of ${unread ? 'up to ' : ''}${idleAll.length + unread}:`
-        : '  conversations nobody runs:',
-    );
-  const machines = shown.map((c) => input.behind?.get(c.id) ?? input.machineOf(c));
-  const ages = shown.map((c) => describeAge(c.updated, now));
-  const ageWidth = Math.max(0, ...ages.map((a) => a.length));
-  const machineWidth = Math.max(0, ...machines.map((m) => (m ?? '?').length));
-  shown.forEach((c, i) => {
-    const machine = machines[i]!;
-    const row: Pick = { kind: 'conversation', conversation: c, machine };
-    rows.push(row);
-    const behind = input.behind?.has(c.id) ?? false;
-    const state = [
-      behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished (wrap)' : 'cut off',
-      machine === null && 'machine unknown',
-    ]
-      .filter(Boolean)
-      .join(', ');
-    const what = [c.topic ? `focused ${quoted(c.topic)}` : '', state, quoted(c.title)].filter(Boolean).join(' · ');
-    const marks = `${c.finished && !behind ? '✅' : ''}${modeIcon({ focused: c.topic !== null })}`;
-    lines.push(
-      `  ${rows.length}) ${ages[i]!.padEnd(ageWidth)}  ${(machine ?? '?').padEnd(machineWidth)}  ${marks ? `${marks} ` : ''}${what}`,
-    );
-    under(row, c.id);
-  });
+  const running = agents.map(agentRow);
+  const service = [...mail, ...hq].map(agentRow);
+  const idle = shown.map(conversationRow);
+  const rows = [...running, ...service, ...idle].flatMap((r) => (r.pick ? [r.pick] : []));
 
   // Enter: the agent with work in it nobody at this seat looks at, the last active; else the
   // newest conversation cut off; else an agent waiting for a first prompt; else a new one.
@@ -338,9 +391,103 @@ export function buildBoard(input: BoardInput): Board {
         ) ??
         'new');
 
-  const head = input.find
+  // A group's rows in columns. In the list the number comes first, and Enter's row has the arrow the
+  // keys line names; in the picker the cursor is the arrow, and a number would only catch the filter.
+  const numberWidth = String(Math.max(rows.length, 1)).length;
+  const under = ' '.repeat(2 + numberWidth + 4);
+  const pickerColumns = input.pickerColumns ?? input.columns;
+  const inColumns = (sized: Row[]) => {
+    const anyIcon = sized.some((r) => r.icon);
+    const anyMode = sized.some((r) => r.mode);
+    const columns = (r: Row) => [
+      ...r.lead,
+      anyIcon ? `${r.icon || '  '} ${r.word}` : r.word,
+      ...(anyMode ? [r.mode || '  '] : []),
+    ];
+    const widths = columns(sized[0]!).map((_, i) =>
+      Math.max(0, ...sized.map((r) => cells(columns(r)[i]!)).filter((w) => w <= COLUMN_CAP)),
+    );
+    return (r: Row, lead: string, width: number | undefined) => {
+      const before = `${lead}${columns(r)
+        .map((c, i) => pad(c, widths[i]!))
+        .join('  ')}`;
+      const tail = r.tail ? cells(r.tail) + 3 : 0;
+      const room = width ? Math.max(16, width - cells(before) - 2 - tail) : CAPTION_ROOM;
+      return `${before}  ${[clip(r.text, room), r.tail].filter(Boolean).join(' · ')}`.trimEnd();
+    };
+  };
+  // Under a row: what a search found in it, and the command that reaches it when nobody is asked —
+  // deeper and dim, so the rows stay a table.
+  const found = (r: Row) => (r.id ? input.find?.around.get(r.id) : undefined);
+  const group = (title: string, members: Row[], sized: Row[] = members): string[] => {
+    if (members.length === 0) return [];
+    const line = inColumns(sized);
+    const out = [bold(title)];
+    for (const r of members) {
+      const n = r.pick ? rows.indexOf(r.pick) : -1;
+      const arrow = n >= 0 && n === enter && !input.reach ? '→' : ' ';
+      const number = n >= 0 ? String(n + 1).padStart(numberWidth) : ' '.repeat(numberWidth);
+      out.push(line(r, `${arrow} ${number}  `, input.columns));
+      const command = r.pick ? input.reach?.(r.pick) : null;
+      for (const l of [found(r), command]) if (l) out.push(dim(`${under}${l}`));
+    }
+    return out;
+  };
+  // The picker's panel for the row under the cursor: what the row had no room for.
+  const detail = (r: Row): string[] => {
+    const p = r.pick;
+    const command = p ? (input.command ?? input.reach)?.(p) : null;
+    const facts =
+      p?.kind === 'agent'
+        ? [
+            p.agent.title?.replace(/\s+/g, ' ').trim(),
+            p.agent.topic ? `topic: ${p.agent.topic}` : p.agent.focused ? 'topic: none set' : '',
+            `state: ${stateWord(p.agent, now)}${p.agent.focused ? ', focused' : p.agent.hq ? ', the HQ session' : ''}`,
+            `runs ${p.agent.session ? `in ${p.agent.session}` : `as pid ${p.agent.pid}`} on ${p.agent.machine}`,
+            r.tail ? `terminal: ${r.tail}` : 'no terminal shows it',
+            p.agent.conversation ? `conversation: ${p.agent.conversation}` : '',
+          ]
+        : p?.kind === 'conversation'
+          ? [
+              p.conversation.title?.replace(/\s+/g, ' ').trim(),
+              p.conversation.topic ? `topic: ${p.conversation.topic}` : '',
+              `state: ${r.word}`,
+              `last on ${p.machine ?? 'a machine not known'}, ${describeAge(p.conversation.updated, now)}`,
+              `conversation: ${p.conversation.id}`,
+            ]
+          : ['the intercom session: letters wake it — not yours to attach'];
+    return [...facts, found(r) ? `found: ${found(r)}` : '', command ? `from a terminal: ${command}` : ''].flatMap(
+      (l) => (l ? [l, ''] : []),
+    );
+  };
+  const pickerGroup = (title: string, members: Row[], sized: Row[] = members): PickerItem[] => {
+    if (members.length === 0) return [];
+    const line = inColumns(sized);
+    return [
+      { text: bold(title), pick: null, detail: [] },
+      ...members.map((r) => ({ text: line(r, '  ', pickerColumns), pick: r.pick, detail: detail(r) })),
+    ];
+  };
+
+  const unread = all ? 0 : (input.unread ?? 0);
+  const hidden = idleAll.length - shown.length + unread;
+  const serviceTitle =
+    mail.length && hq.length ? 'HQ AND INTERCOM SESSIONS' : hq.length ? 'HQ SESSION' : 'INTERCOM SESSION';
+  const live = [...running, ...service];
+  const runningTitle = `RUNNING NOW · ${running.length}`;
+  const idleTitle = `CONVERSATIONS NOBODY RUNS · ${hidden > 0 ? `${idle.length} newest of ${unread ? 'up to ' : ''}${idleAll.length + unread}` : idle.length}`;
+  // The marks the profile gives the machines (`session.machine_icons`), said once: which is which.
+  const legend = [...new Set([...agents, ...mail, ...hq].map((a) => a.machine))]
+    .flatMap((m) => {
+      const icon = machineIcon(m, icons);
+      return icon ? [`${icon} ${m}`] : [];
+    })
+    .join(' · ');
+  const title = input.find
     ? `${input.project} — ${quoted(input.find.phrase)} in ${rows.length} of ${input.find.searched} conversations`
     : input.project;
+  const head = legend ? `${bold(title)}   ${legend}` : bold(title);
+  const nothing = live.length === 0 && !input.find ? ['nothing runs now'] : [];
   const behind = input.behind?.size ?? 0;
   const notes = [
     ...(input.silent ?? []).map((m) => `  note: ${m} does not answer over ssh — what runs there is not known`),
@@ -350,21 +497,84 @@ export function buildBoard(input: BoardInput): Board {
             (input.find ? ` — ${behind === 1 ? 'its' : 'their'} latest part is not searched` : ''),
         ]
       : []),
+    ...(input.footnotes ?? []).map((n) => `  note: ${n}`),
   ];
+  const back = `bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`;
+  const more = input.find ? 'the whole list' : hidden > 0 ? `all (${unread ? 'up to ' : ''}${hidden} more)` : null;
   const keys = [
     `Enter → ${enterKey({ enter })}`,
-    ...(restore > 0 ? [`r bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`] : []),
-    ...(input.find ? ['a the whole list'] : hidden > 0 ? [`a all (${unread ? 'up to ' : ''}${hidden} more)`] : []),
+    ...(restore > 0 ? [`r ${back}`] : []),
+    ...(more ? [`a ${more}`] : []),
     input.find ? '/<phrase> another search' : '/<phrase> find',
     'n new',
     'f new focused',
   ];
+  const blocks = [
+    [head],
+    nothing.length ? nothing : group(runningTitle, running, live),
+    group(serviceTitle, service, live),
+    group(idleTitle, idle),
+    notes,
+    input.reach ? [] : [`  ${keys.join(' · ')}`],
+  ].filter((b) => b.length > 0);
+
+  // The same list for the picker (picker.ts): what a key does in the list is a row here — the cursor
+  // starts on the one Enter takes.
+  const fresh: Pick = { kind: 'new', focused: false };
+  const items: PickerItem[] = [
+    ...(restore > 0
+      ? [{ text: `▶ ${back}`, pick: { kind: 'restore' } as Pick, detail: input.restoreDetail ?? [] }]
+      : []),
+    ...pickerGroup(runningTitle, running, live),
+    ...pickerGroup(serviceTitle, service, live),
+    ...pickerGroup(idleTitle, idle),
+    ...(more
+      ? [
+          {
+            text: `  … ${input.find ? more : more.replace('all', 'all conversations')}`,
+            pick: { kind: 'all' } as Pick,
+            detail: [],
+          },
+        ]
+      : []),
+    { text: '+ new conversation', pick: fresh, detail: [] },
+    { text: '+ new focused conversation', pick: { kind: 'new', focused: true }, detail: [] },
+  ];
+  const target = enter === 'new' ? fresh : enter === 'restore' ? items[0]!.pick : rows[enter]!;
   return {
-    lines: [head, ...lines, ...notes, ...(input.reach ? [] : [`  ${keys.join(' · ')}`])],
+    lines: blocks.flatMap((b, i) => (i === 0 ? b : ['', ...b])),
     rows,
     enter,
     restore,
+    picker: {
+      header: [
+        head,
+        ...nothing,
+        ...notes.map((n) => n.trim()),
+        `Enter takes the row · type to filter · ${SEARCH_KEY} searches what was said · Esc leaves`,
+      ],
+      items,
+      cursor: Math.max(
+        0,
+        items.findIndex((i) => i.pick === target),
+      ),
+    },
   };
+}
+
+/** The picker's key that asks for a search of the typed phrase; every other key there is the picker's own. */
+export const SEARCH_KEY = 'ctrl-s';
+
+/**
+ * What the person did in the picker: Enter on a row is that row; ctrl-s searches the conversations
+ * for the phrase typed as the filter. Null — a title, or nothing typed to search: the list again.
+ */
+export function readPicked(answer: { key: string; index: number | null; query: string }, board: Board): Pick | null {
+  if (answer.key === SEARCH_KEY) {
+    const phrase = answer.query.trim();
+    return phrase ? { kind: 'find', phrase } : null;
+  }
+  return answer.index === null ? null : (board.picker.items[answer.index]?.pick ?? null);
 }
 
 /** The key Enter stands for: a row's number, `n` or `r`. */

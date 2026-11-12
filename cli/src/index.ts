@@ -200,7 +200,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 letter started is left out, and a running one is not doubled. Left
                 out: a conversation running now (here or on another machine) or
                 continued on another machine since. With --dry-run:
-                what it would start. A plain start offers the same as r. A
+                what it would start. With --forget: none is started — they are
+                forgotten, each named with whether work was in it (a
+                conversation with work stays, to continue by its id). A plain
+                start offers the same as r. A
                 terminal vdx ai attached waits for its session when the server
                 falls under it, and attaches again once a restore brings it back
   --tab         for the shell of a cmux tab, started again after cmux restarted: back
@@ -239,16 +242,23 @@ none — a new one. Otherwise one list: the agents running on every machine (its
 state — working, waiting, a draft in its input line, empty since /clear,
 finished with a wrap skill of session.wrap_skills, idle N days — and which seat's
 terminal shows it), then the newest conversations nobody runs, cut off or
-finished, and how many more there are. Enter takes the marked row: an agent with
+finished, and how many more there are — each group under its title, its rows in
+columns: the machine, the state, the mode, one caption (the title; the topic of
+one with no title). Enter takes the marked row (→): an agent with
 work in it that no terminal at your seat shows, else the newest conversation cut
 off. a — every conversation; /<phrase> — the conversations that have it
-(--find); n — a new one; f — a new focused one. Another
+(--find); n — a new one; f — a new focused one. With fzf on PATH the list has a
+cursor instead of a typed answer: move over the rows, type to filter them, the
+row under the cursor is told whole in a panel; all, new and new focused are
+rows, ctrl-s searches what was said for the typed phrase, Esc starts nothing.
+VDX_PLAIN_LIST=1 keeps the numbered list. Another
 machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
 machine's — Syncthing has not brought it yet — too. After the tmux server here
 fell, the list opens with what it took down (of this project; of every project
 where session.restore_all holds), never silent: Enter and r bring them back, as
---restore does, and the start goes on. Without a terminal it takes
+--restore does, and the start goes on; agents of other projects only — one note
+under the list, with whether work was in them. Without a terminal it takes
 this machine's agent, else its newest conversation, else a new one. A new
 conversation while an agent of the project runs on another machine starts only
 after a yes — unless you picked it from the list. --new and --focused take an
@@ -429,7 +439,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--dry-run] | vdx ai --tab',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: [
@@ -441,6 +451,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'detach',
       'dry-run',
       'check',
+      'forget',
       'close',
       'list',
       'report',
@@ -889,12 +900,16 @@ function cmdAi(opts: ParsedArgs): void {
     }
     process.exit(runAiState(opts.positionals[0] ?? '.', defaultDeps(), process.pid, id));
   }
+  if (opts.flags.forget === true && opts.flags.restore !== true) {
+    process.stderr.write('vdx ai: --forget goes with --restore — vdx ai --restore --forget [--dry-run]\n');
+    process.exit(2);
+  }
   if (opts.flags.restore === true) {
     // Every project's agents a fallen tmux server took down on this machine: no project to name.
-    const others = Object.keys(opts.flags).filter((f) => f !== 'restore' && f !== 'dry-run');
+    const others = Object.keys(opts.flags).filter((f) => f !== 'restore' && f !== 'dry-run' && f !== 'forget');
     if (others.length > 0 || opts.cmd !== 'ai' || opts.positionals.length > 0) {
       process.stderr.write(
-        `vdx ai: --restore brings back every project's agents on this machine — it takes only --dry-run (not ${
+        `vdx ai: --restore brings back every project's agents on this machine — it takes only --forget and --dry-run (not ${
           opts.cmd !== 'ai'
             ? `${opts.cmd}; there: ssh ${opts.cmd.slice(3)} vdx ai --restore`
             : others.length
@@ -904,7 +919,7 @@ function cmdAi(opts: ParsedArgs): void {
       );
       process.exit(2);
     }
-    process.exit(runAiRestore(opts.flags['dry-run'] === true, defaultDeps()));
+    process.exit(runAiRestore(opts.flags['dry-run'] === true, defaultDeps(), opts.flags.forget === true));
   }
   if (opts.flags.tab === true) {
     // The shell of a cmux tab after cmux restarted (or the vdx there, over ssh): nothing else to say.

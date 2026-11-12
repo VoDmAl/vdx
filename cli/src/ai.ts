@@ -78,8 +78,10 @@ import {
   type Pick,
   quoted,
   readAnswer,
+  readPicked,
   settledState,
 } from './board.ts';
+import { fzfPick, type PickerAnswer, type PickerInput, rowsWidth } from './picker.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -1084,6 +1086,13 @@ export interface AiDeps {
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
+  /** The terminal's width in cells; not given — not known. */
+  columns?: number;
+  /**
+   * The list with a cursor (picker.ts) for the question of a start at a terminal; not given — the
+   * plain list and a typed answer. Null — the person left; `failed` — it did not show.
+   */
+  pick?: (input: PickerInput) => PickerAnswer | null | 'failed';
   /** This vdx's version, named to the vdx on another machine. */
   version?: string;
   /** Run ssh — capturing its output, or on this terminal; null when ssh is not on PATH. */
@@ -1166,6 +1175,9 @@ export function defaultDeps(): AiDeps {
     sleep: sleepSync,
     confirmTimeoutMs: 30_000,
     ask: askLine,
+    columns: process.stdout.columns,
+    // fzf on PATH is the picker; VDX_PLAIN_LIST=1 keeps the plain list and its typed answer.
+    pick: onPath('fzf') && !process.env['VDX_PLAIN_LIST'] ? fzfPick : undefined,
     ssh: runSsh,
   };
 }
@@ -2372,6 +2384,8 @@ function boardStart(
   machineIcons: Record<string, string> = {},
   /** The profile's `session.always_list`: at a terminal, never one of the plain cases — always the list. */
   alwaysList = false,
+  /** What tmux took down, in the list's words: notes for under it (other projects'), the panel of `r` in the picker. */
+  lostWords: { footnotes: string[]; restoreDetail: string[] } = { footnotes: [], restoreDetail: [] },
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -2534,6 +2548,14 @@ function boardStart(
       ? `vdx ai ${k.rootOn(m)} --conversation ${id}`
       : `vdx ai@${m} ${k.root} --conversation ${id}`;
   };
+  // At a terminal the list is a table: titles bold, commands dim, captions cut to its width.
+  const look = {
+    ...lostWords,
+    command: reachOf,
+    color: deps.interactive && !deps.env['NO_COLOR'],
+    columns: deps.interactive ? deps.columns : undefined,
+    pickerColumns: deps.interactive && deps.columns ? rowsWidth(deps.columns) : undefined,
+  };
   const make = (limit: number | 'all') =>
     buildBoard({
       project: plan.project,
@@ -2549,6 +2571,7 @@ function boardStart(
       restore: mode === 'ask' ? restore : 0,
       machineIcons,
       reach: mode === 'print' ? reachOf : undefined,
+      ...look,
     });
   const show = (b: Board, to: (line: string) => void) => {
     for (const l of b.lines) to(l);
@@ -2585,6 +2608,7 @@ function boardStart(
       reach: print ? reachOf : undefined,
       restore: print ? 0 : restore,
       machineIcons,
+      ...look,
     });
   };
   if (mode === 'print') {
@@ -2695,6 +2719,38 @@ function boardStart(
   }
 
   let board = make(5);
+  // With a picker (fzf on PATH): the same list with a cursor — a row is taken, not its number typed;
+  // `a`, `n`, `f` and `r` are rows of it, a search is its key. Nothing found is said above the rows.
+  if (deps.pick) {
+    let said: string | null = null;
+    const searched = (phrase: string) => {
+      const b = search(phrase, false);
+      if (typeof b === 'string') said = b;
+      else board = b;
+    };
+    if (find !== undefined) searched(find);
+    for (;;) {
+      const { header, items, cursor } = board.picker;
+      const answer = deps.pick({
+        header: said ? [said, ...header] : header,
+        items,
+        cursor,
+        columns: deps.columns,
+      });
+      said = null;
+      // Esc there is a cancel, as Ctrl-D at the question: start nothing.
+      if (answer === null) return { kind: 'abort', lines: ['nothing picked — nothing started'] };
+      if (answer === 'failed') {
+        deps.log('note: fzf did not show the list — the plain one instead');
+        board = make(5);
+        break;
+      }
+      const pick = readPicked(answer, board);
+      if (pick?.kind === 'all') board = make('all');
+      else if (pick?.kind === 'find') searched(pick.phrase);
+      else if (pick) return outcomeOf(pick, []);
+    }
+  }
   // Nothing found leaves the board as it was: the line says so, the question comes again.
   const searchFor = (phrase: string): boolean => {
     const b = search(phrase, false);
@@ -3396,10 +3452,26 @@ interface LostHere {
   all: LostRecord[];
   /** What `r` brings back: the project's own, or every one where session.restore_all holds (DL #4). */
   mine: LostRecord[];
-  /** What tmux did and who ran before it: a line, then a row for each, named as the list names agents. */
+  /**
+   * The project's own went down: what tmux did and who ran before it — a line, then a row for each,
+   * named as the list names agents, with whether work was in it. Empty — none of them is the project's.
+   */
   lines: string[];
-  /** The command that brings back every one, typed where the person sits. */
+  /** The commands that bring back every one, or forget them, typed where the person sits. */
   hint: string;
+  /**
+   * None of them is the project's (Sidetrack #15): one line for under the list — the project's
+   * list is not about them, and the person still learns that they went down and whether work did.
+   */
+  note: string | null;
+}
+
+/** What went down with a lost agent: a conversation with work in it, a wrapped one, or an empty place. */
+function lostWork(r: LostRecord, deps: AiDeps, wrapSkills: readonly string[]): 'work' | 'finished' | 'empty' {
+  const c = r.conversation
+    ? conversationById({ env: deps.env, home: deps.home, projectRoot: r.project, id: r.conversation, wrapSkills })
+    : null;
+  return !c || isEmpty(c) ? 'empty' : c.finished ? 'finished' : 'work';
 }
 
 function lostHere(deps: AiDeps, plan: LaunchPlan, environment: Environment, tidy: boolean): LostHere | null {
@@ -3417,7 +3489,9 @@ function lostHere(deps: AiDeps, plan: LaunchPlan, environment: Environment, tidy
   const here = sameMachine(plan.host, plan.seat);
   const where = here ? 'here' : `on ${plan.host}`;
   const icons = environment.session?.machine_icons ?? {};
+  const wrapSkills = environment.session?.wrap_skills ?? [];
   const row = (r: LostRecord) => {
+    const work = lostWork(r, deps, wrapSkills);
     const mode =
       r.mode === 'focused'
         ? `🎯 focused ${r.topic ? quoted(r.topic) : '(no topic)'}`
@@ -3426,30 +3500,50 @@ function lostHere(deps: AiDeps, plan: LaunchPlan, environment: Environment, tidy
           : r.mode === 'hq'
             ? '👑 the HQ session'
             : '';
-    return `     ${agentLabel({ machine: plan.host, session: r.session, pid: r.pid }, icons)}${mode ? `  ${mode}` : ''}`;
+    const label = agentLabel({ machine: plan.host, session: r.session, pid: r.pid }, icons);
+    return `     ${label}${mode ? `  ${mode}` : ''}${work === 'work' ? '' : ` — ${work}, no work in it`}`;
   };
-  const listed = mine.length === 0 ? all : mine;
   const when = server
     ? `tmux ${where} was started again ${describeAge(new Date(server.started * 1000))}`
     : `no tmux server runs ${where}`;
   const others = all.length - mine.length;
-  const ran =
-    mine.length === 0
-      ? `${agents(others)} of other projects ran`
-      : `${agents(mine.length)}${everyOne ? '' : ` of ${plan.project}`} ran` +
-        (others > 0 ? `, and ${others} of other projects` : '');
   const count = all.length === 1 ? 'it' : all.length === 2 ? 'both' : `all ${all.length}`;
+  const them = all.length === 1 ? 'it' : 'them';
+  const restore = `${here ? '' : `ssh ${plan.host} `}vdx ai --restore`;
+  if (mine.length === 0) {
+    const projects = [...new Set(all.map((r) => path.basename(r.project)))];
+    const named = `${projects.slice(0, 3).join(', ')}${projects.length > 3 ? ` and ${projects.length - 3} more` : ''}`;
+    const withWork = all.filter((r) => lostWork(r, deps, wrapSkills) === 'work').length;
+    const work =
+      withWork === 0
+        ? `no work in ${all.length === 1 ? 'it' : all.length === 2 ? 'either' : 'any of them'}`
+        : `work in ${withWork === all.length ? count : `${withWork} of them`}`;
+    const went = server
+      ? `${agents(all.length)} of other projects (${named}) went down when ${when}`
+      : `${when}; ${agents(all.length)} of other projects (${named}) went down with the last one`;
+    return {
+      all,
+      mine,
+      lines: [],
+      hint: '',
+      note: `${went}, ${work} — ${restore} brings back ${count}, ${restore} --forget drops ${them}`,
+    };
+  }
+  const ran =
+    `${agents(mine.length)}${everyOne ? '' : ` of ${plan.project}`} ran` +
+    (others > 0 ? `, and ${others} of other projects` : '');
   return {
     all,
     mine,
     lines: [
       `⚠ ${when} — before that ${ran}:`,
-      ...listed.slice(0, 6).map(row),
-      ...(listed.length > 6 ? [`     … and ${listed.length - 6} more`] : []),
+      ...mine.slice(0, 6).map(row),
+      ...(mine.length > 6 ? [`     … and ${mine.length - 6} more`] : []),
     ],
     hint:
-      `  ${here ? '' : `ssh ${plan.host} `}vdx ai --restore brings back ${count} — each in its tmux session, ` +
-      `conversation, mode and topic; --dry-run: what it would start`,
+      `  ${restore} brings back ${count} — each in its tmux session, ` +
+      `conversation, mode and topic; --dry-run: what it would start; --forget: drops ${them}`,
+    note: null,
   };
 }
 
@@ -3597,9 +3691,11 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
 /**
  * `vdx ai --restore`: bring back every agent a fallen tmux server took down here, of every
  * project, without a question — for the person, and for whatever starts tmux again after a crash
- * or a reboot. `dryRun` — what it would start. Exit 4 when one did not start.
+ * or a reboot. `dryRun` — what it would start. Exit 4 when one did not start. `forgetThem`
+ * (`--forget`, Sidetrack #15) — none is started: their records go, each named with what was in it,
+ * and a conversation with work stays to continue by its id.
  */
-export function runAiRestore(dryRun: boolean, deps: AiDeps): number {
+export function runAiRestore(dryRun: boolean, deps: AiDeps, forgetThem = false): number {
   if (!deps.tmux.available()) {
     deps.log('vdx ai --restore: tmux is not installed here — nothing went down with it');
     return EXIT_USAGE;
@@ -3612,6 +3708,37 @@ export function runAiRestore(dryRun: boolean, deps: AiDeps): number {
     return EXIT_OK;
   }
   const when = server ? `; tmux was started again ${describeAge(new Date(server.started * 1000))}` : '';
+  if (forgetThem) {
+    let wrapSkills: readonly string[] = [];
+    try {
+      const profile = resolveEnvironmentPath(deps.env, deps.home);
+      if (profile) wrapSkills = loadEnvironment(profile).session?.wrap_skills ?? [];
+    } catch {
+      // a profile that does not read: a wrapped conversation is named as one with work — the careful side
+    }
+    say(
+      `vdx ai --restore --forget — ${lost.length} agent${lost.length === 1 ? '' : 's'} went down with the tmux server here${when}; ` +
+        (dryRun ? 'would forget:' : 'forgotten, not brought back:'),
+    );
+    for (const r of lost) {
+      const work = lostWork(r, deps, wrapSkills);
+      const mode =
+        r.mode === 'focused'
+          ? `focused ${r.topic ? quoted(r.topic) : '(no topic)'} — `
+          : r.mode === 'mail'
+            ? 'the intercom session — '
+            : r.mode === 'hq'
+              ? 'the HQ session — '
+              : '';
+      const what =
+        work === 'work'
+          ? `work in it; its conversation stays: vdx ai ${shellQuote(r.project)} --conversation ${r.conversation}`
+          : `${work}, no work in it`;
+      say(`  ${r.session} (${path.basename(r.project)}): ${mode}${what}`);
+      if (!dryRun) forget(r);
+    }
+    return EXIT_OK;
+  }
   say(
     `vdx ai --restore — ${lost.length} agent${lost.length === 1 ? '' : 's'} went down with the tmux server here${when}` +
       (dryRun ? '; would start:' : ''),
@@ -3874,8 +4001,8 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   let boardNew = false;
   // Any other start says what tmux took down, with the command that brings it back.
   if (lost && !onBoard) {
-    for (const l of lost.lines) log(l);
-    log(lost.hint);
+    if (lost.note) log(`note: ${lost.note}`);
+    else for (const l of [...lost.lines, lost.hint]) log(l);
   }
   if (onBoard) {
     if (!isClaude(plan.command)) {
@@ -3888,7 +4015,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     const ask = deps.interactive && !opts.dryRun;
     const listed = opts.list || (opts.find !== undefined && !ask);
     const offer = ask && !listed ? (lost?.mine.length ?? 0) : 0;
-    if (lost) {
+    if (lost && !lost.note) {
       const say = (l: string) => (listed ? deps.out(`${l}\n`) : log(l));
       for (const l of lost.lines) say(l);
       if (offer === 0 || offer < lost.all.length) say(lost.hint);
@@ -3906,6 +4033,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       offer,
       environment.session?.machine_icons ?? {},
       environment.session?.always_list === true,
+      { footnotes: lost?.note ? [lost.note] : [], restoreDetail: lost ? [...lost.lines, lost.hint.trim()] : [] },
     );
     switch (outcome.kind) {
       case 'listed':
