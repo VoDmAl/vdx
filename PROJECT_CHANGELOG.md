@@ -4,6 +4,13 @@
 
 ## 2026-11-11
 
+### Свой хост — без имени в публичном профиле: `*.<домен>` в `git.personal_hosts`
+
+Память t23b-program не шла в коммит: их `origin` на NAS владельца, а назвать NAS в профиле — опубликовать его, профиль
+лежит в публичном `vdx-rubric-vodmal`. Теперь элемент `git.personal_hosts` может быть `*.<домен>` — все хосты под
+доменом; в профиле владельца — зона ZeroTier `*.zt.vorobyev.name` (сет v1.14.0), публичные хосты вне её
+(письмо t23b-program `private-personal-hosts`; [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md), DL #23).
+
 ### `vdx ai@<машина>` из панели tmux больше не открывает tmux в tmux
 
 На m3 `vdx ai@lft --hq`, набранный в панели, где агент вышел в шелл, поставил клиента tmux lft внутрь панели tmux m3:

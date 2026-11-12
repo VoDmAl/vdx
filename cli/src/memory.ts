@@ -210,7 +210,12 @@ function git(root: string, args: string[]): string | null {
   }
 }
 
-/** A host of `git.personal_hosts`: its repos are the owner's alone; `mirrors` — where its repos may be copied. */
+/**
+ * A host of `git.personal_hosts`: its repos are the owner's alone; `mirrors` — where its repos may be copied.
+ * `*.<domain>` names every host under the domain, not the domain itself: a private zone of the owner's
+ * (`*.zt.example.org`) without the name of each machine in it — the profile may be public (t23b-program,
+ * private-personal-hosts).
+ */
 export interface PersonalHost {
   host: string;
   /** `github.com/<owner>/{repo}`: a repo of the host may be mirrored there (gitolite's post-update hook). */
@@ -226,6 +231,11 @@ export function personalHosts(
       ? { host: h.toLowerCase(), mirrors: [] }
       : { host: h.host.toLowerCase(), mirrors: h.mirrors ?? [] },
   );
+}
+
+/** The listed host names the origin's: the same name, or `*.<domain>` and a name under it. */
+function personalHostMatches(listed: string, host: string): boolean {
+  return listed.startsWith('*.') ? host.endsWith(listed.slice(1)) : listed === host;
 }
 
 /** Who may read where the repo's commits go: only its owner, or — why not. */
@@ -244,7 +254,7 @@ export function memoryReaders(io: HostingIo, hosts: PersonalHost[]): Readers {
   if (!url) return { only: true };
   const { host, path: repo } = remoteParts(url);
   const lower = host.toLowerCase();
-  const own = hosts.find((h) => h.host === lower);
+  const own = hosts.find((h) => personalHostMatches(h.host, lower));
   const places: string[] = [];
   if (lower === 'github.com') places.push(repo);
   else if (!own)

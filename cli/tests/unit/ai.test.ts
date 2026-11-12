@@ -266,6 +266,12 @@ describe('parseEnvironment', () => {
     expect(env.session?.multiplexer).toBe('tmux');
   });
 
+  it('takes *.<domain> in git.personal_hosts', () => {
+    expect(
+      parseEnvironment('git: {personal_hosts: ["*.zt.home.example", {host: "*.lab.home.example"}]}', 'p.yaml').git,
+    ).toEqual({ personal_hosts: ['*.zt.home.example', { host: '*.lab.home.example' }] });
+  });
+
   it('treats an empty document as an empty profile', () => {
     expect(parseEnvironment('', 'p.yaml')).toEqual({});
   });
@@ -290,6 +296,9 @@ describe('parseEnvironment', () => {
     ['session: {machine_icons: {"-oX": "🔹"}}', 'session.machine_icons.-oX'],
     ['session: {machine_icons: {m3: "m 3"}}', 'session.machine_icons.m3'],
     ['session: {machine_icons: {m3: "longmark"}}', 'session.machine_icons.m3'],
+    ['git: {personal_hosts: ["git.*.example"]}', 'git.personal_hosts[0]'],
+    ['git: {personal_hosts: ["*.example"]}', 'git.personal_hosts[0]'],
+    ['git: {personal_hosts: [{host: "*"}]}', 'git.personal_hosts[0].host'],
     ['- just a list', 'top level'],
   ])('rejects %s naming %s', (yaml, key) => {
     expect(() => parseEnvironment(yaml, 'p.yaml')).toThrow(key);

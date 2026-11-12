@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.13.0"
+  version: "1.14.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -99,10 +99,13 @@ git:
   # and each mirror — absent, or private with nobody else. Anyone else's repo —
   # work, someone else's, public, a public mirror — keeps the path in
   # .claude/settings.local.json and the memory out of git; a project without
-  # origin is personal anyway.
+  # origin is personal anyway. "*.<domain>" (vdx 0.54+) is every host under the
+  # domain: the owner's ZeroTier zone, whose machines are not named in this public
+  # file; s02 and the other public hosts stay out unless named.
   personal_hosts:
     - host: git.vorobyev.name
       mirrors: ["github.com/VoDmAl/{repo}", "github.com/FriendsOfVoDmAl/{repo}"]
+    - "*.zt.vorobyev.name"
   # Personal hooks: the owner's gates in every repository on the machine. They
   # live in git's user config (hook.<name>.*, Git 2.54), not in each repo, where
   # they fought the repo's own hook framework for one slot. `vdx doctor` checks

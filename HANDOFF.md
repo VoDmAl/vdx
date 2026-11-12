@@ -10,7 +10,7 @@
 
 - **CLI** `@vodmal/vdx-cli@0.53.0` — в npm с 2026-11-11 (`7aa984f`), Node 22 и
   новее; на m3 и lft — 0.53.0 с 2026-11-11 (`npm update -g --prefer-online`); плагин 0.15.4.
-- **Сет** `vdx-rubric-vodmal@v1.13.0` (schema 0.3; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
+- **Сет** `vdx-rubric-vodmal@v1.14.0` (schema 0.3; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
   `branch-protection`; v1.7.0 (2026-10-22) — ключ `git.personal_hosts`; v1.8.0

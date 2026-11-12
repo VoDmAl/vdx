@@ -410,15 +410,22 @@ export function parseEnvironment(text: string, source: string): Environment {
     }
     if (gitDoc.personal_hosts !== undefined) {
       if (!Array.isArray(gitDoc.personal_hosts)) fail('git.personal_hosts', 'must be a list');
+      // `*.<domain>` — every host under it; a star anywhere else matches nothing and is refused.
+      const wildcard = (host: string, at: string) => {
+        if (host.includes('*') && !/^\*\.[^*\s.]+(\.[^*\s.]+)+$/.test(host))
+          fail(at, 'a star stands only as the first part of *.<domain>, with two parts after it at least');
+      };
       gitDoc.personal_hosts.forEach((h, i) => {
         const at = `git.personal_hosts[${i}]`;
         if (typeof h === 'string') {
           if (h.trim() === '') fail(at, 'must be a host name');
+          wildcard(h, at);
           return;
         }
         if (typeof h !== 'object' || h === null || typeof h.host !== 'string' || h.host.trim() === '') {
           fail(at, 'must be a host name, or a mapping with host');
         }
+        wildcard(h.host, `${at}.host`);
         if (h.mirrors !== undefined && (!isStringList(h.mirrors) || !h.mirrors.every((m) => m.includes('{repo}')))) {
           fail(`${at}.mirrors`, 'must be a list of places like github.com/<owner>/{repo}');
         }

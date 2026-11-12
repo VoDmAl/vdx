@@ -261,6 +261,15 @@ describe('memoryReaders: only the owner reads where the commits go', () => {
     expect(memoryReaders(off.io, []).only).toBe(false);
     expect(off.asked).toEqual([]);
   });
+  // t23b-program, 2026-11-11 (private-personal-hosts): the owner's NAS, origin of a project, must not be named in
+  // the public profile; a zone of the owner's names it without its name.
+  it('*.<domain>: every host under the domain is personal, the domain itself and its look-alikes are not', () => {
+    const zone = personalHosts(['*.zt.home.example']);
+    expect(memoryReaders(hostingIo('ssh://git@nas-1.zt.home.example/p.git').io, zone)).toEqual({ only: true });
+    expect(memoryReaders(hostingIo('git@a.b.zt.home.example:p.git').io, zone)).toEqual({ only: true });
+    for (const other of ['zt.home.example', 'evilzt.home.example', 's02.home.example'])
+      expect(memoryReaders(hostingIo(`git@${other}:p.git`).io, zone).only).toBe(false);
+  });
   it('isPersonalProject: the same answer, a plain host name in the profile too', () => {
     expect(isPersonalProject(root, [])).toBe(true);
     const work = project('work', 'ssh://git@git.work.example:7999/team/work.git');
