@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.54.0` — в npm с 2026-11-11 (`f6365a2`), Node 22 и
-  новее; на m3 и lft — 0.54.0 с 2026-11-11 (`npm update -g --prefer-online`); плагин 0.15.4.
+- **CLI** `@vodmal/vdx-cli@0.55.0` — в npm с 2026-11-12 (`1e7cc1c`), Node 22 и
+  новее; на m3 и lft — 0.55.0 с 2026-11-12 (`npm update -g --prefer-online`); плагин 0.15.5.
 - **Сет** `vdx-rubric-vodmal@v1.14.0` (schema 0.3; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -93,7 +93,9 @@
 Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
 ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
 
-Прежние: 0.54.0 (2026-11-11, `f6365a2`) — `*.<домен>` в `git.personal_hosts`, сет v1.14.0 (`claude-memory-in-project`
+Прежние: 0.55.0 (2026-11-12, `1e7cc1c`) — список `vdx ai` группами и столбцами, в терминале с fzf — выбор курсором
+с панелью строки; упавшие с tmux агенты чужих проектов — строкой под списком; `vdx ai --restore --forget`
+(`vdx-ai-predictable` DL #23, #24). 0.54.0 (2026-11-11, `f6365a2`) — `*.<домен>` в `git.personal_hosts`, сет v1.14.0 (`claude-memory-in-project`
 DL #23); `vdx ai@<машина>` из панели tmux — клиент терминала уступает место, tmux в tmux нет (`vdx-ai-predictable` DL #22).
 0.53.0 (2026-11-11, `7aa984f`) — `vdx ai --tab`: вкладка cmux обратно в свою сессию после перезапуска cmux
 (`vdx-ai-predictable` DL #19); в списке значок машины только у идущего, старты мимо списка — строками списка (DL #20);
