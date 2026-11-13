@@ -185,6 +185,46 @@ describe('audit: a meta repo reads files across its halves', () => {
   });
 });
 
+// Without primary_subpackage the subpackage is guessed. A root with its own stack
+// manifest is the project: a folder beside it with a manifest is a snapshot or a
+// vendored tree (vorobyev.name, 2026-11-11: legacy/, the old site, was taken).
+describe('audit: which subpackage is guessed without primary_subpackage', () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  function write(rel: string, text: string) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  }
+
+  function guessed(stack: string) {
+    const res = audit(mkRubric(), { projectRoot: dir, stack, cache: new Map() }, [], 'test@v0.0.0', null);
+    return res.primary_subpackage ?? null;
+  }
+
+  it('a root with its own manifest stays the project when a folder of the same stack sits beside it', () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-sub-'));
+    write('composer.json', JSON.stringify({ name: 'site/app', type: 'project' }));
+    write('package.json', JSON.stringify({ private: true }));
+    write('legacy/composer.json', JSON.stringify({ name: 'old/site' }));
+    write('legacy/package.json', JSON.stringify({ private: true }));
+    expect(guessed('php')).toBeNull();
+  });
+
+  it('a root with its own manifest is not swapped for a folder of another stack either', () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-sub-'));
+    write('composer.json', JSON.stringify({ name: 'site/app' }));
+    write('tools/package.json', JSON.stringify({ name: 'tools' }));
+    expect(guessed('php')).toBeNull();
+  });
+
+  it('a root without a manifest takes its one subpackage', () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-sub-'));
+    write('cli/package.json', JSON.stringify({ name: 'x' }));
+    expect(guessed('meta')).toBe('cli');
+  });
+});
+
 describe('bundled set: lifecycle-interface L3 asks up/down only of an application', () => {
   let dir: string;
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));

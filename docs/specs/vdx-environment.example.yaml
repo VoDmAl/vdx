@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.14.0"
+  version: "1.15.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -130,6 +130,18 @@ git:
       event: pre-commit
       command: '"$HOME/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"'
       when_exists: "~/AI Projects/echelon/plugin/scripts/check-raw-staged.sh"
+    # echelon's race guard: a ref of a repository synced between the machines
+    # does not move while the other machine's branch is ahead and has not
+    # arrived here (a commit from a terminal, merge, update-ref) — wait a
+    # minute and repeat. git runs it on every ref update of every repository
+    # and appends the state itself ("$@"), so the command names no argument.
+    # Only `preparing` is checked: the other states, and a machine without
+    # echelon, pass in the shell without starting Python.
+    - name: echelon-ref-race
+      description: "echelon: a ref does not move past the other machine's branch that has not arrived here"
+      event: reference-transaction
+      command: '[ "$1" = preparing ] || exit 0; e="${ECHELON_HOME:-$HOME/AI Projects/echelon}/bin/echelon"; [ -x "$e" ] || exit 0; "$e" guard ref'
+      when_exists: "~/AI Projects/echelon/bin/echelon"
     # vdx's guard of Claude Code's memory: a commit that stages .claude/memory/
     # goes only where nobody but the owner reads every place it reaches (origin,
     # the mirrors above; GitHub asked with gh's token, no answer — refused). The

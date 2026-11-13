@@ -5,7 +5,7 @@ description: "Поднимает сессию проекта для писем i
 status: in-progress
 session-type: prd-work
 created: 2026-10-22
-last-updated: 2026-11-06
+last-updated: 2026-11-13
 ---
 
 # Почтовая сессия проекта: `vdx ai --intercom`
@@ -553,14 +553,17 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       (`npm update -g --prefer-online`, 2026-11-03; 0.47.0 на станции не ставили, сразу 0.48.0)
 - [x] `reply` на `intercom-session-name-vdx` (`-outcome`, 2026-11-03); письмо ai-dev-plugins о `@vdx_stays` —
       `ai-dev-plugins/vdx-stays-option`; их итог ждём, срока нет
-- [ ] Ответ ai-dev-plugins на `vdx-stays-option`: `intercom close` не обещает закрытия, строка старта и побудка для
+- [x] Ответ ai-dev-plugins на `vdx-stays-option`: `intercom close` не обещает закрытия, строка старта и побудка для
       сессии с `@vdx_stays`. Письмо взято 2026-11-03 в их кристалл `intercom-session-stays` (`ready`, код не тронут).
       2026-11-06 владелец: «Окей да погнали» — письмо `ai-dev-plugins/intercom-session-stays-start` (начать сейчас,
       срока владелец не назвал), их сессия intercom `vdm@m3-intercom` поднята. Итог `intercom-session-stays-start-outcome`
       (2026-11-06): кристалл у них `in-progress` (их DL #3), код не начат — сессия intercom код не правит, а в их дереве
       с 05.11 ждёт непрогнанная строка коммита (`PROJECT_CHANGELOG.md`, `tests/gates.test.sh`; сессии `vdm@lft`,
       `vdm@lft-3` на lft ждали владельца). Тот же день владелец прогнал строку в `vdm@lft-3` и отдал ей кристалл, она
-      начала. Мяч — ai-dev-plugins: правка, версия vdm, итог ответом на `vdx-stays-option`, срока нет
+      начала. Мяч — ai-dev-plugins: правка, версия vdm, итог ответом на `vdx-stays-option`, срока нет —
+      2026-11-08: `vdx-stays-option-result` — vdm 2.78.0 (`1f0d6b7`): `close` при метке говорит, что сессия остаётся,
+      строка старта и `check` — что владелец здесь, будится как HQ-сессия; `vdx-stays-launch-turn-fixed` — vdm 2.78.1
+      (`64a920c`): запуск сессии intercom больше не ход владельца. Оба взяты 2026-11-13; мяч vdx — живая проверка ниже
 - [x] Живьём на 0.48.0, запуск письмом: `vdm@lft-intercom` (2026-11-03, поднята письмом `vdx-stays-option`):
       суффикс, `DISABLE_AUTO_UPDATE=true` и `VDX_INTERCOM=1` в панели, `@vdx_stays` нет; письма разобрала, закрылась
       сама за 360 с, в транскрипте «the intercom session closes in 2 s»
@@ -623,7 +626,8 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [x] Владелец — закрыть Chrome и Firefox; тогда vdx чистит их кэши (3,8 ГБ, решение владельца) и пишет
       nas-info, что за ними остались `i:disk` и память lft (2026-10-27: оба браузера открыты). Не понадобилось:
       кэши браузеров сняты 2026-10-30, `i:disk` ok (`lft-disk-owner-decision-2710-outcome`)
-- [ ] Ответ vorobyev.name (`vendor-git-clones-6gb`): `vendor/` 6 ГБ — 109 пакетов клонами git, из dist
+- [x] Ответ vorobyev.name (`vendor-git-clones-6gb`): `vendor/` 6 ГБ — 109 пакетов клонами git, из dist —
+      2026-11-09 (`vendor-git-clones-6gb-outcome`, взят 2026-11-13): пересобран из dist, 78 МБ, 116 пакетов из архивов
 - [x] Sidetrack #6: intercom предлагает ключ, когда почта копится — ответ ai-dev-plugins
       (`mail-session-suggest-on-backlog`): vdm 2.64.0, 2026-10-27
 - [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет

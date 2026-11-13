@@ -24,7 +24,10 @@ export interface AuditResult {
 /**
  * Резолвит ctx для stack-specific осей (с `applies_to`). Источник subpackage:
  *   1. manifest.primary_subpackage (explicit) — если папка существует.
- *   2. findSubPackages() auto-detect — если ровно один subpackage совпадает с ctx.stack.
+ *   2. findSubPackages() auto-detect — только у корня без своего манифеста стека:
+ *      ровно один subpackage совпадает с ctx.stack, или он в репо один. Корень со
+ *      своим манифестом — сам проект; папка рядом с манифестом — снимок, инструмент
+ *      или вендоренное дерево (vorobyev.name 2026-11-11: брался `legacy/`).
  *   3. fallback на root ctx.
  *
  * Возвращает `{ ctx, relPath }` где relPath — относительный путь либо null
@@ -45,7 +48,7 @@ function resolveSubpackageCtx(ctx: Ctx, manifest: VdxManifest | null): { ctx: Ct
     } else {
       process.stderr.write(`warning: primary_subpackage "${p}" does not exist — falling back to root\n`);
     }
-  } else {
+  } else if (stackForDir(ctx.projectRoot) === null) {
     const subs = findSubPackages(ctx.projectRoot);
     const matching = subs.filter((s) => s.stack === ctx.stack);
     if (matching.length === 1) {

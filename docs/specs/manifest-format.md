@@ -84,8 +84,12 @@ acknowledged_drift = []              # axis_ids, дрейф осознанно �
   смотрят в subpackage. Оси без `applies_to` (lifecycle-interface, ci,
   reproducibility, secrets-config, git-hygiene, observability, docs,
   shared-infra*) всегда работают от корня. Если поле не задано — evaluator
-  пробует auto-resolve через `findSubPackages()`: использует subpackage,
-  если ровно один совпадает с `stack`. См. O31 в `../decisions.md`.
+  пробует auto-resolve через `findSubPackages()`, но только у корня без
+  своего манифеста стека: использует subpackage, если ровно один совпадает
+  со `stack` или он в репо один. Корень со своим манифестом — сам проект,
+  папка рядом с манифестом (снимок старого сайта, инструмент) его не
+  подменяет (с vdx 0.55.1); нужна она — поле задать явно. См. O31 в
+  `../decisions.md`.
   Файловые предикаты (`has_file`, `file_contains`, `config_value`,
   `package_present`, `tsc_flag`) ищут недостающий файл во второй половине
   (с vdx 0.25): subpackage — в корне (`.github/`, `.gitignore` у репо одни),

@@ -5,7 +5,7 @@ description: "Держит память агента в папке проект�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-22
-last-updated: 2026-11-11
+last-updated: 2026-11-13
 ---
 
 # Память Claude внутри проекта
@@ -897,7 +897,10 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 - [ ] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-19
       (due: 2026-11-19); check: `/vdm:intercom check`. 2026-11-12: `graphite.zt.vorobyev.name` — владелец «удаляй»
       (живой Graphite — `graphite.vorobyev.name`, этот нигде не упомянут и снаружи не работает); письмо nas-info
-      `graphite-zt-delete`: удалить и назвать из журнала Cloudflare, кто и когда завёл
+      `graphite-zt-delete`: удалить и назвать из журнала Cloudflare, кто и когда завёл — 2026-11-12 итог
+      (`graphite-zt-delete-outcome`, взят 2026-11-13): удалена ~03:01Z, под зоной 8 записей A без прокси; заведена
+      2026-03-16 21:13Z, кто — не установлено (журнал Cloudflare токену закрыт, только панель → Audit Log); JSON для
+      возврата — их DL #3 `zt-zone-owners`; итог проверки `cloudflare.zt_zone` — их срок 2026-11-19
 - [ ] Sidetrack #6: к дате смены корня (её назовёт nas-info; обещано им 2026-10-24) — скрипт `vdx doctor
       --fix` по проектам корня (готов, `root-move-fix.sh`, 2026-10-24) — nas-info с командой. Профиль не
       меняется: ссылки останутся (2026-10-25). Кристалл открыт до него (DL #16)
