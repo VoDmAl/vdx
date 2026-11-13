@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.55.0` — в npm с 2026-11-12 (`1e7cc1c`), Node 22 и
-  новее; на m3 и lft — 0.55.0 с 2026-11-12 (`npm update -g --prefer-online`); плагин 0.15.5.
+- **CLI** `@vodmal/vdx-cli@0.55.1` — в npm с 2026-11-13 (`9b348a4`), Node 22 и
+  новее; на m3 и lft — 0.55.1 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.5.
 - **Сет** `vdx-rubric-vodmal@v1.15.1` (schema 0.3; v1.15.1, 2026-11-13, — `echelon-ref-race` через обёртку echelon; v1.15.0, 2026-11-13, — хук `echelon-ref-race` в `git.hooks`; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -95,13 +95,14 @@
 
 Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
 ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
-В `main` (2026-11-13, `bea1427`), к выпуску patch 0.55.1: аудит не подменяет корень со своим манифестом папкой рядом
-(письмо vorobyev.name `audit-primary-subpackage-legacy`), `DEFAULT_BASELINE` — v1.15.1. Ждут работы — `vdx-ai-predictable`
+Ждут работы — `vdx-ai-predictable`
 Sidetracks #16–#18 (фокус-сессия закрывает себя, строка cmux в вводе Claude, `/clear` после просмотра).
 `vdx push`, который ждёт доезда ветки до коммита (письмо echelon `vdx-push-waits`, п. 1): владелец 2026-11-13 —
 сначала только хук, форма команды — его слово, срока нет.
 
-Прежние: 0.55.0 (2026-11-12, `1e7cc1c`) — список `vdx ai` группами и столбцами, в терминале с fzf — выбор курсором
+Прежние: 0.55.1 (2026-11-13, `9b348a4`) — аудит: корень со своим манифестом не подменяется папкой рядом (письмо
+vorobyev.name `audit-primary-subpackage-legacy`, итог отправлен), `DEFAULT_BASELINE` — сет v1.15.1.
+0.55.0 (2026-11-12, `1e7cc1c`) — список `vdx ai` группами и столбцами, в терминале с fzf — выбор курсором
 с панелью строки; упавшие с tmux агенты чужих проектов — строкой под списком; `vdx ai --restore --forget`
 (`vdx-ai-predictable` DL #23, #24). 0.54.0 (2026-11-11, `f6365a2`) — `*.<домен>` в `git.personal_hosts`, сет v1.14.0 (`claude-memory-in-project`
 DL #23); `vdx ai@<машина>` из панели tmux — клиент терминала уступает место, tmux в tmux нет (`vdx-ai-predictable` DL #22).
