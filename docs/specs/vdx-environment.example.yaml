@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.15.0"
+  version: "1.15.1"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -135,13 +135,16 @@ git:
     # arrived here (a commit from a terminal, merge, update-ref) — wait a
     # minute and repeat. git runs it on every ref update of every repository
     # and appends the state itself ("$@"), so the command names no argument.
-    # Only `preparing` is checked: the other states, and a machine without
-    # echelon, pass in the shell without starting Python.
+    # It goes through echelon's wrapper, not bin/echelon: a crash of echelon
+    # (a half-synced edit, a broken config) lets git pass with a line, only
+    # its refusal stops the update, ECHELON_REF_GUARD=off goes around it, and
+    # Python starts only for refs/heads/*. The other states, and a machine
+    # without echelon, pass in the shell.
     - name: echelon-ref-race
       description: "echelon: a ref does not move past the other machine's branch that has not arrived here"
       event: reference-transaction
-      command: '[ "$1" = preparing ] || exit 0; e="${ECHELON_HOME:-$HOME/AI Projects/echelon}/bin/echelon"; [ -x "$e" ] || exit 0; "$e" guard ref'
-      when_exists: "~/AI Projects/echelon/bin/echelon"
+      command: '[ "$1" = preparing ] || exit 0; s="${ECHELON_HOME:-$HOME/AI Projects/echelon}/plugin/scripts/ref-race-guard.sh"; [ -x "$s" ] || exit 0; "$s"'
+      when_exists: "~/AI Projects/echelon/plugin/scripts/ref-race-guard.sh"
     # vdx's guard of Claude Code's memory: a commit that stages .claude/memory/
     # goes only where nobody but the owner reads every place it reaches (origin,
     # the mirrors above; GitHub asked with gh's token, no answer — refused). The
