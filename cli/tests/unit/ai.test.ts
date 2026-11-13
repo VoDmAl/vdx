@@ -984,8 +984,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     answers = [''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(runs()).toEqual([]);
-    expect(text()).toMatch(/1 {2}m3 +5 min ago +cut off/);
-    expect(text()).toMatch(/2 {2}lft +30 min ago +cut off/);
+    expect(text()).toMatch(/1 {2}m3 +5 min ago +unfinished/);
+    expect(text()).toMatch(/2 {2}lft +30 min ago +unfinished/);
     expect(text()).toContain('Enter → 1');
     expect(sshCalls[0]!.args.slice(0, 5)).toEqual(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'm3']);
     // The vdx there reports on the project; an older one, or none — the script of live sessions.
@@ -1072,7 +1072,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     conv(ID.b, null, 55);
     answers = ['', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
-    expect(text()).toMatch(/1 {2}\? +55 min ago +cut off, machine unknown/);
+    expect(text()).toMatch(/1 {2}\? +55 min ago +unfinished, machine unknown/);
     expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     expect(sshCalls).toEqual([]); // no machine to ask: none is named
     answers = ['', ''];
@@ -1120,7 +1120,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     // It runs in a terminal here: Enter passes it by (DL #2); picked, it asks.
     answers = ['1', ''];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_LAUNCH_FAILED);
-    expect(text()).toMatch(/1 {2}pid 4242 on lft {2}⏳ working {2}prompt aaaa · open here/);
+    expect(text()).toMatch(/1 {2}pid 4242 on lft {2}⏳ working {2}prompt aaaa · open on lft \(here\)/);
     expect(text()).toContain('Enter → n');
     answers = ['1', 'y'];
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
@@ -1373,7 +1373,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = [''];
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(text()).toMatch(/1 {2}lft +5 min ago +✅ finished/);
-      expect(text()).toMatch(/2 {2}lft .* cut off/);
+      expect(text()).toMatch(/2 {2}lft .* unfinished/);
       expect(text()).toContain('Enter → 2');
       expect(runs()).toEqual([`--base --resume ${ID.b}`]);
     });
@@ -1384,7 +1384,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = [''];
       const d = report({ agents: [agentThere({ openAt: ['m3', '?'] })] });
       expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
-      expect(text()).toMatch(/1 {2}proj@m3 {2}💤 idle {2}On m3 · open here/);
+      expect(text()).toMatch(/1 {2}proj@m3 {2}💤 idle {2}On m3 · open on lft \(here\)/);
       expect(text()).toContain('Enter → 2');
       expect(remoteRuns()).toEqual([]);
     });
@@ -1407,7 +1407,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = [''];
       const d = report({ agents: [agentThere({ openAt: ['lft'] })] });
       expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
-      expect(text()).toMatch(/1 {2}proj@m3 {2}💤 idle {2}On m3 · open here/);
+      expect(text()).toMatch(/1 {2}proj@m3 {2}💤 idle {2}On m3 · open on lft \(here\)/);
       expect(text()).toContain('Enter → 2');
       expect(runs()).toEqual([`--base --resume ${ID.a}`]);
       expect(remoteRuns()).toEqual([]);
@@ -1438,7 +1438,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(text()).toMatch(/1 {2}proj@m3-2 {2}⏳ working +🎯 {2}Focused/);
       expect(text()).toMatch(/2 {2}proj@m3 {4}💤 draft \(12 chars\) +On m3 · open on m3/);
       expect(text()).toMatch(/3 {2}m3 +30 min ago +not here yet from m3 — continues there/);
-      expect(text()).toMatch(/4 {2}m3 +40 min ago +cut off/);
+      expect(text()).toMatch(/4 {2}m3 +40 min ago +unfinished/);
       expect(text()).toContain('note: 1 conversation not here yet from another machine (sync behind)');
       expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
       expect(runs()).toEqual([]);
@@ -1459,7 +1459,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       answers = ['a', 'n'];
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(text()).toContain('a all (1 more)');
-      expect(text()).toMatch(/6 {2}lft +15 min ago +cut off/);
+      expect(text()).toMatch(/6 {2}lft +15 min ago +unfinished/);
       expect(runs()).toEqual(['--base']);
     });
 
@@ -1538,11 +1538,28 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         expect(shown[2]!.header[0]).toContain('«17 НЕЗАЯВЛЕННЫХ» in 1 of 2 conversations');
         expect(shown[2]!.items[shown[2]!.cursor]!.text).toMatch(/lft .* ✅ finished/);
         expect(shown[2]!.items[shown[2]!.cursor]!.detail.join('\n')).toContain(
-          'found: agent: «Список для ответа готов: 17 незаявленных»',
+          'FOUND\nagent: «Список для ответа готов: 17 незаявленных»',
         );
         // The plain list and its question are not shown next to the picker.
         expect(text()).not.toContain('Enter →');
         expect(runs()).toEqual([`--base --resume ${ID.b}`]);
+      });
+
+      it("with a picker: its command key prints the row's command and starts nothing", () => {
+        twoMachines();
+        const rows: (number | null)[] = [0, null];
+        const said: string[] = [];
+        const pick = (input: PickerInput) => {
+          said.push(input.header[0]!);
+          // A title first — it has no command, and the list comes again; then the row under the cursor.
+          const index = rows.shift();
+          return { key: 'ctrl-y', index: index === null ? input.cursor : index!, query: '' };
+        };
+        expect(runAi({ ...opts, path: root }, deps({ pick }))).toBe(EXIT_OK);
+        expect(said[1]).toBe('that row has no command — it is not an agent or a conversation');
+        expect(text()).toMatch(new RegExp(`vdx ai@m3 \\S+ --conversation ${ID.a}\\n`));
+        expect(runs()).toEqual([]);
+        expect(remoteRuns()).toEqual([]);
       });
 
       it('with a picker: Esc starts nothing; a picker that does not show leaves the plain list and its question', () => {

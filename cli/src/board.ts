@@ -240,8 +240,10 @@ export function agentLabel(
 function openWord(a: AgentFact, seat: string): string {
   const places = [...new Set(a.openAt.filter((s) => s !== '?' && !same(s, seat)))];
   if (a.openAt.includes('?')) places.push('another machine');
-  if (openAtSeat(a, seat)) return `open here${places.length ? `, on ${places.join(', ')}` : ''}`;
-  return places.length ? `open on ${places.join(', ')}` : '';
+  // The machine by its name, and the person's own marked: «open here» beside «open on m3» read as two
+  // different things (the owner, 2026-11-12).
+  const all = [...(openAtSeat(a, seat) ? [`${seat} (here)`] : []), ...places];
+  return all.length ? `open on ${all.join(', ')}` : '';
 }
 
 /** A title or a topic inside a sentence: one line, at most 50 characters. */
@@ -352,7 +354,7 @@ export function buildBoard(input: BoardInput): Board {
       lead: [machine ?? '?', describeAge(c.updated, now)],
       icon: c.finished && !behind ? '✅' : '',
       word: [
-        behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished' : 'cut off',
+        behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished' : 'unfinished',
         machine === null && 'machine unknown',
       ]
         .filter(Boolean)
@@ -371,7 +373,7 @@ export function buildBoard(input: BoardInput): Board {
   const rows = [...running, ...service, ...idle].flatMap((r) => (r.pick ? [r.pick] : []));
 
   // Enter: the agent with work in it nobody at this seat looks at, the last active; else the
-  // newest conversation cut off; else an agent waiting for a first prompt; else a new one.
+  // newest unfinished conversation; else an agent waiting for a first prompt; else a new one.
   // Never one a terminal here shows already (DL #2), never a wrapped one. What a search found
   // was asked for, wrapped or not: the first a terminal here does not show.
   const pickAt = (ok: (p: Pick) => boolean) => {
@@ -437,28 +439,40 @@ export function buildBoard(input: BoardInput): Board {
   const detail = (r: Row): string[] => {
     const p = r.pick;
     const command = p ? (input.command ?? input.reach)?.(p) : null;
+    // A card, not a paragraph: the title, then each fact under or beside its label.
+    const block = (label: string, value: string | null | undefined) => (value ? [dim(label), value, ''] : []);
+    const beside = (label: string, value: string | null | undefined) =>
+      value ? [`${dim(label.padEnd(10))}${value}`] : [];
+    const one = (text: string | null | undefined) => text?.replace(/\s+/g, ' ').trim();
     const facts =
       p?.kind === 'agent'
         ? [
-            p.agent.title?.replace(/\s+/g, ' ').trim(),
-            p.agent.topic ? `topic: ${p.agent.topic}` : p.agent.focused ? 'topic: none set' : '',
-            `state: ${stateWord(p.agent, now)}${p.agent.focused ? ', focused' : p.agent.hq ? ', the HQ session' : ''}`,
-            `runs ${p.agent.session ? `in ${p.agent.session}` : `as pid ${p.agent.pid}`} on ${p.agent.machine}`,
-            r.tail ? `terminal: ${r.tail}` : 'no terminal shows it',
-            p.agent.conversation ? `conversation: ${p.agent.conversation}` : '',
+            bold(one(p.agent.title) || '(no title yet)'),
+            '',
+            ...block('TOPIC', one(p.agent.topic) ?? (p.agent.focused ? 'none set' : null)),
+            ...beside(
+              'STATE',
+              `${stateWord(p.agent, now)}${p.agent.focused ? ', focused' : p.agent.hq ? ', the HQ session' : ''}`,
+            ),
+            ...beside('SESSION', p.agent.session ?? `pid ${p.agent.pid}, no tmux`),
+            ...beside('RUNS ON', p.agent.machine),
+            ...beside('OPEN ON', r.tail ? r.tail.replace(/^open on /, '') : "nobody's terminal"),
+            ...beside('ID', p.agent.conversation),
+            '',
           ]
         : p?.kind === 'conversation'
           ? [
-              p.conversation.title?.replace(/\s+/g, ' ').trim(),
-              p.conversation.topic ? `topic: ${p.conversation.topic}` : '',
-              `state: ${r.word}`,
-              `last on ${p.machine ?? 'a machine not known'}, ${describeAge(p.conversation.updated, now)}`,
-              `conversation: ${p.conversation.id}`,
+              bold(one(p.conversation.title) || '(no title)'),
+              '',
+              ...block('TOPIC', one(p.conversation.topic)),
+              ...beside('STATE', r.word),
+              ...beside('LAST ON', p.machine ?? 'a machine not known'),
+              ...beside('WHEN', describeAge(p.conversation.updated, now)),
+              ...beside('ID', p.conversation.id),
+              '',
             ]
-          : ['the intercom session: letters wake it — not yours to attach'];
-    return [...facts, found(r) ? `found: ${found(r)}` : '', command ? `from a terminal: ${command}` : ''].flatMap(
-      (l) => (l ? [l, ''] : []),
-    );
+          : [bold('the intercom session'), '', 'letters wake it — not yours to attach', ''];
+    return [...facts, ...block('FOUND', found(r)), ...block('COMMAND', command)];
   };
   const pickerGroup = (title: string, members: Row[], sized: Row[] = members): PickerItem[] => {
     if (members.length === 0) return [];
@@ -486,7 +500,7 @@ export function buildBoard(input: BoardInput): Board {
   const title = input.find
     ? `${input.project} — ${quoted(input.find.phrase)} in ${rows.length} of ${input.find.searched} conversations`
     : input.project;
-  const head = legend ? `${bold(title)}   ${legend}` : bold(title);
+  const head = legend ? `${bold(title)}   runs on: ${legend}` : bold(title);
   const nothing = live.length === 0 && !input.find ? ['nothing runs now'] : [];
   const behind = input.behind?.size ?? 0;
   const notes = [
@@ -551,7 +565,7 @@ export function buildBoard(input: BoardInput): Board {
         head,
         ...nothing,
         ...notes.map((n) => n.trim()),
-        `Enter takes the row · type to filter · ${SEARCH_KEY} searches what was said · Esc leaves`,
+        `Enter takes the row · ${SEARCH_KEY} searches what was said for the typed words · ${COMMAND_KEY} prints the row's command · Esc leaves`,
       ],
       items,
       cursor: Math.max(
@@ -562,8 +576,13 @@ export function buildBoard(input: BoardInput): Board {
   };
 }
 
-/** The picker's key that asks for a search of the typed phrase; every other key there is the picker's own. */
+/** The picker's key that asks for a search of the typed phrase. */
 export const SEARCH_KEY = 'ctrl-s';
+/**
+ * The picker's key that prints the command of the row under the cursor and leaves: in the panel a long
+ * command is folded inside a frame, and what the terminal copies from there is not a command.
+ */
+export const COMMAND_KEY = 'ctrl-y';
 
 /**
  * What the person did in the picker: Enter on a row is that row; ctrl-s searches the conversations
@@ -574,7 +593,9 @@ export function readPicked(answer: { key: string; index: number | null; query: s
     const phrase = answer.query.trim();
     return phrase ? { kind: 'find', phrase } : null;
   }
-  return answer.index === null ? null : (board.picker.items[answer.index]?.pick ?? null);
+  // Enter only: another key that ended the picker is not a choice of the row.
+  if (answer.key !== '' || answer.index === null) return null;
+  return board.picker.items[answer.index]?.pick ?? null;
 }
 
 /** The key Enter stands for: a row's number, `n` or `r`. */

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SEARCH_KEY } from './board.ts';
+import { COMMAND_KEY, SEARCH_KEY } from './board.ts';
 
 /**
  * The list of `vdx ai` with a cursor (vdx-ai-predictable Sidetrack #15): at a terminal, with fzf on
@@ -69,8 +69,12 @@ export function fzfArgs(input: PickerInput, dir: string): string[] {
     '--delimiter=\t',
     '--with-nth=2..',
     '--print-query',
-    `--expect=${SEARCH_KEY}`,
-    '--prompt=filter> ',
+    `--expect=${SEARCH_KEY},${COMMAND_KEY}`,
+    // The input line says what typing does; fzf's count of rows says nothing here — titles are rows too.
+    '--prompt=type to filter: ',
+    '--info=hidden',
+    // The terminal's own selection works: a command in the panel can be copied.
+    '--no-mouse',
     `--header=${input.header.flatMap((l) => fold(l, width)).join('\n')}`,
     `--bind=load:pos(${input.cursor + 1})`,
     `--preview=cat ${shellQuote(dir)}/{1}`,

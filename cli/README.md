@@ -141,7 +141,7 @@ their state — each group under its title, its rows in columns (0.55+); Enter
 never takes one your seat already shows; without a terminal, this machine's.
 With `fzf` on PATH the list at a terminal has a cursor (0.55+): move over the
 rows, type to filter them, read the row under the cursor in a panel, `ctrl-s`
-searches what was said; `VDX_PLAIN_LIST=1` keeps the numbered list and a typed
+searches what was said, `ctrl-y` prints the row's command; `VDX_PLAIN_LIST=1` keeps the numbered list and a typed
 answer. `vdx ai --list` prints the list and starts nothing. `vdx ai --find
 "<phrase>"` (or `/<phrase>` at the list's question, 0.45+) lists the conversations
 whose replies — yours and the agent's — have the phrase: a piece of a screen left

@@ -71,6 +71,7 @@ import {
   agentLabel,
   type Board,
   buildBoard,
+  COMMAND_KEY,
   enterKey,
   freeWork,
   inputDraft,
@@ -2744,6 +2745,17 @@ function boardStart(
         deps.log('note: fzf did not show the list — the plain one instead');
         board = make(5);
         break;
+      }
+      // The row's command, printed where it can be copied whole; nothing is started.
+      if (answer.key === COMMAND_KEY) {
+        const row = answer.index === null ? null : board.picker.items[answer.index]?.pick;
+        const command = row ? reachOf(row) : null;
+        if (command) {
+          deps.out(`${command}\n`);
+          return { kind: 'listed' };
+        }
+        said = 'that row has no command — it is not an agent or a conversation';
+        continue;
       }
       const pick = readPicked(answer, board);
       if (pick?.kind === 'all') board = make('all');

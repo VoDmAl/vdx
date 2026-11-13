@@ -97,15 +97,15 @@ describe('buildBoard: one list, Enter marked', () => {
       agent({ session: 'proj@m3-2', pid: 101, conversation: ID.b, focused: true, topic: 'search' }),
     ]);
     expect(b.enter).toBe(1);
-    expect(b.lines.join('\n')).toContain('open here');
-    expect(board([agent({ openAt: ['m3', 'lft'] })]).lines.join('\n')).toContain('open here, on lft');
+    expect(b.lines.join('\n')).toContain('open on m3 (here)');
+    expect(board([agent({ openAt: ['m3', 'lft'] })]).lines.join('\n')).toContain('open on m3 (here), lft');
     expect(board([agent({ openAt: ['lft', '?'] })]).lines.join('\n')).toContain('open on lft, another machine');
     // Enter's row has the arrow the keys line names; the other has none.
     expect(b.lines.filter((l) => l.startsWith('→'))).toEqual(['→ 2  proj@m3-2  💤 idle  🎯  Work']);
     expect(b.lines.at(-1)).toContain('Enter → 2');
   });
 
-  it('…nor a wrapped or empty one while a conversation is cut off; then an empty pane; then a new one', () => {
+  it('…nor a wrapped or empty one while a conversation is unfinished; then an empty pane; then a new one', () => {
     const wrapped = agent({ finished: true });
     const empty = agent({ session: 'proj@m3-2', pid: 101, conversation: ID.b, empty: true });
     expect(board([wrapped, empty], [conv(ID.c)]).rows[board([wrapped, empty], [conv(ID.c)]).enter as number]).toEqual({
@@ -168,8 +168,8 @@ describe('buildBoard: one list, Enter marked', () => {
     expect(b.rows.map((r) => (r.kind === 'conversation' ? r.conversation.id : r.kind))).toEqual(['agent', ID.b, ID.d]);
     expect(b.lines.slice(5)).toEqual([
       'CONVERSATIONS NOBODY RUNS · 2',
-      '  2  ?    today 11:00  cut off, machine unknown  t bbbb',
-      '  3  lft  today 11:00  cut off                   t dddd',
+      '  2  ?    today 11:00  unfinished, machine unknown  t bbbb',
+      '  3  lft  today 11:00  unfinished  t dddd',
       '',
       '  Enter → 1 · /<phrase> find · n new · f new focused',
     ]);
@@ -232,8 +232,8 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
       '  2  proj@m3-hq        🆕 empty    👑',
       '',
       'CONVERSATIONS NOBODY RUNS · 2',
-      '  3  lft  today 11:00  ✅ finished  t bbbb',
-      '  4  lft  today 11:00     cut off   t cccc',
+      '  3  lft  today 11:00  ✅ finished    t bbbb',
+      '  4  lft  today 11:00     unfinished  t cccc',
     ]);
     // A focused session with no topic says so.
     expect(board([agent({ focused: true })]).lines[3]).toBe('→ 1  proj@m3  💤 idle  🎯  Work (no topic)');
@@ -250,8 +250,8 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
       [],
       [conv(ID.b, { topic: 'sidebar marks', finished: true }), conv(ID.c, { topic: 'search', title: null })],
     ).lines.join('\n');
-    expect(text).toContain('  1  lft  today 11:00  ✅ finished  🎯  t bbbb');
-    expect(text).toContain('→ 2  lft  today 11:00     cut off   🎯  search');
+    expect(text).toContain('  1  lft  today 11:00  ✅ finished    🎯  t bbbb');
+    expect(text).toContain('→ 2  lft  today 11:00     unfinished  🎯  search');
     expect(text).not.toMatch(/bbbbbbbb|cccccccc/);
   });
 
@@ -274,7 +274,7 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
     );
     // The first line says once which mark is which machine — of the machines something runs on.
     expect(b.lines).toEqual([
-      'proj   🔹 m3 · 🟢 lft',
+      'proj   runs on: 🔹 m3 · 🟢 lft',
       '',
       'RUNNING NOW · 3',
       '→ 1  🔹 proj     💤 idle  🎯  Work',
@@ -282,8 +282,8 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
       '  3  proj@other  💤 idle      Work',
       '',
       'CONVERSATIONS NOBODY RUNS · 2',
-      '  4  lft  today 11:00  cut off                   t bbbb',
-      '  5  ?    today 11:00  cut off, machine unknown  t cccc',
+      '  4  lft  today 11:00  unfinished  t bbbb',
+      '  5  ?    today 11:00  unfinished, machine unknown  t cccc',
       '',
       '  Enter → 1 · /<phrase> find · n new · f new focused',
     ]);
@@ -318,7 +318,7 @@ describe('buildBoard: the HQ session', () => {
   it('on another machine, a row too; a terminal showing it is said', () => {
     const b = board([agent({ machine: 'lft', hq: true, session: 'proj@lft-hq', openAt: ['m3'] })]);
     expect(b.rows).toHaveLength(1);
-    expect(b.lines.slice(2, 4)).toEqual(['HQ SESSION', '  1  proj@lft-hq  💤 idle  👑  open here']);
+    expect(b.lines.slice(2, 4)).toEqual(['HQ SESSION', '  1  proj@lft-hq  💤 idle  👑  open on m3 (here)']);
   });
 });
 
@@ -333,7 +333,7 @@ describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
     const b = board([agent({ openAt: ['m3'] })], [conv(ID.c, { finished: true })], { find });
     const text = b.lines.join('\n');
     expect(b.lines[0]).toBe('proj — «the needle» in 2 of 29 conversations');
-    expect(text).toContain('  1  proj@m3  💤 idle  Work · open here\n       you: «where is the needle?»');
+    expect(text).toContain('  1  proj@m3  💤 idle  Work · open on m3 (here)\n       you: «where is the needle?»');
     expect(text).toContain(
       '→ 2  lft  today 11:00  ✅ finished  t cccc\n       agent: «the needle is here» (2 replies have it)',
     );
@@ -349,7 +349,7 @@ describe('buildBoard: what a search found (vdx-ai-predictable P5)', () => {
     expect(b.lines.slice(1)).toEqual([
       '',
       'CONVERSATIONS NOBODY RUNS · 1',
-      '  1  lft  today 11:00  cut off  t cccc',
+      '  1  lft  today 11:00  unfinished  t cccc',
       '       agent: «the needle is here» (2 replies have it)',
       `       vdx ai@lft x --conversation ${ID.c}`,
     ]);
@@ -431,7 +431,7 @@ describe('buildBoard: rows in columns', () => {
     const lines = board(ten, [conv(ID.b)]).lines;
     expect(lines.slice(3, 5)).toEqual(['→  1  proj@m3-0  💤 idle  Work', '   2  proj@m3-1  💤 idle  Work']);
     expect(lines[12]).toBe('  10  proj@m3-9  💤 idle  Work');
-    expect(lines[15]).toBe('  11  lft  today 11:00  cut off  t bbbb');
+    expect(lines[15]).toBe('  11  lft  today 11:00  unfinished  t bbbb');
   });
 
   it('a column is counted in terminal cells: an emoji two, its variation selector none', () => {
@@ -452,10 +452,10 @@ describe('buildBoard: rows in columns', () => {
     expect(clip('abcdefgh', 5)).toBe('abcd…');
     const long = 'A very long title of a conversation that does not fit into a narrow terminal at all';
     const row = (extra: object) => board([agent({ title: long, openAt: ['m3'] })], [], extra).lines[3]!;
-    expect(row({ columns: 60 })).toBe('  1  proj@m3  💤 idle  A very long title of a c… · open here');
+    expect(row({ columns: 60 })).toBe('  1  proj@m3  💤 idle  A very long titl… · open on m3 (here)');
     expect(cells(row({ columns: 60 }))).toBeLessThanOrEqual(60);
     expect(row({})).toBe(
-      '  1  proj@m3  💤 idle  A very long title of a conversation that does not fit into… · open here',
+      '  1  proj@m3  💤 idle  A very long title of a conversation that does not fit into… · open on m3 (here)',
     );
   });
 
@@ -483,23 +483,23 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
   it("titles and rows without numbers; all, new and new focused are rows; the cursor starts on Enter's", () => {
     expect(b.picker.items.map((i) => i.text)).toEqual([
       'RUNNING NOW · 1',
-      '  proj@m3  💤 idle  🎯  Work · open here',
+      '  proj@m3  💤 idle  🎯  Work · open on m3 (here)',
       'CONVERSATIONS NOBODY RUNS · 5 newest of 6',
-      '  lft  today 11:00  cut off  🎯  t bbbb',
-      '  lft  today 11:00  cut off      t cccc',
-      '  lft  today 11:00  cut off      t dddd',
-      '  lft  today 11:00  cut off      t 1',
-      '  lft  today 11:00  cut off      t 2',
+      '  lft  today 11:00  unfinished  🎯  t bbbb',
+      '  lft  today 11:00  unfinished      t cccc',
+      '  lft  today 11:00  unfinished      t dddd',
+      '  lft  today 11:00  unfinished      t 1',
+      '  lft  today 11:00  unfinished      t 2',
       '  … all conversations (1 more)',
       '+ new conversation',
       '+ new focused conversation',
     ]);
-    // Enter in the list is row 2 — the newest conversation cut off: the cursor is on it.
+    // Enter in the list is row 2 — the newest conversation unfinished: the cursor is on it.
     expect(enterKey(b)).toBe('2');
     expect(b.picker.cursor).toBe(3);
     expect(b.picker.header).toEqual([
       'proj',
-      'Enter takes the row · type to filter · ctrl-s searches what was said · Esc leaves',
+      "Enter takes the row · ctrl-s searches what was said for the typed words · ctrl-y prints the row's command · Esc leaves",
     ]);
     // Nothing to continue: the cursor is on the new conversation.
     const none = board([], []);
@@ -515,24 +515,47 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     expect(wide.lines[3]).toBe(`→ 1  proj@m3  💤 idle  ${long}`);
   });
 
-  it("a row's panel: what the row had no room for, and the command that reaches it", () => {
-    expect(b.picker.items[1]!.detail.filter(Boolean)).toEqual([
+  // The owner, 2026-11-12, on the first panel: «огонь, но воспринимается как месиво текста» — it was a
+  // run of `label: value` lines with a blank line after each.
+  it("a row's panel is a card: the title, the topic under its label, the short facts beside theirs, the command last", () => {
+    expect(b.picker.items[1]!.detail).toEqual([
       'Work',
-      'topic: the  topic\nwhole',
-      'state: idle, focused',
-      'runs in proj@m3 on m3',
-      'terminal: open here',
-      `conversation: ${ID.a}`,
+      '',
+      'TOPIC',
+      'the topic whole',
+      '',
+      'STATE     idle, focused',
+      'SESSION   proj@m3',
+      'RUNS ON   m3',
+      'OPEN ON   m3 (here)',
+      `ID        ${ID.a}`,
+      '',
     ]);
-    expect(b.picker.items[3]!.detail.filter(Boolean)).toEqual([
+    expect(b.picker.items[3]!.detail).toEqual([
       't bbbb',
-      'topic: search',
-      'state: cut off',
-      'last on lft, today 11:00',
-      `conversation: ${ID.b}`,
-      `from a terminal: vdx ai@lft x --conversation ${ID.b}`,
+      '',
+      'TOPIC',
+      'search',
+      '',
+      'STATE     unfinished',
+      'LAST ON   lft',
+      'WHEN      today 11:00',
+      `ID        ${ID.b}`,
+      '',
+      'COMMAND',
+      `vdx ai@lft x --conversation ${ID.b}`,
+      '',
     ]);
     expect(b.picker.items[0]!.detail).toEqual([]);
+    // No terminal shows it, no topic: said, and left out.
+    const bare = board([agent({ title: null })], []).picker.items[1]!.detail;
+    expect(bare).toContain("OPEN ON   nobody's terminal");
+    expect(bare[0]).toBe('(no title yet)');
+    expect(bare).not.toContain('TOPIC');
+    // At a terminal the title is bold and the labels dim.
+    const painted = board([agent()], [], { color: true }).picker.items[1]!.detail;
+    expect(painted[0]).toBe('\x1b[1mWork\x1b[22m');
+    expect(painted).toContain('\x1b[2mSTATE     \x1b[22midle');
   });
 
   it('Enter on a row is its pick; on a title — nothing; ctrl-s searches for the typed phrase', () => {
@@ -546,6 +569,8 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     expect(on(10)).toEqual({ kind: 'new', focused: true });
     expect(on(3, 'ctrl-s', ' 17 незаявленных ')).toEqual({ kind: 'find', phrase: '17 незаявленных' });
     expect(on(3, 'ctrl-s', '  ')).toBeNull();
+    // Another key that ended the picker is not a choice of the row: the command key is the start's.
+    expect(on(3, 'ctrl-y')).toBeNull();
   });
 
   it('after tmux fell: bringing back is the first row, under the cursor, with who went down in its panel', () => {
@@ -567,12 +592,12 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     const found = board([], [conv(ID.c)], { find });
     expect(found.picker.items.map((i) => i.text)).toEqual([
       'CONVERSATIONS NOBODY RUNS · 1',
-      '  lft  today 11:00  cut off  t cccc',
+      '  lft  today 11:00  unfinished  t cccc',
       '  … the whole list',
       '+ new conversation',
       '+ new focused conversation',
     ]);
-    expect(found.picker.items[1]!.detail).toContain('found: you: «the needle»');
+    expect(found.picker.items[1]!.detail.slice(-3)).toEqual(['FOUND', 'you: «the needle»', '']);
     expect(found.picker.header[0]).toBe('proj — «needle» in 1 of 9 conversations');
   });
 });

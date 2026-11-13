@@ -241,16 +241,17 @@ conversation is this machine's and not finished — continue it; the project has
 none — a new one. Otherwise one list: the agents running on every machine (its
 state — working, waiting, a draft in its input line, empty since /clear,
 finished with a wrap skill of session.wrap_skills, idle N days — and which seat's
-terminal shows it), then the newest conversations nobody runs, cut off or
+terminal shows it), then the newest conversations nobody runs, unfinished or
 finished, and how many more there are — each group under its title, its rows in
 columns: the machine, the state, the mode, one caption (the title; the topic of
 one with no title). Enter takes the marked row (→): an agent with
-work in it that no terminal at your seat shows, else the newest conversation cut
-off. a — every conversation; /<phrase> — the conversations that have it
+work in it that no terminal at your seat shows, else the newest unfinished
+conversation. a — every conversation; /<phrase> — the conversations that have it
 (--find); n — a new one; f — a new focused one. With fzf on PATH the list has a
 cursor instead of a typed answer: move over the rows, type to filter them, the
 row under the cursor is told whole in a panel; all, new and new focused are
-rows, ctrl-s searches what was said for the typed phrase, Esc starts nothing.
+rows, ctrl-s searches what was said for the typed phrase, ctrl-y prints the
+row's command and starts nothing, Esc starts nothing.
 VDX_PLAIN_LIST=1 keeps the numbered list. Another
 machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
