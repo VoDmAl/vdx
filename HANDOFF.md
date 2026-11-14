@@ -9,7 +9,7 @@
 ## Где мы (2026-10-22)
 
 - **CLI** `@vodmal/vdx-cli@0.55.1` — в npm с 2026-11-13 (`9b348a4`), Node 22 и
-  новее; на m3 и lft — 0.55.1 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.5.
+  новее; на m3 и lft — 0.55.1 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.6 (2026-11-13: текст хука темы по первому разбору, `focused-topic` DL #8).
 - **Сет** `vdx-rubric-vodmal@v1.15.1` (schema 0.3; v1.15.1, 2026-11-13, — `echelon-ref-race` через обёртку echelon; v1.15.0, 2026-11-13, — хук `echelon-ref-race` в `git.hooks`; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
