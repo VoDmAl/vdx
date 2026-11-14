@@ -4,6 +4,14 @@
 
 ## 2026-11-13
 
+### После перезапуска cmux строка `cmux restore --surface` больше не уходит в ввод агента
+
+cmux 0.65 сам возвращает вкладку с `tmux attach`, печатая в неё `cmux restore --surface`, а `vdx ai --tab` из блока zsh
+подключал tmux раньше — и строка cmux попадала в поле ввода Claude. Теперь `--tab` оставляет cmux местную вкладку, у
+которой в снимке cmux есть возврат в ту же сессию; вкладки `vdx ai@<машина>` возвращает по-прежнему сам, а метка
+`@vdx_tab` хранит метки всех вкладок сессии (письмо nas-info `cmux-restore-typed-into-claude`;
+[vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md), DL #26).
+
 ### Фокус-сессия шага закрывает себя; `--focused --detach` не спрашивает о другой машине
 
 HQ echelon запускает шаги кода фокус-сессиями с `--detach`, и закончившие висели: `--close` знал только сессию

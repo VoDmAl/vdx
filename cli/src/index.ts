@@ -214,7 +214,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 <CMUX_SURFACE_ID>.json and drops the note when the attach ends;
                 gone down with cmux, it leaves it. A session on another machine
                 (vdx ai@<host>) is found there by the mark @vdx_tab. No note: nothing,
-                exit 0; the session not running: exit 4, the note stays (0.53)
+                exit 0; the session not running: exit 4, the note stays (0.53). A
+                tab cmux brings back into the same session itself (cmux 0.65 types
+                "cmux restore --surface" into it) is left to cmux (0.56)
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,

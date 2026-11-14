@@ -41,6 +41,41 @@ export function cmuxToken(env: NodeJS.ProcessEnv): string | null {
   return cmuxHere(env) ? randomBytes(6).toString('hex') : null;
 }
 
+/** cmux's snapshot of its windows: what it brings back when it starts again. */
+function cmuxSnapshotPath(home: string): string {
+  return path.join(home, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json');
+}
+
+/**
+ * The tmux session cmux itself brings the tab `surface` back into, when it starts again; null — none.
+ * cmux 0.65 notices `tmux attach` in a tab and keeps it as the tab's resume binding
+ * (`"kind": "tmux", "autoResume": true, "source": "process-detected", "checkpointId": "=<session>"`); at its
+ * start it types `cmux restore --surface` into the tab, which runs that attach (vdx-ai-predictable Sidetrack #17).
+ * Read from the snapshot: the socket, which `cmux surface resume get` needs, lets in only cmux's own processes.
+ */
+export function cmuxResumesInto(surface: string, home: string = os.homedir()): string | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(fs.readFileSync(cmuxSnapshotPath(home), 'utf8'));
+  } catch {
+    return null;
+  }
+  const list = (v: unknown): Record<string, unknown>[] =>
+    Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : [];
+  const obj = (v: unknown): Record<string, unknown> =>
+    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+  for (const w of list(obj(data)['windows']))
+    for (const ws of list(obj(w['tabManager'])['workspaces']))
+      for (const panel of list(ws['panels'])) {
+        if (panel['id'] !== surface) continue;
+        const b = obj(obj(panel['terminal'])['resumeBinding']);
+        const checkpoint = b['checkpointId'];
+        if (b['kind'] !== 'tmux' || b['autoResume'] !== true || typeof checkpoint !== 'string') return null;
+        return checkpoint.replace(/^=/, '') || null;
+      }
+  return null;
+}
+
 function args(mode: 'watch' | 'clear', ws: { workspace: string; cli: string }, source: TopicSource, home: string) {
   const dir = path.join(home, '.cache', 'vdx', 'cmux');
   fs.mkdirSync(dir, { recursive: true });
@@ -54,7 +89,7 @@ function args(mode: 'watch' | 'clear', ws: { workspace: string; cli: string }, s
     '--state',
     path.join(dir, ws.workspace.replace(/[^A-Za-z0-9_-]/g, '_')),
     '--snapshot',
-    path.join(home, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json'),
+    cmuxSnapshotPath(home),
     ...('host' in source
       ? ['--host', source.host, '--token', source.token]
       : ['--session', source.session, ...(source.socket ? ['--socket', source.socket] : [])]),

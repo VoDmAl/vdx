@@ -51,7 +51,7 @@ import {
   type PersonalHost,
 } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
-import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, watchTopic } from './cmux.ts';
+import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxResumesInto, cmuxToken, watchTopic } from './cmux.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 import {
   currentServer,
@@ -1085,6 +1085,8 @@ export interface AiDeps {
   agentMail?: (pid: number) => boolean;
   /** Is this agent process an HQ session; default: its environment (`processMode`). */
   agentHq?: (pid: number) => boolean;
+  /** The tmux session cmux brings this tab back into itself; default: its snapshot (`cmuxResumesInto`). */
+  cmuxResumesInto?: (surface: string, home: string) => string | null;
   /** Default `process.platform`: the folder check is for macOS. */
   platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
@@ -1465,6 +1467,8 @@ function startUnderWay(
 
 /** The tmux session option a `vdx ai@<host>` from a cmux tab marks its session with: `--tab` finds it by it. */
 const TAB_OPTION = '@vdx_tab';
+/** The marks a session keeps in `@vdx_tab`, newest last: one per tab that showed it. */
+const TAB_MARKS = 8;
 /** A record of a tab closed by hand stays behind (its vdx ai went down with it): after this long it goes. */
 const TAB_RECORD_DAYS = 30;
 
@@ -1554,7 +1558,13 @@ function finish(
     const token = deps.env[CMUX_TOKEN_ENV_VAR];
     if (token && /^[0-9a-f]+$/.test(token)) {
       // The tab's mark goes on any session; the topic's only where there is one — its watcher would poll for good.
-      deps.tmux.tryRun(['set-option', '-t', `=${session}:`, TAB_OPTION, token]);
+      // Two tabs may show one session: the marks are a list, or the second tab's put the first's out
+      // (`echelon@m3-hq`, 2026-11-12: its tab's mark gone, `--tab` found no session; Sidetrack #17).
+      const marks = (deps.tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, TAB_OPTION]) ?? '')
+        .trim()
+        .split(/\s+/)
+        .filter((m) => /^[0-9a-f]+$/.test(m) && m !== token);
+      deps.tmux.tryRun(['set-option', '-t', `=${session}:`, TAB_OPTION, [...marks, token].slice(-TAB_MARKS).join(' ')]);
       if (withTopic) deps.tmux.tryRun(['set-option', '-t', `=${session}:`, CMUX_TOKEN_OPTION, token]);
     }
     const attach = () => {
@@ -3339,7 +3349,7 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
     const session = out
       .split('\n')
       .map((l) => l.split('\t'))
-      .find(([, mark]) => mark === token)?.[0];
+      .find(([, marks]) => (marks ?? '').split(/\s+/).includes(token))?.[0];
     if (!session) {
       log(
         `✗ no tmux session on ${hostLabel(deps.env)} carries this tab's mark — it may have gone with the tmux server`,
@@ -3363,6 +3373,12 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
         'this tab tries again in its next shell',
     );
     return EXIT_LAUNCH_FAILED;
+  }
+  // cmux 0.65 brings a tab with a local `tmux attach` back itself: it types `cmux restore --surface` into it.
+  // Attached first, that line went into the agent's input (vdx-ai-predictable Sidetrack #17).
+  if ((deps.cmuxResumesInto ?? cmuxResumesInto)(surface, deps.home) === record.session) {
+    log(`↩ ${record.session}: cmux brings this tab back into it itself`);
+    return EXIT_OK;
   }
   log(`↩ ${record.session}: back into the session this tab showed`);
   const pane = here.tmux.tryRun(['display-message', '-p', '-t', `=${record.session}:`, '#{pane_id}'])?.trim() ?? '';

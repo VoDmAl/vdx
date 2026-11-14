@@ -2694,6 +2694,46 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(inner.attached).toEqual([{ session, noted: null }]);
     }, 30_000);
 
+    it('a tab cmux brings back into the same session itself: --tab leaves it to cmux (Sidetrack #17)', () => {
+      fs.mkdirSync(tabRecordDir(base), { recursive: true });
+      fs.writeFileSync(record('SURF-4'), JSON.stringify({ kind: 'here', surface: 'SURF-4', session, socket, at: 1 }));
+      // The snapshot's own shape (m3, cmux 0.65.0, 2026-11-13): the panel's id is the tab's CMUX_SURFACE_ID.
+      const snap = path.join(base, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json');
+      const panel = (id: string, checkpointId: string) => ({
+        id,
+        stableSurfaceId: 'STABLE',
+        terminal: {
+          resumeBinding: {
+            autoResume: true,
+            checkpointId,
+            command: `'tmux' 'attach' '-t' '${checkpointId}'`,
+            kind: 'tmux',
+            source: 'process-detected',
+          },
+        },
+      });
+      const writeSnap = (checkpointId: string) => {
+        fs.mkdirSync(path.dirname(snap), { recursive: true });
+        fs.writeFileSync(
+          snap,
+          JSON.stringify({ windows: [{ tabManager: { workspaces: [{ panels: [panel('SURF-4', checkpointId)] }] } }] }),
+        );
+      };
+      writeSnap(`=${session}`);
+      const { t, attached } = terminal('SURF-4');
+      logs = [];
+      expect(runAiTab('.', inTab('SURF-4', t))).toBe(EXIT_OK);
+      expect(attached).toEqual([]);
+      expect(logs.join('\n')).toContain(`↩ ${session}: cmux brings this tab back into it itself`);
+
+      // cmux would bring it into another session: vdx goes back into its own, as before.
+      writeSnap('=other@testhost');
+      const own = terminal('SURF-4');
+      expect(runAiTab('.', inTab('SURF-4', own.t))).toBe(EXIT_OK);
+      expect(own.attached.map((a) => a.session)).toEqual([session]);
+      fs.rmSync(path.join(base, 'Library'), { recursive: true, force: true });
+    }, 30_000);
+
     it('gone down with cmux, the note stays: --tab goes back into that session, then drops it', () => {
       fs.mkdirSync(tabRecordDir(base), { recursive: true });
       fs.writeFileSync(record('SURF-2'), JSON.stringify({ kind: 'here', surface: 'SURF-2', session, socket, at: 1 }));
@@ -2730,6 +2770,10 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       const option = (o: string) => tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, o])?.trim();
       expect(option('@vdx_tab')).toBe('abc123');
       expect(option('@vdx_cmux')).toBe(''); // no topic: the topic's watcher has nothing to poll for
+      // A second tab on the same session: both marks stay, the first tab still finds its session.
+      const second = terminal();
+      expect(runAi({ ...opts, path: root }, inTab(null, second.t, { VDX_AI_CMUX: 'def456' }))).toBe(EXIT_OK);
+      expect(option('@vdx_tab')).toBe('abc123 def456');
       const back = terminal();
       expect(runAiTab('/somewhere', inTab(null, back.t, { VDX_AI_CMUX: 'abc123' }))).toBe(EXIT_OK);
       expect(back.attached.map((a) => a.session)).toEqual([session]);
