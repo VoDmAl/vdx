@@ -1317,14 +1317,18 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
 ответивших; не ответила машина, где разговор шёл последним, или там vdx без поля — состояние неизвестно, и строка это
 говорит.
 
-**Status:** open — 2026-11-13: код и тесты, DL #27; ждёт выпуска CLI 0.57.0 и итога nas-info
+**Status:** resolved — 2026-11-14: CLI 0.57.0 (`0e51fcb`) в npm, m3 и lft — 0.57.0; на выпущенном (m3)
+`vdx ai --list` в t23b-content — 02ca182f и b9f7c508 «left after a look»; итог nas-info
+`picker-mtime-and-dismiss-shipped` отправлен
 
 ## Next actions
 
-- [ ] Первым — выпуск CLI 0.57.0 с «left after a look» (DL #27, коммит 2026-11-13 после `5b55508`): сам
+- [x] Первым — выпуск CLI 0.57.0 с «left after a look» (DL #27, коммит 2026-11-13 после `5b55508`): сам
       `vdx publish minor --dry-run`, строка `vdx publish minor` владельцу в отдельный терминал; станции m3 и lft
       (`npm update -g --prefer-online`, по одной); итог nas-info — `reply picker-mtime-and-dismiss --slug
-      picker-mtime-and-dismiss-shipped` с версией; HANDOFF — строка CLI и «Прежние»; пункт Sidetrack #18 ниже — `[x]`
+      picker-mtime-and-dismiss-shipped` с версией; HANDOFF — строка CLI и «Прежние»; пункт Sidetrack #18 ниже — `[x]` —
+      2026-11-14: npm 0.57.0, коммит выпуска `0e51fcb`, `main` и тег `v0.57.0` на GitHub, CI зелёный; m3 и lft —
+      0.57.0; итог nas-info отправлен (их сессия простаивала 7 мин — не будил, дойдёт строкой)
 
 Вопросы владельцу (в чате 2026-10-30); ответы — записями в Decision Log:
 
@@ -1441,9 +1445,12 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
       нового клиента `VDX_AI_SEAT=lft`, список на lft — «open here»; срока нет
       (`echelon@m3-8`, `echelon@m3-2`: их терминалы несут `VDX_AI_SEAT=m3`) и проверить, что список зовёт их
       «open here» с lft
-- [ ] `--dry-run`, который подключается к идущему агенту, пишет «session: tmux; a new session is named "<её имя>"»
+- [x] `--dry-run`, который подключается к идущему агенту, пишет «session: tmux; a new session is named "<её имя>"»
       (`renderPlan` получает `freeSessionName(..)` и при `current`) — должно быть «attaches to»; замечено 2026-11-05
-      на `--focused '<тема>' --dry-run`, было и раньше
+      на `--focused '<тема>' --dry-run`, было и раньше — 2026-11-14: строка `session:` идёт по веткам старта
+      (`PlanTarget`: `attaches to`, отход от профиля — вопрос, `restarts the agent in`, новая сессия или окно);
+      имя новой — от всех идущих, как у старта (было `alongside ? running : []`); тесты в `ai.test.ts` (230/230),
+      `environment-format.md`; в `main` к patch 0.57.1
 - [ ] Sidetrack #7: `--focused` без темы не предлагает идущие focused-сессии — с `always_list` их видно только
       в списке голого старта; решить, нужно ли (слово владельца «метчился в сессию с ключами»)
 - [x] Sidetrack #8.1: `shellQuote` берёт в кавычки слово с `=` в начале; тест; коммит — письмо space-hq закрыть
@@ -1544,9 +1551,9 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
 - [ ] DL #26 вживую: при ближайшем перезапуске cmux — поле ввода Claude во вкладках пустое, местные вкладки в своих
       сессиях (вернул cmux), вкладки `vdx ai@<станция>` вернул `--tab`; срока нет — when: письмо nas-info о
       перезапуске (их мяч) или слово владельца; check: `/vdm:intercom check`, затем снимок cmux и `tmux list-clients`
-- [ ] см. Sidetrack #18 — список: разговор, где после перерыва больше суток набран `/clear`, — «оставлен после
+- [x] см. Sidetrack #18 — список: разговор, где после перерыва больше суток набран `/clear`, — «оставлен после
       просмотра», не `unfinished`; другая машина — по ssh в `--report`; итог nas-info `reply` на `picker-mtime-and-dismiss`
-      — 2026-11-13: код и тесты (DL #27); осталось: выпуск 0.57.0, станции, итог nas-info с версией
+      — 2026-11-13: код и тесты (DL #27); 2026-11-14: 0.57.0, станции, итог nas-info `picker-mtime-and-dismiss-shipped`
 
 ## References
 

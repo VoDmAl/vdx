@@ -1205,13 +1205,32 @@ export const EXIT_LAUNCH_FAILED = 4;
  */
 const NOTHING_TO_RESUME_MS = 30_000;
 
+/** Where a start goes in tmux: the agent it attaches to, the pane it restarts, or a place of its own. */
+type PlanTarget =
+  | { kind: 'attach'; session: string; drift: boolean }
+  | { kind: 'restart'; session: string; paneId: string }
+  | { kind: 'new'; session: string; window: boolean };
+
+function targetLine(t: PlanTarget): string {
+  switch (t.kind) {
+    case 'attach':
+      return t.drift
+        ? `"${t.session}" runs off the profile — at a terminal it asks: as is, or a restart; without one nothing is done`
+        : `attaches to "${t.session}"`;
+    case 'restart':
+      return `restarts the agent in "${t.session}" ${t.paneId}`;
+    case 'new':
+      return t.window ? `a new window in "${t.session}"` : `a new session is named "${t.session}"`;
+  }
+}
+
 function renderPlan(
   plan: LaunchPlan,
   multiplexer: Multiplexer,
   running: AgentPane[],
   focusedOf: (pid: number) => boolean,
-  /** The session a start would make: next to running agents, one of its own. */
-  session: string,
+  /** Where the start goes — what the start itself does, not a name it would make anyway. */
+  target: PlanTarget,
   /** The project's agents this start leaves alone, each with what it is. */
   aside: { pane: PaneInfo; what: string }[] = [],
   topic: Topic | null = null,
@@ -1239,9 +1258,7 @@ function renderPlan(
     );
   for (const c of plan.confirm) lines.push(`  confirm:  "${c.screen}" → ${c.keys.join(' ')}`);
   lines.push(
-    multiplexer === 'tmux'
-      ? `  session:  tmux; a new session is named "${session}"`
-      : '  session:  this terminal (no tmux)',
+    multiplexer === 'tmux' ? `  session:  tmux; ${targetLine(target)}` : '  session:  this terminal (no tmux)',
   );
   if (multiplexer === 'tmux') {
     if (running.length === 0) lines.push('  running:  —');
@@ -4293,17 +4310,19 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
         : multiplexer === 'tmux'
           ? chooseTopic(opts, plan, deps, current, false)
           : { text: null, from: 'none: a topic lives in the tmux session, and this start has none' };
-    deps.out(
-      renderPlan(
-        plan,
-        multiplexer,
-        running,
-        focusedOf,
-        freeSessionName(plan.sessionName, alongside ? running : [], viewedElsewhere(tmux, deps.env)),
-        asideWords,
-        topic,
-      ),
-    );
+    // The same branches as the start below: an agent it attaches to, one it restarts, or a place of
+    // its own. The plan used to name a new session for an agent it attaches to (2026-11-05).
+    let target: PlanTarget;
+    if (current && !opts.restart && !(reused && plan.focused)) {
+      const unfocused = plan.focused && !runningFocused;
+      const drift = unfocused || missingArgs(current.proc.args, plan.args).length > 0;
+      target = { kind: 'attach', session: current.pane.session, drift };
+    } else if (current) target = { kind: 'restart', session: current.pane.session, paneId: current.pane.paneId };
+    else {
+      const name = freeSessionName(plan.sessionName, running, viewedElsewhere(tmux, deps.env));
+      target = { kind: 'new', session: name, window: multiplexer === 'tmux' && tmux.hasSession(name) };
+    }
+    deps.out(renderPlan(plan, multiplexer, running, focusedOf, target, asideWords, topic));
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
     for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);

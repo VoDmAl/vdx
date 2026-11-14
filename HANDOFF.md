@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.56.1` — в npm с 2026-11-13 (`b7deab9`), Node 22 и
-  новее; на m3 и lft — 0.56.1 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.7 (2026-11-13: скилл `vdx-ai` — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
+- **CLI** `@vodmal/vdx-cli@0.57.0` — в npm с 2026-11-14 (`0e51fcb`), Node 22 и
+  новее; на m3 и lft — 0.57.0 с 2026-11-14 (`npm update -g --prefer-online`); плагин 0.15.7 (2026-11-13: скилл `vdx-ai` — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
 - **Сет** `vdx-rubric-vodmal@v1.15.1` (schema 0.3; v1.15.1, 2026-11-13, — `echelon-ref-race` через обёртку echelon; v1.15.0, 2026-11-13, — хук `echelon-ref-race` в `git.hooks`; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -96,12 +96,14 @@
 
 Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
 ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
-В `main` к выпуску minor 0.57.0: «left after a look» в списке `vdx ai` и поле `history` в `--report`
-(`vdx-ai-predictable` DL #27, Sidetrack #18).
+В `main` к выпуску patch 0.57.1: план `vdx ai --dry-run` называет, куда пойдёт старт (`attaches to`, `restarts the
+agent in`, новая сессия или окно), — `vdx-ai-predictable`, пункт 2026-11-05.
 `vdx push`, который ждёт доезда ветки до коммита, — кристалл [vdx-push-waits](docs/tasks/vdx-push-waits/workitem.md)
 (форма команды — слово владельца).
 
-Прежние: 0.56.1 (2026-11-13, `b7deab9`) — `vdx ai --tab` оставляет cmux 0.65 местную вкладку, которую он возвращает
+Прежние: 0.57.0 (2026-11-14, `0e51fcb`) — «left after a look» в списке `vdx ai`: `/clear` больше чем через сутки после
+последнего набранного; поле `history` в `--report` (`vdx-ai-predictable` DL #27, Sidetrack #18, письмо nas-info
+`picker-mtime-and-dismiss`, итог отправлен). 0.56.1 (2026-11-13, `b7deab9`) — `vdx ai --tab` оставляет cmux 0.65 местную вкладку, которую он возвращает
 сам; `@vdx_tab` — список меток (`vdx-ai-predictable` DL #26, письмо nas-info `cmux-restore-typed-into-claude`,
 итог отправлен). 0.56.0 (2026-11-13, `94b7a70`) — `vdx ai --close` закрывает и фокус-сессию, которую не запускал и не
 подключал человек; `--focused --detach` не спрашивает о другой машине, отказ без терминала называет причину

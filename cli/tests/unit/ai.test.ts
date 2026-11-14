@@ -1777,6 +1777,10 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain('already running with the profile');
     expect(tmux.panes()).toHaveLength(1);
+    // The plan says what the start does: it attaches, and names no new session.
+    logs = [];
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('session:  tmux; attaches to "proj@testhost"');
   });
 
   it('reports drift and leaves the running agent alone without --restart', () => {
@@ -1785,6 +1789,11 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_DRIFT);
     expect(logs.join('\n')).toContain('running without --extra');
     expect(agentArgs()).toEqual(before);
+    logs = [];
+    expect(runAi({ ...opts, path: root, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(
+      'session:  tmux; "proj@testhost" runs off the profile — at a terminal it asks: as is, or a restart',
+    );
   });
 
   it('in a terminal, asks on drift: Enter takes the agent as it runs, q leaves it', () => {
@@ -1917,9 +1926,14 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
         .split('\n');
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
 
-    expect(
-      runAi({ ...opts, path: root, fresh: true }, { ...deps(), tmux: seen([{ session: 'proj@testhost', pid: 1 }]) }),
-    ).toBe(EXIT_OK);
+    const shown = { ...deps(), tmux: seen([{ session: 'proj@testhost', pid: 1 }]) };
+    expect(runAi({ ...opts, path: root, fresh: true, dryRun: true }, shown)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('session:  tmux; a new session is named "proj@testhost-2"');
+    logs = [];
+    expect(runAi({ ...opts, path: root, fresh: true, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('session:  tmux; a new window in "proj@testhost"');
+    expect(agents()).toEqual([]);
+    expect(runAi({ ...opts, path: root, fresh: true }, shown)).toBe(EXIT_OK);
     expect(agents().map((a) => a.pane.session)).toEqual(['proj@testhost-2']);
     expect(windows('proj@testhost')).toEqual([shell]);
 
@@ -1940,6 +1954,10 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   it('--restart --new replaces the agent in the same pane with a new conversation', () => {
     writeProfile(['--base', '--extra']);
     const paneBefore = tmux.panes().map((p) => p.paneId);
+    // The agent's pane: the session may hold a shell beside it.
+    const agentPane = findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent')[0]!.pane.paneId;
+    expect(runAi({ ...opts, path: root, restart: true, fresh: true, dryRun: true }, deps())).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`session:  tmux; restarts the agent in "proj@testhost" ${agentPane}`);
     expect(runAi({ ...opts, path: root, restart: true, fresh: true }, deps())).toBe(EXIT_OK);
     expect(tmux.panes().map((p) => p.paneId)).toEqual(paneBefore);
     expect(agentArgs()).toHaveLength(1);
