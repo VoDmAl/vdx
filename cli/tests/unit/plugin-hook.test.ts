@@ -196,7 +196,7 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
     // The first review (focused-topic, 2026-11-13): «что дальше» and «закрываем? wrap?» were marked off the
     // topic; the agent put 🎯 on its own finds and on letters, and twice in one answer.
     expect(text).toContain('a question about this session itself (what next, what is left, whether to wrap it up)');
-    expect(text).toContain('The 🎯 line answers a message of the user\'s, once per answer');
+    expect(text).toContain("The 🎯 line answers a message of the user's, once per answer");
     expect(text).not.toContain('--new');
     expect(r.stdout).toContain('"hookEventName":"UserPromptSubmit"');
     expect(calls()).toBe('tmux -u display-message -p -t %7 #{@vdx_topic}\n');
