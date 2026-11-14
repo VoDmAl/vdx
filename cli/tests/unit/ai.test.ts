@@ -1243,12 +1243,22 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(logs).toContain('an agent of this project is running on m3 now (pid 10984, idle)');
     });
 
-    it('…without a terminal nothing starts', () => {
+    it('…without a terminal nothing starts, and the line says why', () => {
       remoteLive = [agentOnM3(root)];
       answers = ['should not be read'];
       expect(runAi({ ...opts, path: root, fresh: true }, deps({ interactive: false }))).toBe(EXIT_LAUNCH_FAILED);
       expect(answers).toHaveLength(1);
-      expect(text()).toContain('nothing started');
+      expect(text()).toContain(
+        'nothing started: an agent of this project runs on m3, and a new conversation here, on lft, needs a yes at a terminal',
+      );
+    });
+
+    it('--focused --detach while the project runs there: a session of its own, nobody asked — an HQ starts steps so', () => {
+      remoteLive = [agentOnM3(root)];
+      answers = ['should not be read'];
+      expect(runAi({ ...opts, path: root, focused: true, detach: true }, deps())).toBe(EXIT_OK);
+      expect(answers).toHaveLength(1);
+      expect(runs()).toEqual(['--base']);
     });
 
     it('a project without conversations here, its agent running there: attached to there (P1) — not a new one here', () => {
@@ -2298,7 +2308,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_waiting'])?.trim() ?? '';
     logs = [];
     expect(runAiClose(root, 0, { ...deps(), processes: toolOf(plain.proc.pid) }, 9_999_991)).toBe(EXIT_USAGE);
-    expect(logs.join('\n')).toContain('this is not an intercom session');
+    expect(logs.join('\n')).toContain('this is neither an intercom session');
     expect(agents()).toHaveLength(2);
 
     logs = [];
@@ -2375,7 +2385,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       { pid: 9_999_991, ppid: agentPid, args: 'node vdx ai --close' },
     ];
     expect(runAiClose(root, 0, { ...deps(), processes: toolOf(hq.proc.pid) }, 9_999_991)).toBe(EXIT_USAGE);
-    expect(logs.join('\n')).toContain('this is not an intercom session');
+    expect(logs.join('\n')).toContain('this is neither an intercom session');
     sleepSync(2_500);
     expect(agents()).toHaveLength(2);
 
@@ -2463,6 +2473,42 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAiCheck(root, inside, 9_999_991)).toBe(EXIT_OK);
     expect(logs.join('')).toContain(`${INTERCOM_LINE_PREFIX} (\`vdx ai --intercom\`)`);
     expect(logs.join('')).toContain('The user started this one, and it stays');
+  }, 60_000);
+
+  it('a focused session an HQ started with --detach ends itself with --close; one the person started stays', () => {
+    writeProfile(['--base'], true);
+    killServer(tmux);
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const stays = (session: string) => tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_stays'])?.trim();
+    const toolOf = (agentPid: number) => () => [
+      ...listProcesses(),
+      { pid: 9_999_991, ppid: agentPid, args: 'node vdx ai --close' },
+    ];
+
+    // A step an HQ started: no mark, and once its step is done it ends itself (vdx-ai-predictable Sidetrack #16).
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'step 1', detach: true }, deps())).toBe(EXIT_OK);
+    const session = 'proj@testhost';
+    expect(stays(session)).toBe('');
+    const step = agents()[0]!;
+    logs = [];
+    expect(runAiClose(root, 0, { ...deps(), processes: toolOf(step.proc.pid) }, 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('the focused session closes in 2 s');
+    sleepSync(3_000);
+    expect(agents()).toHaveLength(0);
+
+    // Started from a terminal: the person's — --close leaves it open.
+    const person = Object.create(tmux) as typeof tmux;
+    person.attach = () => 0;
+    expect(
+      runAi({ ...opts, path: root, focused: true, topic: 'mine' }, { ...deps(), interactive: true, tmux: person }),
+    ).toBe(EXIT_OK);
+    expect(stays(session)).toBe('1');
+    const own = agents()[0]!;
+    logs = [];
+    expect(runAiClose(root, 0, { ...deps(), processes: toolOf(own.proc.pid) }, 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('the user started or joined this focused session — it stays open');
+    sleepSync(3_000);
+    expect(agents().map((a) => a.proc.pid)).toEqual([own.proc.pid]);
   }, 60_000);
 
   describe('a start under way, the agent not among the processes yet', () => {

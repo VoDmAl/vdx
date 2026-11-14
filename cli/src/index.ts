@@ -155,9 +155,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 --conversation <id> brings it back to that one. Not with
                 --focused or --intercom; --close is not for it
   --close [--waiting <n>]
-                inside the intercom session: it ends itself — its pane closes 2 s
-                later; one you started or attached to from a terminal stays, and
-                only the mark changes. --waiting <n>: n questions to you still unanswered; the
+                inside the intercom session, or a focused one (0.56): it ends
+                itself — its pane closes 2 s later; one you started or attached to
+                from a terminal stays, and only the mark changes. A focused step
+                an HQ started with --detach closes once its step is done.
+                --waiting <n>: n questions to you still unanswered; the
                 project's other tmux sessions here get @vdx_waiting = n (without
                 it the mark is cleared). Anywhere else: refused, nothing closed
   --conversation <id>

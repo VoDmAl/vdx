@@ -88,7 +88,12 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   2 s later); with questions to the user still unanswered,
   `vdx ai --close --waiting <n>`. If the line says the user started this one and
   it stays, say what was done and wait for the next wake: `--close` there only
-  moves the number. Anywhere else `--close` is refused.
+  moves the number.
+- **A focused session started for a step** (an HQ's `--focused "<step>" --detach`,
+  vdx 0.56+): when whoever started it asked it to close itself once its outcome
+  went out, say what was done, then `vdx ai --close`. One the user started or
+  joined from a terminal stays: `--close` says so and leaves it. Do not close a
+  focused session nobody asked you to close. Anywhere else `--close` is refused.
 
 ## Commands
 
@@ -107,7 +112,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+), which opens a new conversation as its first prompt (vdx 0.49+); run inside the focused session by its agent — a new topic, nothing started |
 | `vdx ai --intercom [--detach] [path]` | the project's intercom session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
 | `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; `--hq` only narrows the choice — on a plain start's list it is a row whose number attaches to it as it is (vdx 0.52+), Enter and a start without a terminal leave it alone; `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one |
-| `vdx ai --close [--waiting <n>]` | inside the intercom session: it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
+| `vdx ai --close [--waiting <n>]` | inside the intercom session or a focused one (vdx 0.56+): it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |
 | `vdx ai@<host> [path]` | the same on another machine over ssh |
 | `vdx ai --help` | flags and exit codes |

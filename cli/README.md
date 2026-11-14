@@ -65,7 +65,7 @@ vdx ai --restore [--dry-run]   # every agent a fallen tmux server took down on t
 vdx ai --tab   # in a cmux tab's shell after cmux restarted: back into the session the tab showed (vdx ai notes it in ~/.local/state/vdx/cmux-tabs/ while it holds the attach)
 vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic), which opens with it as its first prompt; run by that session's agent: a new topic, nothing started
 vdx ai --hq [project-path]   # the project's HQ session, for what comes from outside (VDX_HQ=1, tmux session <name>-hq, first prompt agent.hq_args): one per project and machine, you keep it running; --hq only narrows the choice: a plain start's list numbers it (0.52), Enter and a start without a terminal leave it; --restore brings it back
-vdx ai --close [--waiting <n>]   # inside the intercom session: it ends itself (one you started or attached to from a terminal stays); n questions to you still unanswered show on the project's other tmux sessions
+vdx ai --close [--waiting <n>]   # inside the intercom session or a focused one (0.56): it ends itself (one you started or attached to from a terminal stays); n questions to you still unanswered show on the project's other tmux sessions
 vdx ai --check [project-path]   # this session against the profile and the installed Claude Code and plugins — what the plugin's SessionStart hook tells the agent
 vdx ai --state [project-path] [--conversation <id>]   # the tmux option @vdx_state of this agent's session (empty | finished) for the cmux sidebar — the plugin's Stop hook; prints nothing
 

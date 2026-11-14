@@ -1034,14 +1034,18 @@ function setSessionTopic(tmux: Tmux, session: string, topic: string | null): boo
   );
 }
 
-/** Is this the intercom session the person started or attached to. */
+/** Is this a session the person started or attached to: `--close` leaves it open. */
 function sessionStays(tmux: Tmux, session: string): boolean {
   return tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, STAYS_OPTION])?.trim() === '1';
 }
 
-/** A start or an attach of the person's, from a terminal, marks the intercom session: it stays. */
+/**
+ * A start or an attach of the person's, from a terminal, marks the session: it stays. The intercom
+ * session and a focused one end themselves with `--close` only when nobody did — a letter or an HQ
+ * started them with `--detach` (vdx-ai-predictable Sidetrack #16); of other sessions nobody reads it.
+ */
 function markSessionStays(session: string, opts: AiOptions, deps: AiDeps): void {
-  if (opts.intercom && deps.interactive && !opts.detach) setStays(deps, session);
+  if (deps.interactive && !opts.detach) setStays(deps, session);
 }
 
 /**
@@ -3374,12 +3378,14 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
 }
 
 /**
- * `vdx ai --close [--waiting <n>]`: the intercom session ends itself — run inside it, by its
- * agent. Only the pane whose agent is this process's own ancestor and carries VDX_INTERCOM=1
- * is closed, a few seconds later: the command never ends the person's session. The project's
- * other tmux sessions here get `@vdx_waiting` = n, the questions to the person still
- * unanswered — the intercom session's tab is about to go; without `--waiting`, none, and the
- * mark is cleared: the last intercom session's word holds.
+ * `vdx ai --close [--waiting <n>]`: the intercom session, or a focused one, ends itself — run inside
+ * it, by its agent. Only the pane whose agent is this process's own ancestor and carries
+ * VDX_INTERCOM=1 or VDX_FOCUSED=1 is closed, a few seconds later; a session the person started or
+ * attached to stays (`@vdx_stays`): the command never ends the person's session. A focused one an HQ
+ * started with `--detach` for a step closes once its step is done (vdx-ai-predictable Sidetrack #16).
+ * The project's other tmux sessions here get `@vdx_waiting` = n, the questions to the person still
+ * unanswered — the session's tab is about to go; without `--waiting`, none, and the mark is cleared:
+ * the last word holds.
  */
 export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfPid: number = process.pid): number {
   const { log, tmux } = deps;
@@ -3389,9 +3395,11 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
   const procs = deps.processes();
   const own = findOwnAgent(procs, selfPid, plan.command);
   const mailOf = deps.agentMail ?? ((pid: number) => processMode(pid) === 'mail');
-  if (!own || !mailOf(own.pid)) {
+  const focusedOf = deps.agentFocused ?? processFocused;
+  const kind = !own ? null : focusedOf(own.pid) ? 'focused session' : mailOf(own.pid) ? 'intercom session' : null;
+  if (!own || !kind) {
     log(
-      `vdx ai --close: this is not an intercom session (\`vdx ai --intercom\`)` +
+      `vdx ai --close: this is neither an intercom session (\`vdx ai --intercom\`) nor a focused one (\`vdx ai --focused\`)` +
         `${own ? '' : ` — no ${plan.command} among the ancestors of this process`}; nothing closed`,
     );
     return EXIT_USAGE;
@@ -3399,9 +3407,7 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
   const panes = tmux.panes();
   const pane = panes.find((p) => processTree(procs, p.panePid).some((x) => x.pid === own.pid));
   if (!pane) {
-    log(
-      'vdx ai --close: this intercom session runs outside tmux — nothing to close here; it ends when its agent exits',
-    );
+    log(`vdx ai --close: this ${kind} runs outside tmux — nothing to close here; it ends when its agent exits`);
     return EXIT_USAGE;
   }
   const others = [
@@ -3422,14 +3428,18 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
         : `note: ${waiting} waiting for the user, and no other session of this project here to show it`,
     );
   if (sessionStays(tmux, pane.session)) {
-    log(`✓ ${pane.session} ${pane.paneId}: the user started this intercom session — it stays and waits for a wake`);
+    log(
+      kind === 'intercom session'
+        ? `✓ ${pane.session} ${pane.paneId}: the user started this intercom session — it stays and waits for a wake`
+        : `✓ ${pane.session} ${pane.paneId}: the user started or joined this focused session — it stays open`,
+    );
     return EXIT_OK;
   }
   if (tmux.tryRun(['run-shell', '-b', '-d', String(CLOSE_DELAY_S), '-C', `kill-pane -t ${pane.paneId}`]) === null) {
-    log(`✗ ${pane.session} ${pane.paneId}: tmux did not take the close — the intercom session keeps running`);
+    log(`✗ ${pane.session} ${pane.paneId}: tmux did not take the close — the ${kind} keeps running`);
     return EXIT_LAUNCH_FAILED;
   }
-  log(`✓ ${pane.session} ${pane.paneId}: the intercom session closes in ${CLOSE_DELAY_S} s`);
+  log(`✓ ${pane.session} ${pane.paneId}: the ${kind} closes in ${CLOSE_DELAY_S} s`);
   return EXIT_OK;
 }
 
@@ -4214,6 +4224,10 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
         ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
         : { args: [], lines: [] };
     }
+    // A focused session started with --detach is a new conversation of its own, and nobody is there
+    // to answer: an HQ starts one for a step while it runs on another machine itself
+    // (vdx-ai-predictable Sidetrack #16).
+    else if (plan.focused && opts.detach) choice = { args: [], lines: [] };
     // A restart into a new conversation replaces the agent here, and a new one next to an agent here
     // is what was asked for: the other machines are not asked.
     else if ((current || alongside) && plan.resumeArgs.length === 0) choice = { args: [], lines: [] };
@@ -4275,7 +4289,13 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `)
       : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
-      log('nothing started');
+      // Said with the reason: without a terminal the question above was never asked.
+      log(
+        deps.interactive
+          ? 'nothing started'
+          : `nothing started: an agent of this project runs on ${choice.elsewhere.join(', ')}, and a new conversation ` +
+              `${here}${atSeat ? ',' : ''} needs a yes at a terminal — or a session of its own: --focused "<topic>" --detach`,
+      );
       return EXIT_LAUNCH_FAILED;
     }
   }
