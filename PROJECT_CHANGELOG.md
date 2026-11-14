@@ -4,6 +4,14 @@
 
 ## 2026-11-13
 
+### Список `vdx ai`: «left after a look» — разговор, куда зашли посмотреть и сделали `/clear`
+
+Владелец зашёл в два `unfinished` разговора проверить их и набрал `/clear` — оба остались первыми, Enter вёл в них.
+`/clear` пишется только в `history.jsonl` машины, где его набрали, с id оставленного разговора. Теперь разговор, чья
+последняя запись там — `/clear` больше чем через сутки после последнего набранного, список называет `left after a
+look`, и Enter его не берёт; другая машина присылает свои отметки в `--report` (письмо nas-info
+`picker-mtime-and-dismiss`; [vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md), DL #27).
+
 ### После перезапуска cmux строка `cmux restore --surface` больше не уходит в ввод агента
 
 cmux 0.65 сам возвращает вкладку с `tmux attach`, печатая в неё `cmux restore --surface`, а `vdx ai --tab` из блока zsh

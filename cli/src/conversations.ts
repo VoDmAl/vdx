@@ -91,6 +91,12 @@ export interface Conversation {
    */
   finished: boolean;
   /**
+   * Left after a look: its last word in the machines' `history.jsonl` is `/clear`, more than a day after
+   * anything was typed in it (vdx-ai-predictable Sidetrack #18). Not finished — no wrap ran — and not
+   * taken as unfinished either. Set by `vdx ai`'s list, from every machine that answered.
+   */
+  leftAfterLook?: boolean;
+  /**
    * Run by a program through the SDK (`claude -p`, the Python or TypeScript SDK: Claude Code's
    * `entrypoint` starts with `sdk`) — a review, a hook's agent — not a conversation of the person's.
    */
@@ -310,6 +316,64 @@ export function typedHere(env: NodeJS.ProcessEnv, home: string, ids: Set<string>
     if (ids.has(m[1]!)) found.add(m[1]!);
   }
   return found;
+}
+
+/** A conversation's marks in one machine's `history.jsonl`: when anything was last typed in it, when `/clear` last left it; 0 — never. */
+export interface HistoryMarks {
+  typed: number;
+  cleared: number;
+}
+
+/**
+ * The marks of `ids` in this machine's `history.jsonl`. `/clear` is written there with the id of the
+ * conversation it leaves, and nowhere else: the transcript of that one gets no line, the new
+ * conversation's has it with no link back (nas-info, 2026-11-13). The file stays on its machine.
+ */
+export function historyMarks(env: NodeJS.ProcessEnv, home: string, ids: Set<string>): Map<string, HistoryMarks> {
+  const found = new Map<string, HistoryMarks>();
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(claudeConfigDir(env, home), 'history.jsonl'), 'utf8');
+  } catch {
+    return found;
+  }
+  for (const line of text.split('\n')) {
+    const id = line.match(/"sessionId":"([0-9a-f-]{36})"/)?.[1];
+    if (!id || !ids.has(id)) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const stamp = at(entry, 'timestamp');
+    const when = typeof stamp === 'number' ? stamp : 0;
+    const display = at(entry, 'display');
+    const marks = found.get(id) ?? { typed: 0, cleared: 0 };
+    if (typeof display === 'string' && display.trim() === '/clear') marks.cleared = Math.max(marks.cleared, when);
+    else marks.typed = Math.max(marks.typed, when);
+    found.set(id, marks);
+  }
+  return found;
+}
+
+/** More than this between the last word typed and `/clear`: the person came back to look, not left in the middle. */
+export const LOOK_GAP_MS = 86_400_000;
+
+/**
+ * Left after a look (the owner's choice, 2026-11-13): `/clear` the last word, more than a day after
+ * anything typed. Nothing typed on any machine that answered: not judged — it may all be on one that did not.
+ */
+export function isLeftAfterLook(m: HistoryMarks | undefined): boolean {
+  return !!m && m.typed > 0 && m.cleared - m.typed > LOOK_GAP_MS;
+}
+
+/** The marks of several machines, joined: the latest of each. */
+export function joinMarks(into: Map<string, HistoryMarks>, more: Iterable<[string, HistoryMarks]>): void {
+  for (const [id, m] of more) {
+    const was = into.get(id) ?? { typed: 0, cleared: 0 };
+    into.set(id, { typed: Math.max(was.typed, m.typed), cleared: Math.max(was.cleared, m.cleared) });
+  }
 }
 
 interface ProjectInput {

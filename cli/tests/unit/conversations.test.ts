@@ -25,7 +25,11 @@ import {
   claudeTrusts,
   describeAge,
   findInConversations,
+  historyMarks,
   isEmpty,
+  isLeftAfterLook,
+  joinMarks,
+  LOOK_GAP_MS,
   latestPerMachine,
   listConversations,
   LIVE_SESSIONS_SCRIPT,
@@ -324,6 +328,62 @@ describe('listConversations and the newest of each machine', () => {
 
   it('finds nothing for a project Claude Code never ran in', () => {
     expect(listConversations({ env: {}, home, projectRoot: root })).toEqual([]);
+  });
+});
+
+describe('left after a look: /clear long after the last word (vdx-ai-predictable Sidetrack #18)', () => {
+  let home: string;
+  beforeEach(() => (home = tmpDir('vdx-history-')));
+  afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  // The lines as Claude Code writes them (m3, 2026-11-13): b9f7c508 got '!sh …' on 11-09 and '/clear' on 11-13.
+  const line = (id: string, display: string, timestamp: number) =>
+    JSON.stringify({ display, pastedContents: {}, timestamp, project: '/p', sessionId: id });
+  const write = (lines: string[]) => {
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'history.jsonl'), lines.join('\n') + '\n');
+  };
+  const day = LOOK_GAP_MS;
+
+  it('the last /clear and the last of anything else, per conversation; other ids and old lines without an id left out', () => {
+    write([
+      JSON.stringify({ display: '/model ', pastedContents: {}, timestamp: 5, project: '/p' }),
+      line(ID.a, '!sh /x.sh', 1_000),
+      line(ID.a, 'Ну поставь 8:00', 2_000),
+      line(ID.a, '/clear', 2_000 + 5 * day),
+      line(ID.b, '/clear ', 10),
+      line(ID.b, 'go on', 20),
+      line(ID.c, 'not asked', 30),
+    ]);
+    const m = historyMarks({}, home, new Set([ID.a, ID.b]));
+    expect([...m]).toEqual([
+      [ID.a, { typed: 2_000, cleared: 2_000 + 5 * day }],
+      [ID.b, { typed: 20, cleared: 10 }],
+    ]);
+    expect(isLeftAfterLook(m.get(ID.a))).toBe(true);
+    // Typed after the /clear: back at work in it.
+    expect(isLeftAfterLook(m.get(ID.b))).toBe(false);
+  });
+
+  it('a /clear right after work is not a look — the wrap guards that; nothing typed anywhere is not judged', () => {
+    expect(isLeftAfterLook({ typed: 1_000, cleared: 1_000 + day - 1 })).toBe(false);
+    expect(isLeftAfterLook({ typed: 1_000, cleared: 1_000 + day + 1 })).toBe(true);
+    expect(isLeftAfterLook({ typed: 0, cleared: 5 * day })).toBe(false);
+    expect(isLeftAfterLook(undefined)).toBe(false);
+  });
+
+  it("another machine's marks join this one's: the latest of each decides", () => {
+    const here = new Map([[ID.a, { typed: 1_000, cleared: 1_000 + 3 * day }]]);
+    // Typed there after the /clear here: not left.
+    joinMarks(here, [[ID.a, { typed: 2_000 + 3 * day, cleared: 0 }]]);
+    expect(here.get(ID.a)).toEqual({ typed: 2_000 + 3 * day, cleared: 1_000 + 3 * day });
+    expect(isLeftAfterLook(here.get(ID.a))).toBe(false);
+    joinMarks(here, [[ID.b, { typed: 10, cleared: 10 + 2 * day }]]);
+    expect(isLeftAfterLook(here.get(ID.b))).toBe(true);
+  });
+
+  it('no history.jsonl: nothing', () => {
+    expect(historyMarks({}, home, new Set([ID.a])).size).toBe(0);
   });
 });
 

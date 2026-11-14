@@ -118,6 +118,13 @@ describe('buildBoard: one list, Enter marked', () => {
     expect(board([wrapped], [conv(ID.c, { finished: true })]).enter).toBe('new');
   });
 
+  it('a conversation left after a look says so, and Enter passes it by like a wrapped one (Sidetrack #18)', () => {
+    const b = board([], [conv(ID.a, { leftAfterLook: true }), conv(ID.b)]);
+    expect(b.lines.join('\n')).toContain('left after a look  t aaaa');
+    expect(b.rows[b.enter as number]).toEqual({ kind: 'conversation', conversation: conv(ID.b), machine: 'lft' });
+    expect(board([], [conv(ID.a, { leftAfterLook: true })]).enter).toBe('new');
+  });
+
   it('says how many there are and how many it shows; `a` shows the rest', () => {
     const many = [
       ID.a,

@@ -1454,6 +1454,35 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runs()).toEqual([]);
     });
 
+    it("left after a look — by the history.jsonl here, or by the other machine's report — and Enter passes them by", () => {
+      withWrap();
+      conv(ID.a, 'lft', 30);
+      conv(ID.b, 'lft', 40);
+      const day = 86_400_000;
+      const now = Date.now();
+      // Here: typed in ID.a five days ago, `/clear` in it now — the owner's look (Sidetrack #18).
+      fs.writeFileSync(
+        path.join(home, 'cc', 'history.jsonl'),
+        [
+          { display: 'go on', timestamp: now - 5 * day, sessionId: ID.a },
+          { display: '/clear', timestamp: now - 60_000, sessionId: ID.a },
+        ]
+          .map((e) => JSON.stringify({ pastedContents: {}, project: root, ...e }))
+          .join('\n') + '\n',
+      );
+      // There: ID.b was typed in on m3 three days ago and cleared there now; an older vdx would send no history.
+      answers = [''];
+      const d = report({
+        history: [{ id: ID.b, typed: now - 3 * day, cleared: now - 120_000 }],
+      });
+      expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+      expect(text()).toMatch(/lft +30 min ago +left after a look/);
+      expect(text()).toMatch(/lft +40 min ago +left after a look/);
+      expect(text()).not.toContain('unfinished');
+      // Enter: neither is continued — a new conversation.
+      expect(runs()).toEqual(['--base']);
+    });
+
     it('`a` shows every conversation; n starts a new one', () => {
       withWrap();
       remoteLive = [];

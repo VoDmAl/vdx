@@ -37,6 +37,10 @@ import {
   liveSessionFile,
   pidAlive,
   typedHere,
+  historyMarks,
+  isLeftAfterLook,
+  joinMarks,
+  type HistoryMarks,
   parseMachineReport,
   runsInProject,
   topicLine,
@@ -1897,6 +1901,8 @@ export interface RemoteReport {
   agents: AgentFact[];
   typed: string[];
   transcripts: { id: string; mtime: number; size: number }[];
+  /** This machine's history.jsonl on the project's conversations (vdx 0.57+): an older vdx sends none. */
+  history?: ({ id: string } & HistoryMarks)[];
 }
 
 /** What another machine answered: always the live sessions; the report when its vdx gives one. */
@@ -2097,6 +2103,7 @@ export function runAiReport(pathArg: string, deps: AiDeps): number {
       hq: hqOf(deps),
     }),
     typed: [...typedHere(deps.env, deps.home, ids)],
+    history: [...historyMarks(deps.env, deps.home, ids)].map(([id, m]) => ({ id, ...m })),
     transcripts: files.map((f) => ({ id: path.basename(f.file, '.jsonl'), mtime: f.updated.getTime(), size: f.size })),
   };
   deps.out(JSON.stringify(report) + '\n');
@@ -2142,8 +2149,8 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
       ? []
       : listConversations({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, wrapSkills });
   // Nor a program's run through the SDK: nobody sits at it.
-  const all = listed.filter(isPersons);
-  const asideCount = listed.length - all.length;
+  const persons = listed.filter(isPersons);
+  const asideCount = listed.length - persons.length;
   const hqCount = listed.filter((c) => c.hq).length;
   const whose =
     hqCount === 0
@@ -2159,13 +2166,26 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
 
   // Who runs what right now: this machine from its session files, the others over ssh.
   const reach = new Map<string, Reach | null>();
-  for (const m of [...plan.machines, ...all.map((c) => c.machine)]) {
+  for (const m of [...plan.machines, ...persons.map((c) => c.machine)]) {
     if (m && !same(m, host) && ![...reach.keys()].some((k) => same(k, m)))
       reach.set(m, askMachine(m, deps, plan.projectRoot));
   }
+  // Left after a look (Sidetrack #18): `/clear` is in the history.jsonl of the machine it was typed on,
+  // and that file is not synced — this machine's, and the others' from their reports.
+  const marks = historyMarks(deps.env, deps.home, new Set(persons.map((c) => c.id)));
+  for (const [, r] of reach)
+    if (r?.report?.history)
+      joinMarks(
+        marks,
+        r.report.history.map((h) => [h.id, h]),
+      );
+  const all = persons.map((c) => (!c.finished && isLeftAfterLook(marks.get(c.id)) ? { ...c, leftAfterLook: true } : c));
   const silent = [...reach]
     .filter(([, r]) => r === null)
-    .map(([m]) => `note: ${m} does not answer over ssh — what runs there is not known`);
+    .map(
+      ([m]) =>
+        `note: ${m} does not answer over ssh — what runs there is not known, nor which of its conversations were left after a look`,
+    );
   const elsewhere = [...reach].flatMap(([m, r]) =>
     (r?.sessions ?? []).filter((l) => runsInProject(l, r!.home, plan.projectRoot, deps.home)).map((l) => ({ m, l })),
   );
@@ -2648,7 +2668,7 @@ function boardStart(
       const m = machineOf(c);
       return m !== null && sameMachine(m, plan.host) && !k.runsHere(c);
     });
-    const mineConv = ours.find((c) => !c.finished) ?? ours[0];
+    const mineConv = ours.find((c) => !c.finished && !c.leftAfterLook) ?? ours[0];
     const chosenAt = mineConv?.updated ?? new Date(0);
     const notes: string[] = [];
     for (const a of [...outside, ...there].filter((x) => !x.mail && !x.hq)) {
@@ -2729,7 +2749,7 @@ function boardStart(
         ...k.silent,
       ]);
     const m = machineOf(newest);
-    if (m && sameMachine(m, plan.host) && !newest.finished && !behind.has(newest.id))
+    if (m && sameMachine(m, plan.host) && !newest.finished && !newest.leftAfterLook && !behind.has(newest.id))
       return outcomeOf({ kind: 'conversation', conversation: newest, machine: m }, k.silent);
   }
 

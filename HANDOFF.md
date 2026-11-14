@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.56.0` — в npm с 2026-11-13 (`94b7a70`), Node 22 и
-  новее; на m3 и lft — 0.56.0 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.7 (2026-11-13: скилл `vdx-ai` — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
+- **CLI** `@vodmal/vdx-cli@0.56.1` — в npm с 2026-11-13 (`b7deab9`), Node 22 и
+  новее; на m3 и lft — 0.56.1 с 2026-11-13 (`npm update -g --prefer-online`); плагин 0.15.7 (2026-11-13: скилл `vdx-ai` — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
 - **Сет** `vdx-rubric-vodmal@v1.15.1` (schema 0.3; v1.15.1, 2026-11-13, — `echelon-ref-race` через обёртку echelon; v1.15.0, 2026-11-13, — хук `echelon-ref-race` в `git.hooks`; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -58,6 +58,7 @@
 | [focused-topic](docs/tasks/focused-topic/workitem.md) | done 2026-11-13 | тема focused-сессии: `vdx ai --focused "<тема>"`, опция tmux `@vdx_topic`, хук темы плагина, описание workspace cmux, письма по теме у intercom; первый разбор ложных срабатываний — DL #8 (23 из 847 помечены, 14 верно), текст хука — плагин 0.15.6; способ разбора — `environment-format.md`, «Тема focused-сессии» |
 | [vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md) | in-progress с 2026-10-30 | предсказуемый `vdx ai` (просьба владельца 2026-10-30): молча — три случая, иначе один список агентов всех машин и разговоров с состоянием (черновик, пустая после `/clear`, закончена wrap) и чей терминал их показывает; Enter не берёт открытую с этого места; `--list`, `--report` другой машины, пустая сессия под `--new`/`--focused` — выпуск 1: CLI 0.44.0, плагин 0.12.0, сет v1.10.0 (`session.wrap_skills`), исправления живой проверки — 0.44.1 (DL #7); поиск по фразе с экрана (`/фраза`, `--find`) — выпуск 2, CLI 0.45.0 (DL #8), владелец пробует `/фраза` в терминале; восстановление после падения tmux (запись хуком, `r` в списке, `--restore`) — выпуск 3, CLI 0.46.0, плагин 0.13.0, сет v1.11.0 (`session.restore_all`), DL #9, #10 — 2026-11-01; письмо nas-info `restore-after-tmux-falls`: `--restore` из их `tmux-server.sh` берут (срока нет), tmux 3.8 — позже; вкладки возвращает `vdx ai` — выпуск 4, часть 1, CLI 0.47.0 (DL #11); запись и агентам, запущенным до 0.46, — CLI 0.49.3 (DL #12); значки сайдбара: `@vdx_state` (`empty`/`finished`) — CLI 0.50.0, плагин 0.15.0 (DL #13), приняты владельцем на m3 и lft 2026-11-10 (Sidetrack #4); список со значками сайдбара и машин, `--focused "<тема>"` берёт свою сессию, `session.always_list` (временно всегда список), команды в `--list` — CLI 0.51.0, набор v1.13.0 (Sidetrack #7, DL #14); дальше P2+ (выпуск 4) |
 | [claude-memory-in-project](docs/tasks/claude-memory-in-project/workitem.md) | in-progress с 2026-10-29 (`vdx move` — любой перенос и пауза Syncthing, DL #19–#22, в 0.42.0) | память агента в `.claude/memory/` проекта (письмо nas-info): `memory.ts`, `vdx doctor --fix`, вопрос в `vdx ai`, перенос папки — в 0.37.0; сет v1.7.0 (`git.personal_hosts`); 0.37.1; память 34 проектов перенесена (2026-10-23); сторож коммита памяти (DL #11, #12) — в 0.38.0, хук `vdx-memory` на lft и m3 (сет v1.8.0); в 0.39.0: заметки старых сессий после переноса, второй клон, доверие к папке (DL #13, Sidetracks #2, #4, #5); идущие сессии перезапущены (2026-10-24); в 0.39.1: общая память клонов одного репо — не предупреждение (DL #14); в 0.39.2: старый путь по ссылке — тоже перенос (DL #15); коммиты памяти в личных репо — 8 из 8 (2026-10-25); nas-info: ссылки на старых корнях останутся, даты смены корня нет — к ней скрипт `--fix` (Sidetrack #6), профиль не меняется; перенос папки — `vdx move` в 0.40.0 (DL #17, #18), живьём на двух станциях; открыт до переноса папок (у владельца) и скрипта к смене корня — решение владельца 2026-10-27 (DL #16); ждём nas-info о паузе Syncthing |
+| [vdx-push-waits](docs/tasks/vdx-push-waits/workitem.md) | in-progress с 2026-11-13 | коммит из папки Syncthing не ложится на старую вершину: хук `echelon-ref-race` через обёртку echelon — сет v1.15.1; открыто: перепись хука на станциях (nas-info), форма команды с ожиданием (слово владельца) |
 | [hosting-extension](docs/tasks/hosting-extension/workitem.md) | done 2026-10-22 | `branch-protection` L3 — GitHub (0.29.0), GitLab (0.33.0), Bitbucket Server (0.34.0); vdx под гейтом, общий L4; отвергнутый вход Bitbucket — причина с командой (0.36.0); отложен gitolite (Sidetrack #1) |
 | [vdx-dogfooding](docs/tasks/vdx-dogfooding/workitem.md) | dormant с 2026-10-14 | цель достигнута (общий L2, оси, кроме `branch-protection`, — L4, CLI 0.28.0); побеги #7 и #8 ждут повода; что будит — «Текущая модель» |
 | [vdx-ai](docs/tasks/vdx-ai/workitem.md) | dormant | отставшая сессия — `✗` в `vdx ai --check` (DL #37, Sidetrack #24) — в 0.35.0 с 2026-10-22; Sidetrack #23 (сервер tmux после прерванных тестов) закрыт 2026-10-24 — открытых пунктов нет |
@@ -89,18 +90,20 @@
   (письмо `husky-hooks-yarn4-merged`); `git-hygiene` limeflow после этого не перемерен.
 - **nas-info** — переписать хук `echelon-ref-race` на форму сета v1.15.1 (`vdx doctor --fix` на lft и m3; v1.15.0
   там уже стоит и при падении echelon останавливает git) — бриф им шлёт echelon после итога vdx
-  `ref-race-hook-via-wrapper`; fzf в наборе станций (`vdx-ai-predictable`, DL #23).
+  `ref-race-hook-via-wrapper` (кристалл `vdx-push-waits`); fzf в наборе станций (`vdx-ai-predictable`, DL #23).
 
 ### Следующий выпуск CLI
 
 Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
 ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
-Ждут работы — `vdx-ai-predictable` Sidetracks #17 (строка cmux в вводе Claude: причина найдена, ход — слово
-владельца) и #18 (`/clear` после просмотра).
-`vdx push`, который ждёт доезда ветки до коммита (письмо echelon `vdx-push-waits`, п. 1): владелец 2026-11-13 —
-сначала только хук, форма команды — его слово, срока нет.
+В `main` к выпуску minor 0.57.0: «left after a look» в списке `vdx ai` и поле `history` в `--report`
+(`vdx-ai-predictable` DL #27, Sidetrack #18).
+`vdx push`, который ждёт доезда ветки до коммита, — кристалл [vdx-push-waits](docs/tasks/vdx-push-waits/workitem.md)
+(форма команды — слово владельца).
 
-Прежние: 0.56.0 (2026-11-13, `94b7a70`) — `vdx ai --close` закрывает и фокус-сессию, которую не запускал и не
+Прежние: 0.56.1 (2026-11-13, `b7deab9`) — `vdx ai --tab` оставляет cmux 0.65 местную вкладку, которую он возвращает
+сам; `@vdx_tab` — список меток (`vdx-ai-predictable` DL #26, письмо nas-info `cmux-restore-typed-into-claude`,
+итог отправлен). 0.56.0 (2026-11-13, `94b7a70`) — `vdx ai --close` закрывает и фокус-сессию, которую не запускал и не
 подключал человек; `--focused --detach` не спрашивает о другой машине, отказ без терминала называет причину
 (`vdx-ai-predictable` DL #25, письмо echelon `focused-session-self-close`, итог отправлен).
 0.55.1 (2026-11-13, `9b348a4`) — аудит: корень со своим манифестом не подменяется папкой рядом (письмо

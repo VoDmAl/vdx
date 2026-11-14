@@ -354,7 +354,13 @@ export function buildBoard(input: BoardInput): Board {
       lead: [machine ?? '?', describeAge(c.updated, now)],
       icon: c.finished && !behind ? '✅' : '',
       word: [
-        behind ? `not here yet from ${machine} — continues there` : c.finished ? 'finished' : 'unfinished',
+        behind
+          ? `not here yet from ${machine} — continues there`
+          : c.finished
+            ? 'finished'
+            : c.leftAfterLook
+              ? 'left after a look'
+              : 'unfinished',
         machine === null && 'machine unknown',
       ]
         .filter(Boolean)
@@ -387,7 +393,7 @@ export function buildBoard(input: BoardInput): Board {
     : restore > 0
       ? 'restore'
       : (pickAt((p) => p.kind === 'agent' && !p.agent.hq && freeWork(p.agent, seat)) ??
-        pickAt((p) => p.kind === 'conversation' && !p.conversation.finished) ??
+        pickAt((p) => p.kind === 'conversation' && !p.conversation.finished && !p.conversation.leftAfterLook) ??
         pickAt(
           (p) => p.kind === 'agent' && !p.agent.hq && !openAtSeat(p.agent, seat) && agentState(p.agent) === 'empty',
         ) ??

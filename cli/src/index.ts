@@ -245,7 +245,8 @@ conversation is this machine's and not finished — continue it; the project has
 none — a new one. Otherwise one list: the agents running on every machine (its
 state — working, waiting, a draft in its input line, empty since /clear,
 finished with a wrap skill of session.wrap_skills, idle N days — and which seat's
-terminal shows it), then the newest conversations nobody runs, unfinished or
+terminal shows it), then the newest conversations nobody runs, unfinished,
+left after a look (/clear more than a day after the last word, 0.57) or
 finished, and how many more there are — each group under its title, its rows in
 columns: the machine, the state, the mode, one caption (the title; the topic of
 one with no title). Enter takes the marked row (→): an agent with
