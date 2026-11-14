@@ -4,6 +4,18 @@
 
 ## 2026-11-14
 
+### `session.always_list` убран — вернулись тихие случаи `vdx ai`
+
+Временный ключ 2026-11-05 («пока мы не стабилизируем работу») показывал список при каждом старте в терминале. Владелец
+2026-11-14 убрал его: из профиля — сет v1.15.2, из кода — к 0.58; ключ в старом профиле не мешает
+([vdx-ai-predictable](docs/tasks/vdx-ai-predictable/workitem.md), DL #28).
+
+### `git.hooks` принимает `pre-commit-line` — место для ожидания ветки другой машины
+
+Строка коммита git-guard зовёт перед `git commit` шаг `git hook run --allow-unknown-hook-name --ignore-missing
+pre-commit-line`, а что на нём, назначает профиль: так `echelon guard wait` попадёт в строку, а плагин не узнает
+об echelon. Шаг делает ai-dev-plugins, обёртку — echelon ([vdx-push-waits](docs/tasks/vdx-push-waits/workitem.md), DL #2).
+
 ### `vdx ai --dry-run` называет, куда пойдёт старт
 
 План писал «a new session is named "<имя>"» и тогда, когда старт подключился бы к идущему агенту. Теперь строка

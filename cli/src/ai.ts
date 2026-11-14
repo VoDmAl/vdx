@@ -151,12 +151,6 @@ interface SessionProfile {
   machines?: string[];
   /** A machine's mark on the list of `vdx ai`, before its label — the one the cmux sidebar shows for it. */
   machine_icons?: Record<string, string>;
-  /**
-   * At a terminal, a start never takes a session on its own: a plain start always shows the list, and a
-   * running session that `--focused "<topic>"` or `--new` would go into is a question. For a while, until the
-   * choice is trusted (the owner, 2026-11-05; vdx-ai-predictable Sidetrack #7).
-   */
-  always_list?: boolean;
   /** What to do when a session cannot read ~/Downloads, ~/Desktop or ~/Documents (macOS): shown after the warning. */
   folders_fix?: string;
   /**
@@ -176,9 +170,17 @@ interface SessionProfile {
  * (`hook.<name>.event` / `.command`, Git 2.54) instead of in every repository.
  * `vdx doctor` checks it is there, `vdx doctor --fix` writes it.
  */
+/**
+ * Events git does not fire itself: a step runs them with `git hook run --allow-unknown-hook-name
+ * --ignore-missing <event>` (git 2.54+), and the profile says what runs there. `pre-commit-line` —
+ * git-guard's commit line, before its `git commit`: the wait for the other machine's branch
+ * (vdx-push-waits DL #2).
+ */
+const LINE_HOOK_EVENTS: ReadonlySet<string> = new Set(['pre-commit-line']);
+
 export interface PersonalHook {
   name: string;
-  /** Git hook event(s): `pre-commit`, … */
+  /** Git hook event(s): `pre-commit`, …, or one of LINE_HOOK_EVENTS. */
   event: string | string[];
   /** Run by git through the shell; `$HOME` and quotes work as in a hook script. */
   command: string;
@@ -376,8 +378,6 @@ export function parseEnvironment(text: string, source: string): Environment {
           fail(`session.machines[${i}]`, 'must be an ssh destination: letters, digits, . _ - and no leading -');
       });
     }
-    if (session.always_list !== undefined && typeof session.always_list !== 'boolean')
-      fail('session.always_list', 'must be true or false');
     if (session.machine_icons !== undefined) {
       const icons: unknown = session.machine_icons;
       if (typeof icons !== 'object' || icons === null || Array.isArray(icons))
@@ -450,8 +450,12 @@ export function parseEnvironment(text: string, source: string): Environment {
         if (names.has(h.name)) fail(`${at}.name`, `"${h.name}" is declared twice`);
         names.add(h.name);
         const events = Array.isArray(h.event) ? h.event : [h.event];
-        if (events.length === 0 || !events.every((e) => typeof e === 'string' && GIT_HOOK_EVENTS.has(e))) {
-          fail(`${at}.event`, 'must be a git hook event (pre-commit, pre-push, …) or a list of them');
+        const known = (e: unknown) => typeof e === 'string' && (GIT_HOOK_EVENTS.has(e) || LINE_HOOK_EVENTS.has(e));
+        if (events.length === 0 || !events.every(known)) {
+          fail(
+            `${at}.event`,
+            `must be a git hook event (pre-commit, pre-push, …), ${[...LINE_HOOK_EVENTS].join(', ')}, or a list of them`,
+          );
         }
         if (typeof h.command !== 'string' || h.command.trim() === '')
           fail(`${at}.command`, 'must be a non-empty string');
@@ -2434,8 +2438,6 @@ function boardStart(
   restore = 0,
   /** The profile's `session.machine_icons`. */
   machineIcons: Record<string, string> = {},
-  /** The profile's `session.always_list`: at a terminal, never one of the plain cases — always the list. */
-  alwaysList = false,
   /** What tmux took down, in the list's words: notes for under it (other projects'), the panel of `r` in the picker. */
   lostWords: { footnotes: string[]; restoreDetail: string[] } = { footnotes: [], restoreDetail: [] },
 ): BoardOutcome {
@@ -2745,7 +2747,7 @@ function boardStart(
 
   // At a terminal, the plain cases: nothing to choose, and nothing a terminal at this seat
   // shows already. A search is a choice, and so is what tmux took down.
-  const plain = find === undefined && restore === 0 && !alwaysList && hqToPick.length === 0;
+  const plain = find === undefined && restore === 0 && hqToPick.length === 0;
   const only = working.length === 1 && plain ? working[0]! : null;
   if (only && !openAtSeat(only, plan.seat)) {
     const where = sameMachine(only.machine, plan.host) ? (k.atSeat ? 'here' : `on ${plan.host}`) : `on ${only.machine}`;
@@ -4034,24 +4036,12 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // for, not one more next to it (vdx-ai-predictable Sidetrack #7).
   const topicAsked =
     plan.focused && opts.topic && !opts.conversation && !opts.restart ? normalizeTopic(opts.topic) : '';
-  let onTopic = topicAsked
+  const onTopic = topicAsked
     ? running.find(
         (a) => focusedOf(a.proc.pid) && normalizeTopic(sessionTopic(tmux, a.pane.session) ?? '') === topicAsked,
       )
     : undefined;
-  // `session.always_list`: at a terminal, a running session is gone into only on the person's word.
-  const askFirst = environment.session?.always_list === true && deps.interactive && !opts.dryRun;
-  if (onTopic) {
-    const line = `${onTopic.pane.session} is the focused session on «${topicAsked}»`;
-    if (askFirst) {
-      const answer = deps.ask(`${line} — Enter attaches to it, n starts a new one next to it: `);
-      if (answer === null) {
-        log('no answer — nothing started');
-        return EXIT_LAUNCH_FAILED;
-      }
-      if (/^n(ew)?$/i.test(answer.trim())) onTopic = undefined;
-    } else log(`→ ${line} — attaching to it`);
-  }
+  if (onTopic) log(`→ ${onTopic.pane.session} is the focused session on «${topicAsked}» — attaching to it`);
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
   // One intercom or HQ session per project and machine: a running one is the one, never a second next to it.
   let alongside =
@@ -4107,7 +4097,6 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       opts.find,
       offer,
       environment.session?.machine_icons ?? {},
-      environment.session?.always_list === true,
       { footnotes: lost?.note ? [lost.note] : [], restoreDetail: lost ? [...lost.lines, lost.hint.trim()] : [] },
     );
     switch (outcome.kind) {
@@ -4177,17 +4166,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       mail: mailOf,
       hq: hqAgent,
     }).find((f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused));
-    let pane = free && running.find((a) => a.proc.pid === free.pid);
-    if (pane && askFirst) {
-      const answer = deps.ask(
-        `${pane.pane.session}: nothing typed in it since /clear — Enter puts the new conversation there, n starts one more next to it: `,
-      );
-      if (answer === null) {
-        log('no answer — nothing started');
-        return EXIT_LAUNCH_FAILED;
-      }
-      if (/^n(ew)?$/i.test(answer.trim())) pane = undefined;
-    }
+    const pane = free && running.find((a) => a.proc.pid === free.pid);
     if (pane) {
       current = pane;
       alongside = false;

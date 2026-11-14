@@ -3105,53 +3105,6 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(from.seats).toEqual({ 'proj@testhost': 'lft' });
   }, 30_000);
 
-  describe('session.always_list: at a terminal nothing is gone into on its own (Sidetrack #7)', () => {
-    const always = () => {
-      const file = path.join(base, 'env-always.yaml');
-      fs.writeFileSync(
-        file,
-        fs.readFileSync(path.join(base, 'env.yaml'), 'utf8').replace('session: {', 'session: {always_list: true, '),
-      );
-      const d = deps();
-      return { ...d, env: { ...d.env, VDX_ENVIRONMENT: file } };
-    };
-
-    it('a plain start shows the list even for the only agent, which no terminal here shows', () => {
-      agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
-      answers = ['1'];
-      expect(runAi({ ...opts, path: root }, always())).toBe(EXIT_OK);
-      expect(answers).toEqual([]);
-      expect(text()).toMatch(/RUNNING NOW · 1\n+. 1 {2}proj@testhost +💤 idle/);
-      expect(text()).not.toMatch(/ 2 {2}proj@testhost/);
-      expect(text()).not.toContain('the only agent of proj runs here');
-      expect(text()).toContain('✓ proj@testhost: already running with the profile');
-    });
-
-    it('the focused session on the topic is a question: n starts a new one next to it', () => {
-      focusedIn('proj@testhost', ID.a, 'search');
-      answers = ['n'];
-      expect(runAi({ ...opts, path: root, focused: true, topic: 'search' }, always())).toBe(EXIT_OK);
-      expect(answers).toEqual([]);
-      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
-    });
-
-    it('…Enter attaches to it', () => {
-      focusedIn('proj@testhost', ID.a, 'search');
-      answers = [''];
-      expect(runAi({ ...opts, path: root, focused: true, topic: 'search' }, always())).toBe(EXIT_OK);
-      expect(answers).toEqual([]);
-      expect(tmux.hasSession('proj@testhost-2')).toBe(false);
-    });
-
-    it('an empty session --new would go into is a question: Enter puts it there, n starts one more', () => {
-      agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
-      answers = ['n'];
-      expect(runAi({ ...opts, path: root, fresh: true }, always())).toBe(EXIT_OK);
-      expect(text()).not.toContain('♻');
-      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
-    });
-  });
-
   it('…--focused restarts it focused, with the new topic', () => {
     agentIn('proj@testhost', ID.a, [slashLine('clear'), startedOn('testhost')]);
     expect(runAi({ ...opts, path: root, focused: true, topic: 'search' }, deps())).toBe(EXIT_OK);

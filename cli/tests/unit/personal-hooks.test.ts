@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   checkPersonalHooks,
   fixPersonalHooks,
@@ -73,6 +73,41 @@ describe('profile git.hooks', () => {
       parseEnvironment('git:\n  hooks:\n    - { name: x, event: [pre-commit, pre-push], command: y }\n', 'p').git
         ?.hooks?.[0]?.name,
     ).toBe('x');
+  });
+
+  // git-guard's commit line runs it before `git commit` (vdx-push-waits DL #2); git itself never does.
+  it('takes pre-commit-line, which only `git hook run --allow-unknown-hook-name` runs', () => {
+    expect(
+      parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-commit-line, command: y }\n', 'p').git?.hooks?.[0]
+        ?.event,
+    ).toBe('pre-commit-line');
+    expect(() =>
+      parseEnvironment('git:\n  hooks:\n    - { name: x, event: pre-commit-lines, command: y }\n', 'p'),
+    ).toThrow(/git\.hooks\[0\]\.event must be a git hook event \(pre-commit, pre-push, …\), pre-commit-line,/);
+
+    profile(`    - name: commit-wait
+      event: pre-commit-line
+      command: 'echo "waited in $(pwd)"; exit 3'
+`);
+    expect(fixPersonalHooks(deps())).toEqual([`hook.commit-wait: pre-commit-line → echo "waited in $(pwd)"; exit 3`]);
+    expect(checkPersonalHooks(null, deps())?.status).toBe('ok');
+    const v = parseGitVersion(deps().git(['--version']));
+    if (v && (v[0] > 2 || (v[0] === 2 && v[1] >= 54))) {
+      const repo = path.join(home, 'r');
+      execFileSync('git', ['init', '-q', repo]);
+      // git hands the hook's output to stderr.
+      const run = (event: string) => {
+        const r = spawnSync('git', ['hook', 'run', '--allow-unknown-hook-name', '--ignore-missing', event], {
+          cwd: repo,
+          env: deps().env,
+          encoding: 'utf8',
+        });
+        return { code: r.status, said: r.stderr };
+      };
+      // The line stops on the hook's own code; with nothing bound, the step passes.
+      expect(run('pre-commit-line')).toEqual({ code: 3, said: `waited in ${repo}\n` });
+      expect(run('pre-push')).toEqual({ code: 0, said: '' });
+    }
   });
 });
 

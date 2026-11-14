@@ -5,7 +5,7 @@ description: "Коммит из папки Syncthing не ложится на с
 status: in-progress
 session-type: prd-prep
 created: 2026-11-13
-last-updated: 2026-11-13
+last-updated: 2026-11-14
 ---
 
 # vdx push, который ждёт ветку другой машины
@@ -58,16 +58,61 @@ v1.15.1. Хук уже не даёт коммиту лечь на старую �
 **Implication:** сеты v1.15.0 (`49c03ff`) и v1.15.1 (`071b864`), зеркало в `docs/specs/vdx-environment.example.yaml`,
 `DEFAULT_BASELINE` — v1.15.1. Итоги echelon: `vdx-push-waits-outcome`, `ref-race-hook-via-wrapper-outcome`.
 
+### #2 / 2026-11-14 / Ожидание — шаг строки git-guard перед `git commit`; что в нём, решает профиль (`pre-commit-line`)
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** на вопрос в чате 2026-11-14 (А — один хук и замер, Б — ожидание в строке коммита git-guard,
+В — своя команда vdx, которая коммитит) владелец: «Да давай не будем замерять а сделаем уже»; Б был назван
+следующим по разумности после А. Замеры того дня: `git hook run --allow-unknown-hook-name --ignore-missing <своё
+событие>` запускает хук из конфига (git 2.56 m3, 2.54 lft), код хука — как есть (3 → 3), без хука — 0, без флага —
+отказ «unknown hook event» (код 1); хук идёт в корне репо. ai-dev-plugins — кристалл `git-guard-line-wait-step`
+(ready с 2026-11-08, кода нет; Sidetrack #2 «откуда плагин берёт команду echelon» открыт), письма echelon
+`commit-line-wait-step`, `commit-line-wait-step-whole-index` (порядок: wait → сверка дерева → commit).
+**Context:** `vdx push` ждать не может: push идёт после коммита, а гонка — в момент коммита (хук `echelon-ref-race`
+отказывает там же). Ожидание есть одно — `echelon guard wait` (до 60 с, переписывает записи индекса чужих путей).
+**Why:** строку собирает git-guard, и шаг у них уже принят; vdx своей команды коммита не заводит (В) — меньше своего
+кода. Чтобы плагин не знал об echelon, шаг строки общий — `git hook run --allow-unknown-hook-name --ignore-missing
+pre-commit-line`, а что на нём, назначает личный профиль (`git.hooks`), как прочие хуки владельца; машина без записи
+проходит шаг молча. Падение echelon не должно ронять строку — нужна обёртка echelon, как `ref-race-guard.sh`.
+**Implication:** vdx — событие `pre-commit-line` в `git.hooks` (сейчас `GIT_HOOK_EVENTS` его отвергает), запись
+сета с ожиданием echelon, `vdx doctor --fix` на станциях. Бриф ai-dev-plugins — механизм для их Sidetrack #2,
+имя события; бриф echelon — обёртка с пропуском при падении. Имя события — предложение vdx, решают git-guard.
+
 ## Sidetracks
 
 ## Next actions
 
-- [ ] Владелец — форма команды, которая ждёт ветку другой машины до коммита (commit + push или push с догоном, имя),
+- [x] Владелец — форма команды, которая ждёт ветку другой машины до коммита (commit + push или push с догоном, имя),
       его слово 2026-11-13 «Ну давай» на «сначала только хук»; срока нет — when: владелец назовёт форму или спросит;
-      после — команда в vdx, шаг `echelon guard wait`, итог echelon
-- [ ] nas-info — переписать хук на форму v1.15.1 (`vdx doctor --fix` на m3 и lft); бриф им шлёт echelon после итога
+      после — команда в vdx, шаг `echelon guard wait`, итог echelon — 2026-11-14: Б, шаг строки git-guard (DL #2)
+- [x] Бриф ai-dev-plugins: шаг `git hook run --allow-unknown-hook-name --ignore-missing pre-commit-line` перед сверкой
+      дерева в строке git-guard (их кристалл `git-guard-line-wait-step`, Sidetrack #2), замеры DL #2; ждём их слова
+      о механизме и имени события — отправлен 2026-11-14 (`ai-dev-plugins/commit-line-wait-via-hook-run`); check:
+      `/vdm:intercom check` — 2026-11-14 ответ (`commit-line-wait-via-hook-run-outcome`): механизм и имя
+      `pre-commit-line` берут (их DL #3, Sidetrack #2 закрыт); при подготовке строка спрашивает `git hook list
+      --allow-unknown-hook-name pre-commit-line` и ставит шаг только при коде 0 (хука нет — строка прежняя, git старше
+      2.54 отсекается тем же); в список попадает и файл `pre-commit-line` в каталоге хуков репо; шаг пишет их основная
+      сессия, живой прогон — после нашей записи в `~/.gitconfig`
+- [ ] Бриф echelon: обёртка шага ожидания с пропуском при падении (как `ref-race-guard.sh`) и код «не доехало»,
+      отличный от падения Python (1); ждём путь обёртки — отправлен 2026-11-14 (`echelon/commit-wait-wrapper`); check:
+      `/vdm:intercom check` — 2026-11-14 ответ (`commit-wait-wrapper-outcome`): принято, `commit-wait-wrapper.sh` и свой
+      код «не доехало» делает их основная сессия (кристалл `cross-machine-session-delivery`), путь и код — письмом vdx,
+      срока нет
+- [ ] vdx: событие `pre-commit-line` в `git.hooks` (`GIT_HOOK_EVENTS`, `vdx doctor`), тесты, `environment-format.md`;
+      сет `vdx-rubric-vodmal` (minor) — запись с обёрткой echelon, зеркало, `DEFAULT_BASELINE`; `vdx doctor --fix` на
+      m3 и lft; итоги echelon и ai-dev-plugins — 2026-11-14: событие в рабочем дереве (`LINE_HOOK_EVENTS` в
+      `cli/src/ai.ts`; `GIT_HOOK_EVENTS` в `hooks.ts` не тронут — по нему читаются хуки самого репо), тест
+      `personal-hooks.test.ts`: `--fix` пишет хук, `git hook run --allow-unknown-hook-name` держит строку его кодом;
+      `environment-format.md` (vdx 0.58+). Брифы отправлены: ai-dev-plugins `commit-line-wait-via-hook-run`, echelon
+      `commit-wait-wrapper`, их сессии intercom подняты. Осталось: слово ai-dev-plugins об имени, обёртка echelon,
+      сет, выпуск CLI (minor, с правкой `--dry-run`), `vdx doctor --fix` на станциях. Имя `pre-commit-line` принято
+      ai-dev-plugins 2026-11-14. Порядок: выпуск CLI 0.58 и станции — до записи сета: vdx старше 0.58 отвергнет профиль
+      с этим событием (`git.hooks[].event`), а профиль один на обе машины
+- [x] nas-info — переписать хук на форму v1.15.1 (`vdx doctor --fix` на m3 и lft); бриф им шлёт echelon после итога
       `ref-race-hook-via-wrapper-outcome`; срока нет — when: письмо echelon или nas-info о переписи; check:
-      `git config --global --get hook.echelon-ref-race.command` на m3 и `ssh lft …` — в строке `ref-race-guard.sh`
+      `git config --global --get hook.echelon-ref-race.command` на m3 и `ssh lft …` — в строке `ref-race-guard.sh` —
+      2026-11-14: на m3 и lft в строке `ref-race-guard.sh` (check выше); письма о переписи vdx не получал
 
 ## References
 
