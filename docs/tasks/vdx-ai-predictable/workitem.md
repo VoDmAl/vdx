@@ -1219,7 +1219,8 @@ workspace, не в заголовке; в списке 👑 остаётся р�
    некому, а агент на другой машине — сама HQ, которая запускает. Обошли `ssh -tt lft` с `y`. Просят: у
    `--focused --detach` — без вопроса (или флаг согласия), отказ — с причиной.
 
-**Status:** open — 2026-11-13: сделано, DL #25; ждёт выпуска CLI 0.56.0 и итога echelon
+**Status:** resolved — 2026-11-13: DL #25, CLI 0.56.0 (`94b7a70`, на m3 и lft), плагин 0.15.7; итог echelon
+`focused-session-self-close-shipped` отправлен; первый живой шаг HQ на 0.56 — пунктом в Next actions
 
 ### #17. После перезапуска cmux его строка `cmux restore --surface` попадает в ввод Claude
 
@@ -1470,10 +1471,13 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
       2026-11-13 ответ (`fzf-for-vdx-ai-picker-outcome`): в наборе станций fzf нет (на lft стоит руками, 0.72.0);
       берут — их кристалл `shared-terminal-cmux`, побег #14: fzf в `ansible/modules/packages.sh` (блок FEATURE_VDX),
       бейдж в gather; делает их основная сессия; ждём их итог письмом, срока нет
-- [ ] см. Sidetrack #16 — фокус-сессия, запущенная `--focused --detach`, закрывает себя `--close`; `--focused --detach`
+- [x] см. Sidetrack #16 — фокус-сессия, запущенная `--focused --detach`, закрывает себя `--close`; `--focused --detach`
       стартует без вопроса, когда агент проекта идёт на другой машине, а отказ называет причину; итог echelon `reply` на
-      `focused-session-self-close` с версией — 2026-11-13: код и тесты (DL #25), плагин 0.15.7; осталось: выпуск
-      CLI 0.56.0, станции, итог echelon
+      `focused-session-self-close` с версией — 2026-11-13: код и тесты (DL #25), плагин 0.15.7; CLI 0.56.0 (`94b7a70`),
+      m3 и lft — 0.56.0; итог echelon `focused-session-self-close-shipped`, их сессия intercom разбужена
+- [ ] DL #25 вживую: шаг HQ echelon на 0.56 — `vdx ai@lft … --focused "<шаг>" --detach` при HQ на m3 стартует без
+      вопроса, шаг закрывает себя `vdx ai --close` после итогов; срока нет — when: письмо echelon о первом таком шаге
+      (или их вопрос); check: `/vdm:intercom check`, затем `ssh lft tmux list-sessions` — закончивших шагов не висит
 - [ ] см. Sidetrack #17 — после перезапуска cmux строка `cmux restore --surface` не доходит до ввода Claude во вкладках,
       которые вернул `vdx ai --tab`; `--tab` открывает `/dev/tty` сам; метка вкладки, когда к сессии подключена вторая;
       итог nas-info `reply` на `cmux-restore-typed-into-claude`
