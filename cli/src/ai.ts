@@ -74,6 +74,7 @@ import {
   type AgentFact,
   agentLabel,
   type Board,
+  clip,
   buildBoard,
   COMMAND_KEY,
   enterKey,
@@ -3889,6 +3890,9 @@ export function sharedTopicWords(asked: string, running: string): string[] {
   return [...topicStems(running)].filter(([stem]) => want.has(stem)).map(([, word]) => word);
 }
 
+/** A row's topic is cut to this: an HQ's step names a paragraph (echelon, 2026-11-15). */
+const FOCUSED_TOPIC_ROOM = 60;
+
 /** A focused session of the project running now, on this machine or another. */
 interface FocusedRunning {
   machine: string;
@@ -3958,7 +3962,7 @@ function chooseFocused(input: {
     : found;
   if (rows.length === 0) return { kind: 'new' };
   const show = (f: FocusedRunning) =>
-    `${agentLabel(f, input.icons)}  🎯 ${f.topic ? `«${f.topic}»` : '(no topic yet)'}${f.shared.length ? `   alike: ${f.shared.join(', ')}` : ''}`;
+    `${agentLabel(f, input.icons)}  🎯 ${f.topic ? `«${clip(f.topic, FOCUSED_TOPIC_ROOM)}»` : '(no topic yet)'}${f.shared.length ? `   alike: ${f.shared.join(', ')}` : ''}`;
   const fresh = topic ? `a new focused session «${topic}»` : 'a new focused session';
   if (!input.ask) {
     if (input.dryRun)

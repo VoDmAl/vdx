@@ -850,7 +850,9 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       окей», `finam*` — «пока оставь там где есть», план — «согласен»; `vdx move` чинит worktree — 2026-11-14:
       код (`worktreeGroups`, `repairScript` в `move.ts`), строки плана, справка, `environment-format.md`; два теста
       `move.test.ts` (оба перенесены; перенесён один основной) — на обеих «машинах» git в worktree жив; тест падает,
-      если починку убрать; к выпуску 0.58
+      если починку убрать; к выпуску 0.58 — 2026-11-15: в CLI 0.58.0 (`f1c7f41`), m3 и lft — 0.58.0; на выпущенном
+      `vdx move limeflow limeflow-859 SPACE --dry-run` называет все семь worktree и «its link is repaired after the
+      mv». Осталось до переноса: правка `echelon moved` (их итог), момент — слово владельца
       (`git worktree repair`, тест, выпуск с 0.58); echelon — `echelon moved` правит пути в `signals/sources.yaml` HQ и
       `tools/dry-run.sh`; потом перенос одной командой на папку, когда владелец закроет сессии этих проектов
 - [ ] Владелец — перенос папок (`GA/`, `SPACE`, потом `/Volumes/Working/…`) с nas-info (их

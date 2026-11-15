@@ -3060,6 +3060,18 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       );
     });
 
+    // echelon's HQ names a step in a paragraph (2026-11-15): the row keeps to one line.
+    it('a long topic is cut on its row, with …', () => {
+      const step = `Шаг 12а очереди кода — ${'подробности шага, '.repeat(12)}конец`;
+      focusedIn('proj@testhost', ID.a, step);
+      answers = ['n'];
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'очередь шагов' }, deps())).toBe(EXIT_OK);
+      expect(text()).toMatch(
+        / {2}1 {2}proj@testhost +🎯 «Шаг 12а очереди кода — подробности[^»]{0,40}…» {3}alike: очереди/,
+      );
+      expect(text()).not.toContain('конец»');
+    });
+
     it('…Enter is n: a new focused session on the topic asked', () => {
       focusedIn('proj@testhost', ID.a, 'письма в ящике vdx');
       answers = [''];

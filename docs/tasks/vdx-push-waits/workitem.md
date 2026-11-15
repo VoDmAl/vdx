@@ -108,7 +108,9 @@ pre-commit-line`, а что на нём, назначает личный про�
       `commit-wait-wrapper`, их сессии intercom подняты. Осталось: слово ai-dev-plugins об имени, обёртка echelon,
       сет, выпуск CLI (minor, с правкой `--dry-run`), `vdx doctor --fix` на станциях. Имя `pre-commit-line` принято
       ai-dev-plugins 2026-11-14. Порядок: выпуск CLI 0.58 и станции — до записи сета: vdx старше 0.58 отвергнет профиль
-      с этим событием (`git.hooks[].event`), а профиль один на обе машины
+      с этим событием (`git.hooks[].event`), а профиль один на обе машины — 2026-11-15: CLI 0.58.0 (`f1c7f41`) в npm,
+      m3 и lft — 0.58.0. Осталось: обёртка echelon (их основная сессия), потом запись сета (minor), `vdx doctor --fix`
+      на m3 и lft, итоги echelon и ai-dev-plugins (их живой прогон ждёт нашей записи в `~/.gitconfig`)
 - [x] nas-info — переписать хук на форму v1.15.1 (`vdx doctor --fix` на m3 и lft); бриф им шлёт echelon после итога
       `ref-race-hook-via-wrapper-outcome`; срока нет — when: письмо echelon или nas-info о переписи; check:
       `git config --global --get hook.echelon-ref-race.command` на m3 и `ssh lft …` — в строке `ref-race-guard.sh` —
