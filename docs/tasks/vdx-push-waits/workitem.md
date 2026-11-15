@@ -83,6 +83,10 @@ pre-commit-line`, а что на нём, назначает личный про�
 
 ## Next actions
 
+- [ ] Запись сета `vdx-rubric-vodmal` (minor): хук на `pre-commit-line` с обёрткой echelon, зеркало,
+      `DEFAULT_BASELINE`; `vdx doctor --fix` на m3 и lft; итоги echelon и ai-dev-plugins — when: письмо echelon с путём
+      `commit-wait-wrapper.sh` и кодом «не доехало» (их основная сессия, срока нет); check: `/vdm:intercom check`.
+      На станциях vdx 0.58.0 с 2026-11-15 — событие профиль принимает
 - [x] Владелец — форма команды, которая ждёт ветку другой машины до коммита (commit + push или push с догоном, имя),
       его слово 2026-11-13 «Ну давай» на «сначала только хук»; срока нет — when: владелец назовёт форму или спросит;
       после — команда в vdx, шаг `echelon guard wait`, итог echelon — 2026-11-14: Б, шаг строки git-guard (DL #2)

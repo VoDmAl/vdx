@@ -846,6 +846,10 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       руками. Сделать к следующему выпуску; nas-info — сказать, что вышло. Код и тест —
       DL #14 (2026-10-24), 562 юнит; рабочим CLI: `~/nas-info` — «ok — in the memory of another
       clone of this repo»
+- [ ] Перенос в `GA/` и `SPACE/` по списку Sidetrack #7 (`vdx move … '<папка>'`, по команде на папку) — when: итог
+      echelon `moved-hq-sources` (правка `echelon moved` для `signals/sources.yaml` HQ, их основная сессия, срока нет) и
+      слово владельца о моменте — он закрывает сессии `global-auth-gap@lft` (и HQ), `limeflow@lft`, HQ `space-hq@lft`;
+      check: `/vdm:intercom check`, затем `vdx move … --dry-run` по обоим спискам
 - [ ] Sidetrack #7: перенос в `GA/` и `SPACE/` — владелец правит список (`finam*`?) — 2026-11-14: «Список-черновик -
       окей», `finam*` — «пока оставь там где есть», план — «согласен»; `vdx move` чинит worktree — 2026-11-14:
       код (`worktreeGroups`, `repairScript` в `move.ts`), строки плана, справка, `environment-format.md`; два теста
