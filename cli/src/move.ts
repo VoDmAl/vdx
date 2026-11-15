@@ -419,6 +419,65 @@ function settingsChanged(root: string): boolean {
   );
 }
 
+/**
+ * The repositories whose `git worktree` links a move cuts, read on this machine: by the main
+ * repository's path, its linked worktrees. git keeps both ends as absolute paths — a worktree's
+ * `.git` file names `<main>/.git/worktrees/<name>`, whose `gitdir` names the worktree — so a
+ * moved main, or a moved worktree, loses the other end (limeflow and its seven, 2026-11-14).
+ */
+function worktreeGroups(moves: Planned[]): Map<string, Set<string>> {
+  const groups = new Map<string, Set<string>>();
+  const add = (main: string, wt: string) => groups.set(main, new Set([...(groups.get(main) ?? []), wt]));
+  const read = (file: string) => {
+    try {
+      return fs.readFileSync(file, 'utf8').trim();
+    } catch {
+      return null;
+    }
+  };
+  for (const mv of moves) {
+    const dotGit = path.join(mv.from, '.git');
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(dotGit);
+    } catch {
+      continue;
+    }
+    if (st.isFile()) {
+      const m = /^gitdir:\s*(.+)$/m.exec(read(dotGit) ?? '');
+      const admin = m ? path.resolve(mv.from, m[1]!.trim()) : null;
+      if (!admin || path.basename(path.dirname(admin)) !== 'worktrees') continue;
+      const gitDir = path.dirname(path.dirname(admin));
+      add(realish(path.basename(gitDir) === '.git' ? path.dirname(gitDir) : gitDir), mv.from);
+    } else if (st.isDirectory()) {
+      let names: string[];
+      try {
+        names = fs.readdirSync(path.join(dotGit, 'worktrees'));
+      } catch {
+        continue;
+      }
+      for (const n of names) {
+        const admin = path.join(dotGit, 'worktrees', n);
+        const gd = read(path.join(admin, 'gitdir'));
+        if (gd) add(mv.from, realish(path.dirname(path.resolve(admin, gd))));
+      }
+    }
+  }
+  return groups;
+}
+
+/** Where `p` is once the moves are done: under a moved folder, its new place; else where it was. */
+function afterMoves(p: string, moves: Planned[]): string {
+  const mv = moves.find((m) => within(p, m.from));
+  return mv ? mv.to + p.slice(mv.from.length) : p;
+}
+
+/** Run in the main repository's place: the links of every worktree there, both ends; a missing one is passed by. */
+function repairScript(main: string, worktrees: string[], home: string): string {
+  const words = worktrees.map((w) => remotePathWord(w, home)).join(' ');
+  return `cd ${remotePathWord(main, home)} 2>/dev/null || exit 0; set --; for w in ${words}; do [ -e "$w" ] && set -- "$@" "$w"; done; git worktree repair "$@" >/dev/null`;
+}
+
 function describeSession(f: Found): string {
   const where = f.live.tmux ? f.live.tmux.replace(/:.*$/, '') : `pid ${f.live.pid}`;
   return `${where} on ${f.machine.label} (${f.live.status ?? 'no status'}, conversation ${f.live.conversation.slice(0, 8)})`;
@@ -603,6 +662,21 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
       if (probes.get(m)!.otherVolume.has(i))
         lines[i]!.push(`another volume on ${m.label}: mv copies, then deletes — slow, and not undone halfway`);
   });
+  // git worktree links, by absolute paths: repaired after the mv (worktreeGroups).
+  const worktrees = worktreeGroups(moves);
+  const nameOf = (p: string) => path.basename(p);
+  for (const [main, wts] of worktrees) {
+    const mi = moves.findIndex((mv) => mv.from === main);
+    if (mi >= 0)
+      lines[mi]!.push(
+        `worktrees: ${[...wts].map(nameOf).join(', ')} — git keeps them by absolute paths; after the mv: git worktree repair`,
+      );
+    for (const w of wts) {
+      const wi = moves.findIndex((mv) => mv.from === w);
+      if (wi >= 0 && wi !== mi)
+        lines[wi]!.push(`a worktree of ${tilde(main, home)} — its link is repaired after the mv`);
+    }
+  }
   const busy = sessions.filter((s) => s.live.status !== 'idle');
   for (const s of busy) refusals.push(`a session of ${moves[s.project]!.name} is not idle: ${describeSession(s)}`);
   const noSync = machines.filter((m) => !probes.get(m)!.caughtUp);
@@ -784,6 +858,23 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
       }
       done.add(i);
       log(`✓ ${mv.name}: ${tilde(mv.from, home)} → ${tilde(mv.to, home)} on ${movedOn.map((m) => m.label).join(', ')}`);
+    }
+    // While the folders are paused, on every machine that moved one end: each fixes its own copy.
+    for (const [main, wts] of worktrees) {
+      const ends = moves.flatMap((mv, i) => (mv.from === main || wts.has(mv.from) ? [i] : []));
+      const newMain = afterMoves(main, moves);
+      const newWts = [...wts].map((w) => afterMoves(w, moves));
+      const ok: string[] = [];
+      for (const m of [...new Set(ends.flatMap((i) => mvOn(i)))]) {
+        const ran = runOn(m, repairScript(newMain, newWts, home), deps);
+        if (ran && ran.status === 0) ok.push(m.label);
+        else
+          log(
+            `✗ worktrees of ${nameOf(main)} on ${m.label}: git worktree repair failed${ran ? ` (exit ${ran.status})` : ' — no answer'} — ` +
+              `there: git -C ${shellQuote(newMain)} worktree repair ${newWts.map((w) => shellQuote(w)).join(' ')}`,
+          );
+      }
+      if (ok.length) log(`✓ worktrees of ${nameOf(main)}: links repaired on ${ok.join(', ')}`);
     }
   } finally {
     resume();

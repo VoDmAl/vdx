@@ -446,6 +446,45 @@ describe('vdx move', () => {
     for (const home of [here, m3]) expect(pausedLog(home)).toBe('AI Projects true\nAI Projects false\n');
   });
 
+  // git keeps a worktree's links as absolute paths, both ways (limeflow and its seven, 2026-11-14).
+  describe('a repository with a worktree', () => {
+    const wt = (home: string) => path.join(home, 'AI Projects', 'proj-wt');
+    const head = (dir: string) => git(dir, 'rev-parse', '--abbrev-ref', 'HEAD').toString().trim();
+    beforeEach(() => {
+      git(projDir(m3), 'init', '-q');
+      git(projDir(m3), 'add', 'README.md');
+      git(projDir(m3), 'commit', '-q', '-m', 'init');
+      for (const h of [here, m3]) git(projDir(h), 'worktree', 'add', '-q', '-b', 'side', wt(h));
+    });
+
+    it('both moved: the plan names the link, and git worktree repair keeps it on both machines', () => {
+      const run = (dryRun: boolean) =>
+        runMove({ sources: [projDir(here), wt(here)], folder: path.join(here, 'AI Projects', 'GA'), dryRun }, deps());
+      expect(run(true)).toBe(EXIT_MOVED);
+      expect(logs.join('\n')).toContain(
+        'worktrees: proj-wt — git keeps them by absolute paths; after the mv: git worktree repair',
+      );
+      expect(logs.join('\n')).toContain('a worktree of ~/AI Projects/proj — its link is repaired after the mv');
+      logs = [];
+      expect(run(false)).toBe(EXIT_MOVED);
+      expect(logs.join('\n')).toContain('✓ worktrees of proj: links repaired on here, m3');
+      for (const h of [here, m3]) {
+        const moved = path.join(h, 'AI Projects', 'GA', 'proj-wt');
+        expect(head(moved)).toBe('side');
+        expect(git(ga(h), 'worktree', 'list', '--porcelain').toString()).toContain(`worktree ${moved}\n`);
+      }
+    });
+
+    it('the main moved alone: the worktree where it was finds it again', () => {
+      expect(move()).toBe(EXIT_MOVED);
+      expect(logs.join('\n')).toContain('✓ worktrees of proj: links repaired on here, m3');
+      for (const h of [here, m3]) {
+        expect(head(wt(h))).toBe('side');
+        expect(git(ga(h), 'worktree', 'list', '--porcelain').toString()).toContain(`worktree ${wt(h)}\n`);
+      }
+    });
+  });
+
   it('a folder inside the project, or one already there, is a usage error', () => {
     expect(
       runMove({ sources: [path.join(projDir(here), '.claude')], folder: path.join(here, 'x'), dryRun: false }, deps()),

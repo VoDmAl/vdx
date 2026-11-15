@@ -430,7 +430,10 @@ a synced folder — cannot all go: a terminal asks which one (commit and uncommi
 files shown, Enter takes the one where you are), the others stay. Peers of the
 folders outside the profile are named with what they get; when Syncthing would
 delete the project there, a terminal asks first ([y/N]). A machine whose mv fails
-puts the others back. Then, on this machine, the profile's move.after commands run
+puts the others back. git keeps a worktree's links by absolute paths, both ways: a
+repository with worktrees, or a worktree, that moves is named in the plan, and after
+the mv each machine runs git worktree repair from the main repository's place. Then,
+on this machine, the profile's move.after commands run
 with VDX_MOVE_FROM and VDX_MOVE_TO — for tools that keep the project's path in
 their own files.
 

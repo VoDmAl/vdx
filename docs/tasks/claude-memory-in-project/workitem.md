@@ -5,7 +5,7 @@ description: "Держит память агента в папке проект�
 status: in-progress
 session-type: prd-prep
 created: 2026-10-22
-last-updated: 2026-11-13
+last-updated: 2026-11-14
 ---
 
 # Память Claude внутри проекта
@@ -582,6 +582,17 @@ FastVPS». DNS: NAS — 10.243.232.87 (ZeroTier), `git.vorobyev.name` и s02 —
 **Implication:** CLI 0.54 (minor), сет v1.14.0 (`DEFAULT_BASELINE`); vdx старше 0.54 читает строку как имя хоста,
 которого нет. Итог t23b-program — `reply` после выпуска.
 
+### #24 / 2026-11-14 / Перенос в `GA/` и `SPACE/`: список и пробный прогон сейчас, перенос — в момент владельца
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** на вопрос в чате 2026-11-14 (А — подготовить список и `--dry-run` сейчас, перенести одной командой в
+выбранный момент; Б — сейчас, с остановкой идущих сессий; В — отложить; Г — отказаться) владелец: «Да, согласен» на
+рекомендованный А. Опись и пробные прогоны того дня — Sidetrack #7.
+**Context:** замысел владельца 2026-10-22 (Назначение): global auth — внутрь `GA/`, space/limeflow — в `SPACE`.
+**Why:** список — основная работа и ничего не ломает; перенос останавливает идущие сессии (два HQ среди них).
+**Implication:** Sidetrack #7 — список, найденные пробелы (worktree, `signals/sources.yaml` HQ) и шаги до переноса.
+
 ## Sidetracks
 
 ### #1. Перенос папки и реестр intercom
@@ -682,6 +693,35 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 корнях останутся, даты нет. Профиль не меняется: `git.author_pool` — каталоги, которые vdx читает
 (`authorPoolDirs`), а не префиксы пути сессии; путь `echelon-guard` проходит через ссылку; других путей
 старых корней в профиле нет. Осталось — скрипт к дате (ответ им — `root-move-vdx-side-outcome-outcome`)
+
+### #7. Перенос в `GA/` и `SPACE/`: список, worktree, пути в `signals/sources.yaml`
+
+**Возникло в:** вопрос 8 в чате 2026-11-14, DL #24.
+**Описание:**
+1. *Список-черновик* (по именам, владелец правит): в `~/AI Projects/GA/` — `global-auth`, `global-auth-gap`,
+   `global-auth-risk-model`, `tx-auth-widget`; в `~/AI Projects/SPACE/` — `limeflow` и семь его worktree
+   (`limeflow-859`, `-874`, `-881`, `-898`, `limeflow-doc-llm-note`, `limeflow-doc-rule-10`, `limeflow-version-doc`),
+   `lime-analytics`, `lime-argus-cdd`, `lime-argus-cdd-perplexity-investigation`, `lime-hq`, `limex_news_next`,
+   `limex-pro-qca-frontend`, `limex-pro-quant-space-frontend`, `limex-team`, `space-hq`, `space-team`,
+   `mcp-app-space-tasks`. Не вошли: `finam`, `finam-ai-kickstart`, `finam-ui-kit-demo`, `aitech-znayka-finam-ru` —
+   вопрос владельцу; файлы `docker-dev-environment(limeflow).md`, `docker-dev-environment(lime-argus-cdd).md` в корне —
+   не проекты, `mv` руками.
+2. *Пробные прогоны 2026-11-14* (`vdx move … --dry-run`, CLI 0.57.0): оба проходят. Держат: `global-auth-gap@lft` и
+   его HQ, `limeflow@lft`, HQ `space-hq@lft-hq` (все idle — вопрос в терминале), процессы node/ssh в папках на m3.
+3. *Worktree — дефект `vdx move`*: в `move.ts` о них ничего; у `limeflow` семь worktree, связь — абсолютными путями в
+   обе стороны (`<wt>/.git` → `limeflow/.git/worktrees/<имя>`, `gitdir` там → путь worktree). После переноса git в
+   каждом из восьми потерял бы другую сторону, план об этом молчит. Чинить: после `mv` — `git worktree repair` из
+   нового места основного репо с новыми путями worktree (перенесён один основной — без путей; один worktree — его
+   путь); план называет worktree; тест.
+4. *`signals/sources.yaml` HQ называет старые пути*: `lime-hq` (`lime-argus-cdd`, `lime-analytics`), `space-hq`
+   (`limeflow`), `global-auth-gap` (`global-auth`, `tx-auth-widget`); `echelon moved` из `move.after` правит только
+   `path:` в `consumers.yaml` и `mcp.yaml`. Плюс путь `space-hq` по умолчанию в `echelon/tools/dry-run.sh`. Формат —
+   echelon'а: бриф им. `autoMemoryDirectory` в `.claude/settings*.json` правит сам `vdx move`.
+**Status:** open — 2026-11-14: список у владельца; worktree — код vdx; `sources.yaml` — бриф echelon
+`moved-hq-sources`, их ответ того же дня (`moved-hq-sources-outcome`): принято, кристалл echelon `moved-hq-sources`
+(ready), правку делает их основная сессия; итог — отдельным письмом после коммита, срока нет. Их находки: `PATH_LINE`
+в `moved.py` берёт только `path:` в начале строки — `- path: X` и голый `- X` не ловит; в `space-hq` есть шаблоны
+`~/AI Projects/avatar/*` и `finam/*`; путь в `tools/dry-run.sh` склоняются брать из `consumers.yaml`
 
 ## Next actions
 
@@ -806,6 +846,13 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       руками. Сделать к следующему выпуску; nas-info — сказать, что вышло. Код и тест —
       DL #14 (2026-10-24), 562 юнит; рабочим CLI: `~/nas-info` — «ok — in the memory of another
       clone of this repo»
+- [ ] Sidetrack #7: перенос в `GA/` и `SPACE/` — владелец правит список (`finam*`?) — 2026-11-14: «Список-черновик -
+      окей», `finam*` — «пока оставь там где есть», план — «согласен»; `vdx move` чинит worktree — 2026-11-14:
+      код (`worktreeGroups`, `repairScript` в `move.ts`), строки плана, справка, `environment-format.md`; два теста
+      `move.test.ts` (оба перенесены; перенесён один основной) — на обеих «машинах» git в worktree жив; тест падает,
+      если починку убрать; к выпуску 0.58
+      (`git worktree repair`, тест, выпуск с 0.58); echelon — `echelon moved` правит пути в `signals/sources.yaml` HQ и
+      `tools/dry-run.sh`; потом перенос одной командой на папку, когда владелец закроет сессии этих проектов
 - [ ] Владелец — перенос папок (`GA/`, `SPACE`, потом `/Volumes/Working/…`) с nas-info (их
       Syncthing). Я предложил отдать nas-info инструкцию «перенос одного проекта»: остановить
       агента, `mv`, `vdx doctor --fix '<новый путь>'`, один раз `vdx ai` там и ответить на окно
