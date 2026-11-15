@@ -1018,6 +1018,34 @@ export interface AiOptions {
   find?: string;
   /** `--tab`: back into the session this cmux tab showed before cmux restarted (vdx-ai-predictable DL #19). */
   tab?: boolean;
+  /** `-y`, `--yes`: every question answered by vdx, as Linux tools take it — y, and Enter for the rest (DL #29). */
+  yes?: boolean;
+  /** `--no-input`: no question asked — as without a terminal; for agents (DL #29). */
+  noInput?: boolean;
+}
+
+/** A question may be put: at a terminal, or with `--yes` (vdx answers it); never with `--no-input`. */
+function asks(deps: { interactive: boolean; answers?: AiDeps['answers'] }): boolean {
+  return deps.answers === 'none' ? false : deps.answers === 'yes' || deps.interactive;
+}
+
+/**
+ * `--yes`: every question answered by vdx — y to a `[y/N]` or `[Y/n]` one, Enter to the rest — and
+ * the answer said on a line; the list is answered by its Enter, not shown with a cursor.
+ * `--no-input`: no question is put (`asks`), as without a terminal (vdx-ai-predictable DL #29).
+ */
+function withAnswers(deps: AiDeps, answers: 'yes' | 'none'): AiDeps {
+  if (answers === 'none') return { ...deps, answers };
+  return {
+    ...deps,
+    answers,
+    pick: undefined,
+    ask: (prompt) => {
+      const answer = /\[(y\/N|Y\/n)\]/.test(prompt) ? 'y' : '';
+      deps.log(`${prompt.trim()} ${answer || 'Enter'} (--yes)`);
+      return answer;
+    },
+  };
 }
 
 /** A topic is one line: it goes into a tmux option, a terminal's title and a transcript line. */
@@ -1082,6 +1110,11 @@ export interface AiDeps {
   tmux: Tmux;
   /** stdin and stdout are a terminal: an interactive agent can run here and tmux can attach. */
   interactive: boolean;
+  /**
+   * Who answers the questions: the person at a terminal (unset), vdx itself (`--yes`), nobody
+   * (`--no-input`). A question goes by `asks`, a terminal's own work (attach, colour) by `interactive`.
+   */
+  answers?: 'yes' | 'none';
   shell: string | null;
   log: (line: string) => void;
   out: (text: string) => void;
@@ -1689,6 +1722,8 @@ function remoteFlags(opts: AiOptions): string[] {
     opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
     opts.tab && '--tab',
+    opts.yes && '--yes',
+    opts.noInput && '--no-input',
   ].filter((f): f is string => Boolean(f));
 }
 
@@ -1757,7 +1792,7 @@ export function ensureAuthor(projectRoot: string, poolDirs: string[], deps: AiDe
     return;
   }
   deps.log(`⚠ ${path.basename(projectRoot)}: no commit author of its own — git will refuse to commit here`);
-  if (!deps.interactive || top.length === 0) {
+  if (!asks(deps) || top.length === 0) {
     deps.log(`  set it: ${top[0] ? command(top[0]) : `git -C ${q} config --local user.email <address>`}`);
     return;
   }
@@ -1813,7 +1848,7 @@ export function ensureMemory(
   if (!memoryNeedsFix(state)) return;
   const fix = `vdx doctor --fix ${shellQuote(projectRoot)}`;
   deps.log(`⚠ ${path.basename(projectRoot)}: Claude memory ${describeMemory(state, ctx)}`);
-  if (!deps.interactive || agentRunning) {
+  if (!asks(deps) || agentRunning) {
     deps.log(`  ${agentRunning ? 'once the running agent of the project ends' : 'put it there'}: ${fix}`);
     return;
   }
@@ -2354,7 +2389,7 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
   }
 
   const firstIdle = found.find(idleHere);
-  if (canAsk && deps.interactive) {
+  if (canAsk && asks(deps)) {
     deps.log('conversations of this project:');
     found.forEach((c, i) => {
       const marks = [
@@ -2877,7 +2912,7 @@ function pickAgent(
   };
   // Start times come from Claude Code's session files; without them, tmux's order.
   const newest = startedAt(sorted[0]!) !== null ? 'the newest' : 'the first';
-  if (!canAsk || !deps.interactive) {
+  if (!canAsk || !asks(deps)) {
     deps.log(`note: ${sorted.length} agents of this project run here — taking ${newest}, ${show(sorted[0]!)}`);
     return sorted[0]!;
   }
@@ -3834,6 +3869,122 @@ interface Topic {
   from: string;
 }
 
+/** Short words that say nothing about a topic: a match on them is no likeness. */
+const TOPIC_STOP = new Set('для это как что или при над под про без над the and for with from into'.split(' '));
+
+/**
+ * The words of a topic that carry it: lower case, three letters and more, cut to five — a crude stem,
+ * so «письма» and «письмо» meet (vdx-ai-predictable Sidetrack #19).
+ */
+function topicStems(topic: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const w of topic.toLowerCase().split(/[^\p{L}\p{N}]+/u))
+    if (w.length >= 3 && !TOPIC_STOP.has(w) && !out.has(w.slice(0, 5))) out.set(w.slice(0, 5), w);
+  return out;
+}
+
+/** The words of `running` a topic asked for shares — empty: not alike. */
+export function sharedTopicWords(asked: string, running: string): string[] {
+  const want = topicStems(asked);
+  return [...topicStems(running)].filter(([stem]) => want.has(stem)).map(([, word]) => word);
+}
+
+/** A focused session of the project running now, on this machine or another. */
+interface FocusedRunning {
+  machine: string;
+  session: string;
+  pid: number;
+  topic: string | null;
+  conversation: string | null;
+  /** This machine's: its pane. */
+  pane?: AgentPane;
+  /** The topic's words the asked one shares. */
+  shared: string[];
+}
+
+/**
+ * Which focused session a `--focused` start goes into (vdx-ai-predictable DL #29, Sidetrack #19):
+ * the project's focused sessions running on every machine, those on a topic like the one asked —
+ * or all of them, with none asked — as rows; Enter, `n`, a new one; with no topic asked, text typed
+ * is the new one's topic. Nothing alike, or nobody to ask: a new one, as before. Null — Ctrl-D.
+ * One on the very topic is attached to before this is asked (its topic stays its own).
+ */
+function chooseFocused(input: {
+  plan: LaunchPlan;
+  deps: AiDeps;
+  running: AgentPane[];
+  focusedOf: (pid: number) => boolean;
+  conversationOf: (a: AgentPane) => string | null;
+  topic: string;
+  ask: boolean;
+  dryRun: boolean;
+  icons: Record<string, string>;
+}):
+  | { kind: 'here'; pane: AgentPane }
+  | { kind: 'there'; at: FocusedRunning }
+  | { kind: 'new'; topic?: string; asked?: boolean }
+  | null {
+  const { plan, deps, topic } = input;
+  const found: FocusedRunning[] = input.running
+    .filter((a) => input.focusedOf(a.proc.pid))
+    .map((a) => ({
+      machine: plan.host,
+      session: a.pane.session,
+      pid: a.proc.pid,
+      topic: sessionTopic(deps.tmux, a.pane.session),
+      conversation: input.conversationOf(a),
+      pane: a,
+      shared: [],
+    }));
+  // The other machines only when somebody sees the rows: a plain focused start asks nobody over ssh.
+  if (input.ask || input.dryRun)
+    for (const m of plan.machines)
+      if (!sameMachine(m, plan.host))
+        for (const f of askMachine(m, deps, plan.projectRoot)?.report?.agents ?? [])
+          if (f.focused && f.session)
+            found.push({
+              machine: m,
+              session: f.session,
+              pid: f.pid,
+              topic: f.topic,
+              conversation: f.conversation,
+              shared: [],
+            });
+  for (const f of found) f.shared = topic && f.topic ? sharedTopicWords(topic, f.topic) : [];
+  const exact = topic ? found.find((f) => !f.pane && f.topic && normalizeTopic(f.topic) === topic) : undefined;
+  if (exact && exact.conversation) return { kind: 'there', at: exact };
+  const rows = topic
+    ? found.filter((f) => f.shared.length > 0).sort((a, b) => b.shared.length - a.shared.length)
+    : found;
+  if (rows.length === 0) return { kind: 'new' };
+  const show = (f: FocusedRunning) =>
+    `${agentLabel(f, input.icons)}  🎯 ${f.topic ? `«${f.topic}»` : '(no topic yet)'}${f.shared.length ? `   alike: ${f.shared.join(', ')}` : ''}`;
+  const fresh = topic ? `a new focused session «${topic}»` : 'a new focused session';
+  if (!input.ask) {
+    if (input.dryRun)
+      deps.log(
+        `note: focused session(s) ${topic ? 'on a topic like it' : 'of the project'} run: ${rows.map(show).join('; ')} — ` +
+          `a start at a terminal asks; Enter — ${fresh}`,
+      );
+    return { kind: 'new' };
+  }
+  deps.log(topic ? `focused sessions on a topic like «${topic}»:` : `focused sessions of ${plan.project} running:`);
+  rows.forEach((f, i) => deps.log(`  ${i + 1}  ${show(f)}`));
+  deps.log(`  n  ${fresh}${topic ? '' : ` — type its topic, or Enter: ${AGENT_TAKES_TOPIC}`}`);
+  for (let tries = 0; tries < 2; tries++) {
+    const answer = deps.ask(topic ? 'Which one? [Enter: n]: ' : 'Which one, or the new one’s topic? [Enter: n]: ');
+    if (answer === null) return null;
+    const a = answer.trim();
+    if (a === '' || /^n$/i.test(a)) return { kind: 'new', asked: true };
+    const picked = /^\d+$/.test(a) ? rows[Number(a) - 1] : undefined;
+    if (picked?.pane) return { kind: 'here', pane: picked.pane };
+    if (picked) return { kind: 'there', at: picked };
+    if (!topic && !/^\d+$/.test(a)) return { kind: 'new', topic: normalizeTopic(a), asked: true };
+    deps.log(`  no row ${a}`);
+  }
+  return { kind: 'new' };
+}
+
 const AGENT_TAKES_TOPIC = "the agent takes it from the user's first message";
 /** An HQ session's sign: what the workspace's description shows (hq-session-mode DL #4). */
 const HQ_TOPIC: Topic = { text: '👑 HQ', from: "the HQ session's sign" };
@@ -3858,7 +4009,7 @@ function chooseTopic(
     ? conversationTopic({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, id: opts.conversation })
     : null;
   if (back) return { text: back, from: 'from the conversation' };
-  if (!deps.interactive) return { text: null, from: AGENT_TAKES_TOPIC };
+  if (!asks(deps)) return { text: null, from: AGENT_TAKES_TOPIC };
   if (!canAsk) return { text: null, from: `asked at the start; Enter — ${AGENT_TAKES_TOPIC}` };
   const answer = deps.ask(`Topic of this focused session [Enter: the agent takes it from your first message]: `);
   if (answer === null) return null;
@@ -3923,8 +4074,13 @@ function describeLag(lag: Lag): string {
   return lag.plugins.length > 0 ? `${claude}; plugins updated since it loaded them: ${names}` : claude;
 }
 
-export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.pid): number {
-  const { log, tmux } = deps;
+export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.pid): number {
+  const { log, tmux } = given;
+  if (opts.yes && opts.noInput) {
+    log('vdx ai: --yes answers every question, --no-input puts none — pick one');
+    return EXIT_USAGE;
+  }
+  const deps = opts.yes || opts.noInput ? withAnswers(given, opts.yes ? 'yes' : 'none') : given;
 
   if (opts.intercom && opts.focused) {
     log(
@@ -4036,12 +4192,52 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // for, not one more next to it (vdx-ai-predictable Sidetrack #7).
   const topicAsked =
     plan.focused && opts.topic && !opts.conversation && !opts.restart ? normalizeTopic(opts.topic) : '';
-  const onTopic = topicAsked
+  let onTopic = topicAsked
     ? running.find(
         (a) => focusedOf(a.proc.pid) && normalizeTopic(sessionTopic(tmux, a.pane.session) ?? '') === topicAsked,
       )
     : undefined;
+  // The list below asked for the topic too: the question about it is not put again.
+  let topicAnswered = false;
   if (onTopic) log(`→ ${onTopic.pane.session} is the focused session on «${topicAsked}» — attaching to it`);
+  // Not one on that very topic: the focused sessions running alike — or all, with no topic — are rows
+  // of a question, and Enter starts a new one (DL #29, Sidetrack #19).
+  else if (plan.focused && !opts.conversation && !opts.restart && multiplexer === 'tmux' && isClaude(plan.command)) {
+    const chosen = chooseFocused({
+      plan,
+      deps,
+      running,
+      focusedOf,
+      conversationOf,
+      topic: topicAsked,
+      ask: asks(deps) && !opts.dryRun,
+      dryRun: opts.dryRun,
+      icons: environment.session?.machine_icons ?? {},
+    });
+    if (chosen === null) {
+      log('no answer — nothing started');
+      return EXIT_LAUNCH_FAILED;
+    }
+    if (chosen.kind === 'new' && chosen.asked) topicAnswered = true;
+    if (chosen.kind === 'here') {
+      onTopic = chosen.pane;
+      // Its topic stays its own: the one typed was only what to look for.
+      opts = { ...opts, topic: undefined };
+      log(`→ ${chosen.pane.pane.session}: attaching to it`);
+    } else if (chosen.kind === 'there') {
+      log(`→ ${chosen.at.session} on ${chosen.at.machine}: attaching to it there`);
+      return runAiRemote(
+        { ...opts, path: projectRoot, topic: undefined, conversation: chosen.at.conversation ?? undefined },
+        chosen.at.machine,
+        deps,
+        plan.seat,
+      );
+    } else if (chosen.topic) {
+      topicAnswered = true;
+      opts = { ...opts, topic: chosen.topic };
+      if (!chosen.topic.startsWith('-')) plan = { ...plan, opening: [chosen.topic] };
+    }
+  }
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
   // One intercom or HQ session per project and machine: a running one is the one, never a second next to it.
   let alongside =
@@ -4077,7 +4273,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       return EXIT_USAGE;
     }
     // A search nobody can be asked about is printed with the commands for its rows, as --list is.
-    const ask = deps.interactive && !opts.dryRun;
+    const ask = asks(deps) && !opts.dryRun;
     const listed = opts.list || (opts.find !== undefined && !ask);
     const offer = ask && !listed ? (lost?.mine.length ?? 0) : 0;
     if (lost && !lost.note) {
@@ -4116,7 +4312,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       case 'attach': {
         for (const l of outcome.lines) log(l);
         if (outcome.open) {
-          const answer = deps.interactive
+          const answer = asks(deps)
             ? deps.ask(`${outcome.agent.pane.session} is open in another terminal here — attach this one too? [y/N]: `)
             : null;
           if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
@@ -4206,7 +4402,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
     current = self;
   }
   // Several agents and nobody to ask: a guess would stop a session someone works in.
-  if (opts.restart && !current && running.length > 1 && (!deps.interactive || opts.dryRun)) {
+  if (opts.restart && !current && running.length > 1 && (!asks(deps) || opts.dryRun)) {
     log(
       `vdx ai --restart: ${running.length} agents of this project run here, and nobody to ask which — nothing restarted:`,
     );
@@ -4319,16 +4515,14 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   for (const l of folders) log(l);
   if (choice?.abort) return EXIT_LAUNCH_FAILED;
   if (choice?.elsewhere && !current) {
-    const answer = deps.interactive
-      ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `)
-      : null;
+    const answer = asks(deps) ? deps.ask(`Start a new conversation ${here}${atSeat ? ',' : ''} anyway? [y/N]: `) : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
       // Said with the reason: without a terminal the question above was never asked.
       log(
-        deps.interactive
+        asks(deps)
           ? 'nothing started'
           : `nothing started: an agent of this project runs on ${choice.elsewhere.join(', ')}, and a new conversation ` +
-              `${here}${atSeat ? ',' : ''} needs a yes at a terminal — or a session of its own: --focused "<topic>" --detach`,
+              `${here}${atSeat ? ',' : ''} needs a yes — at a terminal, or --yes — or a session of its own: --focused "<topic>" --detach`,
       );
       return EXIT_LAUNCH_FAILED;
     }
@@ -4343,7 +4537,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   }
   if (askHere) {
     const { id, why } = askHere;
-    const answer = deps.interactive ? deps.ask(`Continue ${id.slice(0, 8)} ${here}? ${why}. [y/N]: `) : null;
+    const answer = asks(deps) ? deps.ask(`Continue ${id.slice(0, 8)} ${here}? ${why}. [y/N]: `) : null;
     if (!/^y(es)?$/i.test(answer?.trim() ?? '')) {
       log(
         `nothing started. ${atSeat ? 'Here' : `On ${plan.host}`}: ${vdxAiHere} ${shellQuote(projectRoot)} --conversation ${id}` +
@@ -4481,7 +4675,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
       : opts.fresh || plan.intercom
         ? 'stops the running agent and starts a new conversation'
         : 'stops the running agent; the conversation is not resumed — the profile has no resume_args';
-    if (!deps.interactive) {
+    if (!asks(deps)) {
       log(`✗ ${drift}`);
       log(`  ${unfocused ? 'to focus it' : 'to apply the profile'}: ${fix} (${effect})`);
       return EXIT_DRIFT;
@@ -4520,7 +4714,7 @@ export function runAi(opts: AiOptions, deps: AiDeps, selfPid: number = process.p
   // The topic goes into the tmux session before the agent starts: its session-start hook reads it.
   let topic: Topic | null = plan.hq ? HQ_TOPIC : null;
   if (plan.focused) {
-    topic = chooseTopic(opts, plan, deps, reused ? undefined : current, true);
+    topic = chooseTopic(opts, plan, deps, reused ? undefined : current, !topicAnswered);
     if (!topic) {
       log('no answer — nothing started');
       return EXIT_LAUNCH_FAILED;

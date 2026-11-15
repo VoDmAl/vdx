@@ -75,6 +75,18 @@ describe('vdx ai --help and unknown options', () => {
     }
   }, 30_000); // 6 starts of the CLI
 
+  // `-y` is `--yes`, as Linux tools have it (vdx-ai-predictable DL #29), wherever it stands.
+  it('-y is --yes: with --no-input, the usage error that names both', () => {
+    for (const args of [
+      ['-y', '--no-input'],
+      ['--no-input', '-y'],
+    ]) {
+      const r = vdxEnv(env(), 'ai', CLI_ROOT, ...args);
+      expect(r.status, args.join(' ')).toBe(2);
+      expect(r.stderr).toContain('--yes answers every question, --no-input puts none — pick one');
+    }
+  }, 30_000);
+
   it('refuses a second path instead of dropping it', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, os.tmpdir(), '--dry-run');
     expect(r.status).toBe(2);

@@ -99,13 +99,17 @@
 
 Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
 ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
-В `main`, не выпущено: план `vdx ai --dry-run` называет, куда пойдёт старт (`attaches to`, `restarts the
-agent in`, новая сессия или окно), — `vdx-ai-predictable`, пункт 2026-11-05; выпуск — со следующей правкой CLI
-(владелец 2026-11-14: «Дождемся»).
-Ожидание ветки другой машины перед коммитом — кристалл [vdx-push-waits](docs/tasks/vdx-push-waits/workitem.md), DL #2:
-событие `pre-commit-line` в `git.hooks` (имя принято ai-dev-plugins 2026-11-14); выпуск minor 0.58 — с правкой
-`--dry-run` и без `session.always_list` (`vdx-ai-predictable` DL #28); после выпуска и станций — запись сета с обёрткой
-echelon (ждём её) и `vdx doctor --fix` на станциях: vdx старше 0.58 профиль с этим событием отвергнет.
+К выпуску minor 0.58 (в `main` и в рабочем дереве), плагин 0.15.8 с ним:
+- план `vdx ai --dry-run` называет, куда пойдёт старт (`vdx-ai-predictable`, пункт 2026-11-05);
+- `session.always_list` больше не читается (`vdx-ai-predictable` DL #28; из профиля снят сетом v1.15.2);
+- событие `pre-commit-line` в `git.hooks` — место для ожидания ветки другой машины (`vdx-push-waits` DL #2; имя принято
+  ai-dev-plugins 2026-11-14);
+- `vdx move` чинит связь git worktree (`claude-memory-in-project` Sidetrack #7);
+- тема `--focused` — поиск по идущим focused-сессиям, ключи `-y`/`--yes` и `--no-input` (`vdx-ai-predictable` DL #29,
+  Sidetrack #19).
+После выпуска и станций: запись сета с обёрткой echelon (ждём её) и `vdx doctor --fix` на станциях — vdx старше 0.58
+профиль с событием `pre-commit-line` отвергнет; перенос в `GA/` и `SPACE/` — после правки `echelon moved` и слова
+владельца о моменте (`claude-memory-in-project` Sidetrack #7).
 
 Прежние: 0.57.0 (2026-11-14, `0e51fcb`) — «left after a look» в списке `vdx ai`: `/clear` больше чем через сутки после
 последнего набранного; поле `history` в `--report` (`vdx-ai-predictable` DL #27, Sidetrack #18, письмо nas-info

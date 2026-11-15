@@ -93,6 +93,8 @@ interface CommandSpec {
   optional?: string[];
   /** How many positional arguments the command takes. */
   positionals: number;
+  /** Short flags, as Linux tools have them: `-y` → `yes`. */
+  shorts?: Record<string, string>;
 }
 
 const AI_HELP = `Starts your agent in the project, or attaches to the one already running there.
@@ -180,6 +182,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 folder Claude Code does not trust yet, nothing starts (exit 4):
                 its trust window would wait with nobody at it — start once
                 without --detach and answer it
+  -y, --yes     every question answered by vdx, as Linux tools take it: y to a
+                [y/N] one, Enter to the rest (the list: its marked row; a topic:
+                left to the agent); each answer is said on a line (0.58)
+  --no-input    no question put, as without a terminal: the safe way, or a refusal
+                that names the flag or command that would do it — for agents (0.58)
   --dry-run     print the plan and the project's running agents; start nothing.
                 Claude Code: the list as well, and what a start without a terminal takes
   --list        Claude Code: the list a plain start shows; ask nothing, start nothing.
@@ -448,7 +455,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: [
@@ -467,10 +474,13 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'restore',
       'state',
       'tab',
+      'yes',
+      'no-input',
     ],
     values: ['conversation', 'waiting', 'find'],
     optional: ['focused'],
     positionals: 1,
+    shorts: { '-y': 'yes' },
   },
   ...Object.fromEntries(
     LIFECYCLE_VERBS.map((verb) => [
@@ -541,6 +551,11 @@ function checkArgs(name: string, opts: ParsedArgs): ParsedArgs {
       flags[flag] = value;
     }
   }
+  for (const [short, long] of Object.entries(spec.shorts ?? {}))
+    while (positionals.includes(short)) {
+      positionals.splice(positionals.indexOf(short), 1);
+      flags[long] = true;
+    }
   if (flags.help || positionals.includes('-h')) {
     process.stdout.write(`Usage: ${spec.usage}\n\n${spec.help}`);
     process.exit(0);
@@ -1009,6 +1024,8 @@ function cmdAi(opts: ParsedArgs): void {
     hq: opts.flags.hq === true,
     list: opts.flags.list === true,
     find: find?.trim(),
+    yes: opts.flags.yes === true,
+    noInput: opts.flags['no-input'] === true,
   };
   const deps = { ...defaultDeps(), version: readCliVersion() };
   // `ai@m3`: the same command on another machine. Its own label runs here.

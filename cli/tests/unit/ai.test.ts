@@ -54,6 +54,7 @@ import {
   sleepSync,
   tmuxShellCommand,
   unreadableFolders,
+  sharedTopicWords,
 } from '../../src/ai.ts';
 import {
   type LiveSession,
@@ -208,6 +209,19 @@ describe.skipIf(process.getuid?.() === 0)('guarded folders (macOS)', () => {
       '  fix: restart the tmux server (it closes every session)',
     ]);
     expect(foldersWarning(d, true, 'run the fixer', home)[1]).toBe('  fix: run the fixer');
+  });
+});
+
+// The likeness of two topics: the words they share, by the start of the word (Sidetrack #19).
+describe('sharedTopicWords', () => {
+  it('words of three letters and more, by their first five: «письмо» meets «письма»', () => {
+    expect(sharedTopicWords('письмо echelon', 'Письма в ящике vdx')).toEqual(['письма']);
+    expect(sharedTopicWords('release 0.58', 'docs for release')).toEqual(['release']);
+  });
+  it('short and empty words are no likeness', () => {
+    expect(sharedTopicWords('для vdx', 'для echelon')).toEqual([]);
+    expect(sharedTopicWords('a b', 'a b')).toEqual([]);
+    expect(sharedTopicWords('search', 'other')).toEqual([]);
   });
 });
 
@@ -1249,8 +1263,33 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runAi({ ...opts, path: root, fresh: true }, deps({ interactive: false }))).toBe(EXIT_LAUNCH_FAILED);
       expect(answers).toHaveLength(1);
       expect(text()).toContain(
-        'nothing started: an agent of this project runs on m3, and a new conversation here, on lft, needs a yes at a terminal',
+        'nothing started: an agent of this project runs on m3, and a new conversation here, on lft, needs a yes — at a terminal, or --yes',
       );
+    });
+
+    // Questions by a flag, as Linux tools have them (DL #29): --yes answers, --no-input puts none.
+    it('--yes answers the question itself — the person is not asked — and says so', () => {
+      remoteLive = [agentOnM3(root)];
+      answers = ['should not be read'];
+      expect(runAi({ ...opts, path: root, fresh: true, yes: true }, deps())).toBe(EXIT_OK);
+      expect(answers).toHaveLength(1);
+      expect(text()).toContain('Start a new conversation here, on lft, anyway? [y/N]: y (--yes)');
+      expect(runs()).toEqual(['--base']);
+    });
+
+    it('--no-input at a terminal puts no question: nothing starts, and the line names --yes', () => {
+      remoteLive = [agentOnM3(root)];
+      answers = ['y'];
+      expect(runAi({ ...opts, path: root, fresh: true, noInput: true }, deps())).toBe(EXIT_LAUNCH_FAILED);
+      expect(answers).toEqual(['y']);
+      expect(text()).toContain('needs a yes — at a terminal, or --yes');
+      expect(runs()).toEqual([]);
+    });
+
+    it('--yes and --no-input together are a usage error, before anything', () => {
+      expect(runAi({ ...opts, path: root, yes: true, noInput: true }, deps())).toBe(EXIT_USAGE);
+      expect(text()).toContain('--yes answers every question, --no-input puts none — pick one');
+      expect(runs()).toEqual([]);
     });
 
     it('--focused --detach while the project runs there: a session of its own, nobody asked — an HQ starts steps so', () => {
@@ -3003,6 +3042,63 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAi({ ...opts, path: root, focused: true, topic: 'other' }, deps())).toBe(EXIT_OK);
     expect(text()).not.toContain('is the focused session on');
     expect(tmux.hasSession('proj@testhost-3')).toBe(true);
+  });
+
+  // A topic typed from memory is rarely the same letter for letter (the owner, 2026-11-14; DL #29).
+  describe('--focused: a topic is a search among the focused sessions running', () => {
+    it('words alike are rows, and the row picked is attached to — its topic stays its own', () => {
+      focusedIn('proj@testhost', ID.a, 'письма в ящике vdx');
+      answers = ['1'];
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'письмо echelon' }, deps())).toBe(EXIT_OK);
+      expect(answers).toEqual([]);
+      expect(text()).toMatch(
+        /focused sessions on a topic like «письмо echelon»:\n {2}1 {2}proj@testhost .*«письма в ящике vdx» {3}alike: письма\n {2}n {2}a new focused session «письмо echelon»/,
+      );
+      expect(tmux.hasSession('proj@testhost-2')).toBe(false);
+      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe(
+        'письма в ящике vdx',
+      );
+    });
+
+    it('…Enter is n: a new focused session on the topic asked', () => {
+      focusedIn('proj@testhost', ID.a, 'письма в ящике vdx');
+      answers = [''];
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'письмо echelon' }, deps())).toBe(EXIT_OK);
+      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-2:', '@vdx_topic'])?.trim()).toBe(
+        'письмо echelon',
+      );
+    });
+
+    it('no topic: every focused session is a row, and text typed is the new one’s topic — asked once', () => {
+      focusedIn('proj@testhost', ID.a, 'search');
+      answers = ['docs for 0.58'];
+      expect(runAi({ ...opts, path: root, focused: true }, deps())).toBe(EXIT_OK);
+      expect(answers).toEqual([]);
+      expect(text()).toContain('  1  proj@testhost');
+      expect(text()).not.toContain('Topic of this focused session');
+      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-2:', '@vdx_topic'])?.trim()).toBe(
+        'docs for 0.58',
+      );
+    });
+
+    it('nobody to ask, or --yes: no row is taken — a new one, as before', () => {
+      focusedIn('proj@testhost', ID.a, 'письма в ящике vdx');
+      answers = ['1'];
+      expect(
+        runAi(
+          { ...opts, path: root, focused: true, topic: 'письмо echelon', detach: true },
+          { ...deps(), interactive: false },
+        ),
+      ).toBe(EXIT_OK);
+      expect(answers).toEqual(['1']);
+      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+      logs = [];
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'письма echelon', yes: true }, deps())).toBe(EXIT_OK);
+      expect(answers).toEqual(['1']);
+      expect(text()).toContain('Which one? [Enter: n]: Enter (--yes)');
+      expect(tmux.hasSession('proj@testhost-3')).toBe(true);
+    });
   });
 
   // t23b-program, 2026-11-08: `! vdx ai --restart` typed in one session restarted the newest of three.
