@@ -3956,7 +3956,14 @@ function tabsHere(deps: AiDeps): TabPlan[] {
       ttys: view.ttys,
       sessionsHere: (socket) => {
         const t = socket === deps.tmux.socketName ? deps.tmux : new Tmux(socket);
-        return new Set((t.tryRun(['list-sessions', '-F', '#{session_name}']) ?? '').split('\n').filter(Boolean));
+        const out = t.tryRun(['list-sessions', '-F', '#{session_attached}\t#{session_name}']) ?? '';
+        return new Map(
+          out
+            .split('\n')
+            .map((l) => /^(\d+)\t(.+)$/.exec(l))
+            .filter((m): m is RegExpExecArray => m !== null)
+            .map((m) => [m[2]!, Number(m[1])] as const),
+        );
       },
       marksThere: (host) => {
         const res = (deps.ssh ?? runSsh)(
@@ -3966,11 +3973,17 @@ function tabsHere(deps: AiDeps): TabPlan[] {
             '-o',
             'ConnectTimeout=5',
             host,
-            `tmux list-sessions -F '#{${TAB_OPTION}}' 2>/dev/null; true`,
+            `tmux list-sessions -F '#{session_attached} #{${TAB_OPTION}}' 2>/dev/null; true`,
           ],
           true,
         );
-        return res && res.status === 0 ? new Set(res.stdout.split(/\s+/).filter((m) => /^[0-9a-f]+$/.test(m))) : null;
+        if (!res || res.status !== 0) return null;
+        const marks = new Map<string, number>();
+        for (const line of res.stdout.split('\n')) {
+          const [n, ...tokens] = line.trim().split(/\s+/);
+          for (const t of tokens) if (/^[0-9a-f]+$/.test(t)) marks.set(t, Number(n) || 0);
+        }
+        return marks;
       },
     });
   } catch {

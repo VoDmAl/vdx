@@ -136,8 +136,8 @@ describe('planTabs: where each tab goes, and whether it can go now', () => {
     before: null,
     records: [] as TabRecord[],
     foreground: new Map<string, string[]>(),
-    sessionsHere: () => new Set(['proj@lft']),
-    marksThere: () => new Set(['abc123']),
+    sessionsHere: () => new Map([['proj@lft', 0]]),
+    marksThere: () => new Map([['abc123', 0]]),
   };
   const states = (input: Parameters<typeof planTabs>[0]) => planTabs(input).map((x) => [x.surface, x.state, x.from]);
 
@@ -159,6 +159,16 @@ describe('planTabs: where each tab goes, and whether it can go now', () => {
       ['C', 'busy', 'record'],
       ['D', 'no-session', 'record'],
     ]);
+    // Its session is in another terminal here already: not typed into.
+    expect(
+      states({
+        ...base,
+        current: snap([p('A', 'ttys001')]),
+        records: [here('A', 'proj@lft')],
+        foreground: new Map([['ttys001', ['-zsh']]]),
+        sessionsHere: () => new Map([['proj@lft', 1]]),
+      }),
+    ).toEqual([['A', 'shown', 'record']]);
   });
 
   it("the terminal its processes say comes first; a snapshot older than cmux's start does not say it", () => {
@@ -205,12 +215,14 @@ describe('planTabs: where each tab goes, and whether it can go now', () => {
     ]);
   });
 
-  it('a tab without a record: the session cmux noticed in it before it started', () => {
+  it('a tab without a record: the session cmux noticed in it before it started — only for a tab there now', () => {
     expect(
       states({
         ...base,
         current: snap([p('A', 'ttys001'), p('B', 'ttys002')]),
-        before: snap([p('A', 'ttys009', 'proj@lft'), p('B', 'ttys008')], 1000),
+        // C: closed by hand since cmux started, or lost — cmux's binding cannot tell (m3, 2026-11-17: cmux up since
+        // 10-07, 0.59.0 would have opened four tabs closed since).
+        before: snap([p('A', 'ttys009', 'proj@lft'), p('B', 'ttys008'), p('C', 'ttys007', 'proj@lft')], 1000),
         records: [],
       }),
     ).toEqual([['A', 'ready', 'cmux']]);
@@ -230,6 +242,16 @@ describe('planTabs: where each tab goes, and whether it can go now', () => {
       ['L', 'closed', 'record'],
       ['X', 'closed', 'record'],
     ]);
+    // Its session is in another terminal now: the person has it elsewhere, nothing went missing.
+    expect(
+      states({
+        ...base,
+        current: snap([]),
+        before: snap([p('G', 'ttys001')], 1000),
+        records: [here('G', 'proj@lft', 500)],
+        sessionsHere: () => new Map([['proj@lft', 1]]),
+      }),
+    ).toEqual([['G', 'closed', 'record']]);
   });
 
   it('the tab this runs in is itself; no cmux here, no tabs', () => {

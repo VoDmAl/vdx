@@ -203,7 +203,7 @@ const ATTACHED = new Set(['tmux', 'ssh', 'node', 'vdx']);
 
 /**
  * - `ready` — the tab is at its shell and its session is there: it goes back.
- * - `shown` — something holds an attach in it already.
+ * - `shown` — something holds an attach in it already, or its session here is in another terminal.
  * - `busy` — something else runs in front in it: typing there would go to that.
  * - `no-session` — the session it showed is not there (not brought back yet, or gone).
  * - `no-answer` — the other machine did not answer.
@@ -233,10 +233,13 @@ export interface TabsInput {
   foreground: Map<string, string[]>;
   /** Each tab's terminal by its processes (`ttyBySurface`); not given — cmux's snapshot alone. */
   ttys?: Map<string, string>;
-  /** The sessions on a tmux server here. */
-  sessionsHere: (socket: string | null) => Set<string>;
-  /** The tab marks the sessions on another machine carry (`@vdx_tab`); null — it did not answer. */
-  marksThere: (host: string) => Set<string> | null;
+  /** The sessions on a tmux server here, each with the terminals attached to it. */
+  sessionsHere: (socket: string | null) => Map<string, number>;
+  /**
+   * The tab marks the sessions on another machine carry (`@vdx_tab`), each with the terminals attached to
+   * its session; null — it did not answer.
+   */
+  marksThere: (host: string) => Map<string, number> | null;
 }
 
 /** A session a tab shows, named for a person: `vdm@lft`, `echelon on m3`. */
@@ -251,13 +254,16 @@ export function targetLabel(t: TabTarget): string {
 export function planTabs(input: TabsInput): TabPlan[] {
   const { current, before } = input;
   if (!current) return [];
-  const here = new Map<string, Set<string>>();
+  const here = new Map<string, Map<string, number>>();
   const sessions = (socket: string | null) => {
     const key = socket ?? '';
     if (!here.has(key)) here.set(key, input.sessionsHere(socket));
     return here.get(key)!;
   };
-  const there = new Map<string, Set<string> | null>();
+  /** Terminals on the session a tab showed: one shows it now, so no tab of it is missing. */
+  const clients = (t: TabTarget) =>
+    t.kind === 'here' ? (sessions(t.socket).get(t.session) ?? 0) : (marks(t.host)?.get(t.token) ?? 0);
+  const there = new Map<string, Map<string, number> | null>();
   const marks = (host: string) => {
     if (!there.has(host)) there.set(host, input.marksThere(host));
     return there.get(host)!;
@@ -274,8 +280,10 @@ export function planTabs(input: TabsInput): TabPlan[] {
       at: r.at,
     });
   const recorded = new Set(input.records.map((r) => r.surface));
+  // cmux's binding speaks only for a tab that is there now: one closed by hand since cmux started looks the same
+  // as one cmux lost, and m3, up since 2026-10-07, would have opened every tab closed since (0.59.0, DL #6).
   for (const p of before?.panels.values() ?? [])
-    if (p.tmuxSession && !recorded.has(p.surface))
+    if (p.tmuxSession && !recorded.has(p.surface) && current.panels.has(p.surface))
       wanted.push({
         surface: p.surface,
         target: { kind: 'here', session: p.tmuxSession, socket: null },
@@ -288,10 +296,11 @@ export function planTabs(input: TabsInput): TabPlan[] {
     const plan = (state: TabState, panel: CmuxPanel | null = now): TabPlan => ({ surface, target, from, state, panel });
     if (surface === input.self) return plan('self');
     if (!now) {
-      // Lost by cmux: open when cmux last went down, and the attach is from before this run of cmux.
+      // Lost by cmux: open when cmux last went down, the attach from before this run of cmux, and no terminal
+      // shows its session now — one that does means the person has it in another tab.
       const was = before?.panels.get(surface) ?? null;
-      const old = from === 'cmux' || (at !== null && before?.startedAt != null && at < before.startedAt);
-      return was && old ? plan('gone', was) : plan('closed', was);
+      const old = at !== null && before?.startedAt != null && at < before.startedAt;
+      return was && old && clients(target) === 0 ? plan('gone', was) : plan('closed', was);
     }
     // The terminal its processes say, else the snapshot's — only one written since cmux started.
     const fresh = current.writtenAt == null || before?.startedAt == null || current.writtenAt >= before.startedAt;
@@ -301,7 +310,11 @@ export function planTabs(input: TabsInput): TabPlan[] {
     const running = front.filter((c) => !SHELLS.has(c));
     if (running.some((c) => ATTACHED.has(c))) return plan('shown');
     if (running.length > 0) return plan('busy');
-    if (target.kind === 'here') return plan(sessions(target.socket).has(target.session) ? 'ready' : 'no-session');
+    if (target.kind === 'here') {
+      if (!sessions(target.socket).has(target.session)) return plan('no-session');
+      // Its session is in another tab here already: a second terminal on it is not what went missing.
+      return plan(clients(target) > 0 ? 'shown' : 'ready');
+    }
     const m = marks(target.host);
     return plan(m === null ? 'no-answer' : m.has(target.token) ? 'ready' : 'no-session');
   });
