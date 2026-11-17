@@ -56,7 +56,7 @@ function readTopic(o) {
     o.found = true;
     return line.slice(o.token.length + 1).trim() || null;
   }
-  // The topic of the pane in view: a session may hold two agents, each with its own (vdx 0.58.2);
+  // The topic of the pane in view: a session may hold two agents, each with its own (vdx 0.59);
   // one a vdx before that set on the session shows through a pane with none.
   const res = run('tmux', [
     '-u',

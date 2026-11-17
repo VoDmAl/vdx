@@ -2390,7 +2390,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(logs.join('')).toContain(topicLine('dvorobiev-ai'));
   }, 30_000);
 
-  it('a window in a session that kept a topic from a vdx before 0.58.2: the new agent does not show it', () => {
+  it('a window in a session that kept a topic from a vdx before 0.59: the new agent does not show it', () => {
     writeProfile(['--base'], true);
     killServer(tmux);
     tmux.newSession('proj@testhost', root, 'sleep 600');
@@ -3368,10 +3368,25 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       const pane = focusedIn('proj@testhost', ID.a, 'search');
       const d = { ...deps(), interactive: false, processes: inside(pane.proc.pid) };
       expect(runAi({ ...opts, path: root, restart: true }, d, 9_999_991)).toBe(EXIT_USAGE);
-      expect(text()).toContain(
-        `focused, in this conversation: vdx ai --focused --restart ${shellQuote(root)} --conversation ${ID.a}`,
-      );
+      expect(text()).toContain(`focused, in this conversation: vdx ai --focused --restart ${shellQuote(root)}`);
+      expect(text()).toContain(`focused, in a new conversation: vdx ai --focused --new --restart ${shellQuote(root)}`);
       expect(pids()).toEqual([`proj@testhost ${pane.proc.pid}`]);
+    }, 30_000);
+
+    // obsidianvault, 2026-11-15: a restart for a profile's flag brought the focused session back with its
+    // topic and an empty conversation. «Ты должен был автоматом продолжить тему» (the owner, there).
+    it('--focused --restart keeps the conversation the focused agent is in, and its topic; --new starts a new one', () => {
+      const pane = focusedIn('proj@testhost', ID.a, 'Сезон скидок');
+      const args = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').map((a) => a.proc.args);
+      expect(runAi({ ...opts, path: root, focused: true, restart: true }, deps())).toBe(EXIT_OK);
+      expect(text()).toContain(`the agent is in conversation ${ID.a.slice(0, 8)} — resuming it`);
+      expect(args()).toEqual([`/bin/sh ${claude()} --base --resume ${ID.a}`]);
+      expect(tmux.tryRun(['display-message', '-p', '-t', pane.pane.paneId, '#{@vdx_topic}'])?.trim()).toBe(
+        'Сезон скидок',
+      );
+      logs = [];
+      expect(runAi({ ...opts, path: root, focused: true, restart: true, fresh: true }, deps())).toBe(EXIT_OK);
+      expect(args()).toEqual([`/bin/sh ${claude()} --base`]);
     }, 30_000);
   });
 
@@ -4656,19 +4671,23 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     fs.writeFileSync(file, [hookLine(text.trimEnd()), userLine('hi')].join('\n') + '\n');
     expect(readConversation(file, new Date())?.mail).toBe(true);
 
-    // A restart of an intercom session — and of a focused one — starts a new conversation, it resumes none.
-    for (const [mode, flag] of [
-      ['VDX_INTERCOM', '--intercom'],
-      ['VDX_FOCUSED', '--focused'],
-    ] as const) {
-      out = [];
-      expect(runAiCheck(root, deps(chain('--x'), { [mode]: '1' }), 40)).toBe(EXIT_DRIFT);
-      expect(out.join('')).toContain(`\`vdx ai ${flag} --restart ${root}\`: it stops this session and starts it again`);
-      expect(out.join('')).toContain(
-        ", in a new conversation — before handing it over, run the project's wrap check (`/vdm:wrap` where vdm is installed)",
-      );
-      expect(out.join('')).not.toContain('resuming the conversation');
-    }
+    // A restart of an intercom session starts a new conversation, it resumes none.
+    out = [];
+    expect(runAiCheck(root, deps(chain('--x'), { VDX_INTERCOM: '1' }), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).toContain(
+      `\`vdx ai --intercom --restart ${root}\`: it stops this session and starts it again`,
+    );
+    expect(out.join('')).toContain(
+      ", in a new conversation — before handing it over, run the project's wrap check (`/vdm:wrap` where vdm is installed)",
+    );
+    expect(out.join('')).not.toContain('resuming the conversation');
+    // A focused one keeps its conversation (Sidetrack #22): no wrap first.
+    out = [];
+    expect(runAiCheck(root, deps(chain('--x'), { VDX_FOCUSED: '1' }), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).toContain(
+      `\`vdx ai --focused --restart ${root}\`: it stops this session and starts it again with the profile's flags, in the conversation it is in.`,
+    );
+    expect(out.join('')).not.toContain('wrap check');
     // A restart that resumes keeps the chat: no wrap first.
     out = [];
     expect(runAiCheck(root, deps(chain('--x')), 40)).toBe(EXIT_DRIFT);

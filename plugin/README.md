@@ -107,7 +107,7 @@ line says so: nothing wakes it, and it reads its inbox only when the user
 asks. The `vdx-ai` skill tells the agent the same.
 
 A focused session has a topic (vdx 0.41+): `vdx ai --focused "<topic>"`, kept
-as the option `@vdx_topic` of the agent's tmux pane (of its tmux session before vdx 0.58.2). The `vdx ai --check`
+as the option `@vdx_topic` of the agent's tmux pane (of its tmux session before vdx 0.59). The `vdx ai --check`
 line names it on a line of its own — kept in the transcript, it brings the
 topic back with `--focused --conversation <id>` — or asks the agent to set
 one from the user's first message. The plugin's `UserPromptSubmit` hook

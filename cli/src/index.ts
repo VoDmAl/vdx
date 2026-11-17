@@ -121,7 +121,7 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 here already on <topic> is the one: vdx ai attaches to it (0.51)
                 <topic> — what the session is about: the option @vdx_topic of
                 the agent's tmux pane, one per agent where a tmux session holds
-                two (0.58.2; the terminal's title can show it), and the vdx
+                two (0.59; the terminal's title can show it), and the vdx
                 plugin keeps the conversation in it. A new conversation opens
                 with it as its first prompt. Without one a terminal asks — Enter
                 leaves it to the agent, which takes it from your first message;
@@ -169,8 +169,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 continue this Claude Code conversation: attach to the agent in
                 it, or start one next to the agents running here
   --restart     restart the running agent in its pane — applies a changed profile;
-                with --new, --focused or --conversation, it is replaced by that;
-                with --intercom, the intercom session gets a new conversation.
+                with --new or --conversation, it is replaced by that; with
+                --focused it goes on focused in the conversation it is in, a
+                new one with --new too (0.59); with --intercom, the intercom
+                session gets a new conversation.
                 Run inside an agent's session (its shell, ! at its prompt), it
                 restarts that session, from a vdx apart from its pane, output in
                 ~/.cache/vdx/restart/<session>.log; a focused one only with

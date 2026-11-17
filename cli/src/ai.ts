@@ -1148,7 +1148,7 @@ export function normalizeTopic(raw: string): string {
  * session may hold two agents, one per window, so a topic is the pane's (echelon, 2026-11-16: the
  * second focused agent in `echelon@lft` put its topic over the first's). Read as intercom and the
  * plugin's hook read it — the format from the pane: its own option first, then the session's, which
- * a vdx before 0.58.2 set.
+ * a vdx before 0.59 set.
  */
 function paneTopic(tmux: Tmux, paneId: string): string | null {
   if (!paneId) return null;
@@ -1157,7 +1157,7 @@ function paneTopic(tmux: Tmux, paneId: string): string | null {
 
 /**
  * Set the pane's topic, or clear it. Cleared, it is set empty rather than unset: an unset one would
- * show the session's, which a vdx before 0.58.2 set for another agent of the session.
+ * show the session's, which a vdx before 0.59 set for another agent of the session.
  */
 function setPaneTopic(tmux: Tmux, paneId: string, topic: string | null): boolean {
   return tmux.tryRun(['set-option', '-p', '-t', paneId, TOPIC_OPTION, topic ?? '']) !== null;
@@ -3512,13 +3512,15 @@ export function runAiCheck(
     `Hand the user the fix — ${reload}` +
       (deps.env['TMUX']
         ? `\`${vdxAi} --restart ${root}\`: it stops this session and starts it again${again}` +
-          // A focused session and the intercom session restart into a new conversation, and what lives
-          // only in this one ends with it (ai-dev-plugins, restart-hint-wrap-first).
-          (focused || intercom
+          // The intercom session restarts into a new conversation, and what lives only in this one ends
+          // with it (ai-dev-plugins, restart-hint-wrap-first); a focused one keeps it (Sidetrack #22).
+          (intercom
             ? ", in a new conversation — before handing it over, run the project's wrap check (`/vdm:wrap` where vdm is installed): what lives only in this chat ends with it"
-            : plan.resumeArgs.length
-              ? `, resuming the conversation (${plan.resumeArgs.join(' ')})`
-              : '') +
+            : focused
+              ? ', in the conversation it is in'
+              : plan.resumeArgs.length
+                ? `, resuming the conversation (${plan.resumeArgs.join(' ')})`
+                : '') +
           `. Do not run it yourself: it ends this session.`
         : `this session runs outside tmux, so vdx cannot restart it: the user exits it and runs \`${vdxAi} ${root}\`.`),
   );
@@ -4770,8 +4772,8 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       log(
         `vdx ai --restart: ${self.pane.session} is focused, and a plain --restart makes it a plain session — nothing restarted`,
       );
-      log(`  focused, in a new conversation: ${restartLine(' --focused')}`);
-      if (id) log(`  focused, in this conversation: ${restartLine(' --focused', id)}`);
+      log(`  focused, in this conversation: ${restartLine(' --focused')}`);
+      log(`  focused, in a new conversation: ${restartLine(' --focused --new')}`);
       if (id) log(`  plain, in this conversation:   ${restartLine('', id)}`);
       return EXIT_USAGE;
     }
@@ -4827,6 +4829,14 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       choice = live
         ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
         : { args: [], lines: [] };
+    }
+    // A restart keeps the conversation the agent is in, focused too; a new one is --new. A restart for a
+    // profile's flag lost the focused session its conversation (obsidianvault, 2026-11-15; Sidetrack #22).
+    else if (opts.restart && current && plan.focused && !opts.fresh && isClaude(plan.command)) {
+      const live = conversationOf(current);
+      choice = live
+        ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
+        : { args: [], lines: ['its conversation is not known here — starting a new one'] };
     }
     // A focused session started with --detach is a new conversation of its own, and nobody is there
     // to answer: an HQ starts one for a step while it runs on another machine itself
@@ -5196,7 +5206,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     tmux.respawn(paneId, projectRoot, cmd);
   }
   // A window in a session that was there: its pane is set even with no topic, so a topic the session
-  // kept from a vdx before 0.58.2 does not show through.
+  // kept from a vdx before 0.59 does not show through.
   if (paneId && (topic?.text || reuse)) setPaneTopic(tmux, paneId, topic?.text ?? null);
   markSessionStays(session, opts, deps);
   log(`▶ ${session}${reuse && !other ? ' (new window)' : ''}: ${line}`);
