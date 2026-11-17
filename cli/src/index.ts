@@ -120,7 +120,8 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 mode: plain vdx ai attaches to it as it is. A focused session
                 here already on <topic> is the one: vdx ai attaches to it (0.51)
                 <topic> — what the session is about: the option @vdx_topic of
-                its tmux session (the terminal's title can show it), and the vdx
+                the agent's tmux pane, one per agent where a tmux session holds
+                two (0.58.2; the terminal's title can show it), and the vdx
                 plugin keeps the conversation in it. A new conversation opens
                 with it as its first prompt. Without one a terminal asks — Enter
                 leaves it to the agent, which takes it from your first message;

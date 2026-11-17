@@ -8,8 +8,8 @@
 
 ## Где мы (2026-10-22)
 
-- **CLI** `@vodmal/vdx-cli@0.58.0` — в npm с 2026-11-15 (`f1c7f41`), Node 22 и
-  новее; на m3 и lft — 0.58.0 с 2026-11-15 (`npm update -g --prefer-online`); плагин 0.15.8 (2026-11-15: скилл `vdx-ai` — `--no-input`, `--yes`, тема-поиск; 0.15.7, 2026-11-13, — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
+- **CLI** `@vodmal/vdx-cli@0.58.1` — в npm с 2026-11-17 (`03dab92`), Node 22 и
+  новее; на m3 и lft — 0.58.1 с 2026-11-17 (`npm update -g --prefer-online`); плагин 0.15.8 (2026-11-15: скилл `vdx-ai` — `--no-input`, `--yes`, тема-поиск; 0.15.7, 2026-11-13, — когда шагу закрываться; 0.15.6 — текст хука темы по первому разбору, `focused-topic` DL #8).
 - **Сет** `vdx-rubric-vodmal@v1.15.2` (schema 0.3; v1.15.2, 2026-11-14, — `session.always_list` снят; v1.15.1, 2026-11-13, — `echelon-ref-race` через обёртку echelon; v1.15.0, 2026-11-13, — хук `echelon-ref-race` в `git.hooks`; v1.14.0, 2026-11-11, — `*.zt.vorobyev.name` в `git.personal_hosts`, читает vdx 0.54; v1.13.0, 2026-11-05, — `session.machine_icons`, `session.always_list`; v1.12.0, 2026-11-03, — `agent.hq_args`; v1.11.0, 2026-11-01, — `session.restore_all`; v1.10.0, 2026-10-30, — `session.wrap_skills`; v1.9.0, 2026-10-27, — `move.after`): рубрика и личный профиль
   `vdx-environment.yaml`, один тег на оба; v1.6.0 (2026-10-22) — ключ
   `agent.intercom_args`, рубрика как в v1.5.0; v1.6.1 — только комментарий оси
@@ -105,7 +105,9 @@
 `pre-commit-line` профиль теперь принимает; перенос в `GA/` и `SPACE/` — после правки `echelon moved` и слова
 владельца о моменте (`claude-memory-in-project` Sidetrack #7).
 
-Прежние: 0.58.0 (2026-11-15, `f1c7f41`) — тема `--focused` — поиск по идущим focused-сессиям, ключи `-y`/`--yes` и
+Прежние: 0.58.1 (2026-11-17, `03dab92`) — `n` в списке `--focused` после focused-сессий другой машины стартует без
+вопроса «anyway? [y/N]» о них, простая сессия там по-прежнему спрашивается (`vdx-ai-predictable` Sidetrack #20);
+длинная тема обрезается в строке списка (`dc8795c`). 0.58.0 (2026-11-15, `f1c7f41`) — тема `--focused` — поиск по идущим focused-сессиям, ключи `-y`/`--yes` и
 `--no-input` (`vdx-ai-predictable` DL #29, Sidetrack #19); `vdx move` чинит связь git worktree (`claude-memory-in-project`
 Sidetrack #7); событие `pre-commit-line` в `git.hooks` (`vdx-push-waits` DL #2); `session.always_list` не читается
 (DL #28); план `--dry-run` называет, куда пойдёт старт. На выпущенном (m3): `-y --no-input` — код 2; план — `attaches

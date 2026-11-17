@@ -1,6 +1,6 @@
 #!/bin/sh
 # UserPromptSubmit: in a focused session (`vdx ai --focused`) the session's topic —
-# the option @vdx_topic of the agent's tmux session (vdx 0.41) — goes with every
+# the option @vdx_topic of the agent's tmux pane (vdx 0.58.2; its session's from 0.41) — goes with every
 # message of the user's, with what to do with a message off it (focused-topic
 # DL #4). The model judges; the hook only brings the topic. Any other session:
 # out at once, before anything runs.

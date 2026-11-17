@@ -114,7 +114,7 @@ describe('vdx ai --help and unknown options', () => {
     expect(asPath.stdout).toContain(`vdx ai — ${dir}\n`);
     expect(asPath.stdout).toContain('topic:    — none');
     // --detach: a start, never a change of the topic of the session these tests may run in.
-    // The profile has no tmux, and a topic lives in the tmux session: refused, the topic named as such.
+    // The profile has no tmux, and a topic lives in the tmux pane: refused, the topic named as such.
     for (const args of [
       [dir, '--focused', 'release 0.41'],
       [dir, '--focused', dir],
@@ -122,7 +122,7 @@ describe('vdx ai --help and unknown options', () => {
     ]) {
       const r = vdxEnv(env(), 'ai', ...args, '--detach', '--dry-run');
       expect(r.status, args.join(' ')).toBe(2);
-      expect(r.stderr).toContain("a topic lives in the agent's tmux session");
+      expect(r.stderr).toContain("a topic lives in the agent's tmux pane");
     }
     fs.rmSync(dir, { recursive: true, force: true });
   }, 20_000); // 4 starts of the CLI

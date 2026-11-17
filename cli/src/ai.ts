@@ -1054,21 +1054,24 @@ export function normalizeTopic(raw: string): string {
   return raw.replace(/\s+/g, ' ').trim();
 }
 
-/** A tmux session's topic; null — it has none, or there is no such session. */
-function sessionTopic(tmux: Tmux, session: string): string | null {
-  // `=name:` — a session option needs the session as a target, `=name` alone is not found.
-  return tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, TOPIC_OPTION])?.trim() || null;
+/**
+ * The topic of the agent in tmux pane `paneId`; null — it has none, or there is no such pane. A tmux
+ * session may hold two agents, one per window, so a topic is the pane's (echelon, 2026-11-16: the
+ * second focused agent in `echelon@lft` put its topic over the first's). Read as intercom and the
+ * plugin's hook read it — the format from the pane: its own option first, then the session's, which
+ * a vdx before 0.58.2 set.
+ */
+function paneTopic(tmux: Tmux, paneId: string): string | null {
+  if (!paneId) return null;
+  return tmux.tryRun(['display-message', '-p', '-t', paneId, `#{${TOPIC_OPTION}}`])?.trim() || null;
 }
 
-/** Set the session's topic, or clear it: a session left by a focused agent keeps no stale one. */
-function setSessionTopic(tmux: Tmux, session: string, topic: string | null): boolean {
-  return (
-    tmux.tryRun(
-      topic
-        ? ['set-option', '-t', `=${session}:`, TOPIC_OPTION, topic]
-        : ['set-option', '-u', '-t', `=${session}:`, TOPIC_OPTION],
-    ) !== null
-  );
+/**
+ * Set the pane's topic, or clear it. Cleared, it is set empty rather than unset: an unset one would
+ * show the session's, which a vdx before 0.58.2 set for another agent of the session.
+ */
+function setPaneTopic(tmux: Tmux, paneId: string, topic: string | null): boolean {
+  return tmux.tryRun(['set-option', '-p', '-t', paneId, TOPIC_OPTION, topic ?? '']) !== null;
 }
 
 /** Is this a session the person started or attached to: `--close` leaves it open. */
@@ -2034,7 +2037,7 @@ function agentFacts(
       activeAt: live?.activeAt ?? null,
       draft: inputDraft(deps.tmux.screen(a.pane.paneId)),
       focused,
-      topic: focused ? sessionTopic(deps.tmux, a.pane.session) : null,
+      topic: focused ? paneTopic(deps.tmux, a.pane.paneId) : null,
       mail: modeOf.mail(a.proc.pid),
       hq: modeOf.hq(a.proc.pid),
       openAt: clients.filter((k) => k.session === a.pane.session).map((k) => clientSeat(k.pid, procs, plan.host)),
@@ -2920,7 +2923,7 @@ function pickAgent(
   const show = (a: AgentPane) => {
     const id = liveConversationId(deps.env, deps.home, a.proc.pid);
     const at = startedAt(a);
-    const topic = focusedOf(a.proc.pid) ? sessionTopic(deps.tmux, a.pane.session) : null;
+    const topic = focusedOf(a.proc.pid) ? paneTopic(deps.tmux, a.pane.paneId) : null;
     const marks = [
       id && `conversation ${id.slice(0, 8)}`,
       focusedOf(a.proc.pid) && `focused${topic ? ` «${topic}»` : ''}`,
@@ -3181,11 +3184,11 @@ export function findOwnAgent(procs: ProcInfo[], pid: number, command: string): P
  */
 function focusedTopicLines(projectRoot: string, tmux: Tmux, procs: ProcInfo[], agentPid: number): string[] {
   const pane = paneOfAgent(tmux, procs, agentPid);
-  if (!pane) return ["· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux session."];
+  if (!pane) return ["· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux pane."];
   const set =
     `\`vdx ai ${shellQuote(projectRoot)} --focused "<topic>"\` ` +
     "(run here, it changes this session's topic and nothing else)";
-  const topic = sessionTopic(tmux, pane.session);
+  const topic = paneTopic(tmux, pane.paneId);
   if (topic)
     return [
       topicLine(topic),
@@ -3225,7 +3228,7 @@ function keepRecord(
         project: projectRoot,
         conversation: conversation ?? liveConversationId(deps.env, deps.home, pid),
         mode,
-        topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+        topic: mode === 'focused' ? paneTopic(deps.tmux, pane.paneId) : null,
         pid,
         written: Date.now(),
       });
@@ -3266,7 +3269,7 @@ function recordRunning(deps: AiDeps, server: TmuxServer, panes: PaneInfo[], proc
       project,
       conversation: liveConversationId(deps.env, deps.home, agent.pid),
       mode,
-      topic: mode === 'focused' ? sessionTopic(deps.tmux, pane.session) : null,
+      topic: mode === 'focused' ? paneTopic(deps.tmux, pane.paneId) : null,
       pid: agent.pid,
       written: Date.now(),
     });
@@ -3449,7 +3452,7 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
       return EXIT_LAUNCH_FAILED;
     }
     const pane = deps.tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{pane_id}'])?.trim() ?? '';
-    return finish(true, session, pane, opts, deps, Boolean(sessionTopic(deps.tmux, session)), seatLabel(deps.env));
+    return finish(true, session, pane, opts, deps, Boolean(paneTopic(deps.tmux, pane)), seatLabel(deps.env));
   }
   if (!surface) return EXIT_OK;
   const record = readTabRecord(deps.home, surface);
@@ -3474,15 +3477,7 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
   }
   log(`↩ ${record.session}: back into the session this tab showed`);
   const pane = here.tmux.tryRun(['display-message', '-p', '-t', `=${record.session}:`, '#{pane_id}'])?.trim() ?? '';
-  return finish(
-    true,
-    record.session,
-    pane,
-    opts,
-    here,
-    Boolean(sessionTopic(here.tmux, record.session)),
-    seatLabel(deps.env),
-  );
+  return finish(true, record.session, pane, opts, here, Boolean(paneTopic(here.tmux, pane)), seatLabel(deps.env));
 }
 
 /**
@@ -3805,7 +3800,7 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     let ok = false;
     try {
       const paneId = tmux.newSession(session, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
-      if (topic) setSessionTopic(tmux, session, topic);
+      if (topic) setPaneTopic(tmux, paneId, topic);
       if (plan.intercom) setStays(deps, session);
       ok = settleResumed(plan, paneId, deps);
     } catch (e) {
@@ -3952,7 +3947,7 @@ function chooseFocused(input: {
       machine: plan.host,
       session: a.pane.session,
       pid: a.proc.pid,
-      topic: sessionTopic(deps.tmux, a.pane.session),
+      topic: paneTopic(deps.tmux, a.pane.paneId),
       conversation: input.conversationOf(a),
       pane: a,
       shared: [],
@@ -4026,8 +4021,8 @@ function chooseTopic(
   canAsk: boolean,
 ): Topic | null {
   if (opts.topic) return { text: opts.topic, from: 'from --focused' };
-  const kept = restarted ? sessionTopic(deps.tmux, restarted.pane.session) : null;
-  if (kept) return { text: kept, from: 'kept from its tmux session' };
+  const kept = restarted ? paneTopic(deps.tmux, restarted.pane.paneId) : null;
+  if (kept) return { text: kept, from: 'kept from its tmux pane' };
   const back = opts.conversation
     ? conversationTopic({ env: deps.env, home: deps.home, projectRoot: plan.projectRoot, id: opts.conversation })
     : null;
@@ -4042,7 +4037,7 @@ function chooseTopic(
 
 /**
  * `vdx ai <path> --focused <topic>` run by the agent of a focused session of the project, about
- * itself: its tmux session gets the new topic, and nothing starts (focused-topic DL #3). In the
+ * itself: its tmux pane gets the new topic, and nothing starts (focused-topic DL #3). In the
  * project's session that is not focused it is refused, with the command that starts a focused one
  * next to it: a topic is a focused session's. Null — not such a call: a start.
  */
@@ -4063,18 +4058,18 @@ function changeTopic(opts: AiOptions, plan: LaunchPlan, deps: AiDeps, selfPid: n
   }
   if (!pane) {
     deps.log(
-      `vdx ai --focused: this focused session runs outside tmux, and its topic lives in the agent's tmux session ` +
+      `vdx ai --focused: this focused session runs outside tmux, and its topic lives in the agent's tmux pane ` +
         `(${TOPIC_OPTION}) — nothing changed`,
     );
     return EXIT_USAGE;
   }
-  const before = sessionTopic(deps.tmux, pane.session);
+  const before = paneTopic(deps.tmux, pane.paneId);
   const was = before ? `, was «${before}»` : '';
   if (opts.dryRun) {
     deps.out(`vdx ai — ${pane.session}: the topic would be «${topic}»${was}\n`);
     return EXIT_OK;
   }
-  if (!setSessionTopic(deps.tmux, pane.session, topic)) {
+  if (!setPaneTopic(deps.tmux, pane.paneId, topic)) {
     deps.log(`✗ ${pane.session}: tmux did not take the topic — it stays ${before ? `«${before}»` : 'unset'}`);
     return EXIT_LAUNCH_FAILED;
   }
@@ -4177,7 +4172,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   }
   if (opts.topic && multiplexer !== 'tmux') {
     log(
-      `vdx ai: a topic lives in the agent's tmux session (${TOPIC_OPTION}), and this start has no tmux ` +
+      `vdx ai: a topic lives in the agent's tmux pane (${TOPIC_OPTION}), and this start has no tmux ` +
         `(session.multiplexer: tmux in the profile, and tmux installed) — nothing started; without a topic: vdx ai --focused ${shellQuote(projectRoot)}`,
     );
     return EXIT_USAGE;
@@ -4216,9 +4211,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   const topicAsked =
     plan.focused && opts.topic && !opts.conversation && !opts.restart ? normalizeTopic(opts.topic) : '';
   let onTopic = topicAsked
-    ? running.find(
-        (a) => focusedOf(a.proc.pid) && normalizeTopic(sessionTopic(tmux, a.pane.session) ?? '') === topicAsked,
-      )
+    ? running.find((a) => focusedOf(a.proc.pid) && normalizeTopic(paneTopic(tmux, a.pane.paneId) ?? '') === topicAsked)
     : undefined;
   // The list below asked for the topic too: the question about it is not put again.
   let topicAnswered = false;
@@ -4435,7 +4428,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     for (const a of running) {
       const id = conversationOf(a);
       const focused = focusedOf(a.proc.pid);
-      const topic = focused ? sessionTopic(tmux, a.pane.session) : null;
+      const topic = focused ? paneTopic(tmux, a.pane.paneId) : null;
       log(`  ${a.pane.session} ${a.pane.paneId}${focused ? ` — focused${topic ? ` «${topic}»` : ''}` : ''}`);
       log(
         id
@@ -4510,7 +4503,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
         ? null
         : multiplexer === 'tmux'
           ? chooseTopic(opts, plan, deps, current, false)
-          : { text: null, from: 'none: a topic lives in the tmux session, and this start has none' };
+          : { text: null, from: 'none: a topic lives in the tmux pane, and this start has none' };
     // The same branches as the start below: an agent it attaches to, one it restarts, or a place of
     // its own. The plan used to name a new session for an agent it attaches to (2026-11-05).
     let target: PlanTarget;
@@ -4649,10 +4642,10 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     }
     const unfocused = plan.focused && !runningFocused;
     // A topic named for the focused agent attached to is its topic from now on.
-    const { session } = current.pane;
+    const { session, paneId: attachedPane } = current.pane;
     const attachTopic = () => {
       if (!opts.topic || !runningFocused) return;
-      if (setSessionTopic(tmux, session, opts.topic)) log(`🎯 ${session}: the topic is «${opts.topic}»`);
+      if (setPaneTopic(tmux, attachedPane, opts.topic)) log(`🎯 ${session}: the topic is «${opts.topic}»`);
       else log(`✗ ${session}: tmux did not take the topic`);
     };
     const missing = unfocused ? [] : missingArgs(current.proc.args, plan.args);
@@ -4791,7 +4784,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   if (current) {
     const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
     log(`↻ ${current.pane.session} ${current.pane.paneId}: restarting — ${line}`);
-    setSessionTopic(tmux, current.pane.session, topic?.text ?? null);
+    setPaneTopic(tmux, current.pane.paneId, topic?.text ?? null);
     markSessionStays(current.pane.session, opts, deps);
     topicSaid();
     tmux.respawn(current.pane.paneId, projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
@@ -4822,7 +4815,6 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   let other = single && reuse ? startUnderWay(plan, session, sameMode, deps) : null;
   // The start it waited for may have taken the session with it.
   if (single && reuse && !other) reuse = tmux.hasSession(session);
-  if (reuse) setSessionTopic(tmux, session, topic?.text ?? null);
   let paneId = '';
   if (!other) {
     try {
@@ -4846,7 +4838,9 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     );
     tmux.respawn(paneId, projectRoot, cmd);
   }
-  if (!reuse && topic?.text) setSessionTopic(tmux, session, topic.text);
+  // A window in a session that was there: its pane is set even with no topic, so a topic the session
+  // kept from a vdx before 0.58.2 does not show through.
+  if (paneId && (topic?.text || reuse)) setPaneTopic(tmux, paneId, topic?.text ?? null);
   markSessionStays(session, opts, deps);
   log(`▶ ${session}${reuse && !other ? ' (new window)' : ''}: ${line}`);
   topicSaid();

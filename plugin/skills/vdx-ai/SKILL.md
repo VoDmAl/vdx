@@ -53,7 +53,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   pointer unless the user asks.
 - **A focused session's topic** (vdx 0.41+, plugin 0.11+): `vdx ai --focused
   "<topic>"`; without one, a terminal asks, and Enter leaves it to you. It
-  lives in the agent's tmux session (`@vdx_topic`), and the plugin brings it
+  lives in the agent's tmux pane (`@vdx_topic`), and the plugin brings it
   with every message of the user's (`vdx ai: the topic of this focused
   session is «…»`). A message off it: the first line of your answer says so
   (`🎯 off topic «…»`, in the user's language) and offers where to put it

@@ -9,7 +9,7 @@
  *                      (--session <tmux session> [--socket <name>] | --host <ssh host> --token <t>)
  *                      [--parent <pid>] [--every <ms>]
  *
- * watch — until the parent ends: reads the session's @vdx_topic (on <host> over ssh, the
+ * watch — until the parent ends: reads @vdx_topic of the session's pane in view (on <host> over ssh, the
  *   session marked @vdx_cmux = <token>; none marked within 30 s — it exits) and sets the
  *   description when the topic changes; no topic — clears it. When the parent is gone, clears and
  *   exits.
@@ -56,14 +56,16 @@ function readTopic(o) {
     o.found = true;
     return line.slice(o.token.length + 1).trim() || null;
   }
+  // The topic of the pane in view: a session may hold two agents, each with its own (vdx 0.58.2);
+  // one a vdx before that set on the session shows through a pane with none.
   const res = run('tmux', [
     '-u',
     ...(o.socket ? ['-L', o.socket] : []),
-    'show-options',
-    '-qv',
+    'display-message',
+    '-p',
     '-t',
     `=${o.session}:`,
-    '@vdx_topic',
+    '#{@vdx_topic}',
   ]);
   return res.status === 0 ? res.stdout.trim() || null : undefined;
 }

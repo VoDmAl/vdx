@@ -724,11 +724,11 @@ describe('runAi without tmux', () => {
   it('a topic needs tmux: refused before anything starts; a focused start without one goes on', () => {
     const claude = deps({ onPath: (b) => b === 'claude' });
     expect(runAi({ ...opts, path: root, focused: true, topic: 'release', dryRun: true }, claude)).toBe(EXIT_USAGE);
-    expect(logs.join('\n')).toContain("a topic lives in the agent's tmux session (@vdx_topic)");
+    expect(logs.join('\n')).toContain("a topic lives in the agent's tmux pane (@vdx_topic)");
     expect(logs.join('\n')).toContain(`without a topic: vdx ai --focused ${root}`);
     logs = [];
     expect(runAi({ ...opts, path: root, focused: true, dryRun: true }, claude)).toBe(EXIT_OK);
-    expect(logs.join('\n')).toContain('topic:    — none: a topic lives in the tmux session, and this start has none');
+    expect(logs.join('\n')).toContain('topic:    — none: a topic lives in the tmux pane, and this start has none');
   });
 
   describe('in this terminal', () => {
@@ -2245,7 +2245,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     killServer(tmux);
     const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
     const topicOf = (session: string) =>
-      tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim() ?? '';
+      tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{@vdx_topic}'])?.trim() ?? '';
     // A shell tool of the agent `pid` — the agent's environment, VDX_FOCUSED=1 when it is focused.
     const inside = (pid: number, focused: boolean): AiDeps => ({
       ...deps(),
@@ -2267,7 +2267,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     // A restart keeps its session's topic, and its session-start check gives it on a line of its own.
     logs = [];
     expect(runAi({ ...opts, path: root, focused: true, restart: true }, deps())).toBe(EXIT_OK);
-    expect(logs.join('\n')).toContain('🎯 topic «release 0.41» (kept from its tmux session)');
+    expect(logs.join('\n')).toContain('🎯 topic «release 0.41» (kept from its tmux pane)');
     const focused = agents()[0]!;
     logs = [];
     expect(runAiCheck(root, inside(focused.proc.pid, true), 9_999_991)).toBe(EXIT_OK);
@@ -2322,6 +2322,55 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     const sessions = agents().map((a) => a.pane.session);
     expect(sessions.map(topicOf)).toEqual(['', '', 'the typed topic']);
   }, 60_000);
+
+  // echelon, 2026-11-16: two focused agents in the windows of `echelon@lft`, and the second one's topic
+  // took the place of the first's — its hook named another topic, letters on its own passed it by.
+  it('two focused agents in one tmux session: each keeps a topic of its own', () => {
+    writeProfile(['--base'], true);
+    killServer(tmux);
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const topicOf = (paneId: string) =>
+      tmux.tryRun(['display-message', '-p', '-t', paneId, '#{@vdx_topic}'])?.trim() ?? '';
+    const inside = (pid: number): AiDeps => ({
+      ...deps(),
+      env: { ...deps().env, VDX_FOCUSED: '1' },
+      processes: () => [...listProcesses(), { pid: 9_999_991, ppid: pid, args: 'node vdx ai' }],
+      lag: () => null,
+    });
+
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'step 12b' }, deps())).toBe(EXIT_OK);
+    const first = agents()[0]!;
+    tmux.newWindow(first.pane.session, root, `VDX_FOCUSED=1 ${path.join(base, 'fake-agent')} --base`);
+    let second: typeof first | undefined;
+    for (let i = 0; i < 50 && !second; i++) {
+      second = agents().find((a) => a.pane.paneId !== first.pane.paneId && deps().agentFocused!(a.proc.pid));
+      if (!second) sleepSync(100);
+    }
+    expect(second!.pane.session).toBe(first.pane.session);
+
+    expect(
+      runAi({ ...opts, path: root, focused: true, topic: 'dvorobiev-ai' }, inside(second!.proc.pid), 9_999_991),
+    ).toBe(EXIT_OK);
+    expect(topicOf(second!.pane.paneId)).toBe('dvorobiev-ai');
+    expect(topicOf(first.pane.paneId)).toBe('step 12b');
+    logs = [];
+    expect(runAiCheck(root, inside(first.proc.pid), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain(topicLine('step 12b'));
+    logs = [];
+    expect(runAiCheck(root, inside(second!.proc.pid), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain(topicLine('dvorobiev-ai'));
+  }, 30_000);
+
+  it('a window in a session that kept a topic from a vdx before 0.58.2: the new agent does not show it', () => {
+    writeProfile(['--base'], true);
+    killServer(tmux);
+    tmux.newSession('proj@testhost', root, 'sleep 600');
+    tmux.run(['set-option', '-t', '=proj@testhost:', '@vdx_topic', 'old one']);
+    expect(runAi({ ...opts, path: root, focused: true }, deps())).toBe(EXIT_OK);
+    const agent = findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent')[0]!;
+    expect(agent.pane.session).toBe('proj@testhost');
+    expect(tmux.tryRun(['display-message', '-p', '-t', agent.pane.paneId, '#{@vdx_topic}'])?.trim()).toBe('');
+  }, 30_000);
 
   it('--focused --conversation <id> brings back the topic the conversation last had', () => {
     killServer(tmux);
@@ -2439,7 +2488,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(deps().agentHq!(hq.proc.pid)).toBe(true);
     expect(deps().agentMail!(hq.proc.pid)).toBe(false);
     expect(hq.proc.args).toMatch(/fake-agent \/first prompt --base --chan plugin:x@y$/);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, '@vdx_topic'])?.trim()).toBe('👑 HQ');
+    expect(tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{@vdx_topic}'])?.trim()).toBe('👑 HQ');
     expect(logs.join('\n')).not.toContain('keeps running');
 
     // Asked again: the one running, never a second.
@@ -2500,7 +2549,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root, focused: true, topic: '-x' }, deps())).toBe(EXIT_OK);
     expect(agentOf('proj@testhost-3').proc.args).toMatch(/fake-agent --base$/);
     expect(logs.join('\n')).toContain('does not go to the agent as a first prompt');
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-3:', '@vdx_topic'])?.trim()).toBe('-x');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-3:', '#{@vdx_topic}'])?.trim()).toBe('-x');
 
     // Typed at the question: a topic, and no turn.
     killServer(tmux);
@@ -2510,7 +2559,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       runAi({ ...opts, path: root, focused: true }, { ...deps(), interactive: true, tmux: typed, ask: () => 'typed' }),
     ).toBe(EXIT_OK);
     expect(agentOf('proj@testhost').proc.args).toMatch(/fake-agent --base$/);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('typed');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost:', '#{@vdx_topic}'])?.trim()).toBe('typed');
   }, 60_000);
 
   it('the intercom session the person started: --close leaves its pane, the line says it stays', () => {
@@ -3055,7 +3104,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
         /focused sessions on a topic like «письмо echelon»:\n {2}1 {2}proj@testhost .*«письма в ящике vdx» {3}alike: письма\n {2}n {2}a new focused session «письмо echelon»/,
       );
       expect(tmux.hasSession('proj@testhost-2')).toBe(false);
-      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe(
+      expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost:', '#{@vdx_topic}'])?.trim()).toBe(
         'письма в ящике vdx',
       );
     });
@@ -3077,7 +3126,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       answers = [''];
       expect(runAi({ ...opts, path: root, focused: true, topic: 'письмо echelon' }, deps())).toBe(EXIT_OK);
       expect(tmux.hasSession('proj@testhost-2')).toBe(true);
-      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-2:', '@vdx_topic'])?.trim()).toBe(
+      expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-2:', '#{@vdx_topic}'])?.trim()).toBe(
         'письмо echelon',
       );
     });
@@ -3089,7 +3138,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       expect(answers).toEqual([]);
       expect(text()).toContain('  1  proj@testhost');
       expect(text()).not.toContain('Topic of this focused session');
-      expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-2:', '@vdx_topic'])?.trim()).toBe(
+      expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-2:', '#{@vdx_topic}'])?.trim()).toBe(
         'docs for 0.58',
       );
     });
@@ -3319,7 +3368,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAi({ ...opts, path: root, focused: true, topic: 'search' }, deps())).toBe(EXIT_OK);
     expect(text()).toContain('♻ proj@testhost');
     expect(tmux.hasSession('proj@testhost-2')).toBe(false);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('search');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost:', '#{@vdx_topic}'])?.trim()).toBe('search');
     const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
     expect(now).toHaveLength(1);
     expect(fs.existsSync(path.join(base, `focused-${now[0]!.proc.pid}`))).toBe(true);
@@ -3531,7 +3580,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     const focusedNow = mine.find((x) => x.pane.session === 'proj@testhost')!;
     expect(focusedNow.proc.args).toContain(`--resume ${ID.a}`);
     expect(fs.existsSync(path.join(base, `focused-${focusedNow.proc.pid}`))).toBe(true);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('search');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost:', '#{@vdx_topic}'])?.trim()).toBe('search');
     expect(mine.find((x) => x.pane.session === 'proj@testhost-2')!.proc.args).not.toContain('--resume');
     expect(records()).toEqual([]);
 
@@ -3646,7 +3695,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     ]);
     expect(fs.existsSync(path.join(base, `hq-${resumed[0]!.proc.pid}`))).toBe(true);
     // Its sign stays through the restart.
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('👑 HQ');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-hq:', '#{@vdx_topic}'])?.trim()).toBe('👑 HQ');
     fs.writeFileSync(
       path.join(cc(), 'sessions', `${resumed[0]!.proc.pid}.json`),
       JSON.stringify({ pid: resumed[0]!.proc.pid, sessionId: ID.a, status: 'idle', statusUpdatedAt: Date.now() }),
@@ -3687,7 +3736,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(runAi({ ...opts, path: root, focused: true, topic: 'back', conversation: ID.b }, deps())).toBe(EXIT_OK);
     const now = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude');
     expect(now.map((a) => a.proc.args)).toEqual([`/bin/sh ${claude()} --base --resume ${ID.b}`]);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost:', '@vdx_topic'])?.trim()).toBe('back');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost:', '#{@vdx_topic}'])?.trim()).toBe('back');
   }, 30_000);
 
   // The owner, 2026-11-05 (nas-info): plain `vdx ai` reaches the HQ session too; --hq only narrows the choice.
@@ -3756,7 +3805,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       ['proj@testhost-hq', `/bin/sh ${claude()} --base --resume ${ID.a}`],
     ]);
     expect(fs.existsSync(path.join(base, `hq-${now[0]!.proc.pid}`))).toBe(true);
-    expect(tmux.tryRun(['show-options', '-qv', '-t', '=proj@testhost-hq:', '@vdx_topic'])?.trim()).toBe('👑 HQ');
+    expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-hq:', '#{@vdx_topic}'])?.trim()).toBe('👑 HQ');
   }, 60_000);
 
   it("--restore brings back the intercom session the person started, to stay; a letter's is left out (DL #12)", () => {
@@ -4326,7 +4375,7 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     expect(text).toContain('· this session is focused (`vdx ai --focused`)');
     expect(text).toContain("the profile's echelon-channel is left out");
     // No tmux pane holds this agent: it has nowhere to keep a topic.
-    expect(text).toContain("· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux session.");
+    expect(text).toContain("· it runs outside tmux, so it has no topic: a topic lives in the agent's tmux pane.");
     expect(text).toContain("✓ this session carries the profile's flags");
   });
 
