@@ -5,7 +5,7 @@ description: "Чтобы человек знал заранее, что сдел
 status: in-progress
 session-type: prd-prep
 created: 2026-10-30
-last-updated: 2026-11-14
+last-updated: 2026-11-17
 relates-to: ["[[vdx-ai/workitem|vdx-ai]]", "[[focused-topic/workitem|focused-topic]]"]
 ---
 
@@ -1381,6 +1381,24 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
 2026-11-15: всё это в рабочем дереве к 0.58 (Next actions); вопрос — простым списком, вариант в fzf с темой как
 готовым запросом не сделан
 
+### #20. `n` в списке `--focused` — и второй вопрос о тех же сессиях другой машины
+
+**Возникло в:** вывод владельца 2026-11-17 с вопросом «Насколько это правильный output?» — lft, vdx 0.58.0,
+`vdx ai@lft --focused` в ObsidianVault.
+**Описание:** список показал две focused-сессии m3 (`🔹 ObsidianVault`, `🔹 ObsidianVault-2`; `🔹` — m3 в
+`machine_icons`), владелец набрал `n` — и следом «an agent of this project is running on m3 now (ObsidianVault@m3-2,
+idle)…» дважды и «Start a new conversation here, on lft, anyway? [y/N]». Против DL #29 кристалла `vdx-ai` («`n` в
+списке — уже выбор: агенты в списке помечены») и справки («unless you picked it from the list»). Причина: `n` общего
+списка задаёт `boardChoice` и вопрос обходит; `n` списка `chooseFocused` — `{kind: 'new', asked: true}`, а `runAi`
+пропускает вопрос лишь при агенте проекта на этой машине (`alongside`) или `--detach` (DL #25) — на lft не шло ничего,
+и выбор ушёл в `chooseConversation` → `elsewhere`. Попутно: те же две сессии названы по-разному (`🔹 ObsidianVault-2`
+в списке, `ObsidianVault@m3-2` в строке), их темы в строке пропали.
+**Решение:** строки списка `--focused` (машина и pid) идут в `chooseConversation`; агент, которого человек видел
+строкой, вопроса не вызывает. Простую сессию другой машины список `--focused` не показывает — о ней вопрос остаётся,
+и строка называет только её. Тесты `ai.test.ts` («agents of the project on another machine»): `n` после двух
+focused-сессий m3 — старт без вопроса; при простой сессии m3 — вопрос и только она в строке; оба падают без правки.
+**Status:** resolved в рабочем дереве 2026-11-17 — выпуск: Next actions
+
 ## Next actions
 
 - [x] Первым — выпуск CLI 0.57.0 с «left after a look» (DL #27, коммит 2026-11-13 после `5b55508`): сам
@@ -1639,6 +1657,9 @@ vdx уже читает его ради `typedHere`. Порядок по mtime �
 - [x] см. Sidetrack #18 — список: разговор, где после перерыва больше суток набран `/clear`, — «оставлен после
       просмотра», не `unfinished`; другая машина — по ssh в `--report`; итог nas-info `reply` на `picker-mtime-and-dismiss`
       — 2026-11-13: код и тесты (DL #27); 2026-11-14: 0.57.0, станции, итог nas-info `picker-mtime-and-dismiss-shipped`
+- [ ] см. Sidetrack #20 — `n` в списке `--focused` после сессий другой машины стартует без второго вопроса: коммит,
+      выпуск patch (сам `vdx publish patch --dry-run`, строка владельцу), станции m3 и lft по одной, HANDOFF — строка
+      CLI; when: слово владельца о выпуске
 
 ## References
 

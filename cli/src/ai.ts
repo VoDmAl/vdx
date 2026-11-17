@@ -2167,6 +2167,12 @@ export function runAiReport(pathArg: string, deps: AiDeps): number {
   return EXIT_OK;
 }
 
+/** An agent another machine runs, shown to the person as a row of a list. */
+interface Shown {
+  machine: string;
+  pid: number;
+}
+
 /** What a start continues: resume args here, or a conversation on another machine. */
 interface ConversationChoice {
   args: string[];
@@ -2197,7 +2203,12 @@ const isPersons = (c: Conversation) => !c.mail && !c.hq && !c.automated;
  * on its own machine (vdx-ai DL #27). chooseConversation and the list of a plain start
  * (vdx-ai-predictable) both decide from it.
  */
-function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonly string[] = []) {
+function conversationContext(
+  plan: LaunchPlan,
+  deps: AiDeps,
+  wrapSkills: readonly string[] = [],
+  shown: readonly Shown[] = [],
+) {
   const host = plan.host;
   const same = sameMachine;
   // An intercom or HQ session's conversations are its own: a start of the person's never continues one.
@@ -2255,12 +2266,13 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
   // `vdx ai` attaches to an agent in tmux; one in a terminal of its own has no command to reach it.
   const reachAgent = (m: string, l: LiveSession) =>
     !l.tmux ? '' : same(m, plan.seat) ? ` — attach: vdx ai ${rootOn(m)}` : ` — there: vdx ai@${m} ${root}`;
+  // An agent the person saw as a row of the list a new one was picked from is no news: the pick was
+  // the yes (vdx-ai DL #29). The focused list shows only focused sessions — a plain one is still asked about.
+  const unseen = elsewhere.filter(({ m, l }) => !shown.some((s) => same(s.machine, m) && s.pid === l.pid));
   const fresh = (lines: string[]): ConversationChoice => {
-    if (elsewhere.length === 0) return { args: [], lines };
-    const agents = elsewhere.map(
-      ({ m, l }) => `an agent of this project is ${describeLive(on(m), l)}${reachAgent(m, l)}`,
-    );
-    return { args: [], elsewhere: [...new Set(elsewhere.map(({ m }) => m))], lines: [...lines, ...agents] };
+    if (unseen.length === 0) return { args: [], lines };
+    const agents = unseen.map(({ m, l }) => `an agent of this project is ${describeLive(on(m), l)}${reachAgent(m, l)}`);
+    return { args: [], elsewhere: [...new Set(unseen.map(({ m }) => m))], lines: [...lines, ...agents] };
   };
 
   const live = new Map<string, { machine: string; session: LiveSession; here: boolean }[]>();
@@ -2358,7 +2370,12 @@ function conversationContext(plan: LaunchPlan, deps: AiDeps, wrapSkills: readonl
  * takes the newest overall; without a terminal it is this machine's newest
  * idle one, never another's.
  */
-function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): ConversationChoice {
+function chooseConversation(
+  plan: LaunchPlan,
+  deps: AiDeps,
+  canAsk: boolean,
+  shown: readonly Shown[] = [],
+): ConversationChoice {
   if (!isClaude(plan.command)) return { args: plan.resumeArgs, lines: [] };
   const {
     host,
@@ -2379,7 +2396,7 @@ function chooseConversation(plan: LaunchPlan, deps: AiDeps, canAsk: boolean): Co
     show,
     running,
     take,
-  } = conversationContext(plan, deps);
+  } = conversationContext(plan, deps, [], shown);
   if (plan.resumeArgs.length === 0) return fresh(silent);
   if (all.length === 0) {
     return fresh([asideCount ? onlyAside : 'no conversation of this project yet — starting a new one', ...silent]);
@@ -3926,7 +3943,7 @@ function chooseFocused(input: {
 }):
   | { kind: 'here'; pane: AgentPane }
   | { kind: 'there'; at: FocusedRunning }
-  | { kind: 'new'; topic?: string; asked?: boolean }
+  | { kind: 'new'; topic?: string; asked?: boolean; shown?: Shown[] }
   | null {
   const { plan, deps, topic } = input;
   const found: FocusedRunning[] = input.running
@@ -3975,15 +3992,17 @@ function chooseFocused(input: {
   deps.log(topic ? `focused sessions on a topic like «${topic}»:` : `focused sessions of ${plan.project} running:`);
   rows.forEach((f, i) => deps.log(`  ${i + 1}  ${show(f)}`));
   deps.log(`  n  ${fresh}${topic ? '' : ` — type its topic, or Enter: ${AGENT_TAKES_TOPIC}`}`);
+  // The rows the person saw: a new one picked over them asks nothing more about them (vdx-ai DL #29).
+  const shown = rows.map((f) => ({ machine: f.machine, pid: f.pid }));
   for (let tries = 0; tries < 2; tries++) {
     const answer = deps.ask(topic ? 'Which one? [Enter: n]: ' : 'Which one, or the new one’s topic? [Enter: n]: ');
     if (answer === null) return null;
     const a = answer.trim();
-    if (a === '' || /^n$/i.test(a)) return { kind: 'new', asked: true };
+    if (a === '' || /^n$/i.test(a)) return { kind: 'new', asked: true, shown };
     const picked = /^\d+$/.test(a) ? rows[Number(a) - 1] : undefined;
     if (picked?.pane) return { kind: 'here', pane: picked.pane };
     if (picked) return { kind: 'there', at: picked };
-    if (!topic && !/^\d+$/.test(a)) return { kind: 'new', topic: normalizeTopic(a), asked: true };
+    if (!topic && !/^\d+$/.test(a)) return { kind: 'new', topic: normalizeTopic(a), asked: true, shown };
     deps.log(`  no row ${a}`);
   }
   return { kind: 'new' };
@@ -4203,6 +4222,8 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     : undefined;
   // The list below asked for the topic too: the question about it is not put again.
   let topicAnswered = false;
+  // Its rows, when a new one was picked over them: agents of other machines the person has seen.
+  let shownInList: Shown[] = [];
   if (onTopic) log(`→ ${onTopic.pane.session} is the focused session on «${topicAsked}» — attaching to it`);
   // Not one on that very topic: the focused sessions running alike — or all, with no topic — are rows
   // of a question, and Enter starts a new one (DL #29, Sidetrack #19).
@@ -4223,6 +4244,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       return EXIT_LAUNCH_FAILED;
     }
     if (chosen.kind === 'new' && chosen.asked) topicAnswered = true;
+    if (chosen.kind === 'new' && chosen.shown) shownInList = chosen.shown;
     if (chosen.kind === 'here') {
       onTopic = chosen.pane;
       // Its topic stays its own: the one typed was only what to look for.
@@ -4468,7 +4490,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       choice = live
         ? { args: resumeId(live), lines: [`the agent is in conversation ${live.slice(0, 8)} — resuming it`] }
         : chooseConversation(plan, deps, false);
-    } else choice = chooseConversation(plan, deps, !opts.dryRun);
+    } else choice = chooseConversation(plan, deps, !opts.dryRun, shownInList);
     plan = { ...plan, resumeArgs: choice.args };
   }
 

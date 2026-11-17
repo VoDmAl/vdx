@@ -3111,6 +3111,107 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       expect(text()).toContain('Which one? [Enter: n]: Enter (--yes)');
       expect(tmux.hasSession('proj@testhost-3')).toBe(true);
     });
+
+    // lft, 2026-11-17: the list showed the two focused sessions on m3, `n` was typed — and a question
+    // about those very two followed. `n` in a list is already the choice (vdx-ai DL #29).
+    describe('agents of the project on another machine', () => {
+      const remoteHome = '/Users/remote';
+      type There = { pid: number; session: string; id: string; focused: boolean; topic?: string };
+      /** At a terminal here, m3 running `agents` in the project; the attach is only noted. */
+      const withM3 = (agents: There[]) => {
+        const env = path.join(base, 'env-m3.yaml');
+        fs.writeFileSync(
+          env,
+          `agent: {command: ${claude()}, args: [--base], resume_args: [--continue]}\n` +
+            'session: {multiplexer: tmux, name: "{project}@{host}", machines: [m3]}\n',
+        );
+        const cwd = path.join(remoteHome, path.relative(base, root));
+        const d = deps();
+        return {
+          ...d,
+          env: { ...d.env, VDX_ENVIRONMENT: env },
+          tmux: new (class extends Tmux {
+            override attach(): number {
+              return 0;
+            }
+          })(socket),
+          ssh: (_args: string[], capture: boolean) =>
+            !capture
+              ? { status: 0, stdout: '' }
+              : {
+                  status: 0,
+                  stdout: JSON.stringify({
+                    vdx: '0.58.0',
+                    machine: 'm3',
+                    home: remoteHome,
+                    sessions: agents.map((a, i) => ({
+                      pid: a.pid,
+                      conversation: a.id,
+                      tmux: `${a.session}:@${i}.%${i}`,
+                      status: 'idle',
+                      cwd,
+                    })),
+                    agents: agents.map((a) => ({
+                      machine: 'm3',
+                      session: a.session,
+                      pid: a.pid,
+                      conversation: a.id,
+                      status: 'idle',
+                      activeAt: Date.now(),
+                      draft: 0,
+                      focused: a.focused,
+                      topic: a.topic ?? null,
+                      mail: false,
+                      openAt: [],
+                      title: null,
+                      empty: false,
+                      finished: false,
+                    })),
+                    typed: [],
+                    transcripts: [],
+                  }),
+                },
+        };
+      };
+      const ask = (d: AiDeps, questions: string[]): AiDeps => ({
+        ...d,
+        ask: (q) => (questions.push(q), answers.shift() ?? null),
+      });
+
+      it('the focused list showed them, and n is the yes: a new one here, not asked again', () => {
+        const questions: string[] = [];
+        const d = ask(
+          withM3([
+            { pid: 20001, session: 'proj@m3', id: ID.c, focused: true, topic: 'Нидерланды' },
+            { pid: 20002, session: 'proj@m3-2', id: ID.d, focused: true, topic: 'Сезон скидок' },
+          ]),
+          questions,
+        );
+        answers = ['n'];
+        expect(runAi({ ...opts, path: root, focused: true, detach: false }, d)).toBe(EXIT_OK);
+        expect(text()).toMatch(/ {2}1 {2}proj@m3 +🎯 «Нидерланды»/);
+        expect(questions).toEqual(['Which one, or the new one’s topic? [Enter: n]: ']);
+        expect(text()).not.toContain('an agent of this project is running on m3');
+        expect(tmux.hasSession('proj@testhost')).toBe(true);
+      });
+
+      it('…one the list did not show — a plain session — is still asked about, and only it is named', () => {
+        const questions: string[] = [];
+        const d = ask(
+          withM3([
+            { pid: 20001, session: 'proj@m3', id: ID.c, focused: true, topic: 'Нидерланды' },
+            { pid: 20002, session: 'proj@m3-2', id: ID.d, focused: false },
+          ]),
+          questions,
+        );
+        answers = ['n', ''];
+        expect(runAi({ ...opts, path: root, focused: true, detach: false }, d)).toBe(EXIT_LAUNCH_FAILED);
+        expect(questions[1]).toBe('Start a new conversation here, on testhost, anyway? [y/N]: ');
+        expect(text()).toContain('an agent of this project is running on m3 now (proj@m3-2, idle)');
+        expect(text()).not.toContain('(proj@m3, idle)');
+        expect(tmux.hasSession('proj@testhost')).toBe(false);
+      });
+    });
   });
 
   // t23b-program, 2026-11-08: `! vdx ai --restart` typed in one session restarted the newest of three.

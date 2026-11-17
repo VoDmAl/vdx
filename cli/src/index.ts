@@ -274,9 +274,11 @@ where session.restore_all holds), never silent: Enter and r bring them back, as
 under the list, with whether work was in them. Without a terminal it takes
 this machine's agent, else its newest conversation, else a new one. A new
 conversation while an agent of the project runs on another machine starts only
-after a yes — unless you picked it from the list. --new and --focused take an
-empty session of the project (nothing typed since /clear) when one is there and
-no terminal at your seat shows it; a session with work in it they leave running.
+after a yes — unless you picked it from a list that showed that agent: the one
+list, or the list of --focused (focused sessions only). --new and --focused
+take an empty session of the project (nothing typed since /clear) when one is
+there and no terminal at your seat shows it; a session with work in it they
+leave running.
 
 Claude Code's memory of the project (Claude Code only): when it is not inside the
 project, .claude/memory/, or the folder was moved, a start in a terminal asks to
