@@ -60,7 +60,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   aside; a short answer goes at once, edits, commits and letters off the
   topic wait for the user's "here". No topic yet: take it from the user's
   first message — or the active crystal's name, if the message is about its
-  work — and set it yourself: `vdx ai '<root>' --focused "<topic>"` run in
+  work — as a title of a few words, the subject, not the user's sentence or an
+  instruction (other agents compare it to route letters), and set it yourself: `vdx ai '<root>' --focused "<topic>"` run in
   your own focused session changes its topic and starts nothing (in a
   session that is not focused it is refused). The same when the user names
   another topic.
@@ -68,7 +69,9 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   `vdx ai '<root>' --focused "<topic>"`, the topic filled in, to paste into a
   terminal: the new session opens with the topic as its first prompt. Do not
   run it yourself: in a focused session it changes your own topic, in another
-  it is refused.
+  it is refused. What the new session should do goes apart from the topic, in
+  `--prompt "<what to do>"` (vdx 0.60+): the topic stays a few words of the
+  subject, and the prompt is its first message.
 - **A letter for a project, and nobody to wake there: its intercom session.**
   `vdx ai --intercom --detach <project root>` (vdx 0.36+) starts it on this
   machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
@@ -90,7 +93,8 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   it stays, say what was done and wait for the next wake: `--close` there only
   moves the number.
 - **A focused session started for a step** (an HQ's `--focused "<step>" --detach`,
-  vdx 0.56+): when whoever started it asked it to close itself once its outcome
+  vdx 0.56+; from 0.60 the step's instructions go in `--prompt`, the topic is
+  the step's name): when whoever started it asked it to close itself once its outcome
   went out, say what was done, then `vdx ai --close`. One the user started or
   joined from a terminal stays: `--close` says so and leaves it. Do not close a
   focused session nobody asked you to close. Anywhere else `--close` is refused.

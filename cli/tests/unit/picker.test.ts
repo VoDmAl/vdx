@@ -21,6 +21,16 @@ describe('fzfArgs: the list of vdx ai as fzf shows it (vdx-ai-predictable Sidetr
     expect(option(args, 'header')).toBe('proj\nkeys');
   });
 
+  // The list of --focused (the owner, 2026-11-17): typing is the new session's topic, the rows stay.
+  it('typing as text: fzf filters nothing, its input line says what the text is, the topic asked is in it', () => {
+    const args = fzfArgs({ ...input, typing: 'text', prompt: 'topic of a new one: ', query: 'docs 0.60' }, '/d');
+    expect(args).toContain('--disabled');
+    expect(args).toContain('--prompt=topic of a new one: ');
+    expect(args).toContain('--query=docs 0.60');
+    expect(fzfArgs(input, '/d')).not.toContain('--disabled');
+    expect(fzfArgs(input, '/d').some((a) => a.startsWith('--query='))).toBe(false);
+  });
+
   it('a header line longer than the rows are wide is folded: fzf would cut it', () => {
     const long = 'note: two agents of other projects went down when tmux here was started again';
     expect(fold(long, 40)).toEqual([

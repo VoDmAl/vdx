@@ -123,7 +123,12 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 the agent's tmux pane, one per agent where a tmux session holds
                 two (0.59; the terminal's title can show it), and the vdx
                 plugin keeps the conversation in it. A new conversation opens
-                with it as its first prompt. Without one a terminal asks — Enter
+                with it as its first prompt, unless --prompt names another.
+                The focused sessions running (with no topic all of them, with
+                one those on a topic like it) come first as a list: a row
+                attaches to one, n (Enter) starts a new one; with fzf on PATH
+                the list has a cursor and what you type is the new one's topic
+                (0.60). Without a topic and no list, a terminal asks — Enter
                 leaves it to the agent, which takes it from your first message;
                 what you type there is the topic, not a prompt. A restart keeps
                 the session's topic, and --conversation brings back the
@@ -133,6 +138,11 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 tmux. Attached from a cmux terminal (here or @host), the
                 workspace shows the topic as its description while vdx ai holds
                 the attach, and drops it after; one you set by hand stays
+  --prompt <text>
+                with --focused: the first message of the new session, apart
+                from its topic — the topic is what lists show and other agents
+                compare, so a few words of the subject; what to do goes here
+                (0.60). A start that goes on in a conversation does not send it
   --intercom    the project's intercom session: a new conversation in a tmux
                 session of its own (<name>-intercom), one per project and machine —
                 a running or starting one is attached to, never a second. The
@@ -473,7 +483,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] [--prompt <text>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: [
@@ -495,7 +505,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'yes',
       'no-input',
     ],
-    values: ['conversation', 'waiting', 'find'],
+    values: ['conversation', 'waiting', 'find', 'prompt'],
     optional: ['focused'],
     positionals: 1,
     shorts: { '-y': 'yes' },
@@ -1011,6 +1021,13 @@ function cmdAi(opts: ParsedArgs): void {
     process.stderr.write(`vdx ai: --conversation takes a conversation id (a UUID), not "${conversation}"\n`);
     process.exit(2);
   }
+  const prompt = typeof opts.flags.prompt === 'string' ? opts.flags.prompt.trim() : undefined;
+  if (prompt !== undefined && (!prompt || opts.flags.focused === undefined)) {
+    process.stderr.write(
+      'vdx ai: --prompt is the first message of a new focused session: vdx ai --focused "<topic>" --prompt "<what to do>"\n',
+    );
+    process.exit(2);
+  }
   const find = typeof opts.flags.find === 'string' ? opts.flags.find : undefined;
   if (find !== undefined && !find.trim()) {
     process.stderr.write('vdx ai: --find takes a phrase to search for: --find "a piece of the screen"\n');
@@ -1038,6 +1055,7 @@ function cmdAi(opts: ParsedArgs): void {
     dryRun: opts.flags['dry-run'] === true,
     focused: opts.flags.focused !== undefined,
     topic,
+    prompt,
     intercom: opts.flags.intercom === true,
     hq: opts.flags.hq === true,
     list: opts.flags.list === true,

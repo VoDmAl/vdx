@@ -1098,6 +1098,11 @@ export interface AiOptions {
   focused?: boolean;
   /** `--focused <topic>`: what the focused session is about; inside it, a new topic for it. */
   topic?: string;
+  /**
+   * `--prompt <text>`: the first message of a new focused session, apart from its topic — the topic is
+   * what senders compare and lists show, the prompt what the agent reads (vdx-ai-predictable DL #30).
+   */
+  prompt?: string;
   /** `--intercom`: the project's intercom session — VDX_INTERCOM=1, one per project and machine. */
   intercom?: boolean;
   /** `--hq`: the project's HQ session — VDX_HQ=1, one per project and machine. */
@@ -1385,6 +1390,8 @@ function renderPlan(
   if (plan.focused)
     lines.push(`  focused:  nothing wakes it; left out: ${plan.skipped.length ? plan.skipped.join(', ') : '—'}`);
   if (topic) lines.push(`  topic:    ${topic.text ? `«${topic.text}» (${topic.from})` : `— ${topic.from}`}`);
+  if (plan.focused && plan.opening.length && plan.resumeArgs.length === 0)
+    lines.push(`  first:    ${plan.opening.join(' ')}`);
   if (plan.intercom)
     lines.push(
       `  intercom: the project's intercom session, a new conversation; first: ${
@@ -1814,6 +1821,7 @@ function remoteFlags(opts: AiOptions): string[] {
     opts.fresh && '--new',
     // After the path: the word after --focused is then the topic there, never the path.
     opts.focused && (opts.topic ? `--focused ${shellQuote(opts.topic)}` : '--focused'),
+    opts.prompt && `--prompt ${shellQuote(opts.prompt)}`,
     opts.intercom && '--intercom',
     opts.hq && '--hq',
     opts.restart && '--restart',
@@ -4323,11 +4331,61 @@ function chooseFocused(input: {
       );
     return { kind: 'new' };
   }
-  deps.log(topic ? `focused sessions on a topic like «${topic}»:` : `focused sessions of ${plan.project} running:`);
-  rows.forEach((f, i) => deps.log(`  ${i + 1}  ${show(f)}`));
-  deps.log(`  n  ${fresh}${topic ? '' : ` — type its topic, or Enter: ${AGENT_TAKES_TOPIC}`}`);
+  const header = topic
+    ? `focused sessions on a topic like «${topic}»:`
+    : `focused sessions of ${plan.project} running:`;
   // The rows the person saw: a new one picked over them asks nothing more about them (vdx-ai DL #29).
   const shown = rows.map((f) => ({ machine: f.machine, pid: f.pid }));
+  // With a picker (fzf on PATH): the same rows with a cursor, as the one list has them; the cursor
+  // starts on the new one, and what is typed is its topic, not a filter — the rows are few. The
+  // owner, 2026-11-17: «нормального интерфейса тоже не было» (Sidetrack #20).
+  if (deps.pick) {
+    const detail = (f: FocusedRunning) => [
+      f.topic ? `🎯 ${f.topic}` : '🎯 (no topic yet)',
+      `${f.session} — ${f.pane ? 'here' : `on ${f.machine}`}`,
+      ...(f.conversation ? [`conversation ${f.conversation.slice(0, 8)}`] : []),
+      '',
+      f.pane ? 'Enter — attach to it' : `Enter — attach to it on ${f.machine}`,
+    ];
+    const items = [
+      ...rows.map((f) => ({ text: show(f), detail: detail(f) })),
+      {
+        text: `n  ${fresh}`,
+        detail: [
+          fresh,
+          '',
+          `Enter — start it; its topic is the text typed above${topic ? '' : ` — nothing typed: ${AGENT_TAKES_TOPIC}`}`,
+        ],
+      },
+    ];
+    for (let tries = 0; tries < 3; tries++) {
+      const answer = deps.pick({
+        header: [header],
+        items,
+        cursor: rows.length,
+        columns: deps.columns,
+        typing: 'text',
+        prompt: 'topic of a new one: ',
+        query: topic,
+      });
+      // Esc there is a cancel, as Ctrl-D at the question: start nothing.
+      if (answer === null) return null;
+      if (answer === 'failed') {
+        deps.log('note: fzf did not show the list — the plain one instead');
+        break;
+      }
+      // Enter only: another key that ended the picker is not a choice.
+      if (answer.key !== '') continue;
+      const picked = answer.index === null ? undefined : rows[answer.index];
+      if (picked?.pane) return { kind: 'here', pane: picked.pane };
+      if (picked) return { kind: 'there', at: picked };
+      const typed = normalizeTopic(answer.query);
+      return { kind: 'new', ...(typed && typed !== topic ? { topic: typed } : {}), asked: true, shown };
+    }
+  }
+  deps.log(header);
+  rows.forEach((f, i) => deps.log(`  ${i + 1}  ${show(f)}`));
+  deps.log(`  n  ${fresh}${topic ? '' : ` — type its topic, or Enter: ${AGENT_TAKES_TOPIC}`}`);
   for (let tries = 0; tries < 2; tries++) {
     const answer = deps.ask(topic ? 'Which one? [Enter: n]: ' : 'Which one, or the new one’s topic? [Enter: n]: ');
     if (answer === null) return null;
@@ -4496,13 +4554,18 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   // the intercom session are new ones.
   const wantsNew = (opts.fresh || opts.focused === true || plan.intercom) && !opts.conversation;
   if (wantsNew) plan = { ...plan, resumeArgs: [] };
-  // A topic named with the flag is also the new conversation's first prompt; one that starts with
-  // `-` would reach the agent as a flag of its own.
-  if (plan.focused && opts.topic) {
-    if (opts.topic.startsWith('-'))
-      log(`note: the topic starts with "-", so it does not go to the agent as a first prompt`);
-    else plan = { ...plan, opening: [opts.topic] };
-  }
+  // The new conversation's first message: --prompt, or else the topic named with the flag (DL #30).
+  // One that starts with `-` would reach the agent as a flag of its own.
+  const firstOf = (topic: string | undefined): string[] => {
+    const first = opts.prompt ?? topic;
+    if (!first) return [];
+    if (!first.startsWith('-')) return [first];
+    log(
+      `note: the ${opts.prompt ? 'prompt' : 'topic'} starts with "-", so it does not go to the agent as a first prompt`,
+    );
+    return [];
+  };
+  if (plan.focused && (opts.topic || opts.prompt)) plan = { ...plan, opening: firstOf(opts.topic) };
 
   let multiplexer = plan.multiplexer;
   if (multiplexer === 'tmux' && !tmux.available()) {
@@ -4593,7 +4656,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     } else if (chosen.topic) {
       topicAnswered = true;
       opts = { ...opts, topic: chosen.topic };
-      if (!chosen.topic.startsWith('-')) plan = { ...plan, opening: [chosen.topic] };
+      plan = { ...plan, opening: firstOf(chosen.topic) };
     }
   }
   const unreadable = opts.conversation && !inConversation ? running.find((a) => conversationOf(a) === null) : undefined;
@@ -4866,6 +4929,10 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     } else choice = chooseConversation(plan, deps, !opts.dryRun, shownInList);
     plan = { ...plan, resumeArgs: choice.args };
   }
+
+  // A prompt opens a new conversation: a start that goes on in one does not send it.
+  if (opts.prompt && ((current && !opts.restart && !(reused && plan.focused)) || plan.resumeArgs.length > 0))
+    log('note: --prompt is the first message of a new conversation — this start goes on in one, so it is not sent');
 
   const poolDirs = authorPoolDirs(environment, projectRoot, deps.home, profileDir);
   // Said before a start or an attach, never in the way: the agent runs, without those files.

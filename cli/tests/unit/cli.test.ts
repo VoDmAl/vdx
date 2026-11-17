@@ -127,6 +127,17 @@ describe('vdx ai --help and unknown options', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }, 20_000); // 4 starts of the CLI
 
+  it('--prompt goes with --focused only, and takes text', () => {
+    for (const args of [
+      [CLI_ROOT, '--prompt', 'do it', '--dry-run'],
+      [CLI_ROOT, '--focused', 'step', '--prompt', '  ', '--dry-run'],
+    ]) {
+      const r = vdxEnv(env(), 'ai', ...args);
+      expect(r.status, args.join(' ')).toBe(2);
+      expect(r.stderr).toContain('--prompt is the first message of a new focused session');
+    }
+  });
+
   it('still accepts --resume, a no-op since 0.13', () => {
     const r = vdxEnv(env(), 'ai', CLI_ROOT, '--resume', '--dry-run');
     expect(r.status).toBe(0);

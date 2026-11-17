@@ -37,7 +37,7 @@ EOF
 if [ -n "$topic" ]; then
   text=$(topic_text)
 else
-  text="· This focused session has no topic yet: once a message of the user's gives one — or it is about the active crystal's work — set it with $set_it, and say it to the user in one line."
+  text="· This focused session has no topic yet: once a message of the user's gives one — or it is about the active crystal's work — set it with $set_it, and say it to the user in one line. The topic names the subject as a title of a few words (what the session is about, as other agents will compare it), not the user's sentence and not an instruction."
 fi
 
 # Plain stdout is not shown to the agent; additionalContext is.

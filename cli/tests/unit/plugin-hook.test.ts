@@ -206,8 +206,11 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
   });
 
   it('no topic yet: asks the agent to set one — only of a vdx that takes it', () => {
-    expect(contextOf(run({ STUB_TOPIC: '', STUB_VERSION: '0.41.0' }).stdout)).toContain(
-      '· This focused session has no topic yet',
+    const asked = contextOf(run({ STUB_TOPIC: '', STUB_VERSION: '0.41.0' }).stdout);
+    expect(asked).toContain('· This focused session has no topic yet');
+    // A topic is what other agents compare: a title, not the user's words (vdx-ai-predictable DL #30).
+    expect(asked).toContain(
+      "a title of a few words (what the session is about, as other agents will compare it), not the user's sentence and not an instruction",
     );
     for (const version of ['0.40.0', ''])
       expect(run({ STUB_TOPIC: '', STUB_VERSION: version }).stdout, version).toBe('');

@@ -79,7 +79,7 @@ import {
 } from './transcripts.ts';
 import { currentServer, socketDir, writeRecord } from '../../src/restore.ts';
 import { type CmuxPanel, type CmuxSnapshot, tabRecordDir } from '../../src/tabs.ts';
-import type { PickerInput } from '../../src/picker.ts';
+import type { PickerAnswer, PickerInput } from '../../src/picker.ts';
 
 const tmpDir = (prefix: string) => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 
@@ -3186,6 +3186,64 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-2:', '#{@vdx_topic}'])?.trim()).toBe(
         'docs for 0.58',
       );
+    });
+
+    // The owner, 2026-11-17: «нормального интерфейса тоже не было» — the one list had a cursor, this one not.
+    describe('with a picker (fzf on PATH): the same rows with a cursor', () => {
+      const picking = (answer: (input: PickerInput) => PickerAnswer | null | 'failed') => {
+        const seen: PickerInput[] = [];
+        return { seen, d: { ...deps(), pick: (input: PickerInput) => (seen.push(input), answer(input)) } };
+      };
+
+      it('the cursor starts on the new one; the text typed is its topic; a row attaches', () => {
+        focusedIn('proj@testhost', ID.a, 'search');
+        const typed = picking((input) => ({ key: '', index: input.cursor, query: '  docs  for 0.60 ' }));
+        expect(runAi({ ...opts, path: root, focused: true }, typed.d)).toBe(EXIT_OK);
+        const shown = typed.seen[0]!;
+        expect(shown.header).toEqual(['focused sessions of proj running:']);
+        expect(shown.items.map((i) => i.text)).toEqual([
+          expect.stringMatching(/^proj@testhost +🎯 «search»/),
+          expect.stringMatching(/^n {2}a new focused session$/),
+        ]);
+        expect(shown.cursor).toBe(1);
+        expect(shown.typing).toBe('text');
+        expect(answers).toEqual([]);
+        expect(tmux.tryRun(['display-message', '-p', '-t', '=proj@testhost-2:', '#{@vdx_topic}'])?.trim()).toBe(
+          'docs for 0.60',
+        );
+        logs = [];
+        const row = picking(() => ({ key: '', index: 0, query: '' }));
+        expect(runAi({ ...opts, path: root, focused: true }, row.d)).toBe(EXIT_OK);
+        expect(text()).toContain('→ proj@testhost: attaching to it');
+        expect(tmux.hasSession('proj@testhost-3')).toBe(false);
+      });
+
+      it('a topic asked is in the input line; fzf that did not show — the plain question', () => {
+        focusedIn('proj@testhost', ID.a, 'письма в ящике vdx');
+        const failed = picking(() => 'failed');
+        answers = [''];
+        expect(runAi({ ...opts, path: root, focused: true, topic: 'письмо echelon' }, failed.d)).toBe(EXIT_OK);
+        expect(failed.seen[0]!.query).toBe('письмо echelon');
+        expect(text()).toContain('note: fzf did not show the list — the plain one instead');
+        expect(answers).toEqual([]);
+        expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+      });
+    });
+
+    // DL #30: the topic is what lists show and senders compare; what to do goes apart from it.
+    it('--prompt is the new one’s first message, apart from its topic', () => {
+      expect(
+        runAi({ ...opts, path: root, focused: true, topic: 'step 12', prompt: 'do the step', dryRun: true }, deps()),
+      ).toBe(EXIT_OK);
+      expect(text()).toContain('topic:    «step 12» (from --focused)');
+      expect(text()).toContain('first:    do the step');
+      logs = [];
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'step 12', prompt: 'do the step' }, deps())).toBe(
+        EXIT_OK,
+      );
+      const agent = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude')[0]!;
+      expect(agent.proc.args).toBe(`/bin/sh ${claude()} do the step --base`);
+      expect(tmux.tryRun(['display-message', '-p', '-t', agent.pane.paneId, '#{@vdx_topic}'])?.trim()).toBe('step 12');
     });
 
     it('nobody to ask, or --yes: no row is taken — a new one, as before', () => {

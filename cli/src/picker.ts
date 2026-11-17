@@ -20,6 +20,15 @@ export interface PickerInput {
   cursor: number;
   /** The terminal's width: fzf cuts a header line that is longer, so a long one is folded first. */
   columns?: number;
+  /**
+   * What typing does: filters the rows (the default), or writes text that comes back as the query,
+   * the rows left as they are — the list of `--focused`, where it is the new session's topic.
+   */
+  typing?: 'filter' | 'text';
+  /** The input line's words; the default says that typing filters. */
+  prompt?: string;
+  /** Text already in the input line. */
+  query?: string;
 }
 
 /** What the person did: the key that ended it (`''` — Enter), the row under the cursor, the filter typed. */
@@ -71,7 +80,9 @@ export function fzfArgs(input: PickerInput, dir: string): string[] {
     '--print-query',
     `--expect=${SEARCH_KEY},${COMMAND_KEY}`,
     // The input line says what typing does; fzf's count of rows says nothing here — titles are rows too.
-    '--prompt=type to filter: ',
+    ...(input.typing === 'text' ? ['--disabled'] : []),
+    `--prompt=${input.prompt ?? 'type to filter: '}`,
+    ...(input.query ? [`--query=${input.query}`] : []),
     '--info=hidden',
     // The terminal's own selection works: a command in the panel can be copied.
     '--no-mouse',
