@@ -143,6 +143,8 @@ export interface BoardInput {
    * then Enter is `r`, unless a search was asked for.
    */
   restore?: number;
+  /** What `r` brings back, in words; not given — the agents tmux took down. */
+  restoreWhat?: string;
   /** The profile's `session.machine_icons`: a machine's mark before its label, as the cmux sidebar shows it. */
   machineIcons?: Record<string, string>;
   /** Lines the start adds under the list, each said as a note: what tmux took down of other projects. */
@@ -519,7 +521,7 @@ export function buildBoard(input: BoardInput): Board {
       : []),
     ...(input.footnotes ?? []).map((n) => `  note: ${n}`),
   ];
-  const back = `bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`;
+  const back = `bring back ${input.restoreWhat || `${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`}`;
   const more = input.find ? 'the whole list' : hidden > 0 ? `all (${unread ? 'up to ' : ''}${hidden} more)` : null;
   const keys = [
     `Enter → ${enterKey({ enter })}`,

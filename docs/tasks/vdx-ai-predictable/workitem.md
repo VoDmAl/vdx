@@ -1438,6 +1438,11 @@ focused-сессии сохраняет её разговор, новый — т
 
 ## Next actions
 
+- [ ] Восстановление после любого падения (вкладки cmux, другие машины, `r` — всё) ведёт кристалл
+      [[restore-after-any-crash/workitem|restore-after-any-crash]] (2026-11-17): ждущие здесь пункты про `--restore` в
+      `tmux-server.sh` nas-info и живую проверку вкладок после перезапуска cmux (DL #26) закрываются там, с его выпуском
+      0.59.0 — when: живая проверка `restore-after-any-crash` на lft и m3
+
 - [x] Первым — выпуск CLI 0.57.0 с «left after a look» (DL #27, коммит 2026-11-13 после `5b55508`): сам
       `vdx publish minor --dry-run`, строка `vdx publish minor` владельцу в отдельный терминал; станции m3 и lft
       (`npm update -g --prefer-online`, по одной); итог nas-info — `reply picker-mtime-and-dismiss --slug

@@ -200,31 +200,43 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 one as from the list; without a terminal, or with --list or
                 --dry-run, it is printed with the command for each row.
                 /<phrase> at the list's question searches the same way
-  --restore     Claude Code: bring back every agent a fallen tmux server took down
-                on this machine — a crash, a kill-server, a reboot — of every
-                project, without a question: each in its tmux session (its old
-                name, or the next free one), conversation, mode and topic, attached
-                to by nobody. One with nothing typed since /clear, or finished with
-                a wrap, comes back in a new conversation, as a place. The intercom
+  --restore     Claude Code: bring back what a fall took down — a crash of tmux,
+                of cmux or of the machine, a kill-server, a reboot — without a
+                question. First every agent a fallen tmux server took down on this
+                machine, of every project: each in its tmux session (its old name,
+                or the next free one), conversation, mode and topic, attached to by
+                nobody. One with nothing typed since /clear, or finished with a
+                wrap, comes back in a new conversation, as a place. The intercom
                 session you started or attached to comes back, to stay; one a
                 letter started is left out, and a running one is not doubled. Left
                 out: a conversation running now (here or on another machine) or
-                continued on another machine since. With --dry-run:
-                what it would start. With --forget: none is started — they are
-                forgotten, each named with whether work was in it (a
-                conversation with work stays, to continue by its id). A plain
-                start offers the same as r. A
-                terminal vdx ai attached waits for its session when the server
-                falls under it, and attaches again once a restore brings it back
+                continued on another machine since. Then the same on the profile's
+                other machines (session.machines), over ssh (0.59). Then the cmux
+                tabs here that lost their sessions (0.59): a tab at its shell gets
+                vdx ai --tab typed into it, a tab cmux lost opens again in its
+                folder; where a tab went is the note vdx ai keeps (--tab below),
+                or the tmux session cmux noticed in it before cmux last started.
+                cmux takes this only from its own tabs: run elsewhere, the tabs are
+                named, with where to run it. Run in one of those tabs, that tab
+                goes back last. With --dry-run: what it would do. With --forget:
+                no agent is started — they are forgotten, each named with whether
+                work was in it (a conversation with work stays, to continue by its
+                id). A plain start offers the same as r. A terminal vdx ai attached
+                waits for its session when the server falls under it, and attaches
+                again once a restore brings it back
   --tab         for the shell of a cmux tab, started again after cmux restarted: back
                 into the session the tab showed. vdx ai, while it holds an attach in a
                 cmux tab, notes the session in ~/.local/state/vdx/cmux-tabs/
                 <CMUX_SURFACE_ID>.json and drops the note when the attach ends;
-                gone down with cmux, it leaves it. A session on another machine
-                (vdx ai@<host>) is found there by the mark @vdx_tab. No note: nothing,
-                exit 0; the session not running: exit 4, the note stays (0.53). A
+                gone down with cmux, or refused by tmux, it leaves it (0.59). A
+                session on another machine (vdx ai@<host>) is found there by the
+                mark @vdx_tab. No note: nothing, exit 0; the session not running:
+                exit 4, the note stays (0.53) — while a restore brings that session
+                back after a reboot, the tab waits for it up to 3 minutes (0.59). A
                 tab cmux brings back into the same session itself (cmux 0.65 types
-                "cmux restore --surface" into it) is left to cmux (0.56)
+                "cmux restore --surface" into it) is left to cmux (0.56), unless a
+                restore typed the command (VDX_TAB_NOW=1). The terminal tmux gets
+                is the tab's own device, even when the caller hands /dev/tty (0.59)
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
@@ -270,7 +282,8 @@ machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
 machine's — Syncthing has not brought it yet — too. After the tmux server here
 fell, the list opens with what it took down (of this project; of every project
-where session.restore_all holds), never silent: Enter and r bring them back, as
+where session.restore_all holds), and in a cmux tab with the tabs here that lost
+their sessions (0.59), never silent: Enter and r bring back everything, as
 --restore does, and the start goes on; agents of other projects only — one note
 under the list, with whether work was in them. Without a terminal it takes
 this machine's agent, else its newest conversation, else a new one. A new

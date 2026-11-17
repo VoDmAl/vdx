@@ -56,6 +56,25 @@ import {
 } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
 import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxResumesInto, cmuxToken, watchTopic } from './cmux.ts';
+import {
+  TAB_FROM_ENV_VAR,
+  TAB_NOW_ENV_VAR,
+  type CmuxSnapshot,
+  type TabPlan,
+  cmuxBeforeStart,
+  cmuxCli,
+  currentCmux,
+  forgetTabRecord,
+  foregroundByTty,
+  ttyBySurface,
+  planTabs,
+  readTabRecord,
+  readTabRecords,
+  returnTabs,
+  tabRecordDir,
+  targetLabel,
+  writeTabRecord,
+} from './tabs.ts';
 import { type Lag, sessionLag } from './session-versions.ts';
 import {
   currentServer,
@@ -881,6 +900,71 @@ export function listProcesses(): ProcInfo[] {
   return parsePs(execFileSync('ps', ['-A', '-o', 'pid=,ppid=,args='], { encoding: 'utf8' }));
 }
 
+/** How a process finds out which terminal device it has: as `ps` names it, and the device numbers. */
+export interface TerminalProbe {
+  /** The device number of an open descriptor; null — not a device, or closed. */
+  rdev: (fd: number) => number | null;
+  /** The device number of `/dev/tty`, the alias of every process's controlling terminal. */
+  aliasRdev: () => number | null;
+  /** The controlling terminal's own device, `/dev/ttysNNN`; null — none. */
+  device: () => string | null;
+}
+
+const terminalProbe: TerminalProbe = {
+  rdev: (fd) => {
+    try {
+      return fs.fstatSync(fd).rdev || null;
+    } catch {
+      return null;
+    }
+  },
+  aliasRdev: () => {
+    try {
+      return fs.statSync('/dev/tty').rdev || null;
+    } catch {
+      return null;
+    }
+  },
+  device: () => {
+    // `ps -o tty=` reads the same on macOS of either architecture and on Linux: `ttys010`, `pts/3`; `??` — none.
+    const name = spawnSync('ps', ['-o', 'tty=', '-p', String(process.pid)], { encoding: 'utf8' }).stdout?.trim();
+    return name && !name.startsWith('?') ? (name.startsWith('/') ? name : `/dev/${name}`) : null;
+  },
+};
+
+/**
+ * The stdio of a tmux client. tmux names its terminal by stdin and refuses `/dev/tty`: a caller that hands
+ * vdx `</dev/tty` (the nas-info zsh block for `--tab`, 2026-11-12) left every attach at «open terminal
+ * failed: can't use /dev/tty» (restore-after-any-crash DL #1, lft x86_64 and m3 arm64 alike). A descriptor
+ * on that alias is given the terminal's own device instead; null — nothing to change.
+ */
+export function clientStdio(
+  probe: TerminalProbe = terminalProbe,
+): { stdio: ('inherit' | number)[]; close: () => void } | null {
+  const alias = probe.aliasRdev();
+  if (alias === null) return null;
+  const onAlias = [0, 1, 2].map((fd) => probe.rdev(fd) === alias);
+  if (!onAlias[0] && !onAlias[1]) return null;
+  const device = probe.device();
+  if (!device) return null;
+  let fd: number;
+  try {
+    fd = fs.openSync(device, 'r+');
+  } catch {
+    return null;
+  }
+  return {
+    stdio: onAlias.map((a) => (a ? fd : 'inherit')),
+    close: () => {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // closed already
+      }
+    },
+  };
+}
+
 export class Tmux {
   constructor(private readonly socket: string | null = null) {}
 
@@ -982,7 +1066,12 @@ export class Tmux {
   /** `env` — the client's own: SEAT_MARK_ENV_VAR in it says which seat the terminal is at. */
   attach(session: string, insideTmux: boolean, env?: NodeJS.ProcessEnv): number {
     const args = insideTmux ? ['switch-client', '-t', `=${session}`] : ['attach-session', '-t', `=${session}`];
-    return spawnSync('tmux', this.argv(args), { stdio: 'inherit', env }).status ?? 1;
+    const stdio = insideTmux ? null : clientStdio();
+    try {
+      return spawnSync('tmux', this.argv(args), { stdio: stdio?.stdio ?? 'inherit', env }).status ?? 1;
+    } finally {
+      stdio?.close();
+    }
   }
 
   /** A tmux command for a person to run, on this server. */
@@ -1132,6 +1221,15 @@ export interface AiDeps {
   agentHq?: (pid: number) => boolean;
   /** The tmux session cmux brings this tab back into itself; default: its snapshot (`cmuxResumesInto`). */
   cmuxResumesInto?: (surface: string, home: string) => string | null;
+  /** Runs the cmux command line (tabs.ts `returnTabs`); default: the one cmux names in its tabs. */
+  cmux?: (args: string[]) => { status: number; out: string };
+  /** cmux's windows now and before it last started, and what runs in front in each terminal; default: read here. */
+  tabsView?: () => {
+    current: CmuxSnapshot | null;
+    before: CmuxSnapshot | null;
+    foreground: Map<string, string[]>;
+    ttys?: Map<string, string>;
+  };
   /** Default `process.platform`: the folder check is for macOS. */
   platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
@@ -1534,19 +1632,6 @@ const TAB_MARKS = 8;
 /** A record of a tab closed by hand stays behind (its vdx ai went down with it): after this long it goes. */
 const TAB_RECORD_DAYS = 30;
 
-/**
- * What a cmux tab shows while `vdx ai` holds the attach in it (vdx-ai-predictable DL #19): a session here,
- * or one on another machine, marked `@vdx_tab` = token. A `vdx ai` that goes down with cmux leaves it,
- * and the tab's shell, started again, goes back with `vdx ai --tab`.
- */
-type TabRecord =
-  | { kind: 'here'; surface: string; session: string; socket: string | null; at: number }
-  | { kind: 'there'; surface: string; host: string; project: string; token: string; at: number };
-
-export function tabRecordDir(home: string): string {
-  return path.join(home, '.local', 'state', 'vdx', 'cmux-tabs');
-}
-
 /** The cmux tab this process runs in, outside tmux; null — not one. */
 function cmuxSurface(env: NodeJS.ProcessEnv): string | null {
   const surface = env['CMUX_SURFACE_ID']?.trim();
@@ -1579,23 +1664,6 @@ function noteTab(
     return () => {};
   }
   return () => fs.rmSync(file, { force: true });
-}
-
-function readTabRecord(home: string, surface: string): TabRecord | null {
-  try {
-    const r = JSON.parse(fs.readFileSync(path.join(tabRecordDir(home), `${surface}.json`), 'utf8')) as TabRecord;
-    if (r.kind === 'here' && typeof r.session === 'string') return r;
-    if (
-      r.kind === 'there' &&
-      typeof r.host === 'string' &&
-      typeof r.project === 'string' &&
-      /^[0-9a-f]+$/.test(r.token)
-    )
-      return r;
-  } catch {
-    // no record, or not one
-  }
-  return null;
 }
 
 /**
@@ -1639,10 +1707,14 @@ function finish(
     // The tmux server fell under the attach — a crash, a kill-server: its session comes back with
     // `vdx ai --restore`, and this terminal with it (vdx-ai-predictable DL #11). A detach leaves the
     // server as it was, and so does a switch-client inside tmux.
+    // Forgotten once an attach was (exit 0: a detach, the session's end): one tmux refused — «can't use
+    // /dev/tty» on every tab after cmux restarted, 2026-11-17 — leaves it, and the next try still knows
+    // where the tab goes (restore-after-any-crash DL #1).
     const forget = noteTab(deps, { kind: 'here', session, socket: deps.tmux.socketName });
+    let status = EXIT_LAUNCH_FAILED;
     try {
       let before = insideTmux ? null : currentServer(deps.tmux);
-      let status = attach();
+      status = attach();
       while (before && fellUnder(before, session, deps)) {
         if (!awaitSession(session, before, deps)) return status;
         before = currentServer(deps.tmux);
@@ -1650,7 +1722,7 @@ function finish(
       }
       return status;
     } finally {
-      forget();
+      if (status === EXIT_OK) forget();
     }
   }
   deps.log(`attach: ${deps.tmux.attachHint(session)}`);
@@ -1698,6 +1770,31 @@ function awaitSession(session: string, before: TmuxServer, deps: AiDeps): boolea
     }
     deps.sleep(REATTACH_POLL_MS);
   }
+}
+
+/** How long a tab's shell waits for its session while a restore brings it back: after a reboot, tmux and its agents come up later than cmux. */
+const RESTORE_WAIT_MS = 180_000;
+
+/**
+ * Wait for `session`, which a cmux tab showed, while a restore brings back the agents a fallen tmux took
+ * down — the record of one of them names it (restore-after-any-crash). False — none does, or it did
+ * not come within RESTORE_WAIT_MS; Ctrl-C leaves at any time.
+ */
+function awaitRestore(session: string, deps: AiDeps): boolean {
+  const pending = () => lostAgents(deps, currentServer(deps.tmux), false).some((r) => r.session === session);
+  if (!pending()) return false;
+  deps.log(
+    `⏳ ${session}, which this tab showed, is coming back with the agents tmux took down — waiting; Ctrl-C leaves`,
+  );
+  for (let waited = 0; waited < RESTORE_WAIT_MS; waited += REATTACH_POLL_MS) {
+    if (deps.tmux.hasSession(session)) {
+      deps.log(`↻ ${session} is back — attaching`);
+      return true;
+    }
+    if (!pending()) return deps.tmux.hasSession(session);
+    deps.sleep(REATTACH_POLL_MS);
+  }
+  return deps.tmux.hasSession(session);
 }
 
 /** `vdx ai@<host>`: an ssh destination such as `m3` — never an option to ssh. */
@@ -1934,7 +2031,8 @@ export function runAiRemote(
   const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
   const forget = token ? noteTab(deps, { kind: 'there', host, project: projectPath, token }) : () => {};
   const res = (deps.ssh ?? runSsh)(args, false);
-  forget();
+  // As here: a refused attach there, or a dropped connection, keeps the tab's record.
+  if (res?.status === EXIT_OK) forget();
   watch?.stop();
   if (res === null) {
     deps.log('vdx ai: `ssh` not found on PATH');
@@ -2494,8 +2592,11 @@ function boardStart(
   restore = 0,
   /** The profile's `session.machine_icons`. */
   machineIcons: Record<string, string> = {},
-  /** What tmux took down, in the list's words: notes for under it (other projects'), the panel of `r` in the picker. */
-  lostWords: { footnotes: string[]; restoreDetail: string[] } = { footnotes: [], restoreDetail: [] },
+  /**
+   * What a fall took down, in the list's words: notes for under it (other projects'), the panel of `r` in the
+   * picker, and what `r` brings back.
+   */
+  lostWords: { footnotes: string[]; restoreDetail: string[]; what?: string } = { footnotes: [], restoreDetail: [] },
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -2679,6 +2780,7 @@ function boardStart(
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
       limit,
       restore: mode === 'ask' ? restore : 0,
+      restoreWhat: lostWords.what,
       machineIcons,
       reach: mode === 'print' ? reachOf : undefined,
       ...look,
@@ -2717,6 +2819,7 @@ function boardStart(
       // Nobody to ask: the command for each row — the conversation's id is not on the row whole.
       reach: print ? reachOf : undefined,
       restore: print ? 0 : restore,
+      restoreWhat: lostWords.what,
       machineIcons,
       ...look,
     });
@@ -3455,14 +3558,25 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
     return finish(true, session, pane, opts, deps, Boolean(paneTopic(deps.tmux, pane)), seatLabel(deps.env));
   }
   if (!surface) return EXIT_OK;
-  const record = readTabRecord(deps.home, surface);
+  let record = readTabRecord(deps.home, surface);
+  // A tab `vdx ai --restore` opened in place of one cmux lost: that one's record is this one's
+  // (restore-after-any-crash).
+  const from = deps.env[TAB_FROM_ENV_VAR]?.trim();
+  if (!record && from && from !== surface) {
+    const old = readTabRecord(deps.home, from);
+    if (old) {
+      record = { ...old, surface };
+      writeTabRecord(deps.home, record);
+      forgetTabRecord(deps.home, from);
+    }
+  }
   if (!record) return EXIT_OK;
   if (record.kind === 'there') {
     log(`↩ this tab showed a session on ${record.host} — back into it`);
     return runAiRemote({ ...opts, path: record.project }, record.host, deps, seatLabel(deps.env), record.token);
   }
   const here: AiDeps = record.socket === deps.tmux.socketName ? deps : { ...deps, tmux: new Tmux(record.socket) };
-  if (!here.tmux.hasSession(record.session)) {
+  if (!here.tmux.hasSession(record.session) && !awaitRestore(record.session, here)) {
     log(
       `✗ ${record.session}, which this tab showed, is not running — after tmux fell, vdx ai --restore brings it back; ` +
         'this tab tries again in its next shell',
@@ -3470,8 +3584,12 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
     return EXIT_LAUNCH_FAILED;
   }
   // cmux 0.65 brings a tab with a local `tmux attach` back itself: it types `cmux restore --surface` into it.
-  // Attached first, that line went into the agent's input (vdx-ai-predictable Sidetrack #17).
-  if ((deps.cmuxResumesInto ?? cmuxResumesInto)(surface, deps.home) === record.session) {
+  // Attached first, that line went into the agent's input (vdx-ai-predictable Sidetrack #17). Typed by a
+  // restore (VDX_TAB_NOW), cmux's own line has run already and missed: the tab goes back now.
+  if (
+    deps.env[TAB_NOW_ENV_VAR] !== '1' &&
+    (deps.cmuxResumesInto ?? cmuxResumesInto)(surface, deps.home) === record.session
+  ) {
     log(`↩ ${record.session}: cmux brings this tab back into it itself`);
     return EXIT_OK;
   }
@@ -3813,14 +3931,185 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
   return result;
 }
 
+/** Set on the `vdx ai --restore` one machine runs on another: that one brings back its own and asks nobody. */
+const RESTORE_PEER_ENV_VAR = 'VDX_RESTORE_PEER';
+/** How long a restore lets a tab it typed into take the attach before it looks. */
+const TAB_CHECK_MS = 4_000;
+
+/** The cmux tabs here and where each goes (tabs.ts); none when cmux's windows are not here to read. */
+function tabsHere(deps: AiDeps): TabPlan[] {
+  try {
+    const view = deps.tabsView?.() ?? {
+      current: currentCmux(deps.home),
+      before: cmuxBeforeStart(deps.home),
+      foreground: foregroundByTty(),
+      ttys: ttyBySurface(),
+    };
+    return planTabs({
+      self: cmuxSurface(deps.env),
+      current: view.current,
+      before: view.before,
+      records: readTabRecords(deps.home),
+      foreground: view.foreground,
+      ttys: view.ttys,
+      sessionsHere: (socket) => {
+        const t = socket === deps.tmux.socketName ? deps.tmux : new Tmux(socket);
+        return new Set((t.tryRun(['list-sessions', '-F', '#{session_name}']) ?? '').split('\n').filter(Boolean));
+      },
+      marksThere: (host) => {
+        const res = (deps.ssh ?? runSsh)(
+          [
+            '-o',
+            'BatchMode=yes',
+            '-o',
+            'ConnectTimeout=5',
+            host,
+            `tmux list-sessions -F '#{${TAB_OPTION}}' 2>/dev/null; true`,
+          ],
+          true,
+        );
+        return res && res.status === 0 ? new Set(res.stdout.split(/\s+/).filter((m) => /^[0-9a-f]+$/.test(m))) : null;
+      },
+    });
+  } catch {
+    // cmux's files unreadable: no tabs to say anything about
+    return [];
+  }
+}
+
+/** The tabs a restore sends back: at their shell with their session there, or lost by cmux. */
+function tabsToSend(plans: TabPlan[]): TabPlan[] {
+  return plans.filter((p) => p.state === 'ready' || p.state === 'gone');
+}
+
+function tabs(n: number): string {
+  return `${n} tab${n === 1 ? '' : 's'}`;
+}
+
+/** The command a tab a restore opens starts with: this vdx by the paths it runs from — the tab's PATH is cmux's. */
+function tabCommand(): string {
+  const words = [process.execPath, process.argv[1] ?? ''];
+  return words.every((w) => /^[A-Za-z0-9/._+@-]+$/.test(w)) ? `${words.join(' ')} ai --tab` : 'vdx ai --tab';
+}
+
+function runCmux(env: NodeJS.ProcessEnv): (args: string[]) => { status: number; out: string } {
+  const cli = cmuxCli(env);
+  return (args) => {
+    const res = spawnSync(cli, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return { status: res.status ?? 1, out: `${res.stdout ?? ''}${res.stderr ?? ''}` };
+  };
+}
+
 /**
- * `vdx ai --restore`: bring back every agent a fallen tmux server took down here, of every
- * project, without a question — for the person, and for whatever starts tmux again after a crash
- * or a reboot. `dryRun` — what it would start. Exit 4 when one did not start. `forgetThem`
- * (`--forget`, Sidetrack #15) — none is started: their records go, each named with what was in it,
- * and a conversation with work stays to continue by its id.
+ * The cmux tabs that lost their sessions (restore-after-any-crash): each named with where it goes, then sent
+ * back — typed into or opened by cmux, which only a process in a cmux tab outside tmux may ask; from
+ * anywhere else, the line that says where to run it. A record of a tab the person closed goes. `self` — the
+ * tab this runs in, when it is one of them: the restore's caller sends it back last.
  */
-export function runAiRestore(dryRun: boolean, deps: AiDeps, forgetThem = false): number {
+function restoreTabs(
+  deps: AiDeps,
+  dryRun: boolean,
+  say: (line: string) => void,
+): { any: boolean; failed: number; self: TabPlan | null } {
+  const plans = tabsHere(deps);
+  const self = plans.find((p) => p.state === 'self') ?? null;
+  if (!dryRun)
+    for (const p of plans) if (p.state === 'closed' && p.from === 'record') forgetTabRecord(deps.home, p.surface);
+  const send = tabsToSend(plans);
+  const stuck = plans.filter((p) => ['no-session', 'no-answer', 'busy', 'unknown'].includes(p.state));
+  if (send.length === 0 && stuck.length === 0) return { any: false, failed: 0, self };
+  const inCmux = cmuxSurface(deps.env) !== null;
+  const title = (p: TabPlan) => (p.panel?.title ? ` («${p.panel.title}»)` : '');
+  say(
+    `↩ cmux tabs here: ${send.length ? `${tabs(send.length)} to send back` : 'none to send back'}` +
+      (stuck.length ? `, ${stuck.length} cannot go now` : ''),
+  );
+  for (const p of send)
+    say(
+      p.state === 'ready'
+        ? `  ▶ ${targetLabel(p.target)}: ${dryRun || !inCmux ? 'would type' : 'typing'} vdx ai --tab into its tab${title(p)}`
+        : `  ▶ ${targetLabel(p.target)}: cmux lost its tab — ${dryRun || !inCmux ? 'would open' : 'opening'} a new one` +
+            (p.panel?.directory ? ` in ${p.panel.directory}` : ''),
+    );
+  for (const p of stuck)
+    say(
+      p.state === 'busy' || p.state === 'unknown'
+        ? `  · ${targetLabel(p.target)}: ${p.state === 'busy' ? 'something else runs in its tab' : 'what runs in its tab cannot be told'}${title(p)} — ` +
+            `${p.state === 'busy' ? 'leave it, then ' : ''}there: vdx ai --tab`
+        : p.state === 'no-answer'
+          ? `  · ${targetLabel(p.target)}: ${p.target.kind === 'there' ? p.target.host : 'the machine'} does not answer over ssh — its tab waits`
+          : `  · ${targetLabel(p.target)}: not running — its tab waits for it`,
+    );
+  if (send.length === 0) return { any: true, failed: 0, self };
+  if (!inCmux) {
+    say(`  cmux lets only its own tabs ask it: run vdx ai --restore in a cmux tab outside tmux`);
+    return { any: true, failed: 0, self };
+  }
+  if (dryRun) return { any: true, failed: 0, self };
+  const { sent, failed } = returnTabs(send, {
+    home: deps.home,
+    cmux: deps.cmux ?? runCmux(deps.env),
+    tabCommand: tabCommand(),
+    log: say,
+  });
+  if (sent.length === 0) return { any: true, failed: failed.length, self };
+  // A tab that took the attach holds tmux, ssh or vdx in front; one whose `--tab` gave up is at its shell again.
+  deps.sleep(TAB_CHECK_MS);
+  const after = new Map(tabsHere(deps).map((p) => [p.surface, p.state]));
+  const clients = (session: string) =>
+    Number(deps.tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{session_attached}'])?.trim() ?? 0);
+  const back = sent.filter((p) =>
+    p.state === 'ready' ? after.get(p.surface) === 'shown' : p.target.kind === 'there' || clients(p.target.session) > 0,
+  );
+  for (const p of sent.filter((x) => !back.includes(x)))
+    say(`  ✗ ${targetLabel(p.target)}: its tab did not take the attach — there: vdx ai --tab`);
+  const bad = sent.length - back.length + failed.length;
+  say(`${bad ? '✗' : '✓'} ${back.length} of ${tabs(send.length)} back in their sessions`);
+  return { any: true, failed: bad, self };
+}
+
+/**
+ * The other machines of the profile bring back their own (restore-after-any-crash, Q2): before the tabs here,
+ * which may show their sessions. Each answers with its own lines; one that does not answer is named.
+ */
+function restorePeers(deps: AiDeps, dryRun: boolean, say: (line: string) => void): { any: boolean; failed: number } {
+  let machines: string[] = [];
+  try {
+    const profile = resolveEnvironmentPath(deps.env, deps.home);
+    if (profile) machines = loadEnvironment(profile).session?.machines ?? [];
+  } catch {
+    // a profile that does not read: no machines to ask
+  }
+  const self = hostLabel(deps.env);
+  let any = false;
+  let failed = 0;
+  for (const m of machines.filter((x) => !sameMachine(x, self))) {
+    const script = `${RESTORE_PEER_ENV_VAR}=1 vdx ai --restore${dryRun ? ' --dry-run' : ''} 2>&1`;
+    const res = (deps.ssh ?? runSsh)(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', m, script], true);
+    if (!res || res.status === 255) {
+      say(`· ${m}: does not answer over ssh — what went down there stays down; there: vdx ai --restore`);
+      continue;
+    }
+    const lines = res.stdout.split('\n').filter((l) => l.trim());
+    if (lines.length <= 1 && /nothing to bring back/.test(lines[0] ?? '')) continue;
+    any = true;
+    for (const l of lines) say(`  ${m}: ${l}`);
+    if (res.status !== 0) failed++;
+  }
+  return { any, failed };
+}
+
+/**
+ * `vdx ai --restore`: bring back everything a fall took down (restore-after-any-crash) — whatever fell: tmux,
+ * cmux, the machine. Every agent a fallen tmux server took down here, of every project, without a question;
+ * then the same on the profile's other machines; then the cmux tabs here that lost their sessions; then, run
+ * in one of those tabs, that tab itself. For the person, and for whatever starts tmux again after a crash or
+ * a reboot. `dryRun` — what it would do. Exit 4 when something did not come back. `forgetThem` (`--forget`,
+ * Sidetrack #15) — no agent is started: their records go, each named with what was in it, and a
+ * conversation with work stays to continue by its id. `fromList` — `r` in the list: the list goes on after,
+ * so this tab stays where it is.
+ */
+export function runAiRestore(dryRun: boolean, deps: AiDeps, forgetThem = false, fromList = false): number {
   if (!deps.tmux.available()) {
     deps.log('vdx ai --restore: tmux is not installed here — nothing went down with it');
     return EXIT_USAGE;
@@ -3828,12 +4117,12 @@ export function runAiRestore(dryRun: boolean, deps: AiDeps, forgetThem = false):
   const server = currentServer(deps.tmux);
   const lost = lostAgents(deps, server, !dryRun);
   const say = (line: string) => (dryRun ? deps.out(`${line}\n`) : deps.log(line));
-  if (lost.length === 0) {
-    say('vdx ai --restore: nothing to bring back — no agent here went down with a tmux server');
-    return EXIT_OK;
-  }
   const when = server ? `; tmux was started again ${describeAge(new Date(server.started * 1000))}` : '';
   if (forgetThem) {
+    if (lost.length === 0) {
+      say('vdx ai --restore: nothing to bring back — no agent here went down with a tmux server');
+      return EXIT_OK;
+    }
     let wrapSkills: readonly string[] = [];
     try {
       const profile = resolveEnvironmentPath(deps.env, deps.home);
@@ -3864,14 +4153,49 @@ export function runAiRestore(dryRun: boolean, deps: AiDeps, forgetThem = false):
     }
     return EXIT_OK;
   }
-  say(
-    `vdx ai --restore — ${lost.length} agent${lost.length === 1 ? '' : 's'} went down with the tmux server here${when}` +
-      (dryRun ? '; would start:' : ''),
-  );
-  const { started, skipped, failed } = restoreAgents(lost, deps, dryRun);
-  if (!dryRun) {
-    const rest = [skipped && `${skipped} left out`, failed && `${failed} did not start`].filter(Boolean).join(', ');
-    deps.log(`${failed ? '✗' : '✓'} ${started} back${rest ? ` (${rest})` : ''} — attach: vdx ai <project>`);
+  let failed = 0;
+  let any = false;
+  if (lost.length > 0) {
+    any = true;
+    say(
+      `vdx ai --restore — ${lost.length} agent${lost.length === 1 ? '' : 's'} went down with the tmux server here${when}` +
+        (dryRun ? '; would start:' : ''),
+    );
+    const r = restoreAgents(lost, deps, dryRun);
+    if (!dryRun) {
+      const rest = [r.skipped && `${r.skipped} left out`, r.failed && `${r.failed} did not start`]
+        .filter(Boolean)
+        .join(', ');
+      deps.log(`${r.failed ? '✗' : '✓'} ${r.started} back${rest ? ` (${rest})` : ''} — attach: vdx ai <project>`);
+    }
+    failed += r.failed;
+  }
+  // The other machine of `vdx ai@<machine>` tabs: asked by the restore a person or a start runs, not by one it asked.
+  if (deps.env[RESTORE_PEER_ENV_VAR] !== '1') {
+    const peers = restorePeers(deps, dryRun, say);
+    any ||= peers.any;
+    failed += peers.failed;
+  }
+  const t = restoreTabs(deps, dryRun, say);
+  any ||= t.any;
+  failed += t.failed;
+  if (!any && !t.self)
+    say(
+      'vdx ai --restore: nothing to bring back — no agent here went down with a tmux server, and no cmux tab here lost its session',
+    );
+  // This tab last: its attach holds the terminal until a detach.
+  if (t.self && !fromList && !dryRun && deps.interactive) {
+    // Known from cmux's binding alone: `--tab` goes by a record.
+    if (t.self.from === 'cmux' && t.self.target.kind === 'here')
+      writeTabRecord(deps.home, {
+        kind: 'here',
+        surface: t.self.surface,
+        session: t.self.target.session,
+        socket: t.self.target.socket,
+        at: Date.now(),
+      });
+    const status = runAiTab('.', { ...deps, env: { ...deps.env, [TAB_NOW_ENV_VAR]: '1' } });
+    return failed > 0 ? EXIT_LAUNCH_FAILED : status;
   }
   return failed > 0 ? EXIT_LAUNCH_FAILED : EXIT_OK;
 }
@@ -4294,12 +4618,39 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     // A search nobody can be asked about is printed with the commands for its rows, as --list is.
     const ask = asks(deps) && !opts.dryRun;
     const listed = opts.list || (opts.find !== undefined && !ask);
-    const offer = ask && !listed ? (lost?.mine.length ?? 0) : 0;
+    // cmux tabs here that lost their sessions (restore-after-any-crash): only a person in a cmux tab here
+    // sends them back — `r` does, with every agent a fall took down.
+    const tabsBack =
+      ask && !listed && sameMachine(plan.host, plan.seat) && cmuxSurface(deps.env) ? tabsToSend(tabsHere(deps)) : [];
+    const agentsBack = ask && !listed ? (lost?.mine.length ?? 0) : 0;
+    const offer = agentsBack + tabsBack.length;
     if (lost && !lost.note) {
       const say = (l: string) => (listed ? deps.out(`${l}\n`) : log(l));
       for (const l of lost.lines) say(l);
-      if (offer === 0 || offer < lost.all.length) say(lost.hint);
+      if (agentsBack === 0 || agentsBack < lost.all.length) say(lost.hint);
     }
+    const tabLines = tabsBack.map(
+      (p) =>
+        `     ${targetLabel(p.target)}${p.state === 'gone' ? ' — cmux lost its tab' : p.panel?.title ? `  («${p.panel.title}»)` : ''}`,
+    );
+    if (tabsBack.length)
+      for (const l of [
+        `⚠ ${tabs(tabsBack.length)} here lost ${tabsBack.length === 1 ? 'its session' : 'their sessions'}:`,
+        ...tabLines,
+      ])
+        log(l);
+    const restoreWhat = [
+      agentsBack > 0
+        ? agentsBack === 1
+          ? 'the agent tmux took down'
+          : `the ${agentsBack} agents tmux took down`
+        : null,
+      tabsBack.length > 0
+        ? `${tabsBack.length === 1 ? 'the tab' : `${tabsBack.length} tabs`} that lost ${tabsBack.length === 1 ? 'its session' : 'their sessions'}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' and ');
     const outcome = boardStart(
       plan,
       deps,
@@ -4312,7 +4663,14 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       opts.find,
       offer,
       environment.session?.machine_icons ?? {},
-      { footnotes: lost?.note ? [lost.note] : [], restoreDetail: lost ? [...lost.lines, lost.hint.trim()] : [] },
+      {
+        footnotes: lost?.note ? [lost.note] : [],
+        restoreDetail: [
+          ...(lost && agentsBack > 0 ? [...lost.lines, lost.hint.trim()] : []),
+          ...(tabsBack.length ? ['cmux tabs that go back into their sessions:', ...tabLines] : []),
+        ],
+        what: restoreWhat,
+      },
     );
     switch (outcome.kind) {
       case 'listed':
@@ -4346,9 +4704,8 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
         boardChoice = outcome.choice;
         break;
       case 'restore': {
-        const { started, skipped, failed } = restoreAgents(lost?.mine ?? [], deps, false);
-        const rest = [skipped && `${skipped} left out`, failed && `${failed} did not start`].filter(Boolean).join(', ');
-        log(`${failed ? '✗' : '✓'} ${started} back${rest ? ` (${rest})` : ''}`);
+        // Everything a fall took down, as `vdx ai --restore` (restore-after-any-crash DL #4): this tab stays.
+        runAiRestore(false, deps, false, true);
         // What runs now is another list: the start goes on from there — from the same seat, which
         // this start dropped from the environment before its agents came back.
         return runAi(opts, { ...deps, env: { ...deps.env, [SEAT_ENV_VAR]: plan.seat } }, selfPid);
