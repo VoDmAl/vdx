@@ -1251,7 +1251,7 @@ export interface AiDeps {
   /** This vdx's version, named to the vdx on another machine. */
   version?: string;
   /** Run ssh — capturing its output, or on this terminal; null when ssh is not on PATH. */
-  ssh?: (args: string[], capture: boolean) => { status: number; stdout: string } | null;
+  ssh?: (args: string[], capture: boolean, timeoutMs?: number) => { status: number; stdout: string } | null;
   /** Claude Code processes alive on this machine; read from its session files when not given. */
   liveHere?: () => LiveSession[];
   /**
@@ -1283,10 +1283,62 @@ function machineLag(deps: AiDeps, pid: number, projectRoot: string, command: str
   });
 }
 
-function runSsh(args: string[], capture: boolean): { status: number; stdout: string } | null {
-  const res = spawnSync('ssh', args, { stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'inherit', encoding: 'utf8' });
+function runSsh(args: string[], capture: boolean, timeoutMs?: number): { status: number; stdout: string } | null {
+  const res = spawnSync('ssh', args, {
+    stdio: capture ? ['ignore', 'pipe', 'ignore'] : 'inherit',
+    encoding: 'utf8',
+    ...(timeoutMs ? { timeout: timeoutMs } : {}),
+  });
+  return sshOutcome(res);
+}
+
+/**
+ * What an ssh call came to: null — no ssh here; 255 — no answer, as ssh says it of a connection, and so is a call
+ * cut by its time limit (a hung exchange, link or command: restore-after-any-crash DL #7).
+ */
+export function sshOutcome(res: {
+  status: number | null;
+  signal?: NodeJS.Signals | null;
+  stdout?: string | null;
+  error?: Error;
+}): { status: number; stdout: string } | null {
   if (at(res.error, 'code') === 'ENOENT') return null;
-  return { status: res.status ?? 1, stdout: res.stdout ?? '' };
+  const cut = at(res.error, 'code') === 'ETIMEDOUT' || (res.status === null && Boolean(res.signal));
+  return { status: cut ? 255 : (res.status ?? 1), stdout: res.stdout ?? '' };
+}
+
+/** How long a question to another machine may take: what runs there, its tab marks, its report. */
+const ASK_TIMEOUT_MS = 30_000;
+/** How long another machine may take to bring back its own: up to 30 s an agent while its prompts are answered. */
+const PEER_RESTORE_TIMEOUT_MS = 600_000;
+
+/**
+ * Ask another machine and read its answer: BatchMode (a password prompt is no answer), 5 s to connect, a link
+ * gone dead noticed within 30 s, and the whole call cut at `timeoutMs` — ConnectTimeout alone holds only the
+ * connection, and a hung command there would hold this vdx for good (nas-info, 2026-11-17).
+ */
+function askMachineOver(
+  deps: AiDeps,
+  host: string,
+  script: string,
+  timeoutMs: number = ASK_TIMEOUT_MS,
+): { status: number; stdout: string } | null {
+  return (deps.ssh ?? runSsh)(
+    [
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=5',
+      '-o',
+      'ServerAliveInterval=10',
+      '-o',
+      'ServerAliveCountMax=3',
+      host,
+      script,
+    ],
+    true,
+    timeoutMs,
+  );
 }
 
 export function sleepSync(ms: number): void {
@@ -2097,7 +2149,7 @@ function parseReach(stdout: string): Reach {
  */
 function askMachine(host: string, deps: AiDeps, projectRoot: string): Reach | null {
   const script = `vdx ai ${remotePathWord(projectRoot, deps.home)} --report 2>/dev/null || sh -c ${shellQuote(LIVE_SESSIONS_SCRIPT)}`;
-  const res = (deps.ssh ?? runSsh)(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, script], true);
+  const res = askMachineOver(deps, host, script);
   return res && res.status === 0 ? parseReach(res.stdout) : null;
 }
 
@@ -3830,10 +3882,7 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     if (!elsewhere) {
       elsewhere = new Map();
       for (const m of machines) {
-        const res = (deps.ssh ?? runSsh)(
-          ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', m, LIVE_SESSIONS_SCRIPT],
-          true,
-        );
+        const res = askMachineOver(deps, m, LIVE_SESSIONS_SCRIPT);
         if (res && res.status === 0)
           for (const l of parseMachineReport(res.stdout).sessions) elsewhere.set(l.conversation, m);
         else say(`note: ${m} does not answer over ssh — what runs there is not known`);
@@ -3974,16 +4023,10 @@ function tabsHere(deps: AiDeps): TabPlan[] {
         );
       },
       marksThere: (host) => {
-        const res = (deps.ssh ?? runSsh)(
-          [
-            '-o',
-            'BatchMode=yes',
-            '-o',
-            'ConnectTimeout=5',
-            host,
-            `tmux list-sessions -F '#{session_attached} #{${TAB_OPTION}}' 2>/dev/null; true`,
-          ],
-          true,
+        const res = askMachineOver(
+          deps,
+          host,
+          `tmux list-sessions -F '#{session_attached} #{${TAB_OPTION}}' 2>/dev/null; true`,
         );
         if (!res || res.status !== 0) return null;
         const marks = new Map<string, number>();
@@ -4108,9 +4151,12 @@ function restorePeers(deps: AiDeps, dryRun: boolean, say: (line: string) => void
   let failed = 0;
   for (const m of machines.filter((x) => !sameMachine(x, self))) {
     const script = `${RESTORE_PEER_ENV_VAR}=1 vdx ai --restore${dryRun ? ' --dry-run' : ''} 2>&1`;
-    const res = (deps.ssh ?? runSsh)(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', m, script], true);
+    const res = askMachineOver(deps, m, script, PEER_RESTORE_TIMEOUT_MS);
     if (!res || res.status === 255) {
-      say(`· ${m}: does not answer over ssh — what went down there stays down; there: vdx ai --restore`);
+      say(
+        `· ${m}: does not answer over ssh, or did not finish within ${PEER_RESTORE_TIMEOUT_MS / 60_000} min — ` +
+          `what went down there may still be down; there: vdx ai --restore`,
+      );
       continue;
     }
     const lines = res.stdout.split('\n').filter((l) => l.trim());

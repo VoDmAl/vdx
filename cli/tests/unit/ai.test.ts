@@ -50,6 +50,7 @@ import {
   clientSeat,
   clientStdio,
   shellQuote,
+  sshOutcome,
   handOffRestart,
   sleepSync,
   tmuxShellCommand,
@@ -570,6 +571,20 @@ describe('clientStdio: the tmux client never gets /dev/tty (restore-after-any-cr
   });
 });
 
+describe('sshOutcome: a call cut by its time limit is no answer (restore-after-any-crash DL #7)', () => {
+  it('255 for a timeout or a kill, null without ssh, the status otherwise', () => {
+    const timedOut = Object.assign(new Error('spawnSync ssh ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    expect(sshOutcome({ status: null, signal: 'SIGTERM', stdout: 'partial', error: timedOut })).toEqual({
+      status: 255,
+      stdout: 'partial',
+    });
+    expect(sshOutcome({ status: null, signal: 'SIGKILL', stdout: '' })).toEqual({ status: 255, stdout: '' });
+    const missing = Object.assign(new Error('spawnSync ssh ENOENT'), { code: 'ENOENT' });
+    expect(sshOutcome({ status: null, error: missing })).toBeNull();
+    expect(sshOutcome({ status: 4, stdout: 'x' })).toEqual({ status: 4, stdout: 'x' });
+  });
+});
+
 describe('fallbackAgent', () => {
   it('takes the first known agent on PATH, with no flags', () => {
     expect(fallbackAgent((b) => b === 'codex')).toEqual({ command: 'codex' });
@@ -857,14 +872,15 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
   let home: string;
   let root: string;
   let logs: string[];
-  let sshCalls: { args: string[]; capture: boolean }[];
+  let sshCalls: { args: string[]; capture: boolean; timeoutMs?: number }[];
   let answers: string[];
   /** What another machine answers over ssh: its live session files; null — it does not answer. */
   let remoteLive: object[] | null;
   let remoteHome: string;
   let liveHere: LiveSession[];
   const opts = { path: '', restart: false, fresh: false, detach: false, dryRun: false };
-  const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[5]);
+  // The script is the last word of an ssh call, the machine the one before it.
+  const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[c.args.length - 1]);
   const remoteRuns = () => sshCalls.filter((c) => !c.capture).map((c) => c.args);
 
   beforeEach(() => {
@@ -918,8 +934,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     confirmTimeoutMs: 1000,
     ask: () => answers.shift() ?? null,
     version: '0.19.0',
-    ssh: (args, capture) => {
-      sshCalls.push({ args, capture });
+    ssh: (args, capture, timeoutMs) => {
+      sshCalls.push({ args, capture, timeoutMs });
       if (!capture) return { status: 0, stdout: '' };
       if (!remoteLive) return { status: 255, stdout: '' };
       return { status: 0, stdout: [`home=${remoteHome}`, ...remoteLive.map((o) => JSON.stringify(o))].join('\n') };
@@ -1030,7 +1046,19 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(text()).toMatch(/1 {2}m3 +5 min ago +unfinished/);
     expect(text()).toMatch(/2 {2}lft +30 min ago +unfinished/);
     expect(text()).toContain('Enter → 1');
-    expect(sshCalls[0]!.args.slice(0, 5)).toEqual(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'm3']);
+    // BatchMode, 5 s to connect, a dead link noticed, and the call itself cut at its limit (restore-after-any-crash DL #7).
+    expect(sshCalls[0]!.args.slice(0, -1)).toEqual([
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=5',
+      '-o',
+      'ServerAliveInterval=10',
+      '-o',
+      'ServerAliveCountMax=3',
+      'm3',
+    ]);
+    expect(sshCalls[0]!.timeoutMs).toBe(30_000);
     // The vdx there reports on the project; an older one, or none — the script of live sessions.
     expect(asked()).toEqual([expect.stringMatching(/^vdx ai .* --report 2>\/dev\/null \|\| sh -c .*sessions/)]);
     expect(remoteRuns()).toHaveLength(1);
@@ -1227,7 +1255,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       status: 'idle',
       cwd,
     });
-    const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[4]);
+    const asked = () => sshCalls.filter((c) => c.capture).map((c) => c.args[c.args.length - 2]);
     beforeEach(() => {
       fs.writeFileSync(
         path.join(home, 'env.yaml'),
@@ -3910,7 +3938,10 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
           .replace('wrap_skills: [vdm:wrap]', 'wrap_skills: [vdm:wrap], machines: [testhost, m3]'),
       );
       const scripts: string[] = [];
-      const ssh = (args: string[]) => {
+      const limits: (number | undefined)[] = [];
+      const ssh = (args: string[], _capture: boolean, timeoutMs?: number) => {
+        limits.push(timeoutMs);
+        expect(args).toContain('ServerAliveInterval=10');
         scripts.push(`${args[args.length - 2]}: ${args[args.length - 1]}`);
         return {
           status: 0,
@@ -3921,6 +3952,8 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       const d = { ...deps(), ssh, env: { ...deps().env, VDX_ENVIRONMENT: profile } };
       expect(runAiRestore(false, d)).toBe(EXIT_OK);
       expect(scripts).toEqual(['m3: VDX_RESTORE_PEER=1 vdx ai --restore 2>&1']);
+      // Cut at 10 min: a restore hung there must not hold this one, nor the tmux-server.sh that runs it (DL #7).
+      expect(limits).toEqual([600_000]);
       expect(text()).toContain('  m3: ✓ 1 back — attach: vdx ai <project>');
       expect(text()).not.toContain('nothing to bring back');
       scripts.length = 0;
