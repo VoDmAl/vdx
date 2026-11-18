@@ -304,7 +304,9 @@ after a yes — unless you picked it from a list that showed that agent: the one
 list, or the list of --focused (focused sessions only). --new and --focused
 take an empty session of the project (nothing typed since /clear) when one is
 there and no terminal at your seat shows it; a session with work in it they
-leave running.
+leave running, and so one started in the last two minutes: its first message
+may not be written yet (0.60.1). A new session does not take the name of one
+where an agent is still starting.
 
 Claude Code's memory of the project (Claude Code only): when it is not inside the
 project, .claude/memory/, or the folder was moved, a start in a terminal asks to

@@ -1645,6 +1645,31 @@ export function handOffRestart(
 
 /** As long as a start waits for its own agent (settle): past that, the start that opened the pane has given up on it. */
 const START_UNDER_WAY_MS = 15_000;
+/**
+ * An agent started this long ago or less is no empty place for a new conversation, whatever its
+ * transcript says: its first message may not be written yet (echelon, 2026-11-17: a start seconds
+ * after another took its pane, and the first session went with no trace).
+ */
+const FRESH_AGENT_MS = 120_000;
+
+/**
+ * The tmux sessions where an agent's start is under way, or its agent runs: a pane whose process
+ * tree names the agent's command. The agent shows among the processes only after the login shell
+ * (0.2–1.5 s), and until then its pane is told by that shell's line; a shell the agent left behind
+ * is `exec <shell> -l` and names it no more. A start seconds after another took the name of the
+ * first's session and put a window into it (echelon, 2026-11-16).
+ */
+function agentSessions(tmux: Tmux, procs: ProcInfo[], command: string): Set<string> {
+  const want = path.basename(command);
+  const names = (args: string) =>
+    args.split(/\s+/).some((w) => path.basename(w.replace(/^['"]+|['"]+$/g, '')) === want);
+  return new Set(
+    tmux
+      .panes()
+      .filter((p) => processTree(procs, p.panePid).some((x) => names(x.args)))
+      .map((p) => p.session),
+  );
+}
 
 function startUnderWayMs(deps: AiDeps): number {
   return Math.min(START_UNDER_WAY_MS, deps.confirmTimeoutMs);
@@ -4627,6 +4652,13 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   }
 
   const procs = multiplexer === 'tmux' ? deps.processes() : [];
+  // Names a new session does not take: one a terminal elsewhere shows, and — but for the one intercom
+  // or HQ session, whose start under way is waited for — one where an agent's start is under way.
+  const takenNames = (single: boolean) =>
+    new Set([
+      ...viewedElsewhere(tmux, deps.env),
+      ...(single ? [] : agentSessions(tmux, deps.processes(), plan.command)),
+    ]);
   const agentsHere = multiplexer === 'tmux' ? findAgentPanes(tmux.panes(), procs, projectRoot, plan.command) : [];
   // What a fallen tmux server took down (vdx-ai-predictable P6): said before any start; a plain
   // start at a terminal offers to bring it back.
@@ -4861,7 +4893,11 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       focused: focusedOf,
       mail: mailOf,
       hq: hqAgent,
-    }).find((f) => f.empty && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused));
+    }).find((f) => {
+      const started = liveStartedAt(deps.env, deps.home, f.pid);
+      const fresh = started !== null && Date.now() - started < FRESH_AGENT_MS;
+      return f.empty && !fresh && f.draft === 0 && !openAtSeat(f, plan.seat) && (plan.focused || !f.focused);
+    });
     const pane = free && running.find((a) => a.proc.pid === free.pid);
     if (pane) {
       current = pane;
@@ -5006,7 +5042,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       target = { kind: 'attach', session: current.pane.session, drift };
     } else if (current) target = { kind: 'restart', session: current.pane.session, paneId: current.pane.paneId };
     else {
-      const name = freeSessionName(plan.sessionName, running, viewedElsewhere(tmux, deps.env));
+      const name = freeSessionName(plan.sessionName, running, takenNames(plan.intercom || plan.hq));
       target = { kind: 'new', session: name, window: multiplexer === 'tmux' && tmux.hasSession(name) };
     }
     deps.out(renderPlan(plan, multiplexer, running, focusedOf, target, asideWords, topic));
@@ -5299,10 +5335,11 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     log('note: the profile has no agent.hq_args — the HQ session starts with no first prompt');
   const line = agentLine(plan, [...plan.args, ...plan.resumeArgs]);
   const cmd = tmuxShellCommand(line, deps.shell, !plan.intercom);
-  const session = freeSessionName(plan.sessionName, running, viewedElsewhere(tmux, deps.env));
   // One intercom or HQ session per project and machine holds for two starts at once too: letters
-  // come in pairs, and each sender starts it (intercom-session-mode DL #11).
+  // come in pairs, and each sender starts it (intercom-session-mode DL #11) — its start under way is
+  // waited for below, under its one name.
   const single = plan.intercom || plan.hq;
+  const session = freeSessionName(plan.sessionName, running, takenNames(single));
   const sameMode = (pid: number) => mailOf(pid) === plan.intercom && hqAgent(pid) === plan.hq;
   let reuse = tmux.hasSession(session);
   let other = single && reuse ? startUnderWay(plan, session, sameMode, deps) : null;

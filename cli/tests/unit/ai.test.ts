@@ -3143,6 +3143,52 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(tmux.hasSession('proj@testhost-2')).toBe(false);
   });
 
+  // echelon, 2026-11-17: two `--focused … --detach` seconds apart. The first agent had no transcript yet, so
+  // it looked empty, and the second took its pane — the first session went with no trace.
+  describe('two starts seconds apart', () => {
+    /** An agent with its session file and no transcript yet, started at `startedAt`. */
+    const noTranscript = (session: string, id: string, startedAt: number) => {
+      tmux.newSession(session, root, `${claude()} --base`);
+      let pane: ReturnType<typeof findAgentPanes>[number] | undefined;
+      for (let i = 0; i < 50 && !pane; i++) {
+        pane = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').find((a) => a.pane.session === session);
+        if (!pane) sleepSync(100);
+      }
+      fs.mkdirSync(path.join(cc(), 'sessions'), { recursive: true });
+      fs.writeFileSync(
+        path.join(cc(), 'sessions', `${pane!.proc.pid}.json`),
+        JSON.stringify({ pid: pane!.proc.pid, sessionId: id, status: 'idle', statusUpdatedAt: Date.now(), startedAt }),
+      );
+      return pane!;
+    };
+
+    it('an agent started a moment ago is no empty place — its first message may not be written yet', () => {
+      const first = noTranscript('proj@testhost', ID.a, Date.now());
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'second step' }, deps())).toBe(EXIT_OK);
+      expect(text()).not.toContain('♻');
+      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+      const still = findAgentPanes(tmux.panes(), listProcesses(), root, 'claude').find(
+        (a) => a.pane.paneId === first.pane.paneId,
+      );
+      expect(still?.proc.pid).toBe(first.proc.pid);
+    });
+
+    it('…one that has sat empty for minutes still is', () => {
+      noTranscript('proj@testhost', ID.a, Date.now() - 10 * 60_000);
+      expect(runAi({ ...opts, path: root, focused: true, topic: 'second step' }, deps())).toBe(EXIT_OK);
+      expect(text()).toContain('♻ proj@testhost: nothing typed in it since /clear');
+      expect(tmux.hasSession('proj@testhost-2')).toBe(false);
+    });
+
+    it('a session where an agent is still starting is not taken for a window: the next name', () => {
+      // The login shell's line names the agent before the agent shows among the processes.
+      tmux.newSession('proj@testhost', root, `sleep 30; exec ${claude()} --base`);
+      expect(runAi({ ...opts, path: root, fresh: true }, deps())).toBe(EXIT_OK);
+      expect(tmux.hasSession('proj@testhost-2')).toBe(true);
+      expect(tmux.panes().filter((p) => p.session === 'proj@testhost')).toHaveLength(1);
+    });
+  });
+
   /** An agent started focused, as `processFocused` would tell from its environment. */
   const focusedIn = (session: string, id: string, topic: string) => {
     const pane = agentIn(session, id, [startedOn('testhost'), userLine('work')]);
