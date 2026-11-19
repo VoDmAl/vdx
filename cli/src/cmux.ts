@@ -41,39 +41,78 @@ export function cmuxToken(env: NodeJS.ProcessEnv): string | null {
   return cmuxHere(env) ? randomBytes(6).toString('hex') : null;
 }
 
-/** cmux's snapshot of its windows: what it brings back when it starts again. */
+/** cmux's snapshot of its windows: the topic watcher reads the workspace's description from it. */
 function cmuxSnapshotPath(home: string): string {
   return path.join(home, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json');
 }
 
+/** What cmux types into a tab it brings back itself (cmux 0.65): `cmux restore --surface`. */
+const CMUX_LINE = 'cmux restore';
+
 /**
- * The tmux session cmux itself brings the tab `surface` back into, when it starts again; null — none.
- * cmux 0.65 notices `tmux attach` in a tab and keeps it as the tab's resume binding
- * (`"kind": "tmux", "autoResume": true, "source": "process-detected", "checkpointId": "=<session>"`); at its
- * start it types `cmux restore --surface` into the tab, which runs that attach (vdx-ai-predictable Sidetrack #17).
- * Read from the snapshot: the socket, which `cmux surface resume get` needs, lets in only cmux's own processes.
+ * cmux, started again, types `cmux restore --surface` into each tab it holds a trusted resume binding for —
+ * a `tmux attach` it noticed — and no setting stops that for tmux (its docs: «cmux only auto-runs resume
+ * bindings it marks trusted, such as live process-detected tmux bindings»). `vdx ai --tab` takes the tab back
+ * itself, so the line must not reach the agent the tab attaches to: lft 2026-11-19, it stood in the input of
+ * 4 agents of 7 (restore-after-any-crash DL #8). Reads what arrives — `read` gives what is there, '' when
+ * nothing — until cmux's line has come and the terminal is quiet for `quietMs`, or `maxMs` passed.
  */
-export function cmuxResumesInto(surface: string, home: string = os.homedir()): string | null {
-  let data: unknown;
+export function takeTypedLine(
+  read: () => string,
+  clock: { now: () => number; sleep: (ms: number) => void },
+  maxMs = 5_000,
+  quietMs = 300,
+): string {
+  const start = clock.now();
+  let taken = '';
+  let last = start;
+  for (;;) {
+    const got = read();
+    const t = clock.now();
+    if (got) {
+      taken += got;
+      last = t;
+    }
+    if (taken.includes(CMUX_LINE) && t - last >= quietMs) return taken;
+    if (t - start >= maxMs) return taken;
+    clock.sleep(50);
+  }
+}
+
+/**
+ * `takeTypedLine` on this process's terminal: its input read as it comes, unechoed, then the terminal as it
+ * was. Null — no terminal here. `waitedMs` — how long it took, for the tab's log.
+ */
+export function takeCmuxLine(maxMs = 5_000): { taken: string; waitedMs: number } | null {
+  let fd: number;
   try {
-    data = JSON.parse(fs.readFileSync(cmuxSnapshotPath(home), 'utf8'));
+    fd = fs.openSync('/dev/tty', fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
   } catch {
     return null;
   }
-  const list = (v: unknown): Record<string, unknown>[] =>
-    Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null) : [];
-  const obj = (v: unknown): Record<string, unknown> =>
-    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
-  for (const w of list(obj(data)['windows']))
-    for (const ws of list(obj(w['tabManager'])['workspaces']))
-      for (const panel of list(ws['panels'])) {
-        if (panel['id'] !== surface) continue;
-        const b = obj(obj(panel['terminal'])['resumeBinding']);
-        const checkpoint = b['checkpointId'];
-        if (b['kind'] !== 'tmux' || b['autoResume'] !== true || typeof checkpoint !== 'string') return null;
-        return checkpoint.replace(/^=/, '') || null;
-      }
-  return null;
+  const stty = (args: string[]) => spawnSync('stty', args, { stdio: [fd, 'pipe', 'ignore'], encoding: 'utf8' });
+  const saved = stty(['-g']).stdout?.trim();
+  const start = Date.now();
+  try {
+    stty(['-icanon', '-echo', 'min', '0', 'time', '0']);
+    const buf = Buffer.alloc(1024);
+    const taken = takeTypedLine(
+      () => {
+        try {
+          const n = fs.readSync(fd, buf, 0, buf.length, null);
+          return n > 0 ? buf.toString('utf8', 0, n) : '';
+        } catch {
+          return ''; // EAGAIN: nothing typed yet
+        }
+      },
+      { now: Date.now, sleep: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) },
+      maxMs,
+    );
+    return { taken, waitedMs: Date.now() - start };
+  } finally {
+    if (saved) stty([saved]);
+    fs.closeSync(fd);
+  }
 }
 
 function args(mode: 'watch' | 'clear', ws: { workspace: string; cli: string }, source: TopicSource, home: string) {

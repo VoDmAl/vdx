@@ -8,6 +8,7 @@ import {
   type TabRecord,
   cmuxBeforeStart,
   cmuxDir,
+  cmuxJustStarted,
   currentCmux,
   planTabs,
   readTabRecord,
@@ -91,9 +92,13 @@ describe('cmux snapshots: now, and before cmux last started', () => {
       title: 'tab A',
       tty: 'ttys001',
       tmuxSession: 'proj@lft',
+      resumes: true,
     });
     expect(now.panels.get('B')!.tmuxSession).toBeNull();
+    // No binding, nothing cmux runs at its start; one on another socket is still cmux's to run.
+    expect(now.panels.get('B')!.resumes).toBe(false);
     expect(now.panels.get('C')!.tmuxSession).toBeNull();
+    expect(now.panels.get('C')!.resumes).toBe(true);
   });
 
   it('before the start: the newest copy in session-history, its start from the name', () => {
@@ -108,6 +113,18 @@ describe('cmux snapshots: now, and before cmux last started', () => {
     expect(before.startedAt).toBe(1794937350065);
     expect(before.panels.get('A')!.tmuxSession).toBe('proj@lft');
     expect(cmuxBeforeStart(tmpDir('vdx-tabs-none-'))).toBeNull();
+  });
+
+  // The copy of before speaks for a tab's first shell only in the minutes after that start: m3's, from
+  // 2026-10-07, says nothing of a tab opened weeks later (restore-after-any-crash DL #9).
+  it('before the start counts only while the start is minutes old', () => {
+    const at = (startedAt: number | null): CmuxSnapshot => ({ panels: new Map(), startedAt });
+    const start = 1_795_107_170_835;
+    expect(cmuxJustStarted(at(start), start + 60_000)).not.toBeNull();
+    expect(cmuxJustStarted(at(start), start + 11 * 60_000)).toBeNull();
+    expect(cmuxJustStarted(at(start), start - 1)).toBeNull();
+    expect(cmuxJustStarted(at(null), start)).toBeNull();
+    expect(cmuxJustStarted(null, start)).toBeNull();
   });
 });
 

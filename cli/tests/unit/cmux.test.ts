@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cmuxToken, watchTopic } from '../../src/cmux.ts';
+import { cmuxToken, takeTypedLine, watchTopic } from '../../src/cmux.ts';
 import { remoteAiArgs } from '../../src/ai.ts';
 
 // The cmux topic watcher (focused-topic DL #6), run against fakes of cmux, tmux and ssh.
@@ -189,4 +189,49 @@ describe('vdx ai in cmux', () => {
     expect(calls()).toContain('--workspace|WS-9|--action|clear-description|');
     expect(execFileSync('ls', [path.join(home, '.cache', 'vdx', 'cmux')], { encoding: 'utf8' })).toBe('');
   }, 20_000);
+});
+
+// lft, 2026-11-19: cmux's `cmux restore --surface`, typed into a tab vdx had attached, stood in the input of
+// 4 agents of 7 (restore-after-any-crash DL #8): `vdx ai --tab` reads it off the terminal first.
+describe('cmux line taken off the terminal before the attach', () => {
+  /** A terminal that gets `chunks` at their times (ms), and a clock the reader moves. */
+  const typed = (chunks: [number, string][]) => {
+    let now = 0;
+    const left = [...chunks];
+    return {
+      read: () => {
+        let got = '';
+        while (left.length && left[0]![0] <= now) got += left.shift()![1];
+        return got;
+      },
+      clock: { now: () => now, sleep: (ms: number) => void (now += ms) },
+      at: () => now,
+    };
+  };
+
+  it('takes the line cmux types, its Enter too, and stops once the terminal is quiet', () => {
+    const t = typed([
+      [1200, 'cmux restore'],
+      [1250, ' --surface'],
+      [1300, '\r'],
+    ]);
+    expect(takeTypedLine(t.read, t.clock)).toBe('cmux restore --surface\r');
+    expect(t.at()).toBeGreaterThanOrEqual(1600);
+    expect(t.at()).toBeLessThan(1700);
+  });
+
+  it('nothing typed: gives up after the limit, taking nothing', () => {
+    const t = typed([]);
+    expect(takeTypedLine(t.read, t.clock, 5_000)).toBe('');
+    expect(t.at()).toBe(5_000);
+  });
+
+  it('other keys alone do not end the wait: only cmux line does', () => {
+    const t = typed([
+      [100, 'x'],
+      [4000, 'cmux restore --surface\r'],
+    ]);
+    expect(takeTypedLine(t.read, t.clock, 5_000)).toBe('xcmux restore --surface\r');
+    expect(t.at()).toBeLessThan(5_000);
+  });
 });

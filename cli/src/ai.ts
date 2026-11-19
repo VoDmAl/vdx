@@ -55,7 +55,7 @@ import {
   type PersonalHost,
 } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
-import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxResumesInto, cmuxToken, watchTopic } from './cmux.ts';
+import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, takeCmuxLine, watchTopic } from './cmux.ts';
 import {
   TAB_FROM_ENV_VAR,
   TAB_NOW_ENV_VAR,
@@ -63,6 +63,7 @@ import {
   type TabPlan,
   cmuxBeforeStart,
   cmuxCli,
+  cmuxJustStarted,
   currentCmux,
   forgetTabRecord,
   foregroundByTty,
@@ -1224,8 +1225,8 @@ export interface AiDeps {
   agentMail?: (pid: number) => boolean;
   /** Is this agent process an HQ session; default: its environment (`processMode`). */
   agentHq?: (pid: number) => boolean;
-  /** The tmux session cmux brings this tab back into itself; default: its snapshot (`cmuxResumesInto`). */
-  cmuxResumesInto?: (surface: string, home: string) => string | null;
+  /** Take cmux's own `cmux restore --surface` off this terminal before the attach; default: `takeCmuxLine`. */
+  takeCmuxLine?: () => { taken: string; waitedMs: number } | null;
   /** Runs the cmux command line (tabs.ts `returnTabs`); default: the one cmux names in its tabs. */
   cmux?: (args: string[]) => { status: number; out: string };
   /** cmux's windows now and before it last started, and what runs in front in each terminal; default: read here. */
@@ -1722,6 +1723,43 @@ function cmuxSurface(env: NodeJS.ProcessEnv): string | null {
   return surface && !env['TMUX'] && /^[A-Za-z0-9-]+$/.test(surface) ? surface : null;
 }
 
+/**
+ * A line in `~/.cache/vdx/tab.log` from `vdx ai --tab`: what cmux typed into the tab and when — what the
+ * next restart of cmux is read by (restore-after-any-crash DL #9). Errors are swallowed.
+ */
+function noteTabLog(home: string, line: string): void {
+  try {
+    const dir = path.join(home, '.cache', 'vdx');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'tab.log'), `${new Date().toISOString()} ${line}\n`);
+  } catch {
+    // the log is for reading later; the attach does not wait on it
+  }
+}
+
+/**
+ * cmux opens a tab again in the directory its shell last reported, and a `vdx ai '<path>'` typed anywhere left
+ * that one: told the project's directory while vdx holds the attach, cmux brings the tab back into the project
+ * (the owner, 2026-11-19: «чтобы cmux запоминал рабочий каталог»). The shell's own report at its next prompt
+ * sets it back. Said with cmux's own call — its shell integration reports a remote shell's directory so.
+ * Outside a cmux tab, or a directory not here: nothing.
+ */
+function reportTabDirectory(deps: AiDeps, dir: string | null): void {
+  const surface = cmuxSurface(deps.env);
+  const workspace = deps.env['CMUX_WORKSPACE_ID']?.trim();
+  if (!surface || !workspace || !dir) return;
+  try {
+    if (!fs.statSync(dir).isDirectory()) return;
+  } catch {
+    return;
+  }
+  (deps.cmux ?? runCmux(deps.env))([
+    'rpc',
+    'surface.report_pwd',
+    JSON.stringify({ workspace_id: workspace, surface_id: surface, path: dir }),
+  ]);
+}
+
 /** Note what this cmux tab shows; the function returned forgets it. Outside a cmux tab: nothing. */
 function noteTab(
   deps: AiDeps,
@@ -1795,6 +1833,11 @@ function finish(
     // /dev/tty» on every tab after cmux restarted, 2026-11-17 — leaves it, and the next try still knows
     // where the tab goes (restore-after-any-crash DL #1).
     const forget = noteTab(deps, { kind: 'here', session, socket: deps.tmux.socketName });
+    if (!insideTmux)
+      reportTabDirectory(
+        deps,
+        deps.tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{session_path}'])?.trim() || null,
+      );
     let status = EXIT_LAUNCH_FAILED;
     try {
       let before = insideTmux ? null : currentServer(deps.tmux);
@@ -1935,6 +1978,10 @@ export function remoteAiArgs(input: {
   const flags = remoteFlags(opts);
   const v = shellQuote(version);
   const script =
+    // A terminal the machine there has no entry for — cmux's `xterm-ghostty`, which its shells keep until their
+    // first command, the moment `--tab` runs — tmux there refuses: «missing or unsuitable terminal»
+    // (restore-after-any-crash DL #8).
+    (input.tty ? `infocmp "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color; ` : '') +
     `v=$(vdx --version 2>/dev/null) || v='older than 0.13.1'; ` +
     `[ "$v" = ${v} ] || echo "note: vdx on ${host} is $v, here "${v} >&2; ` +
     `export ${SEAT_ENV_VAR}=${shellQuote(input.from)}; ` +
@@ -2115,6 +2162,7 @@ export function runAiRemote(
   deps.log(`→ ${host}: vdx ai ${[shellQuote(projectPath), ...remoteFlags(opts)].join(' ')}`);
   const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
   const forget = token ? noteTab(deps, { kind: 'there', host, project: projectPath, token }) : () => {};
+  if (token) reportTabDirectory(deps, projectPath);
   const res = (deps.ssh ?? runSsh)(args, false);
   // As here: a refused attach there, or a dropped connection, keeps the tab's record.
   if (res?.status === EXIT_OK) forget();
@@ -3617,7 +3665,10 @@ export function runAiCheck(
 /**
  * `vdx ai --tab`: the shell of a cmux tab, started again after cmux restarted, goes back into the session
  * the tab showed — its record (DL #19): a session here, or `vdx ai@<host> --tab` with the mark. Run there,
- * over ssh, it finds the session marked `@vdx_tab` with this terminal's mark. No record: nothing, exit 0.
+ * over ssh, it finds the session marked `@vdx_tab` with this terminal's mark. No record, but cmux, minutes
+ * ago, started with a `tmux attach` noticed in this tab: that session, if no terminal here shows it. Neither:
+ * nothing, exit 0. One way back (restore-after-any-crash DL #9): vdx attaches, and cmux's own line, typed
+ * into the same tab, is taken off the terminal first.
  */
 export function runAiTab(pathArg: string, deps: AiDeps): number {
   const { log } = deps;
@@ -3657,7 +3708,31 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
       forgetTabRecord(deps.home, from);
     }
   }
+  const before = cmuxJustStarted(deps.tabsView ? deps.tabsView().before : cmuxBeforeStart(deps.home));
+  const bound = before?.panels.get(surface) ?? null;
+  // A tab attached by hand, or whose record went (cmux-tabs-back, 2026-11-17): cmux noticed its attach, and
+  // vdx, not cmux, takes it back (lft 2026-11-19: cmux lost the binding of nas-info@lft's tab, DL #8).
+  if (
+    !record &&
+    bound?.tmuxSession &&
+    deps.tmux.hasSession(bound.tmuxSession) &&
+    !terminalsHere(deps.tmux, deps).get(bound.tmuxSession)
+  ) {
+    record = { kind: 'here', surface, session: bound.tmuxSession, socket: deps.tmux.socketName, at: Date.now() };
+    writeTabRecord(deps.home, record);
+  }
   if (!record) return EXIT_OK;
+  // cmux types `cmux restore --surface` into a tab it brings back itself; attached first, the line went into
+  // the agent's input (vdx-ai-predictable Sidetrack #17; lft 2026-11-19, 4 of 7). Typed by a restore
+  // (VDX_TAB_NOW), cmux's line has run already.
+  if (bound?.resumes && deps.env[TAB_NOW_ENV_VAR] !== '1') {
+    const took = (deps.takeCmuxLine ?? takeCmuxLine)();
+    noteTabLog(
+      deps.home,
+      `${surface} ${record.kind === 'here' ? record.session : `${record.host}:${record.project}`} cmux line: ` +
+        (took ? `${JSON.stringify(took.taken.slice(0, 120))} in ${took.waitedMs} ms` : 'no terminal to read'),
+    );
+  }
   if (record.kind === 'there') {
     log(`↩ this tab showed a session on ${record.host} — back into it`);
     return runAiRemote({ ...opts, path: record.project }, record.host, deps, seatLabel(deps.env), record.token);
@@ -3669,16 +3744,6 @@ export function runAiTab(pathArg: string, deps: AiDeps): number {
         'this tab tries again in its next shell',
     );
     return EXIT_LAUNCH_FAILED;
-  }
-  // cmux 0.65 brings a tab with a local `tmux attach` back itself: it types `cmux restore --surface` into it.
-  // Attached first, that line went into the agent's input (vdx-ai-predictable Sidetrack #17). Typed by a
-  // restore (VDX_TAB_NOW), cmux's own line has run already and missed: the tab goes back now.
-  if (
-    deps.env[TAB_NOW_ENV_VAR] !== '1' &&
-    (deps.cmuxResumesInto ?? cmuxResumesInto)(surface, deps.home) === record.session
-  ) {
-    log(`↩ ${record.session}: cmux brings this tab back into it itself`);
-    return EXIT_OK;
   }
   log(`↩ ${record.session}: back into the session this tab showed`);
   const pane = here.tmux.tryRun(['display-message', '-p', '-t', `=${record.session}:`, '#{pane_id}'])?.trim() ?? '';
@@ -4021,6 +4086,27 @@ const RESTORE_PEER_ENV_VAR = 'VDX_RESTORE_PEER';
 const TAB_CHECK_MS = 4_000;
 
 /** The cmux tabs here and where each goes (tabs.ts); none when cmux's windows are not here to read. */
+/**
+ * The sessions on a tmux server here, each with the terminals of this machine on it. One another machine holds
+ * (`vdx ai@<this one>` there, an ssh) shows the session there, not in a tab here: lft 2026-11-19, the tab of
+ * `nas-info@lft` stayed out of it, its session counted as shown by m3's tab (restore-after-any-crash DL #8).
+ */
+function terminalsHere(t: Tmux, deps: AiDeps): Map<string, number> {
+  const out = t.tryRun(['list-sessions', '-F', '#{session_name}']) ?? '';
+  const sessions = new Map(
+    out
+      .split('\n')
+      .filter(Boolean)
+      .map((s): [string, number] => [s, 0]),
+  );
+  const me = hostLabel(deps.env);
+  const procs = deps.processes();
+  for (const c of t.clients())
+    if (sessions.has(c.session) && clientSeat(c.pid, procs, me) === me)
+      sessions.set(c.session, sessions.get(c.session)! + 1);
+  return sessions;
+}
+
 function tabsHere(deps: AiDeps): TabPlan[] {
   try {
     const view = deps.tabsView?.() ?? {
@@ -4036,17 +4122,7 @@ function tabsHere(deps: AiDeps): TabPlan[] {
       records: readTabRecords(deps.home),
       foreground: view.foreground,
       ttys: view.ttys,
-      sessionsHere: (socket) => {
-        const t = socket === deps.tmux.socketName ? deps.tmux : new Tmux(socket);
-        const out = t.tryRun(['list-sessions', '-F', '#{session_attached}\t#{session_name}']) ?? '';
-        return new Map(
-          out
-            .split('\n')
-            .map((l) => /^(\d+)\t(.+)$/.exec(l))
-            .filter((m): m is RegExpExecArray => m !== null)
-            .map((m) => [m[2]!, Number(m[1])] as const),
-        );
-      },
+      sessionsHere: (socket) => terminalsHere(socket === deps.tmux.socketName ? deps.tmux : new Tmux(socket), deps),
       marksThere: (host) => {
         const res = askMachineOver(
           deps,
@@ -4086,7 +4162,7 @@ function tabCommand(): string {
 function runCmux(env: NodeJS.ProcessEnv): (args: string[]) => { status: number; out: string } {
   const cli = cmuxCli(env);
   return (args) => {
-    const res = spawnSync(cli, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const res = spawnSync(cli, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10_000 });
     return { status: res.status ?? 1, out: `${res.stdout ?? ''}${res.stderr ?? ''}` };
   };
 }
@@ -4795,14 +4871,19 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
         ...tabLines,
       ])
         log(l);
+    // Each part with its verb, the tabs by name: the row reads as what it does (the owner, 2026-11-19).
+    const tabNames = tabsBack.map((p) => targetLabel(p.target));
     const restoreWhat = [
       agentsBack > 0
         ? agentsBack === 1
-          ? 'the agent tmux took down'
-          : `the ${agentsBack} agents tmux took down`
+          ? 'bring back the agent tmux took down'
+          : `bring back the ${agentsBack} agents tmux took down`
         : null,
       tabsBack.length > 0
-        ? `${tabsBack.length === 1 ? 'the tab' : `${tabsBack.length} tabs`} that lost ${tabsBack.length === 1 ? 'its session' : 'their sessions'}`
+        ? `return ${tabsBack.length === 1 ? 'the cmux tab to its session' : `${tabsBack.length} cmux tabs to their sessions`}: ` +
+          (tabNames.length > 3
+            ? `${tabNames.slice(0, 3).join(', ')} +${tabNames.length - 3} more`
+            : tabNames.join(', '))
         : null,
     ]
       .filter(Boolean)

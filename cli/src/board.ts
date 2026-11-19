@@ -143,7 +143,7 @@ export interface BoardInput {
    * then Enter is `r`, unless a search was asked for.
    */
   restore?: number;
-  /** What `r` brings back, in words; not given — the agents tmux took down. */
+  /** What `r` does, in words from its verb on; not given — bring back the agents tmux took down. */
   restoreWhat?: string;
   /** The profile's `session.machine_icons`: a machine's mark before its label, as the cmux sidebar shows it. */
   machineIcons?: Record<string, string>;
@@ -521,7 +521,8 @@ export function buildBoard(input: BoardInput): Board {
       : []),
     ...(input.footnotes ?? []).map((n) => `  note: ${n}`),
   ];
-  const back = `bring back ${input.restoreWhat || `${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`}`;
+  const back =
+    input.restoreWhat || `bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`;
   const more = input.find ? 'the whole list' : hidden > 0 ? `all (${unread ? 'up to ' : ''}${hidden} more)` : null;
   const keys = [
     `Enter → ${enterKey({ enter })}`,
@@ -545,7 +546,8 @@ export function buildBoard(input: BoardInput): Board {
   const fresh: Pick = { kind: 'new', focused: false };
   const items: PickerItem[] = [
     ...(restore > 0
-      ? [{ text: `▶ ${back}`, pick: { kind: 'restore' } as Pick, detail: input.restoreDetail ?? [] }]
+      ? // ↩ as `--tab` says it: the owner found ▶ and «bring back …» unclear as the first row (2026-11-19).
+        [{ text: `↩ ${back}`, pick: { kind: 'restore' } as Pick, detail: input.restoreDetail ?? [] }]
       : []),
     ...pickerGroup(runningTitle, running, live),
     ...pickerGroup(serviceTitle, service, live),

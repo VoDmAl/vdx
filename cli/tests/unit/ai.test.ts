@@ -6,6 +6,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   type AiDeps,
   type AiOptions,
+  type ProcInfo,
   type Environment,
   EXIT_DRIFT,
   EXIT_LAUNCH_FAILED,
@@ -2886,11 +2887,37 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(inner.attached).toEqual([{ session, noted: null }]);
     }, 30_000);
 
-    it('a tab cmux brings back into the same session itself: --tab leaves it to cmux (Sidetrack #17)', () => {
+    // The owner, 2026-11-19: «было бы хорошо чтобы cmux запоминал рабочий каталог» — a `vdx ai '<path>'` typed
+    // in a tab elsewhere left the tab there, and cmux opened it there again.
+    it('in a cmux tab, cmux is told the project directory while vdx holds the attach', () => {
+      const { t } = terminal('SURF-1');
+      const calls: string[][] = [];
+      const cmux = (args: string[]) => (calls.push(args), { status: 0, out: 'OK' });
+      const env = { CMUX_WORKSPACE_ID: 'WS-9' };
+      expect(runAi({ ...opts, path: root }, { ...inTab('SURF-1', t, env), cmux })).toBe(EXIT_OK);
+      expect(calls).toEqual([
+        [
+          'rpc',
+          'surface.report_pwd',
+          JSON.stringify({ workspace_id: 'WS-9', surface_id: 'SURF-1', path: fs.realpathSync(root) }),
+        ],
+      ]);
+      // Inside tmux the tab is tmux's: cmux is not told anything.
+      calls.length = 0;
+      const inner = terminal('SURF-1');
+      expect(
+        runAi({ ...opts, path: root }, { ...inTab('SURF-1', inner.t, { ...env, TMUX: '/tmp/x,1,0' }), cmux }),
+      ).toBe(EXIT_OK);
+      expect(calls).toEqual([]);
+    }, 30_000);
+
+    // lft, 2026-11-19: vdx attached 7 tabs, and cmux's own `cmux restore --surface` stood in the input of 4 of
+    // their agents; nothing in cmux stops it for tmux (restore-after-any-crash DL #8, #9).
+    it("a tab cmux brings back itself: --tab takes cmux's line off the terminal, then attaches", () => {
       fs.mkdirSync(tabRecordDir(base), { recursive: true });
       fs.writeFileSync(record('SURF-4'), JSON.stringify({ kind: 'here', surface: 'SURF-4', session, socket, at: 1 }));
-      // The snapshot's own shape (m3, cmux 0.65.0, 2026-11-13): the panel's id is the tab's CMUX_SURFACE_ID.
-      const snap = path.join(base, 'Library', 'Application Support', 'cmux', 'session-com.cmuxterm.app.json');
+      // The copy cmux makes of its snapshot at a start, named by the start (lft 2026-11-19, cmux 0.65.2).
+      const history = path.join(base, 'Library', 'Application Support', 'cmux', 'session-history');
       const panel = (id: string, checkpointId: string) => ({
         id,
         stableSurfaceId: 'STABLE',
@@ -2904,26 +2931,75 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
           },
         },
       });
-      const writeSnap = (checkpointId: string) => {
-        fs.mkdirSync(path.dirname(snap), { recursive: true });
+      const startedCmux = (startedAt: number, checkpointId = `=${session}`) => {
+        fs.rmSync(history, { recursive: true, force: true });
+        fs.mkdirSync(history, { recursive: true });
         fs.writeFileSync(
-          snap,
+          path.join(history, `session-com.cmuxterm.app-${startedAt}-w1-p1.json`),
           JSON.stringify({ windows: [{ tabManager: { workspaces: [{ panels: [panel('SURF-4', checkpointId)] }] } }] }),
         );
       };
-      writeSnap(`=${session}`);
+      const taker = () => {
+        const calls: number[] = [];
+        return { calls, take: () => (calls.push(1), { taken: 'cmux restore --surface\r', waitedMs: 1200 }) };
+      };
+      startedCmux(Date.now() - 5_000);
       const { t, attached } = terminal('SURF-4');
+      const took = taker();
       logs = [];
-      expect(runAiTab('.', inTab('SURF-4', t))).toBe(EXIT_OK);
-      expect(attached).toEqual([]);
-      expect(logs.join('\n')).toContain(`↩ ${session}: cmux brings this tab back into it itself`);
+      expect(runAiTab('.', { ...inTab('SURF-4', t), takeCmuxLine: took.take })).toBe(EXIT_OK);
+      expect(took.calls).toHaveLength(1);
+      expect(attached.map((a) => a.session)).toEqual([session]);
+      expect(logs.join('\n')).toContain(`↩ ${session}: back into the session this tab showed`);
+      expect(fs.readFileSync(path.join(base, '.cache', 'vdx', 'tab.log'), 'utf8')).toMatch(
+        new RegExp(`SURF-4 ${session} cmux line: "cmux restore --surface\\\\r" in 1200 ms\\n$`),
+      );
 
-      // cmux would bring it into another session: vdx goes back into its own, as before.
-      writeSnap('=other@testhost');
+      // Typed by a restore (VDX_TAB_NOW): cmux's line has run already — nothing to take.
+      fs.writeFileSync(record('SURF-4'), JSON.stringify({ kind: 'here', surface: 'SURF-4', session, socket, at: 1 }));
+      const now = taker();
+      const typed = terminal('SURF-4');
+      expect(runAiTab('.', { ...inTab('SURF-4', typed.t, { VDX_TAB_NOW: '1' }), takeCmuxLine: now.take })).toBe(
+        EXIT_OK,
+      );
+      expect(now.calls).toEqual([]);
+      expect(typed.attached.map((a) => a.session)).toEqual([session]);
+
+      // cmux started long ago (m3, up since 2026-10-07): a new tab's first shell — cmux types nothing.
+      startedCmux(Date.now() - 86_400_000);
+      fs.writeFileSync(record('SURF-4'), JSON.stringify({ kind: 'here', surface: 'SURF-4', session, socket, at: 1 }));
+      const old = taker();
+      const later = terminal('SURF-4');
+      expect(runAiTab('.', { ...inTab('SURF-4', later.t), takeCmuxLine: old.take })).toBe(EXIT_OK);
+      expect(old.calls).toEqual([]);
+      expect(later.attached.map((a) => a.session)).toEqual([session]);
+
+      // No record — attached by hand, or its record gone: the attach cmux noticed is the tab's, vdx takes it.
+      startedCmux(Date.now() - 5_000);
+      const byHand = terminal('SURF-4');
+      const hand = taker();
+      expect(runAiTab('.', { ...inTab('SURF-4', byHand.t), takeCmuxLine: hand.take })).toBe(EXIT_OK);
+      expect(hand.calls).toHaveLength(1);
+      expect(byHand.attached).toMatchObject([{ session, noted: { kind: 'here', surface: 'SURF-4', session } }]);
+      // Its session in a terminal here already: the person has it there; this tab stays as it is.
+      const seen = terminal('SURF-4');
+      seen.t.clients = () => [{ session, pid: 7001 }];
+      expect(
+        runAiTab('.', {
+          ...inTab('SURF-4', seen.t),
+          takeCmuxLine: taker().take,
+          processes: () => [{ pid: 7001, ppid: 1, args: 'tmux attach-session -t =' + session }],
+        }),
+      ).toBe(EXIT_OK);
+      expect(seen.attached).toEqual([]);
+      // cmux noticed another session there: vdx goes back into its own record, as before.
+      startedCmux(Date.now() - 5_000, '=other@testhost');
+      fs.writeFileSync(record('SURF-4'), JSON.stringify({ kind: 'here', surface: 'SURF-4', session, socket, at: 1 }));
       const own = terminal('SURF-4');
-      expect(runAiTab('.', inTab('SURF-4', own.t))).toBe(EXIT_OK);
+      expect(runAiTab('.', { ...inTab('SURF-4', own.t), takeCmuxLine: taker().take })).toBe(EXIT_OK);
       expect(own.attached.map((a) => a.session)).toEqual([session]);
       fs.rmSync(path.join(base, 'Library'), { recursive: true, force: true });
+      fs.rmSync(path.join(base, '.cache', 'vdx', 'tab.log'), { force: true });
     }, 30_000);
 
     it('gone down with cmux, the note stays: --tab goes back into that session, then drops it', () => {
@@ -3895,6 +3971,38 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       expect(noted('SURF-B')).toBe(true);
     });
 
+    // lft, 2026-11-19: the tab of nas-info@lft stayed out of it — m3's `vdx ai@lft` showed the same session
+    // (restore-after-any-crash DL #8).
+    it('a session another machine shows is not shown here: its tab goes back; one a terminal here shows stays', () => {
+      agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
+      noteTab('SURF-A', 'proj@testhost');
+      const c = cmuxHere([tabPanel('SURF-A', 'ttys901')], []);
+      const viewedBy = (procs: ProcInfo[]) => {
+        const t = Object.create(tmux) as typeof tmux;
+        t.clients = () => [{ session: 'proj@testhost', pid: 7001 }];
+        return {
+          ...deps(),
+          ...c.over,
+          tmux: t,
+          processes: () => procs,
+          env: { ...deps().env, CMUX_SURFACE_ID: 'SURF-SELF' },
+        };
+      };
+      const overSsh = [
+        { pid: 7000, ppid: 1, args: 'sshd-session: vdm@ttys037' },
+        { pid: 7001, ppid: 7000, args: 'tmux attach-session -t =proj@testhost' },
+      ];
+      expect(runAiRestore(true, viewedBy(overSsh))).toBe(EXIT_OK);
+      expect(text()).toContain('  ▶ proj@testhost: would type vdx ai --tab into its tab («tab SURF-A»)\n');
+      logs = [];
+      const local = [
+        { pid: 7000, ppid: 1, args: '-zsh' },
+        { pid: 7001, ppid: 7000, args: 'tmux attach-session -t =proj@testhost' },
+      ];
+      expect(runAiRestore(true, viewedBy(local))).toBe(EXIT_OK);
+      expect(text()).not.toContain('would type vdx ai --tab');
+    });
+
     it('outside a cmux tab (tmux, the agent launchd starts): the tabs are named, and where to send them back from', () => {
       agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
       noteTab('SURF-A', 'proj@testhost');
@@ -3940,18 +4048,22 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
       agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]);
       noteTab('SURF-C', 'proj@testhost');
       const attached: string[] = [];
+      const taken: number[] = [];
       const t = Object.create(tmux) as typeof tmux;
       t.attach = (name: string) => (attached.push(name), 0);
+      const bound = { ...tabPanel('SURF-C', 'ttys904', 'proj@testhost'), resumes: true };
       const d = {
         ...deps(),
         tmux: t,
-        cmuxResumesInto: () => 'proj@testhost',
+        tabsView: () => ({ current: snap([bound]), before: snap([bound], Date.now() - 5_000), foreground: new Map() }),
+        takeCmuxLine: () => (taken.push(1), { taken: '', waitedMs: 5000 }),
         env: { ...deps().env, CMUX_SURFACE_ID: 'SURF-C' },
       };
       expect(runAiTab('.', d)).toBe(EXIT_OK);
-      expect(attached).toEqual([]);
+      expect(taken).toHaveLength(1);
       expect(runAiTab('.', { ...d, env: { ...d.env, VDX_TAB_NOW: '1' } })).toBe(EXIT_OK);
-      expect(attached).toEqual(['proj@testhost']);
+      expect(taken).toHaveLength(1);
+      expect(attached).toEqual(['proj@testhost', 'proj@testhost']);
     });
 
     it('after a reboot: a tab whose session is still coming back waits for it, and attaches', () => {
@@ -4022,7 +4134,7 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
         { ...deps(), ...c.over, tmux: t, env: { ...deps().env, CMUX_SURFACE_ID: 'SURF-SELF' } },
       );
       expect(text()).toContain('⚠ 1 tab here lost its session:\n     proj@testhost  («tab SURF-A»)');
-      expect(text()).toContain('Enter → r · r bring back the tab that lost its session');
+      expect(text()).toContain('Enter → r · r return the cmux tab to its session: proj@testhost');
       expect(c.calls).toEqual([
         ['send', '--workspace', 'WS-1', '--surface', 'SURF-A', '--', 'VDX_TAB_NOW=1 vdx ai --tab\\n'],
       ]);
@@ -4359,6 +4471,23 @@ describe('vdx ai@host', () => {
       `--find 'it'\\''s here'`,
     );
     expect(remoteAiArgs({ ...base, opts: { ...opts, hq: true }, tty: true })[2]).toContain(' --hq');
+  });
+
+  // lft, 2026-11-19: `--tab` at a cmux shell's first prompt, TERM still cmux's xterm-ghostty — «missing or
+  // unsuitable terminal: xterm-ghostty» from tmux on m3 (restore-after-any-crash DL #8).
+  it('a terminal the machine there does not know attaches as xterm-256color', () => {
+    const base = { host: 'm3', from: 'lft', projectPath: '/h/p', home: '/h', version: '1.0.0', opts };
+    const script = remoteAiArgs({ ...base, tty: true })[2]!;
+    expect(script.startsWith('infocmp "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color; ')).toBe(true);
+    expect(remoteAiArgs({ ...base, tty: false })[2]).not.toContain('TERM');
+    // What the line does there, with the terminal there knows and with one it does not.
+    const termThere = (term: string) =>
+      spawnSync('sh', ['-c', `${script.split('; ')[0]}; echo "$TERM"`], {
+        encoding: 'utf8',
+        env: { ...process.env, TERM: term },
+      }).stdout.trim();
+    expect(termThere('xterm-ghostty-unknown-here')).toBe('xterm-256color');
+    expect(termThere('vt100')).toBe('vt100');
   });
 
   it('the line before ssh names every flag the vdx there gets (vdx-ai-predictable Sidetrack #10)', () => {

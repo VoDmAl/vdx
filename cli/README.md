@@ -62,7 +62,7 @@ vdx doctor --fix [project-path]     # write the profile's personal hooks (git.ho
 # Start your agent in a project per your profile (~/.vdx-environment.yaml or $VDX_ENVIRONMENT)
 vdx ai[@host] [project-path] [--new | --conversation <id>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list]   # default: cwd; @host: over ssh, in tmux there; --intercom: the project's intercom session; --yes: vdx answers every question, --no-input: none is put (agents)
 vdx ai --restore [--dry-run]   # whatever fell (tmux, cmux, the machine): every agent a fallen tmux server took down on this machine, back where it was (an intercom session — only one you started or attached to), then the profile's other machines, then the cmux tabs that lost their sessions (0.59)
-vdx ai --tab   # in a cmux tab's shell after cmux restarted: back into the session the tab showed (vdx ai notes it in ~/.local/state/vdx/cmux-tabs/ while it holds the attach); after a reboot it waits while a restore brings the session back (0.59)
+vdx ai --tab   # in a cmux tab's shell after cmux restarted: back into the session the tab showed (vdx ai notes it in ~/.local/state/vdx/cmux-tabs/ while it holds the attach); after a reboot it waits while a restore brings the session back (0.59); without a note, the tmux attach cmux noticed in the tab before it started; cmux's own "cmux restore --surface" is read off the terminal first, so it never reaches the agent (0.61)
 vdx ai [project-path] --focused "<topic>"   # a focused session about <topic> (tmux option @vdx_topic), which opens with it as its first prompt; run by that session's agent: a new topic, nothing started
 vdx ai [project-path] --focused "<topic>" --prompt "<what to do>"   # the same, its first message apart from the topic (0.60)
 vdx ai --hq [project-path]   # the project's HQ session, for what comes from outside (VDX_HQ=1, tmux session <name>-hq, first prompt agent.hq_args): one per project and machine, you keep it running; --hq only narrows the choice: a plain start's list numbers it (0.52), Enter and a start without a terminal leave it; --restore brings it back
@@ -127,7 +127,8 @@ pushed yet: npm would get them before CI.
 The session's `{project}` is `[_.vdx] name` (or the older `[vdx]`) from the project's `mise.toml`, else the
 first file in the profile's `session.project_names` that has one, else the repo
 name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
-profile and tmux, the path taken under its home directory; `--detach` only
+profile and tmux, the path taken under its home directory, and a terminal that machine has no
+entry for (cmux's `xterm-ghostty`) as `xterm-256color` (0.61); `--detach` only
 starts it, and not in a folder Claude Code does not trust yet: nobody would answer
 its trust window (exit 4; start once without `--detach`). The machine's own label (`$VDX_HOST`) runs here. Where git knows no
 commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
@@ -151,7 +152,8 @@ start opens the list with what it took down, and Enter (`r`) brings those agents
 back — each in its tmux session, conversation, mode and topic; `vdx ai --restore`
 brings back every one on the machine without a question — from 0.59 with the other machines'
 agents and the cmux tabs here that lost their sessions, and in a cmux tab `r` brings those tabs
-back too — and `vdx ai --restore
+back too (0.61: the row is `↩ bring back … and return N cmux tabs to their sessions: <names>`;
+a tab counts as shown only by a terminal of this machine) — and `vdx ai --restore
 --forget` (0.55+) drops them instead, naming each with whether work was in it;
 agents of other projects that went down are one note under the list (0.55+); a
 terminal `vdx ai` attached waits for its session and attaches again (0.47+). The plugin's

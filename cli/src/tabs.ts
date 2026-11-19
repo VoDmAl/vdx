@@ -89,6 +89,8 @@ export interface CmuxPanel {
   tty: string | null;
   /** The tmux session cmux noticed attached in it (`resumeBinding` kind tmux); null — none. */
   tmuxSession: string | null;
+  /** cmux runs its binding at its start (`autoResume`): it types `cmux restore --surface` into the tab. */
+  resumes?: boolean;
 }
 
 export interface CmuxSnapshot {
@@ -138,6 +140,7 @@ function readSnapshot(file: string, startedAt: number | null): CmuxSnapshot | nu
           title: text(panel['title']) ?? text(ws['customTitle']) ?? text(ws['processTitle']),
           tty: text(panel['ttyName'])?.replace(/^\/dev\//, '') ?? null,
           tmuxSession,
+          resumes: b['autoResume'] === true,
         });
       }
   return { panels, startedAt, writtenAt };
@@ -166,6 +169,19 @@ export function cmuxBeforeStart(home: string): CmuxSnapshot | null {
     .filter((x) => Number.isFinite(x.at))
     .sort((a, b) => b.at - a.at)[0];
   return newest ? readSnapshot(path.join(dir, newest.n), newest.at) : null;
+}
+
+/** How long after cmux started a tab's first shell still comes from that start: cmux brings ~20 tabs in seconds. */
+const JUST_STARTED_MS = 10 * 60_000;
+
+/**
+ * cmux's windows before it started — only while that start is minutes old: a shell opened later (a new tab)
+ * is no tab cmux brought back, and the snapshot of before says nothing of it.
+ */
+export function cmuxJustStarted(before: CmuxSnapshot | null, now: number = Date.now()): CmuxSnapshot | null {
+  return before?.startedAt != null && now - before.startedAt >= 0 && now - before.startedAt < JUST_STARTED_MS
+    ? before
+    : null;
 }
 
 /** The processes a terminal runs in front, by the terminal: `ps` reads alike on macOS of either architecture. */

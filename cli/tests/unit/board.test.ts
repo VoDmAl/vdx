@@ -587,7 +587,7 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     });
     expect(fell.picker.cursor).toBe(0);
     expect(fell.picker.items[0]).toEqual({
-      text: '▶ bring back the 2 agents tmux took down',
+      text: '↩ bring back the 2 agents tmux took down',
       pick: { kind: 'restore' },
       detail: ['⚠ tmux here was started again', '  proj-2'],
     });

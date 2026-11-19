@@ -242,13 +242,18 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 <CMUX_SURFACE_ID>.json and drops the note when the attach ends;
                 gone down with cmux, or refused by tmux, it leaves it (0.59). A
                 session on another machine (vdx ai@<host>) is found there by the
-                mark @vdx_tab. No note: nothing, exit 0; the session not running:
+                mark @vdx_tab. No note, but cmux started minutes ago with a tmux
+                attach noticed in the tab: that session, if no terminal of this
+                machine shows it (0.61). Neither: nothing, exit 0; the session not running:
                 exit 4, the note stays (0.53) — while a restore brings that session
-                back after a reboot, the tab waits for it up to 3 minutes (0.59). A
-                tab cmux brings back into the same session itself (cmux 0.65 types
-                "cmux restore --surface" into it) is left to cmux (0.56), unless a
-                restore typed the command (VDX_TAB_NOW=1). The terminal tmux gets
-                is the tab's own device, even when the caller hands /dev/tty (0.59)
+                back after a reboot, the tab waits for it up to 3 minutes (0.59).
+                cmux types "cmux restore --surface" into a tab it brings back itself
+                (cmux 0.65): --tab reads that line off the terminal before it
+                attaches, up to 5 s, unless a restore typed the command
+                (VDX_TAB_NOW=1); what it took goes to ~/.cache/vdx/tab.log (0.61).
+                In a cmux tab, vdx ai tells cmux the project directory while it
+                holds the attach (0.61). The terminal tmux gets is the tab's own
+                device, even when the caller hands /dev/tty (0.59)
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
