@@ -19,6 +19,7 @@ import {
   isMachineLabel,
   LIVE_SESSIONS_SCRIPT,
   type LiveSession,
+  claudeConfigDir,
   latestPerMachine,
   listConversations,
   liveConversationId,
@@ -108,6 +109,7 @@ import {
   settledState,
 } from './board.ts';
 import { fzfPick, type PickerAnswer, type PickerInput, rowsWidth } from './picker.ts';
+import { awaitReach, reach } from './reach.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -1239,6 +1241,8 @@ export interface AiDeps {
   /** Default `process.platform`: the folder check is for macOS. */
   platform?: NodeJS.Platform;
   sleep: (ms: number) => void;
+  /** Where volumes are mounted (reach.ts); default `/Volumes`. */
+  volumes?: string;
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
@@ -3949,6 +3953,46 @@ interface Restored {
   failed: number;
 }
 
+/** How long a start waits for Claude Code's transcripts to lead somewhere: a volume unlocks in seconds. */
+const REACH_START_MS = 60_000;
+/** How long `--restore` waits for them, and for its projects: it runs at login, as the volume unlocks. */
+const REACH_RESTORE_MS = 10 * 60_000;
+
+/** A path as the person reads it: under the home directory, with `~`. */
+function homePath(p: string, home: string): string {
+  const rel = path.relative(home, p);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? `~/${rel}` : p;
+}
+
+/**
+ * Wait while Claude Code's transcripts (`projects` in its config directory) and `paths` lead nowhere — a link
+ * to a volume not mounted yet (nas-info `projects-link-mount-race`): a Claude Code started then writes no
+ * transcript and says nothing, and `--resume`, intercom and echelon lose it. What still leads nowhere after
+ * `waitMs`, each with why.
+ */
+function awaitClaudeReach(deps: AiDeps, paths: string[], waitMs: number): { path: string; why: string }[] {
+  const projects = path.join(claudeConfigDir(deps.env, deps.home), 'projects');
+  return awaitReach(
+    [projects, ...paths],
+    waitMs,
+    deps.sleep,
+    (stuck) =>
+      deps.log(
+        `⏳ ${stuck.map((x) => `${homePath(x.path, deps.home)} leads nowhere yet (${x.why})`).join('; ')} — ` +
+          `waiting up to ${Math.round(waitMs / 1000)} s for the volume`,
+      ),
+    deps.volumes,
+  );
+}
+
+/** The line that says Claude Code was not started because its transcripts lead nowhere; it starts with ✗ and the path. */
+function transcriptsNowhere(stuck: { path: string; why: string }, deps: AiDeps, waitMs: number): string {
+  return (
+    `✗ ${homePath(stuck.path, deps.home)} leads nowhere after ${Math.round(waitMs / 1000)} s (${stuck.why}) — ` +
+    'Claude Code would run without its transcripts'
+  );
+}
+
 /**
  * Start again the agents a fallen tmux server took down (vdx-ai-predictable P6, DL #9): each in a
  * tmux session of its old name — taken, the next free one — with its project's profile, in its
@@ -3981,8 +4025,32 @@ function restoreAgents(lost: LostRecord[], deps: AiDeps, dryRun: boolean): Resto
     return elsewhere.get(id) ?? null;
   };
   const result: Restored = { started: 0, skipped: 0, failed: 0 };
+  // At login the restore can come before the volume Claude Code's transcripts, or a project, live on: it waits
+  // for them, and a record whose place has not come stays for the next restore (projects-link-mount-race).
+  const projects = path.join(claudeConfigDir(deps.env, deps.home), 'projects');
+  if (dryRun) {
+    const now = reach(projects, deps.volumes);
+    if (now.kind === 'unreachable')
+      say(`note: ${homePath(projects, deps.home)} leads nowhere now (${now.why}) — a restore waits for it`);
+  } else {
+    const stuck = awaitClaudeReach(deps, [...new Set(lost.map((r) => r.project))], REACH_RESTORE_MS);
+    const transcripts = stuck.find((x) => x.path === projects);
+    if (transcripts) {
+      say(`${transcriptsNowhere(transcripts, deps, REACH_RESTORE_MS)}; no agent started, their records stay`);
+      return { ...result, failed: lost.length };
+    }
+  }
   for (const r of lost) {
-    if (!fs.existsSync(r.project)) {
+    const where = reach(r.project, deps.volumes);
+    if (where.kind === 'unreachable') {
+      say(
+        `${dryRun ? '·' : '✗'} ${r.session}: ${r.project} leads nowhere ${dryRun ? 'now' : 'yet'} (${where.why}) — ` +
+          (dryRun ? 'a restore waits for it' : 'not brought back; its record stays for the next restore'),
+      );
+      if (!dryRun) result.failed++;
+      continue;
+    }
+    if (where.kind === 'missing') {
       say(`· ${r.session}: not brought back — ${r.project} is not there any more`);
       result.skipped++;
       done(r);
@@ -5389,6 +5457,13 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
         `(pid ${pid}) and stops now; what that says: ${logFile}`,
     );
     return EXIT_OK;
+  }
+
+  // Claude Code with its transcripts nowhere would run on without them (projects-link-mount-race).
+  const nowhere = awaitClaudeReach(deps, [], REACH_START_MS)[0];
+  if (nowhere) {
+    log(`${transcriptsNowhere(nowhere, deps, REACH_START_MS)}; nothing started`);
+    return EXIT_LAUNCH_FAILED;
   }
 
   if (current) {

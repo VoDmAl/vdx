@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.15.2"
+  version: "1.16.1"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -49,6 +49,17 @@ agent:
         # cursor rests on "1. I am using this for local development".
         - screen: "Loading development channels"
           keys: [Enter]
+    # The Obsidian vault's agent drives the owner's Chrome through the Claude in
+    # Chrome extension: price checks in his logged-in sessions (REI member
+    # coupon and the like), where sites refuse automation from a bare browser.
+    # Only this vault: wiki/vault-health.md is its governance hub. Chrome, not
+    # the owner's default Firefox — the extension exists for Chrome only.
+    # Asked by the owner 2026-11-15.
+    - id: obsidian-vault-chrome
+      description: "Obsidian vault (wiki/vault-health.md): the agent drives Chrome through Claude in Chrome"
+      if:
+        has_file: {path: wiki/vault-health.md}
+      args: [--chrome]
 
 session:
   multiplexer: tmux          # tmux | none; without tmux installed, runs in this terminal
@@ -74,9 +85,12 @@ session:
   # after it but the `!` commit line, vdx ai (0.44+) lists the conversation as
   # finished and Enter passes it by. 146 of 162 wraps in two weeks ended that way.
   wrap_skills: [vdm:wrap]
-  # Where vdx ai (0.46+), after the tmux server fell, offers to bring back every
-  # agent it took down on the machine, of every project — elsewhere only the
-  # project's own: the projects the day starts in, the ones echelon feeds.
+  # Where vdx ai, after the tmux server fell, names above its list every agent
+  # it took down on the machine, of every project, and Enter brings them back —
+  # elsewhere the list names the project's own, the rest in one note under it.
+  # Here: the projects the day starts in, the ones echelon feeds. Since vdx 0.59
+  # r (and --restore) brings back everything anywhere: the key decides only
+  # what the list names and when Enter is r.
   restore_all:
     has_file: {path: signals/sources.yaml}
 

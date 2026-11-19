@@ -194,7 +194,10 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --detach      start without attaching; print the command that attaches. In a
                 folder Claude Code does not trust yet, nothing starts (exit 4):
                 its trust window would wait with nobody at it — start once
-                without --detach and answer it
+                without --detach and answer it. Any start or restart waits up to
+                60 s while Claude Code's transcripts (~/.claude/projects) lead
+                nowhere — a link to a volume not mounted yet — then nothing
+                starts (exit 4): Claude Code would run without them (0.62)
   -y, --yes     every question answered by vdx, as Linux tools take it: y to a
                 [y/N] one, Enter to the rest (the list: its marked row; a topic:
                 left to the agent); each answer is said on a line (0.58)
@@ -222,7 +225,12 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 session you started or attached to comes back, to stay; one a
                 letter started is left out, and a running one is not doubled. Left
                 out: a conversation running now (here or on another machine) or
-                continued on another machine since. Then the same on the profile's
+                continued on another machine since. Claude Code's transcripts
+                (~/.claude/projects) and the projects that lead nowhere yet — a
+                link to a volume not mounted, as at login — are waited for up to
+                10 minutes; transcripts still nowhere: no agent starts, exit 4, the
+                line begins with ✗ and the path; a project still nowhere keeps its
+                record for the next restore (0.62). Then the same on the profile's
                 other machines (session.machines), over ssh (0.59). Then the cmux
                 tabs here that lost their sessions (0.59): a tab at its shell gets
                 vdx ai --tab typed into it, a tab cmux lost opens again in its

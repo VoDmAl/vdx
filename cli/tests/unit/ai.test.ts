@@ -3857,6 +3857,92 @@ describe.skipIf(!tmuxAvailable)('one list and empty sessions, Claude Code in tmu
     expect(text()).toContain('nothing to bring back');
   }, 60_000);
 
+  // nas-info `projects-link-mount-race`, 2026-11-17: at login on lft `vdx ai --restore` can come before the
+  // encrypted volume `Working`, where Claude Code's transcripts and some projects live; started then, Claude
+  // Code writes no transcript, and a project there counted as gone lost its record for good.
+  it('a volume not mounted at login: the restore waits for it; what has not come keeps its record', () => {
+    const vol = path.join(base, 'Volumes');
+    fs.mkdirSync(vol, { recursive: true });
+    const vault = path.join(vol, 'Working', 'vault');
+    hook(agentIn('proj@testhost', ID.a, [startedOn('testhost'), userLine('work')]), ID.a);
+    writeRecord({}, base, currentServer(tmux)!, {
+      session: 'vault@testhost',
+      pane: '%98',
+      project: vault,
+      conversation: null,
+      mode: 'plain',
+      topic: null,
+      pid: 1,
+      written: Date.now(),
+    });
+    killServer(tmux);
+    const stays = (sleep: () => void, env: Record<string, string> = {}): AiDeps => ({
+      ...deps(),
+      volumes: vol,
+      sleep,
+      env: { ...deps().env, ...env },
+    });
+
+    // Claude Code's transcripts lead nowhere: nothing starts, and every record stays.
+    const cfg = path.join(base, 'cfg');
+    fs.mkdirSync(cfg, { recursive: true });
+    fs.symlinkSync(path.join(vol, 'Locked', 'claude-projects'), path.join(cfg, 'projects'));
+    const locked = { CLAUDE_CONFIG_DIR: cfg };
+    expect(
+      runAiRestore(
+        false,
+        stays(() => {}, locked),
+      ),
+    ).toBe(EXIT_LAUNCH_FAILED);
+    // Named from the home directory: the test's home is `base`.
+    expect(text()).toContain('⏳ ~/cfg/projects leads nowhere yet (');
+    expect(text()).toContain(
+      `✗ ~/cfg/projects leads nowhere after 600 s (${path.join(cfg, 'projects')} → ` +
+        `${path.join(vol, 'Locked', 'claude-projects')}: ${path.join(vol, 'Locked')} is not mounted) — Claude Code ` +
+        'would run without its transcripts; no agent started, their records stay',
+    );
+    expect(tmux.panes()).toEqual([]);
+    expect(records()).toHaveLength(2);
+
+    // The project's volume never comes: the other agent is back, the vault's record stays for the next restore.
+    logs = [];
+    expect(
+      runAiRestore(
+        false,
+        stays(() => {}),
+      ),
+    ).toBe(EXIT_LAUNCH_FAILED);
+    expect(text()).toContain(
+      `✗ vault@testhost: ${vault} leads nowhere yet (${path.join(vol, 'Working')} is not mounted) — not brought back; ` +
+        'its record stays for the next restore',
+    );
+    expect(text()).toContain('✗ 1 back (1 did not start)');
+    expect(records()).toEqual(['98.json']); // the vault's: a record is named by its pane, %98
+
+    // It comes while the restore waits: the vault's agent is back too.
+    logs = [];
+    expect(
+      runAiRestore(
+        false,
+        stays(() => fs.mkdirSync(vault, { recursive: true })),
+      ),
+    ).toBe(EXIT_OK);
+    expect(text()).toContain('✓ 1 back');
+    expect(tmux.panes().map((p) => p.session)).toContain('vault@testhost');
+    expect(records()).not.toContain('98.json');
+
+    // A start, too, does not run Claude Code with its transcripts nowhere.
+    logs = [];
+    const start = { ...opts, path: root, fresh: true, detach: true };
+    expect(
+      runAi(
+        start,
+        stays(() => {}, locked),
+      ),
+    ).toBe(EXIT_LAUNCH_FAILED);
+    expect(text()).toContain('— Claude Code would run without its transcripts; nothing started');
+  }, 60_000);
+
   // The owner, 2026-11-12, in vdx on lft: «Я в проекте vdx нахожусь при чем тут echelon или ga-plugins?» — the
   // block with ⚠ stood first there, and both agents it named had no work in them (Sidetrack #15).
   it('agents of other projects only went down: one note under the list, with whether work was in them', () => {
