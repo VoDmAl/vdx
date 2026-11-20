@@ -543,9 +543,12 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 - [x] Итог infra-hq (`intercom-session-machine-limit-outcome`) и ai-dev-plugins
       (`intercom-session-machine-limit-send-line-outcome`) — 2026-11-19: версия, N и откуда, что не считается, код 5 и
       строка; их сессии на lft — строкой со следующим сообщением там
-- [ ] Ответ ai-dev-plugins: текст `send` под код 5 и `INTERCOM_VDX_MIN` = 0.63, потом их выпуск без ключа
-      (`intercom-session-no-key`) — when: их письмо; check: `/vdm:intercom check`. Живьём предел — when: первая
-      строка `⏸ queued:` на станции; check: `~/.local/state/vdx/intercom-queue/` и `~/.cache/vdx/intercom-queue/*.log`
+- [x] Ответ ai-dev-plugins — 2026-11-20 (`…-send-line-outcome-outcome`): vdm 2.83.0 — ключ снят, `INTERCOM_VDX_MIN` =
+      0.63, `send` и `sent` знают код 5 и строку `⏸ queued:` (ai-dev-plugins `711b1cb`); vdm 2.85.0 — замершую (waiting
+      ≥ 30 мин) не будят, просят закрыть (`d09a52f`). Их вопрос — поднимет ли vdx вторую сессию проекта при живой
+      замершей: нет, одна на проект и машину («already running», код 0) — ответ ушёл, мяч закрыт
+- [ ] Живьём предел — when: первая строка `⏸ queued:` на станции (ключа больше нет — письма в любом проекте);
+      check: `~/.local/state/vdx/intercom-queue/` и `~/.cache/vdx/intercom-queue/*.log`
 
 - [x] `vdx ai --intercom`: метка, сессия `<имя>-mail`, одна на проект и машину,
       `agent.intercom_args`, отказы с `--focused` и `--conversation`; тесты

@@ -1559,11 +1559,14 @@ isEmpty(c) : started`) — только что запущенный первый
 - [x] DL #32, шаг 1 — места сессии по всем клиентам tmux — 2026-11-20: метка своей машины под `sshd` — не место,
       клиент без метки — `ssh:<адрес>`, имя машины — по `ips` отчёта; вживую из дерева на m3: `echelon@m3` — «open on
       m3 (here), lft» (было «open on m3 (here)»)
-- [ ] DL #32, шаг 2 — в `~` все сессии tmux машин профиля: без агента и вне `~`, строкой с командой подключения;
-      intercom — вне списка
-- [ ] DL #32, шаг 3 — группа «not open here» первой и выбор строки, который только подключает
-- [ ] DL #32: выпуск 0.64 (вместе с zoxide, `claude-memory-in-project` DL #25) и `reply` nas-info на
-      `vdx-list-all-tmux-sessions` и `vdx-move-zoxide-paths`
+- [x] DL #32, шаги 2–3 — 2026-11-20: в `~` все сессии tmux машин (`tmux` в `--report` домашней папки, без intercom),
+      строка сессии — команда панели и места; группы `NOT OPEN HERE` → `RUNNING NOW` → `OTHER TMUX SESSIONS`; строка
+      сессии подключает `vdx ai --attach <сессия>` (скрытый ключ, `vdx ai@<машина>` его передаёт). Вживую из дерева на
+      m3: ObsidianVault ×3 и `space-hq@m3` (zsh) — в `OTHER TMUX SESSIONS`, `echelon` на lft — в `NOT OPEN HERE`; сессии
+      lft без агента появятся с её 0.65
+- [x] DL #32, шаг 1 вышел в 0.64.0 — 2026-11-20 (`b66a8f7`, выпуск `d7065a7`) вместе с zoxide; nas-info сказано в итоге
+      zoxide, что письмо о списке в работе
+- [ ] DL #32: выпуск шагов 2–3 (0.65) и `reply` nas-info на `vdx-list-all-tmux-sessions` (письмо взято этой сессией)
 - [ ] Восстановление после любого падения (вкладки cmux, другие машины, `r` — всё) ведёт кристалл
       [[restore-after-any-crash/workitem|restore-after-any-crash]] (2026-11-17): ждущие здесь пункты про `--restore` в
       `tmux-server.sh` nas-info и живую проверку вкладок после перезапуска cmux (DL #26) закрываются там, с его выпуском

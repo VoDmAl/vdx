@@ -93,6 +93,7 @@ import {
 } from './restore.ts';
 import {
   type AgentFact,
+  type SessionFact,
   agentLabel,
   type Board,
   clip,
@@ -1115,6 +1116,11 @@ export interface AiOptions {
   intercom?: boolean;
   /** `--hq`: the project's HQ session — VDX_HQ=1, one per project and machine. */
   hq?: boolean;
+  /**
+   * `--attach <session>`: attach to this tmux session as it is, start nothing — the command of a session's row in
+   * the list of `~` (vdx-ai-predictable DL #32). Other terminals on it stay.
+   */
+  attach?: string;
   /** `--list`: the list of a plain start, printed; nothing is asked or started. */
   list?: boolean;
   /** `--find <phrase>`: the list of the conversations whose replies have it (vdx-ai-predictable P5). */
@@ -2028,6 +2034,7 @@ function remoteFlags(opts: AiOptions): string[] {
     opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
     opts.tab && '--tab',
+    opts.attach && `--attach ${shellQuote(opts.attach)}`,
     opts.yes && '--yes',
     opts.noInput && '--no-input',
   ].filter((f): f is string => Boolean(f));
@@ -2273,6 +2280,8 @@ export interface RemoteReport {
   history?: ({ id: string } & HistoryMarks)[];
   /** This machine's addresses (vdx 0.64+): the asking machine names its ssh clients by them (DL #32). */
   ips?: string[];
+  /** Asked about the home folder (vdx 0.65+): every tmux session here, for the list of `~` (DL #32). */
+  tmux?: SessionFact[];
 }
 
 /** What another machine answered: always the live sessions; the report when its vdx gives one. */
@@ -2476,6 +2485,7 @@ export function runAiReport(pathArg: string, deps: AiDeps): number {
     history: [...historyMarks(deps.env, deps.home, ids)].map(([id, m]) => ({ id, ...m })),
     transcripts: files.map((f) => ({ id: path.basename(f.file, '.jsonl'), mtime: f.updated.getTime(), size: f.size })),
     ips: (deps.addresses ?? ownAddresses)(),
+    ...(realpathOr(plan.projectRoot) === realpathOr(deps.home) ? { tmux: sessionFactsHere(deps, plan.host) } : {}),
   };
   deps.out(JSON.stringify(report) + '\n');
   return EXIT_OK;
@@ -2778,6 +2788,7 @@ type BoardOutcome =
   | { kind: 'new'; focused: boolean; lines: string[] }
   | { kind: 'abort'; lines: string[] }
   | { kind: 'restore' }
+  | { kind: 'session'; host: string; session: string; lines: string[] }
   | { kind: 'listed' };
 
 /**
@@ -2891,7 +2902,7 @@ function boardStart(
   // `?` — a terminal over ssh from a machine nothing names: the attaches of a vdx older than 0.44
   // carry no seat mark. When the profile has one machine besides the agent's, it is that one.
   const machinesAll = [plan.host, ...plan.machines];
-  const seatOf = (a: AgentFact): AgentFact => {
+  const seatOf = <T extends { machine: string; openAt: string[] }>(a: T): T => {
     const others = machinesAll.filter((m) => !sameMachine(m, a.machine));
     return a.openAt.includes('?') && others.length === 1
       ? { ...a, openAt: a.openAt.map((s) => (s === '?' ? others[0]! : s)) }
@@ -2905,6 +2916,20 @@ function boardStart(
     owners,
   ).map(seatOf);
   const working = agents.filter((a) => !a.mail && !a.hq);
+  // In `~` (no project): every tmux session of the machines no agent row stands for (DL #32).
+  const shownSessions = new Set(agents.flatMap((a) => (a.session ? [`${a.machine}\t${a.session}`] : [])));
+  const sessions =
+    realpathOr(plan.projectRoot) === realpathOr(deps.home)
+      ? nameSeats(
+          [
+            ...sessionFactsHere(deps, plan.host),
+            ...[...k.reach].flatMap(([m, r]) => (r?.report?.tmux ?? []).map((x) => ({ ...x, machine: m }))),
+          ],
+          owners,
+        )
+          .map(seatOf)
+          .filter((x) => !shownSessions.has(`${x.machine}\t${x.session}`))
+      : undefined;
   // The HQ session is a choice of its own where no terminal at this seat shows it: the plain cases
   // below are plain only without one.
   const hqToPick = agents.filter((a) => a.hq && !openAtSeat(a, plan.seat));
@@ -2915,6 +2940,8 @@ function boardStart(
   const continuable = k.all.filter((c) => !isEmpty(c) && !busy.has(c.id));
   const conversationOf = (a: AgentFact) => k.all.find((c) => c.id === a.conversation) ?? copy(a.conversation);
   const outcomeOf = (pick: Pick, why: string[]): BoardOutcome => {
+    if (pick.kind === 'session')
+      return { kind: 'session', host: pick.session.machine, session: pick.session.session, lines: why };
     if (pick.kind === 'agent') {
       const a = pick.agent;
       const pane = paneOf.get(a.pid);
@@ -2963,6 +2990,10 @@ function boardStart(
   // The command that reaches a row from this seat (Sidetrack #7): a running agent by its conversation,
   // which attaches to it, on its machine; a conversation nobody runs, continued there.
   const reachOf = (p: Pick): string | null => {
+    if (p.kind === 'session')
+      return sameMachine(p.session.machine, plan.seat)
+        ? `vdx ai --attach ${shellQuote(p.session.session)}`
+        : `vdx ai@${p.session.machine} --attach ${shellQuote(p.session.session)}`;
     if (p.kind !== 'agent' && p.kind !== 'conversation') return null;
     if (p.kind === 'agent' && p.agent.hq)
       return sameMachine(p.agent.machine, plan.seat)
@@ -2990,6 +3021,7 @@ function boardStart(
       host: plan.host,
       seat: plan.seat,
       agents,
+      sessions,
       conversations: limit === 'all' ? everyOne() : k.all,
       unread: files.size - k.all.length - k.asideCount,
       machineOf,
@@ -3413,7 +3445,7 @@ function ownAddresses(): string[] {
  * `ssh:<address>` seats named by the machine that has the address — the reports' addresses, and this machine's
  * own; one nobody has stays `?`, another machine, which not known.
  */
-export function nameSeats(agents: AgentFact[], owners: Map<string, string>): AgentFact[] {
+export function nameSeats<T extends { openAt: string[] }>(agents: T[], owners: Map<string, string>): T[] {
   const named = (s: string) => (s.startsWith('ssh:') ? (owners.get(s.slice(4)) ?? '?') : s);
   return agents.map((a) => (a.openAt.some((s) => s.startsWith('ssh:')) ? { ...a, openAt: a.openAt.map(named) } : a));
 }
@@ -4812,6 +4844,38 @@ function changeTopic(opts: AiOptions, plan: LaunchPlan, deps: AiDeps, selfPid: n
   return EXIT_OK;
 }
 
+/**
+ * `vdx ai --attach <session>`: this terminal onto a tmux session here as it is — the row of a session in the list
+ * of `~` (vdx-ai-predictable DL #32). Nothing starts; the terminals already on it stay; in a cmux tab the tab notes
+ * it, as any attach of vdx.
+ */
+function attachSession(session: string, opts: AiOptions, deps: AiDeps): number {
+  if (!deps.tmux.available() || !deps.tmux.hasSession(session)) {
+    deps.log(`✗ no tmux session ${session} on ${hostLabel(deps.env)} — nothing to attach to`);
+    return EXIT_LAUNCH_FAILED;
+  }
+  const pane = deps.tmux.tryRun(['display-message', '-p', '-t', `=${session}:`, '#{pane_id}'])?.trim() ?? '';
+  return finish(true, session, pane, { ...opts, detach: false }, deps, false, seatLabel(deps.env));
+}
+
+/** Every tmux session here but the intercom sessions, with the seats of the terminals on it (DL #32). */
+function sessionFactsHere(deps: AiDeps, host: string): SessionFact[] {
+  if (!deps.tmux.available()) return [];
+  const out = deps.tmux.tryRun(['list-sessions', '-F', '#{session_name}\t#{pane_current_command}']) ?? '';
+  const procs = deps.processes();
+  const clients = deps.tmux.clients();
+  return out
+    .split('\n')
+    .map((l) => l.split('\t'))
+    .filter(([name]) => name && !/-intercom$/.test(name))
+    .map(([name, command]) => ({
+      machine: host,
+      session: name!,
+      command: command ?? '',
+      openAt: clients.filter((c) => c.session === name).map((c) => clientSeat(c.pid, procs, host)),
+    }));
+}
+
 /** `this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0`. */
 function describeLag(lag: Lag): string {
   const names = lag.plugins.map((p) => `${p.name} ${p.version}`).join(', ');
@@ -4827,6 +4891,9 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     return EXIT_USAGE;
   }
   const deps = opts.yes || opts.noInput ? withAnswers(given, opts.yes ? 'yes' : 'none') : given;
+
+  // A session's row in the list of `~`: attach to it as it is, start nothing (DL #32).
+  if (opts.attach !== undefined) return attachSession(opts.attach, opts, deps);
 
   if (opts.intercom && opts.focused) {
     log(
@@ -5096,6 +5163,12 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     switch (outcome.kind) {
       case 'listed':
         return EXIT_OK;
+      case 'session':
+        // A session's row in the list of `~`: attach to it, start nothing (DL #32).
+        for (const l of outcome.lines) log(l);
+        return sameMachine(outcome.host, plan.host)
+          ? attachSession(outcome.session, opts, deps)
+          : runAiRemote({ ...opts, attach: outcome.session }, outcome.host, deps, plan.seat);
       case 'abort':
         for (const l of outcome.lines) log(l);
         return EXIT_LAUNCH_FAILED;

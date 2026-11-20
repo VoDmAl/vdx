@@ -2966,6 +2966,28 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
   });
 
   // nas-info, 2026-11-05: after cmux restarted, 16 of 22 tabs stayed out of their sessions (DL #19).
+  // nas-info `vdx-list-all-tmux-sessions`: a session's row only attaches, starts nothing, leaves the other
+  // terminals on it (vdx-ai-predictable DL #32).
+  it('--attach <session>: this terminal onto that session as it is; no such session — nothing', () => {
+    killServer(tmux);
+    tmux.newSession('space-hq@testhost', root, 'sleep 600');
+    const attached: string[] = [];
+    const t = Object.create(tmux) as typeof tmux;
+    t.attach = (name: string) => (attached.push(name), 0);
+    const before = tmux.panes().length;
+    expect(runAi({ ...opts, path: '.', attach: 'space-hq@testhost' }, { ...deps(), interactive: true, tmux: t })).toBe(
+      EXIT_OK,
+    );
+    expect(attached).toEqual(['space-hq@testhost']);
+    expect(tmux.panes()).toHaveLength(before);
+    logs = [];
+    expect(runAi({ ...opts, path: '.', attach: 'gone@testhost' }, { ...deps(), interactive: true, tmux: t })).toBe(
+      EXIT_LAUNCH_FAILED,
+    );
+    expect(logs.join('\n')).toContain('✗ no tmux session gone@testhost on testhost — nothing to attach to');
+    killServer(tmux);
+  }, 30_000);
+
   describe('a cmux tab goes back into its session', () => {
     const session = 'proj@testhost';
     const record = (surface: string) => path.join(tabRecordDir(base), `${surface}.json`);
@@ -4667,6 +4689,14 @@ describe('vdx ai@host', () => {
     expect(remotePathWord('/Users/vdm/AI Projects/vdx', '/Users/vdm')).toBe(`"$HOME"/'AI Projects/vdx'`);
     expect(remotePathWord('/Users/vdm2/x', '/Users/vdm')).toBe('/Users/vdm2/x');
     expect(remotePathWord('/opt/my proj', '/Users/vdm')).toBe(`'/opt/my proj'`);
+  });
+
+  // The row of a session in the list of `~` (vdx-ai-predictable DL #32): the vdx there attaches to it by name.
+  it('--attach goes over with the session it names', () => {
+    const base = { host: 'lft', from: 'm3', projectPath: '/h', home: '/h', version: '1.0.0', opts };
+    expect(remoteAiArgs({ ...base, opts: { ...opts, attach: 'space-hq@lft' }, tty: true })[2]).toContain(
+      '--attach space-hq@lft',
+    );
   });
 
   it('asks ssh for a terminal only when it will attach', () => {

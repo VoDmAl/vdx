@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type AgentFact,
+  type SessionFact,
   agentState,
   buildBoard,
   cells,
@@ -606,5 +607,40 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     ]);
     expect(found.picker.items[1]!.detail.slice(-3)).toEqual(['FOUND', 'you: «the needle»', '']);
     expect(found.picker.header[0]).toBe('proj — «needle» in 1 of 9 conversations');
+  });
+});
+
+// nas-info `vdx-list-all-tmux-sessions` (2026-11-20): in `~` the list shows every tmux session of the machines —
+// a shell, an agent outside `~` — and what no terminal at this seat shows first (vdx-ai-predictable DL #32).
+describe('the list of ~: every tmux session, what is not open here first', () => {
+  const session = (over: Partial<SessionFact> = {}): SessionFact => ({
+    machine: 'm3',
+    session: 'space-hq@m3',
+    command: 'zsh',
+    openAt: [],
+    ...over,
+  });
+  it('NOT OPEN HERE first — agents and sessions; then the agents here, then the sessions here', () => {
+    const away = agent({ machine: 'lft', session: 'echelon@lft', pid: 11, openAt: [] });
+    const here = agent({ machine: 'm3', session: 'vdx@m3', pid: 12, openAt: ['m3'] });
+    const shell = session({ openAt: [] });
+    const vault = session({ session: 'ObsidianVault@m3', command: 'claude', openAt: ['m3', 'lft'] });
+    const b = board([away, here], [], { sessions: [shell, vault] });
+    const titles = b.lines.filter((l) => /^[A-Z][A-Z ]+ · \d+$/.test(l));
+    expect(titles).toEqual(['NOT OPEN HERE · 2', 'RUNNING NOW · 1', 'OTHER TMUX SESSIONS · 1']);
+    expect(
+      b.rows.map((p) => (p.kind === 'agent' ? p.agent.session : p.kind === 'session' ? p.session.session : p.kind)),
+    ).toEqual(['echelon@lft', 'space-hq@m3', 'vdx@m3', 'ObsidianVault@m3']);
+    expect(b.lines.join('\n')).toMatch(/ObsidianVault@m3 +claude +open on m3 \(here\), lft/);
+    // Its card in the picker: what runs, where it is open, and that the other terminals stay.
+    const card = b.picker.items.find((i) => i.pick?.kind === 'session' && i.pick.session.session === 'space-hq@m3')!;
+    expect(card.detail.join('\n')).toContain("nobody's terminal");
+    expect(card.detail.join('\n')).toContain('Enter attaches to it; the terminals on it stay');
+  });
+
+  it('a project folder gives no sessions: the list is as before', () => {
+    const b = board([agent({ openAt: [] })]);
+    expect(b.lines.join('\n')).not.toContain('NOT OPEN HERE');
+    expect(b.lines.join('\n')).toContain('RUNNING NOW · 1');
   });
 });

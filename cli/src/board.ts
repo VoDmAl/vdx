@@ -69,7 +69,20 @@ function hasWork(a: AgentFact): boolean {
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** A terminal at the person's seat shows it already. */
-export function openAtSeat(a: AgentFact, seat: string): boolean {
+/**
+ * A tmux session no agent row stands for, in the list of a folder that is no project (`~`): a shell, an agent
+ * vdx does not count to that folder, a session made by hand (vdx-ai-predictable DL #32).
+ */
+export interface SessionFact {
+  machine: string;
+  session: string;
+  /** What runs in front in its pane: `zsh`, `claude`, `ssh`. */
+  command: string;
+  /** The seats whose terminals show it, as an agent's `openAt`. */
+  openAt: string[];
+}
+
+export function openAtSeat(a: { openAt: string[] }, seat: string): boolean {
   return a.openAt.some((s) => same(s, seat));
 }
 
@@ -104,6 +117,7 @@ export function inputDraft(screen: string | null): number {
 
 export type Pick =
   | { kind: 'agent'; agent: AgentFact }
+  | { kind: 'session'; session: SessionFact }
   | { kind: 'conversation'; conversation: Conversation; machine: string | null }
   | { kind: 'new'; focused: boolean }
   | { kind: 'all' }
@@ -117,6 +131,11 @@ export interface BoardInput {
   /** The machine the person sits at. */
   seat: string;
   agents: AgentFact[];
+  /**
+   * In a folder that is no project (`~`): every tmux session of the machines no agent row stands for. Given,
+   * what no terminal at this seat shows comes first, in a group of its own (DL #32).
+   */
+  sessions?: SessionFact[];
   /** The project's conversations as read here, newest first, the intercom session's left out. */
   conversations: Conversation[];
   /** How many of them were not read: some may be the intercom session's or empty ones. */
@@ -239,7 +258,7 @@ export function agentLabel(
   return a.session.includes('@') ? a.session : `${a.session} on ${a.machine}`;
 }
 
-function openWord(a: AgentFact, seat: string): string {
+function openWord(a: { openAt: string[] }, seat: string): string {
   const places = [...new Set(a.openAt.filter((s) => s !== '?' && !same(s, seat)))];
   if (a.openAt.includes('?')) places.push('another machine');
   // The machine by its name, and the person's own marked: «open here» beside «open on m3» read as two
@@ -375,10 +394,29 @@ export function buildBoard(input: BoardInput): Board {
   // The person sits at the HQ session too: a row with a number, after their agents, and its
   // number attaches to it as it is — `--hq` only narrows the choice to it (nas-info for the owner,
   // 2026-11-05). Enter does not go to it.
-  const running = agents.map(agentRow);
+  // In `~`: every tmux session of the machines; what no terminal at this seat shows first (DL #32).
+  const machineView = input.sessions !== undefined;
+  const sessionRow = (x: SessionFact): Row => ({
+    pick: { kind: 'session', session: x },
+    id: null,
+    lead: [agentLabel({ machine: x.machine, session: x.session, pid: 0 }, icons)],
+    icon: '',
+    word: x.command || 'shell',
+    mode: '',
+    text: '',
+    tail: openWord(x, seat),
+  });
+  const away = machineView
+    ? [
+        ...agents.filter((a) => !openAtSeat(a, seat)).map(agentRow),
+        ...input.sessions!.filter((x) => !openAtSeat(x, seat)).map(sessionRow),
+      ]
+    : [];
+  const running = (machineView ? agents.filter((a) => openAtSeat(a, seat)) : agents).map(agentRow);
+  const others = machineView ? input.sessions!.filter((x) => openAtSeat(x, seat)).map(sessionRow) : [];
   const service = [...mail, ...hq].map(agentRow);
   const idle = shown.map(conversationRow);
-  const rows = [...running, ...service, ...idle].flatMap((r) => (r.pick ? [r.pick] : []));
+  const rows = [...away, ...running, ...others, ...service, ...idle].flatMap((r) => (r.pick ? [r.pick] : []));
 
   // Enter: the agent with work in it nobody at this seat looks at, the last active; else the
   // newest unfinished conversation; else an agent waiting for a first prompt; else a new one.
@@ -468,18 +506,29 @@ export function buildBoard(input: BoardInput): Board {
             ...beside('ID', p.agent.conversation),
             '',
           ]
-        : p?.kind === 'conversation'
+        : p?.kind === 'session'
           ? [
-              bold(one(p.conversation.title) || '(no title)'),
+              bold(p.session.session),
               '',
-              ...block('TOPIC', one(p.conversation.topic)),
-              ...beside('STATE', r.word),
-              ...beside('LAST ON', p.machine ?? 'a machine not known'),
-              ...beside('WHEN', describeAge(p.conversation.updated, now)),
-              ...beside('ID', p.conversation.id),
+              ...beside('RUNS', p.session.command || 'shell'),
+              ...beside('ON', p.session.machine),
+              ...beside('OPEN ON', r.tail ? r.tail.replace(/^open on /, '') : "nobody's terminal"),
+              '',
+              'Enter attaches to it; the terminals on it stay',
               '',
             ]
-          : [bold('the intercom session'), '', 'letters wake it — not yours to attach', ''];
+          : p?.kind === 'conversation'
+            ? [
+                bold(one(p.conversation.title) || '(no title)'),
+                '',
+                ...block('TOPIC', one(p.conversation.topic)),
+                ...beside('STATE', r.word),
+                ...beside('LAST ON', p.machine ?? 'a machine not known'),
+                ...beside('WHEN', describeAge(p.conversation.updated, now)),
+                ...beside('ID', p.conversation.id),
+                '',
+              ]
+            : [bold('the intercom session'), '', 'letters wake it — not yours to attach', ''];
     return [...facts, ...block('FOUND', found(r)), ...block('COMMAND', command)];
   };
   const pickerGroup = (title: string, members: Row[], sized: Row[] = members): PickerItem[] => {
@@ -495,8 +544,10 @@ export function buildBoard(input: BoardInput): Board {
   const hidden = idleAll.length - shown.length + unread;
   const serviceTitle =
     mail.length && hq.length ? 'HQ AND INTERCOM SESSIONS' : hq.length ? 'HQ SESSION' : 'INTERCOM SESSION';
-  const live = [...running, ...service];
+  const live = [...away, ...running, ...others, ...service];
   const runningTitle = `RUNNING NOW · ${running.length}`;
+  const awayTitle = `NOT OPEN HERE · ${away.length}`;
+  const othersTitle = `OTHER TMUX SESSIONS · ${others.length}`;
   const idleTitle = `CONVERSATIONS NOBODY RUNS · ${hidden > 0 ? `${idle.length} newest of ${unread ? 'up to ' : ''}${idleAll.length + unread}` : idle.length}`;
   // The marks the profile gives the machines (`session.machine_icons`), said once: which is which.
   const legend = [...new Set([...agents, ...mail, ...hq].map((a) => a.machine))]
@@ -534,7 +585,9 @@ export function buildBoard(input: BoardInput): Board {
   ];
   const blocks = [
     [head],
+    group(awayTitle, away, live),
     nothing.length ? nothing : group(runningTitle, running, live),
+    group(othersTitle, others, live),
     group(serviceTitle, service, live),
     group(idleTitle, idle),
     notes,
@@ -549,7 +602,9 @@ export function buildBoard(input: BoardInput): Board {
       ? // ↩ as `--tab` says it: the owner found ▶ and «bring back …» unclear as the first row (2026-11-19).
         [{ text: `↩ ${back}`, pick: { kind: 'restore' } as Pick, detail: input.restoreDetail ?? [] }]
       : []),
+    ...pickerGroup(awayTitle, away, live),
     ...pickerGroup(runningTitle, running, live),
+    ...pickerGroup(othersTitle, others, live),
     ...pickerGroup(serviceTitle, service, live),
     ...pickerGroup(idleTitle, idle),
     ...(more

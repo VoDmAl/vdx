@@ -742,7 +742,8 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 `~/AI Projects/avatar/*` и `finam/*`; путь в `tools/dry-run.sh` склоняются брать из `consumers.yaml`
 
 ## Next actions
-- [ ] DL #25: выпуск 0.64 с путями zoxide в `vdx move`; `reply` nas-info на `vdx-move-zoxide-paths` с версией
+- [x] DL #25: выпуск 0.64.0 с путями zoxide в `vdx move` — 2026-11-20 (`2ccb994`, выпуск `d7065a7`, m3 и lft — 0.64.0);
+      `reply` nas-info (`vdx-move-zoxide-paths-outcome`) с версией
 
 - [x] Владелец: где память в рабочих и публичных репо — DL #3 (2026-10-22)
 - [x] Владелец: уточнения к DL #3 — DL #4 (2026-10-22)

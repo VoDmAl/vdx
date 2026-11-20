@@ -211,7 +211,12 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
   --dry-run     print the plan and the project's running agents; start nothing.
                 Claude Code: the list as well, and what a start without a terminal takes
   --list        Claude Code: the list a plain start shows; ask nothing, start nothing.
-                Under each row, the command that reaches it from here (0.51)
+                Under each row, the command that reaches it from here (0.51). In a
+                folder that is no project (~) the list shows every tmux session of
+                the machines (0.65): NOT OPEN HERE first — what no terminal at this
+                seat shows — then RUNNING NOW, then OTHER TMUX SESSIONS (a shell, an
+                agent outside ~); a session's row only attaches to it, as it is
+                (vdx ai --attach <session>), and the terminals on it stay
   --find <phrase>
                 Claude Code: the list of the project's conversations whose replies
                 — yours and the agent's — have the phrase, with the text around it:
@@ -527,7 +532,7 @@ Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing mov
       'yes',
       'no-input',
     ],
-    values: ['conversation', 'waiting', 'find', 'prompt'],
+    values: ['conversation', 'waiting', 'find', 'prompt', 'attach'],
     optional: ['focused'],
     positionals: 1,
     shorts: { '-y': 'yes' },
@@ -1082,6 +1087,8 @@ function cmdAi(opts: ParsedArgs): void {
     hq: opts.flags.hq === true,
     list: opts.flags.list === true,
     find: find?.trim(),
+    // `--attach <session>`: the row of a session in the list of `~` — attaches to it, starts nothing (DL #32).
+    attach: typeof opts.flags.attach === 'string' ? opts.flags.attach : undefined,
     yes: opts.flags.yes === true,
     noInput: opts.flags['no-input'] === true,
   };
