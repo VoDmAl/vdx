@@ -538,10 +538,14 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 ## Next actions
 - [x] DL #13: предел и очередь сессий intercom — 2026-11-19: `cli/src/intercom-queue.ts`, проверка в `runAi`, очередь в
       `--close`; тесты падают без предела; справка, спека, CHANGELOG; скилл `vdx-ai` (плагин 0.15.13) — строка `⏸` не отказ
-- [ ] Выпуск 0.63.0 и плагина 0.15.13; m3 и lft на 0.63.0
-- [ ] Итог infra-hq на `intercom-session-machine-limit` (версия, N и откуда, `@vdx_stays` не считаются) и `reply`
-      ai-dev-plugins на `intercom-session-machine-limit-send-line` (код 5, строка, 0.63.0, замершая сессия) — после
-      выпуска
+- [x] Выпуск 0.63.0 и плагина 0.15.13 — 2026-11-19: коммит `24bb01c` (822 из 822 тестов), коммит выпуска `a795d8c`,
+      тег `v0.63.0`, npm 0.63.0; m3 и lft — 0.63.0; плагин 0.15.13 в `main`
+- [x] Итог infra-hq (`intercom-session-machine-limit-outcome`) и ai-dev-plugins
+      (`intercom-session-machine-limit-send-line-outcome`) — 2026-11-19: версия, N и откуда, что не считается, код 5 и
+      строка; их сессии на lft — строкой со следующим сообщением там
+- [ ] Ответ ai-dev-plugins: текст `send` под код 5 и `INTERCOM_VDX_MIN` = 0.63, потом их выпуск без ключа
+      (`intercom-session-no-key`) — when: их письмо; check: `/vdm:intercom check`. Живьём предел — when: первая
+      строка `⏸ queued:` на станции; check: `~/.local/state/vdx/intercom-queue/` и `~/.cache/vdx/intercom-queue/*.log`
 
 - [x] `vdx ai --intercom`: метка, сессия `<имя>-mail`, одна на проект и машину,
       `agent.intercom_args`, отказы с `--focused` и `--conversation`; тесты
