@@ -10,6 +10,7 @@ import {
   type Environment,
   EXIT_DRIFT,
   EXIT_LAUNCH_FAILED,
+  EXIT_QUEUED,
   EXIT_OK,
   EXIT_USAGE,
   Tmux,
@@ -80,6 +81,7 @@ import {
   writeHistory,
 } from './transcripts.ts';
 import { currentServer, socketDir, writeRecord } from '../../src/restore.ts';
+import { dequeue, enqueue, queued } from '../../src/intercom-queue.ts';
 import { type CmuxPanel, type CmuxSnapshot, tabRecordDir } from '../../src/tabs.ts';
 import type { PickerAnswer, PickerInput } from '../../src/picker.ts';
 
@@ -2505,11 +2507,30 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(agents()).toHaveLength(2);
 
     logs = [];
-    expect(runAiClose(root, 2, { ...deps(), processes: toolOf(mail.proc.pid) }, 9_999_991)).toBe(EXIT_OK);
+    // A project waits in the queue of intercom sessions (intercom-session-mode DL #13): the closing one's place is its.
+    const waiting = path.join(base, 'queued-project');
+    fs.mkdirSync(waiting, { recursive: true });
+    enqueue(deps().home, waiting);
+    const handed: { args: string[]; queued?: string; freeing?: string }[] = [];
+    const handOff = (args: string[], env: NodeJS.ProcessEnv) => (
+      handed.push({ args, queued: env['VDX_INTERCOM_QUEUED'], freeing: env['VDX_INTERCOM_FREEING'] }),
+      4242
+    );
+    const closing = { ...deps(), processes: toolOf(mail.proc.pid), intercomLimit: 1, handOff };
+    expect(runAiClose(root, 2, closing, 9_999_991)).toBe(EXIT_OK);
     expect(logs.join('\n')).toContain('✓ 2 waiting for the user — shown on proj@testhost');
     expect(logs.join('\n')).toContain(
       `✓ proj@testhost-intercom ${mail.pane.paneId}: the intercom session closes in 2 s`,
     );
+    expect(handed).toEqual([
+      {
+        args: ['ai', waiting, '--intercom', '--detach'],
+        queued: '1',
+        freeing: 'proj@testhost-intercom',
+      },
+    ]);
+    expect(logs.join('\n')).toContain('↪ queued-project: queued ');
+    dequeue(deps().home, waiting);
     expect(waitingOn('proj@testhost')).toBe('2');
     expect(agents()).toHaveLength(2); // not yet: the call returns first
     sleepSync(3_000);
@@ -2820,6 +2841,85 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       killServer(tmux);
       logs = [];
     });
+
+    // infra-hq `intercom-session-machine-limit`, 2026-11-18: «лимит на машину у vdx» — over it, a queue, not a
+    // refusal (intercom-session-mode DL #13).
+    it("over the machine's limit a letter's intercom session is queued; with a place it starts, taking the queue's oldest", () => {
+      // Another project's intercom session a letter started, and one the person keeps (not counted).
+      tmux.newSession('other@testhost-intercom', root, 'sleep 600');
+      tmux.newSession('kept@testhost-intercom', root, 'sleep 600');
+      tmux.run(['set-option', '-t', '=kept@testhost-intercom:', '@vdx_stays', '1']);
+      const handed: { args: string[]; queued?: string }[] = [];
+      const handOff = (args: string[], env: NodeJS.ProcessEnv) => (
+        handed.push({ args, queued: env['VDX_INTERCOM_QUEUED'] }),
+        4242
+      );
+      const start = { ...opts, path: root, intercom: true, detach: true };
+      expect(runAi(start, { ...deps(), intercomLimit: 1, handOff })).toBe(EXIT_QUEUED);
+      const queuedLine =
+        `⏸ queued: ${path.basename(root)} — 1 of 1 intercom sessions live on testhost, place 1; ` +
+        'vdx starts it when one closes, and the letter waits in the inbox\n';
+      const queuedLines = () => logs.filter((l) => l.startsWith('⏸'));
+      expect(queuedLines()).toEqual([queuedLine]);
+      // Queued again: the same line, its place kept, no second record.
+      logs = [];
+      expect(runAi(start, { ...deps(), intercomLimit: 1, handOff })).toBe(EXIT_QUEUED);
+      expect(queuedLines()).toEqual([queuedLine]);
+      expect(tmux.hasSession(session)).toBe(false);
+      expect(queued(deps().home).map((q) => q.project)).toEqual([root]);
+
+      // Another letter's project joins the queue behind it; a place frees, and the next start takes it.
+      const later = path.join(base, 'later-project');
+      fs.mkdirSync(later, { recursive: true });
+      enqueue(deps().home, later);
+      tmux.run(['kill-session', '-t', '=other@testhost-intercom']);
+      logs = [];
+      expect(runAi(start, { ...deps(), intercomLimit: 2, handOff })).toBe(EXIT_OK);
+      expect(tmux.hasSession(session)).toBe(true);
+      expect(handed).toEqual([{ args: ['ai', later, '--intercom', '--detach'], queued: '1' }]);
+      expect(queued(deps().home).map((q) => q.project)).toEqual([later]);
+      // A start the queue made moves it no further.
+      tmux.run(['kill-session', '-t', `=${session}`]);
+      handed.length = 0;
+      expect(
+        runAi(start, { ...deps(), intercomLimit: 3, handOff, env: { ...deps().env, VDX_INTERCOM_QUEUED: '1' } }),
+      ).toBe(EXIT_OK);
+      expect(handed).toEqual([]);
+      dequeue(deps().home, later);
+    }, 60_000);
+
+    // ai-dev-plugins, `intercom-session-machine-limit-send-line`: an intercom session stood on «You've hit your
+    // weekly limit» from 14.11, status waiting, no turn — counted, it would hold a place for good.
+    it('an intercom session stalled on a waiting screen past 30 minutes holds no place; one just waiting does', () => {
+      tmux.newSession('stuck@testhost-intercom', root, 'sleep 600');
+      const panePid = tmux.panes().find((p) => p.session === 'stuck@testhost-intercom')!.panePid;
+      const agentPid = 777_001;
+      const sessions = path.join(deps().home, '.claude', 'sessions');
+      fs.mkdirSync(sessions, { recursive: true });
+      const waitingSince = (ms: number) =>
+        fs.writeFileSync(
+          path.join(sessions, `${agentPid}.json`),
+          JSON.stringify({ sessionId: ID.a, status: 'waiting', statusUpdatedAt: Date.now() - ms }),
+        );
+      const d = {
+        ...deps(),
+        intercomLimit: 1,
+        handOff: () => 4242,
+        processes: () => [
+          ...listProcesses(),
+          { pid: agentPid, ppid: panePid, args: 'claude /vdm:intercom check --dangerously-skip-permissions' },
+        ],
+      };
+      const start = { ...opts, path: root, intercom: true, detach: true };
+      waitingSince(5 * 60_000);
+      expect(runAi(start, d)).toBe(EXIT_QUEUED);
+      expect(tmux.hasSession(session)).toBe(false);
+      waitingSince(60 * 60_000);
+      expect(runAi(start, d)).toBe(EXIT_OK);
+      expect(tmux.hasSession(session)).toBe(true);
+      fs.rmSync(path.join(sessions, `${agentPid}.json`));
+      dequeue(deps().home, root);
+    }, 60_000);
 
     it('a login shell slower than 5 s: the prompt is waited for while the start is under way', () => {
       const start = { ...opts, path: root, intercom: true, detach: true };

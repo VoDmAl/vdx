@@ -152,7 +152,12 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 (its first prompt). Every other start leaves it alone, and its
                 conversations are not continued unless named with --conversation.
                 Started by the agent that has a letter and nobody to wake:
-                vdx ai --intercom --detach <project>
+                vdx ai --intercom --detach <project>. A machine runs at most one
+                such session per 5 GB of memory, two at least (0.63; the ones the
+                user started or joined are not counted, nor one stalled on a
+                waiting screen past 30 minutes): over that, the start is queued,
+                not refused — one line on stdout, ⏸ queued: with the place, exit 5
+                — and the project's session starts when one closes
   --hq          the project's HQ session, for what comes from outside: a new
                 conversation in a tmux session of its own (<name>-hq), one per
                 project and machine — a running one is attached to, never a

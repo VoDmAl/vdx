@@ -110,6 +110,7 @@ import {
 } from './board.ts';
 import { fzfPick, type PickerAnswer, type PickerInput, rowsWidth } from './picker.ts';
 import { awaitReach, reach } from './reach.ts';
+import { dequeue, enqueue, intercomLimit, lettersSessions, queued } from './intercom-queue.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -269,6 +270,10 @@ const FOCUSED_ENV_VAR = 'VDX_FOCUSED';
  * Nobody sits at it; it ends itself with `vdx ai --close`.
  */
 const INTERCOM_ENV_VAR = 'VDX_INTERCOM';
+/** `1` for a start the queue of intercom sessions makes (intercom-queue.ts): it moves the queue no further. */
+const INTERCOM_QUEUED_ENV_VAR = 'VDX_INTERCOM_QUEUED';
+/** The intercom session closing as a queued start begins: its place is the one taken, so it is not counted. */
+const INTERCOM_FREEING_ENV_VAR = 'VDX_INTERCOM_FREEING';
 /**
  * `1` in the environment of the project's HQ session (`vdx ai --hq`): the session for what comes
  * from outside, so that the person's working sessions stay quiet. The person sits at it and keeps
@@ -1243,6 +1248,8 @@ export interface AiDeps {
   sleep: (ms: number) => void;
   /** Where volumes are mounted (reach.ts); default `/Volumes`. */
   volumes?: string;
+  /** How many intercom sessions letters may run here at once; default from the machine's memory (intercom-queue.ts). */
+  intercomLimit?: number;
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
@@ -1398,6 +1405,12 @@ export const EXIT_OK = 0;
 export const EXIT_USAGE = 2;
 export const EXIT_DRIFT = 3;
 export const EXIT_LAUNCH_FAILED = 4;
+/**
+ * `--intercom --detach` over the machine's limit: queued, not failed — the letter waits in the inbox, and vdx starts
+ * the session when one closes (intercom-session-mode DL #13; the code `send` of vdm asked for, ai-dev-plugins
+ * `intercom-session-machine-limit-send-line`).
+ */
+export const EXIT_QUEUED = 5;
 
 /**
  * Without tmux the agent runs in the foreground. One that fails this soon after
@@ -1616,6 +1629,64 @@ function settleResumed(plan: LaunchPlan, paneId: string, deps: AiDeps): boolean 
   deps.log(`↻ nothing to resume — starting without ${plan.resumeArgs.join(' ')}: ${line}`);
   deps.tmux.respawn(paneId, plan.projectRoot, tmuxShellCommand(line, deps.shell, !plan.intercom));
   return settle(plan, paneId, deps) === 'ok';
+}
+
+/**
+ * An intercom session whose agent has stood this long on a screen that waits — a weekly limit reached, a window
+ * nobody answers — holds no place: nobody sits at it, and it would take the place for good (ai-dev-plugins,
+ * `intercom-session-machine-limit-send-line`: one stood so from 14.11). A run takes 3.5–5 min, 9 in 10 under 13.
+ */
+const STALLED_INTERCOM_MS = 30 * 60_000;
+
+/**
+ * The intercom sessions letters started here, but the one `freeing`, and those whose agent stalls on a waiting
+ * screen (intercom-session-mode DL #13).
+ */
+function lettersSessionsHere(deps: AiDeps, freeing: string | null, now: number = Date.now()): string[] {
+  const names = lettersSessions(
+    deps.tmux.tryRun(['list-sessions', '-F', `#{session_name}\t#{${STAYS_OPTION}}`]) ?? '',
+    freeing,
+  );
+  if (names.length === 0) return names;
+  const panes = deps.tmux.panes();
+  const procs = deps.processes();
+  return names.filter((name) => {
+    const pane = panes.find((p) => p.session === name);
+    const agent = pane ? processTree(procs, pane.panePid).find((p) => /^(\S*\/)?claude(\s|$)/.test(p.args)) : null;
+    const live = agent ? liveSessionFile(deps.env, deps.home, agent.pid) : null;
+    return !(live?.status === 'waiting' && live.activeAt !== null && now - live.activeAt > STALLED_INTERCOM_MS);
+  });
+}
+
+/**
+ * Start the oldest queued projects' intercom sessions, as many as `free` places — each in a vdx of its own,
+ * apart from this one, which may be a closing session's (intercom-session-mode DL #13). A start the queue made
+ * moves it no further. One queued twice meanwhile is not doubled: one intercom session per project and machine.
+ */
+function startQueued(deps: AiDeps, free: number, freeing: string | null): void {
+  if (free <= 0 || deps.env[INTERCOM_QUEUED_ENV_VAR] === '1') return;
+  for (const q of queued(deps.home).slice(0, free)) {
+    if (!fs.existsSync(q.project)) {
+      dequeue(deps.home, q.project);
+      continue;
+    }
+    const name = path.basename(q.project);
+    const logFile = path.join(deps.home, '.cache', 'vdx', 'intercom-queue', `${name.replace(/[^\w.@-]/g, '_')}.log`);
+    const pid = (deps.handOff ?? handOffRestart)(
+      ['ai', q.project, '--intercom', '--detach'],
+      {
+        ...deps.env,
+        [INTERCOM_QUEUED_ENV_VAR]: '1',
+        ...(freeing ? { [INTERCOM_FREEING_ENV_VAR]: freeing } : {}),
+      },
+      logFile,
+    );
+    deps.log(
+      pid === null
+        ? `✗ ${name}: queued for its intercom session, and it could not be started now — the next start or close tries again`
+        : `↪ ${name}: queued ${describeAge(new Date(q.at))}, its intercom session starts now — what it says: ${logFile}`,
+    );
+  }
 }
 
 /**
@@ -3817,6 +3888,13 @@ export function runAiClose(pathArg: string, waiting: number, deps: AiDeps, selfP
     return EXIT_LAUNCH_FAILED;
   }
   log(`✓ ${pane.session} ${pane.paneId}: the ${kind} closes in ${CLOSE_DELAY_S} s`);
+  // Its place goes to the queue's oldest (intercom-session-mode DL #13).
+  if (kind === 'intercom session')
+    startQueued(
+      deps,
+      (deps.intercomLimit ?? intercomLimit()) - lettersSessionsHere(deps, pane.session).length,
+      pane.session,
+    );
   return EXIT_OK;
 }
 
@@ -5464,6 +5542,25 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   if (nowhere) {
     log(`${transcriptsNowhere(nowhere, deps, REACH_START_MS)}; nothing started`);
     return EXIT_LAUNCH_FAILED;
+  }
+
+  // A letter's intercom session over the machine's limit waits in the queue; its letter waits in the inbox
+  // (intercom-session-mode DL #13). The person's own start (no --detach) is not counted, nor held.
+  if (!current && plan.intercom && opts.detach) {
+    const limit = deps.intercomLimit ?? intercomLimit();
+    const busy = lettersSessionsHere(deps, deps.env[INTERCOM_FREEING_ENV_VAR]?.trim() || null);
+    // Its own, under way from another letter, is no place to wait for: the start below finds it.
+    if (busy.length >= limit && !busy.includes(plan.sessionName)) {
+      // One line on stdout, for the sender's assistant to retell; queued again — the same line, its place kept.
+      const place = enqueue(deps.home, projectRoot);
+      deps.out(
+        `⏸ queued: ${path.basename(projectRoot)} — ${busy.length} of ${limit} intercom sessions live on ` +
+          `${hostLabel(deps.env)}, place ${place}; vdx starts it when one closes, and the letter waits in the inbox\n`,
+      );
+      return EXIT_QUEUED;
+    }
+    dequeue(deps.home, projectRoot);
+    startQueued(deps, limit - busy.length - 1, null);
   }
 
   if (current) {

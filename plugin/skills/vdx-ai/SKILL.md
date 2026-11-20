@@ -77,7 +77,10 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   machine — `VDX_INTERCOM=1`, a new conversation in a tmux session of its own
   (`<name>-intercom`) that opens with the profile's `agent.intercom_args`. One per
   project and machine: when one runs, the command says so and starts nothing.
-  This one you run yourself — it touches no session anyone sits at.
+  This one you run yourself — it touches no session anyone sits at. Over the
+  machine's limit (vdx 0.63+) it says `⏸ queued: … place N` and exits 5: not a
+  failure — the letter waits in the inbox and vdx starts the session when one
+  closes; do not run it again.
 - **The project's HQ session: `vdx ai --hq`** (vdx 0.49+), for what comes from
   outside. `VDX_HQ=1`, a new conversation in a tmux session of its own
   (`<name>-hq`) that opens with the profile's `agent.hq_args`; one per project and
