@@ -593,6 +593,24 @@ FastVPS». DNS: NAS — 10.243.232.87 (ZeroTier), `git.vorobyev.name` и s02 —
 **Why:** список — основная работа и ничего не ломает; перенос останавливает идущие сессии (два HQ среди них).
 **Implication:** Sidetrack #7 — список, найденные пробелы (worktree, `signals/sources.yaml` HQ) и шаги до переноса.
 
+### #25 / 2026-11-19 / Пути zoxide переезжают в самом `vdx move`, на каждой машине, а не через `move.after`
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** письмо nas-info `vdx-move-zoxide-paths` (2026-11-19), слово владельца там: «vdx move не помешает
+научить ещё и в "z" находить и менять пути. Тогда вообще почти бесшовно будет»; владелец переносит проекты в
+`/Volumes/Working/repos` (папка Syncthing на lft, m3, nyc), обе старые папки уйдут. Здесь 2026-11-19 «Да» на взять
+письмо. Проверено: zoxide 0.10.0 на m3 и lft; на пробной базе (`_ZO_DATA_DIR`) `query --list` прячет пропавшие пути
+(`--all` их показывает), `add` того, чего нет, — «not a directory», код 1; `move.after` идёт только на машине команды.
+**Context:** nas-info предложили два пути: встроить в `vdx move` или гонять `move.after` на каждой машине.
+**Why:** встроено — работает само, без записи в профиле (слово владельца: работает само, ключи — агентам). Шаг —
+после своего `mv` на каждой машине профиля: там новое место уже есть, а zoxide не добавит пути, которого нет. Скрипт
+пропускает машину без zoxide, без нового места и ту, где старая копия остаётся. Вес сохраняется (`add --score`).
+Попутно Sidetrack #4 `restore-after-any-crash`: предела на весь ssh у `vdx move` нет — `mv` на другой том копирует
+минутами; мёртвую связь ssh замечает за 30 с (`ServerAliveInterval`).
+**Implication:** CLI 0.64 (вместе с письмом nas-info `vdx-list-all-tmux-sessions`, если успеет, иначе отдельно);
+`reply` nas-info с версией.
+
 ## Sidetracks
 
 ### #1. Перенос папки и реестр intercom
@@ -724,6 +742,7 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 `~/AI Projects/avatar/*` и `finam/*`; путь в `tools/dry-run.sh` склоняются брать из `consumers.yaml`
 
 ## Next actions
+- [ ] DL #25: выпуск 0.64 с путями zoxide в `vdx move`; `reply` nas-info на `vdx-move-zoxide-paths` с версией
 
 - [x] Владелец: где память в рабочих и публичных репо — DL #3 (2026-10-22)
 - [x] Владелец: уточнения к DL #3 — DL #4 (2026-10-22)

@@ -5,7 +5,15 @@ import * as path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { parseEnvironment, shellQuote } from '../../src/ai.ts';
 import { projectDirName } from '../../src/conversations.ts';
-import { EXIT_FAILED, EXIT_MOVED, EXIT_REFUSED, EXIT_USAGE, runMove, type MoveDeps } from '../../src/move.ts';
+import {
+  EXIT_FAILED,
+  EXIT_MOVED,
+  EXIT_REFUSED,
+  EXIT_USAGE,
+  runMove,
+  type MoveDeps,
+  zoxideScript,
+} from '../../src/move.ts';
 
 // `vdx move`: two machines are two homes here — "m3" is reached by a fake ssh that runs
 // the same script with its own HOME (claude-memory-in-project DL #17, #18).
@@ -171,7 +179,7 @@ function deps(over: Partial<MoveDeps> = {}): MoveDeps {
     ask: () => '',
     sh: (script) => run(here, script),
     // ssh -o … -o … <host> "sh -c '<script>'"
-    ssh: (args) => (args[4] === 'm3' ? run(m3, args[5]!) : { status: 255, stdout: '' }),
+    ssh: (args) => (args.at(-2) === 'm3' ? run(m3, args.at(-1)!) : { status: 255, stdout: '' }),
     hook: (command, env) =>
       spawnSync('sh', ['-c', command], { env: { ...process.env, ...env }, stdio: 'ignore' }).status ?? 1,
     restart: (input) => {
@@ -501,5 +509,70 @@ describe('move.after in the profile', () => {
     expect(parseEnvironment('move:\n  after:\n    - name: e\n      command: x\n', 'p').move?.after).toHaveLength(1);
     expect(() => parseEnvironment('move:\n  after:\n    - name: e\n', 'p')).toThrow('move.after[0].command');
     expect(() => parseEnvironment('move: [x]\n', 'p')).toThrow('move must be a mapping');
+  });
+});
+
+// nas-info `vdx-move-zoxide-paths` (2026-11-19), the owner: «vdx move не помешает научить ещё и в "z" находить и
+// менять пути». A fake zoxide keeps its list in a file and logs what it is asked.
+describe("zoxide's paths follow the move", () => {
+  let dir: string;
+  beforeEach(() => (dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-zoxide-')))));
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const run = (script: string, withZoxide = true) => {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(
+      path.join(bin, 'zoxide'),
+      '#!/bin/sh\ncase "$1" in\n  query) cat "$ZO_LIST";;\n  add|remove) echo "$*" >> "$ZO_LOG";;\nesac\n',
+      { mode: 0o755 },
+    );
+    const res = spawnSync('sh', ['-c', script], {
+      encoding: 'utf8',
+      env: {
+        PATH: withZoxide ? `${bin}:/usr/bin:/bin` : '/usr/bin:/bin',
+        HOME: dir,
+        ZO_LIST: path.join(dir, 'list'),
+        ZO_LOG: path.join(dir, 'log'),
+      },
+    });
+    const log = fs.existsSync(path.join(dir, 'log')) ? fs.readFileSync(path.join(dir, 'log'), 'utf8') : '';
+    return { out: res.stdout.trim(), log };
+  };
+
+  it('moves the old place and its subfolders with their scores; drops one gone; leaves others alone', () => {
+    const from = path.join(dir, 'AI Projects', 'proj');
+    const to = path.join(dir, 'repos', 'proj');
+    fs.mkdirSync(path.join(to, 'cli', 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'list'),
+      [
+        `2529.2 ${from}`,
+        `  40.0 ${from}/cli/src`,
+        `   4.0 ${from}/gone`,
+        `   8.0 ${from}-other`,
+        `  12.5 ${path.join(dir, 'elsewhere')}`,
+      ].join('\n') + '\n',
+    );
+    const r = run(zoxideScript(from, to, dir));
+    expect(r.out).toBe('2 1');
+    expect(r.log.split('\n').filter(Boolean)).toEqual([
+      `add --score 2529.2 -- ${to}`,
+      `remove -- ${from}`,
+      `add --score 40.0 -- ${to}/cli/src`,
+      `remove -- ${from}/cli/src`,
+      `remove -- ${from}/gone`,
+    ]);
+  });
+
+  it('skips a machine without zoxide, without the new place, or that keeps its copy in the old place', () => {
+    const from = path.join(dir, 'old');
+    const to = path.join(dir, 'new');
+    expect(run(zoxideScript(from, to, dir), false).out).toBe('skip no zoxide');
+    expect(run(zoxideScript(from, to, dir)).out).toBe('skip not here');
+    fs.mkdirSync(to);
+    fs.mkdirSync(from);
+    expect(run(zoxideScript(from, to, dir)).out).toBe('skip the old place stays');
+    expect(run(zoxideScript(from, to, dir)).log).toBe('');
   });
 });

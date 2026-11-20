@@ -183,7 +183,49 @@ const VERDICT_CODE: Record<string, number> = { 'caught-up': 0, ignored: 0, incom
 
 function runOn(m: Machine, script: string, deps: MoveDeps): Ran {
   if (m.host === null) return deps.sh(script);
-  return deps.ssh(['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', m.host, `sh -c ${shellQuote(script)}`]);
+  // A dead link is noticed in 30 s; the whole call has no limit: an `mv` onto another volume copies, for minutes
+  // (restore-after-any-crash Sidetrack #4).
+  return deps.ssh([
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=5',
+    '-o',
+    'ServerAliveInterval=10',
+    '-o',
+    'ServerAliveCountMax=3',
+    m.host,
+    `sh -c ${shellQuote(script)}`,
+  ]);
+}
+
+/**
+ * zoxide's paths under the old place, moved to the new one with their scores — on a machine whose copy moved
+ * (nas-info `vdx-move-zoxide-paths`, the owner 2026-11-19: «vdx move не помешает научить ещё и в "z" находить и
+ * менять пути»). zoxide 0.10 hides paths that are gone (`--all` shows them) and adds none that is not there, so
+ * it runs after the machine's own `mv`. Prints `<moved> <dropped>` (a subfolder gone with the move is dropped), or
+ * `skip <why>`: no zoxide, the new place not on this machine, the old one still there (a copy that stays).
+ */
+export function zoxideScript(from: string, to: string, home: string): string {
+  return [
+    'command -v zoxide >/dev/null 2>&1 || { echo "skip no zoxide"; exit 0; }',
+    `from=${remotePathWord(from, home)}; to=${remotePathWord(to, home)}`,
+    '[ -d "$to" ] || { echo "skip not here"; exit 0; }',
+    '[ -e "$from" ] && { echo "skip the old place stays"; exit 0; }',
+    'list=$(zoxide query --list --score --all 2>/dev/null)',
+    'moved=0; dropped=0',
+    'while IFS= read -r line; do',
+    '  s=${line#"${line%%[! ]*}"}; score=${s%% *}; p=${s#* }',
+    '  case "$p" in "$from"|"$from"/*)',
+    '    new="$to${p#"$from"}"',
+    '    if [ -d "$new" ] && zoxide add --score "$score" -- "$new"; then moved=$((moved + 1)); else dropped=$((dropped + 1)); fi',
+    '    zoxide remove -- "$p";;',
+    '  esac',
+    'done <<EOF',
+    '$list',
+    'EOF',
+    'echo "$moved $dropped"',
+  ].join('\n');
 }
 
 /** `p` with its existing part resolved through links: the new folder may not be there yet. */
@@ -715,6 +757,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
   });
   for (const m of noSync) log(`  note: no syncthing-caught-up on ${m.label} — Syncthing not checked there`);
   const hooks = (environment.move?.after ?? []).filter((h) => !h.when_exists || fs.existsSync(expand(h.when_exists)));
+  log("  then: zoxide's paths under each moved folder, on every machine with zoxide whose copy moved");
   if (hooks.length) log(`  then: ${hooks.map((h) => h.name).join(', ')} (move.after)`);
 
   if (refusals.length) {
@@ -934,6 +977,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
             : `  ${m.label} keeps its own copy in ${old}`,
         );
       }
+    zoxideOn([...probes.keys()], mv, probes, deps);
     for (const h of hooks) runHook(h, mv, deps);
   }
 
@@ -1060,6 +1104,27 @@ function describeCopy(c: Copy, i: number, probes: Map<Machine, Probe>, here: Mac
       }`
     : '';
   return `${who} — ${kind}${state}${c.machines.includes(here) ? '   ← where you are' : ''}`;
+}
+
+/** `zoxideScript` on each machine, said in one line: where paths moved, where it was skipped and why. */
+function zoxideOn(machines: Machine[], mv: Planned, probes: Map<Machine, Probe>, deps: MoveDeps): void {
+  const moved: string[] = [];
+  const failed: string[] = [];
+  for (const m of machines) {
+    const there = probes.get(m)?.home ?? deps.home;
+    const ran = runOn(
+      m,
+      zoxideScript(onMachine(mv.from, deps.home, there), onMachine(mv.to, deps.home, there), there),
+      deps,
+    );
+    const out = ran?.stdout.trim() ?? '';
+    const counts = /^(\d+) (\d+)$/.exec(out);
+    if (!ran || ran.status !== 0) failed.push(`${m.label}${ran ? ` (exit ${ran.status})` : ' (no answer)'}`);
+    else if (counts && (counts[1] !== '0' || counts[2] !== '0'))
+      moved.push(`${m.label} ${counts[1]}${counts[2] !== '0' ? ` (${counts[2]} gone)` : ''}`);
+  }
+  if (moved.length) deps.log(`  zoxide: paths under it moved — ${moved.join(', ')}`);
+  for (const f of failed) deps.log(`  ✗ zoxide on ${f}: its paths still lead to ${tilde(mv.from, deps.home)}`);
 }
 
 function runHook(h: MoveHook, mv: Planned, deps: MoveDeps): void {

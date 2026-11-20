@@ -487,8 +487,10 @@ folders outside the profile are named with what they get; when Syncthing would
 delete the project there, a terminal asks first ([y/N]). A machine whose mv fails
 puts the others back. git keeps a worktree's links by absolute paths, both ways: a
 repository with worktrees, or a worktree, that moves is named in the plan, and after
-the mv each machine runs git worktree repair from the main repository's place. Then,
-on this machine, the profile's move.after commands run
+the mv each machine runs git worktree repair from the main repository's place. On
+every machine with zoxide whose copy moved, zoxide's paths under the old place go to
+the new one with their scores (0.64). Then, on this machine, the profile's move.after
+commands run
 with VDX_MOVE_FROM and VDX_MOVE_TO — for tools that keep the project's path in
 their own files.
 
