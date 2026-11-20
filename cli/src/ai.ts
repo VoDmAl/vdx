@@ -1250,6 +1250,8 @@ export interface AiDeps {
   volumes?: string;
   /** How many intercom sessions letters may run here at once; default from the machine's memory (intercom-queue.ts). */
   intercomLimit?: number;
+  /** This machine's addresses; default its network interfaces (DL #32). */
+  addresses?: () => string[];
   confirmTimeoutMs: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
@@ -2269,6 +2271,8 @@ export interface RemoteReport {
   transcripts: { id: string; mtime: number; size: number }[];
   /** This machine's history.jsonl on the project's conversations (vdx 0.57+): an older vdx sends none. */
   history?: ({ id: string } & HistoryMarks)[];
+  /** This machine's addresses (vdx 0.64+): the asking machine names its ssh clients by them (DL #32). */
+  ips?: string[];
 }
 
 /** What another machine answered: always the live sessions; the report when its vdx gives one. */
@@ -2471,6 +2475,7 @@ export function runAiReport(pathArg: string, deps: AiDeps): number {
     typed: [...typedHere(deps.env, deps.home, ids)],
     history: [...historyMarks(deps.env, deps.home, ids)].map(([id, m]) => ({ id, ...m })),
     transcripts: files.map((f) => ({ id: path.basename(f.file, '.jsonl'), mtime: f.updated.getTime(), size: f.size })),
+    ips: (deps.addresses ?? ownAddresses)(),
   };
   deps.out(JSON.stringify(report) + '\n');
   return EXIT_OK;
@@ -2892,9 +2897,13 @@ function boardStart(
       ? { ...a, openAt: a.openAt.map((s) => (s === '?' ? others[0]! : s)) }
       : a;
   };
-  const agents = [...here, ...agentFacts(hqPanes, plan, deps, procs, wrapSkills, modeOf), ...outside, ...there].map(
-    seatOf,
-  );
+  // A plain `ssh` client is named by the machine its address belongs to (DL #32).
+  const owners = new Map((deps.addresses ?? ownAddresses)().map((ip) => [ip, plan.host] as const));
+  for (const [m, r] of k.reach) for (const ip of r?.report?.ips ?? []) owners.set(ip, m);
+  const agents = nameSeats(
+    [...here, ...agentFacts(hqPanes, plan, deps, procs, wrapSkills, modeOf), ...outside, ...there],
+    owners,
+  ).map(seatOf);
   const working = agents.filter((a) => !a.mail && !a.hq);
   // The HQ session is a choice of its own where no terminal at this seat shows it: the plain cases
   // below are plain only without one.
@@ -3360,8 +3369,10 @@ function processEnvWords(pid: number): string[] | null {
 }
 
 /**
- * The seat of a tmux client: the mark `vdx ai` gave it at the attach; else a client under sshd
- * is another machine's — which one, nothing says (`?`); else this machine's.
+ * The seat of a tmux client: the mark `vdx ai` gave it at the attach; else a client under sshd is another
+ * machine's — `ssh:<address>`, the address it came from (`SSH_CONNECTION`), which the list turns into that
+ * machine by the addresses each one reports (vdx-ai-predictable DL #32: m3's `echelon@m3` had a plain `ssh m3`
+ * from lft, and the list said only «open on m3»); `?` — not even that; else this machine's.
  */
 export function clientSeat(
   pid: number,
@@ -3372,12 +3383,39 @@ export function clientSeat(
   const mark = envOf(pid)
     ?.find((w) => w.startsWith(`${SEAT_MARK_ENV_VAR}=`))
     ?.slice(SEAT_MARK_ENV_VAR.length + 1);
-  if (mark && isMachineLabel(mark)) return mark;
   const byPid = new Map(procs.map((p) => [p.pid, p]));
+  let underSsh = false;
+  for (let p = byPid.get(pid), n = 0; p && n < 32 && !underSsh; p = byPid.get(p.ppid), n++)
+    underSsh = /\bsshd(-session)?\b/.test(p.args);
+  // Under sshd a mark of this very machine is a `vdx ai` typed in an `ssh <here>` session: it took itself for
+  // the seat (m3, 2026-11-19: the client from lft on `echelon@m3` marked m3). Another machine's mark is the
+  // seat `vdx ai@<here>` was typed at.
+  if (mark && isMachineLabel(mark) && !(underSsh && mark === host)) return mark;
   for (let p = byPid.get(pid), n = 0; p && n < 32; p = byPid.get(p.ppid), n++) {
-    if (/\bsshd(-session)?\b/.test(p.args)) return '?';
+    if (/\bsshd(-session)?\b/.test(p.args)) {
+      const from = envOf(pid)
+        ?.find((w) => w.startsWith('SSH_CONNECTION='))
+        ?.slice('SSH_CONNECTION='.length);
+      return from && /^[0-9a-fA-F.:]+$/.test(from) ? `ssh:${from}` : '?';
+    }
   }
   return host;
+}
+
+/** This machine's addresses, for the other machines to tell its ssh clients by (DL #32). */
+function ownAddresses(): string[] {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .flatMap((i) => (i && !i.internal ? [i.address] : []));
+}
+
+/**
+ * `ssh:<address>` seats named by the machine that has the address — the reports' addresses, and this machine's
+ * own; one nobody has stays `?`, another machine, which not known.
+ */
+export function nameSeats(agents: AgentFact[], owners: Map<string, string>): AgentFact[] {
+  const named = (s: string) => (s.startsWith('ssh:') ? (owners.get(s.slice(4)) ?? '?') : s);
+  return agents.map((a) => (a.openAt.some((s) => s.startsWith('ssh:')) ? { ...a, openAt: a.openAt.map(named) } : a));
 }
 
 /** How an agent process was started: `vdx ai --focused`, `vdx ai --intercom`, `vdx ai --hq`, or none. */

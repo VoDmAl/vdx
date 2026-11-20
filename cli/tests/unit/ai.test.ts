@@ -50,6 +50,7 @@ import {
   STATE_OPTION,
   type RemoteReport,
   clientSeat,
+  nameSeats,
   clientStdio,
   shellQuote,
   sshOutcome,
@@ -82,6 +83,7 @@ import {
 } from './transcripts.ts';
 import { currentServer, socketDir, writeRecord } from '../../src/restore.ts';
 import { dequeue, enqueue, queued } from '../../src/intercom-queue.ts';
+import type { AgentFact } from '../../src/board.ts';
 import { type CmuxPanel, type CmuxSnapshot, tabRecordDir } from '../../src/tabs.ts';
 import type { PickerAnswer, PickerInput } from '../../src/picker.ts';
 
@@ -341,6 +343,24 @@ describe('clientSeat: which seat a terminal on a tmux session is at', () => {
     expect(clientSeat(61, procs, 'lft', () => ['tmux'])).toBe('lft');
     // A mark that would read as an option to ssh is no mark.
     expect(clientSeat(61, procs, 'lft', () => ['VDX_AI_SEAT=-oX'])).toBe('lft');
+  });
+
+  // m3, 2026-11-19: `echelon@m3` had a plain `ssh m3` from lft, and the list said only «open on m3» (DL #32).
+  it('a plain ssh client: the address it came from, which the list names by the machine that has it', () => {
+    const env = ['tmux', 'SSH_CONNECTION=10.147.17.21', '51234', '10.147.17.5', '22'];
+    expect(clientSeat(53, procs, 'm3', () => env)).toBe('ssh:10.147.17.21');
+    // `vdx ai` typed in that ssh session marked this machine — the mark is no seat there; another machine's is.
+    expect(clientSeat(53, procs, 'm3', () => [...env, 'VDX_AI_SEAT=m3'])).toBe('ssh:10.147.17.21');
+    expect(clientSeat(53, procs, 'm3', () => [...env, 'VDX_AI_SEAT=lft'])).toBe('lft');
+    const agent = (openAt: string[]): AgentFact =>
+      ({ machine: 'm3', session: 'echelon@m3', pid: 1, openAt }) as unknown as AgentFact;
+    const owners = new Map([
+      ['10.147.17.21', 'lft'],
+      ['10.147.17.5', 'm3'],
+    ]);
+    expect(nameSeats([agent(['m3', 'ssh:10.147.17.21'])], owners)[0]!.openAt).toEqual(['m3', 'lft']);
+    // An address no machine of the profile has: another machine, which not known.
+    expect(nameSeats([agent(['ssh:192.0.2.9'])], owners)[0]!.openAt).toEqual(['?']);
   });
 });
 
