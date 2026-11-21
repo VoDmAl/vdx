@@ -1566,7 +1566,11 @@ isEmpty(c) : started`) — только что запущенный первый
       lft без агента появятся с её 0.65
 - [x] DL #32, шаг 1 вышел в 0.64.0 — 2026-11-20 (`b66a8f7`, выпуск `d7065a7`) вместе с zoxide; nas-info сказано в итоге
       zoxide, что письмо о списке в работе
-- [ ] DL #32: выпуск шагов 2–3 (0.65) и `reply` nas-info на `vdx-list-all-tmux-sessions` (письмо взято этой сессией)
+- [x] DL #32: выпуск шагов 2–3 — 2026-11-20 (`e1a15b5`, выпуск `b8bf474`, m3 и lft — 0.65.0); вживую из `~`: на m3
+      `NOT OPEN HERE · 5` и сессии m3 без агента в `OTHER TMUX SESSIONS`, на lft сессии m3 — с `vdx ai@m3 --attach`;
+      `reply` nas-info (`vdx-list-all-tmux-sessions-outcome`); клиент control mode как зеркало не помечен — открыто
+- [ ] DL #32: клиент control mode (`cmux ssh-tmux`, `control-mode` в `client_flags`) — зеркало, а не место — when: nas-info
+      или владелец скажут, что это мешает; сейчас считается клиентом своей машины
 - [ ] Восстановление после любого падения (вкладки cmux, другие машины, `r` — всё) ведёт кристалл
       [[restore-after-any-crash/workitem|restore-after-any-crash]] (2026-11-17): ждущие здесь пункты про `--restore` в
       `tmux-server.sh` nas-info и живую проверку вкладок после перезапуска cmux (DL #26) закрываются там, с его выпуском
