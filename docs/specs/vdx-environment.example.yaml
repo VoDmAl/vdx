@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.16.1"
+  version: "1.17.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -32,6 +32,21 @@ agent:
   # first. An older vdx skips the key.
   hq_args: ["/echelon:whatsup"]
   when:
+    # The HQ session runs for days and sees little input: an hour without a turn
+    # and its whole context, 0.3-0.9M tokens, goes into the prompt cache again.
+    # Claude Code compacts a conversation while idle, before the cache expires;
+    # the owner has that off for every session (idleCompaction: false in
+    # ~/.claude/settings.json) and on for the HQ alone, from 350k tokens: the
+    # sessions start near 200k. --settings wins over settings.json. Only in the
+    # HQ session (session: hq, vdx 0.67+; an older vdx would give it to every
+    # session). First in the list: the channel flag below takes a list of
+    # values. Asked by the owner 2026-11-21 (vdx hq-session-mode, DL #11).
+    - id: hq-idle-compaction
+      description: "HQ session of an echelon consumer: Claude Code compacts it while idle, from 350k tokens"
+      if:
+        has_file: {path: signals/sources.yaml}
+      session: hq
+      args: [--settings, '{"idleCompaction":true,"env":{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS":"350000"}}']
     # echelon sends its consumers' agents Claude Code channel events: mail
     # while the project's mail window is open (mail.watch), and to every
     # consumer "the project's slice is complete". A session started without
