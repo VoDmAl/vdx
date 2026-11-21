@@ -5,7 +5,7 @@ description: "Запускает отдельную сессию листа и �
 status: in-progress
 session-type: prd-work
 created: 2026-11-03
-last-updated: 2026-11-03
+last-updated: 2026-11-20
 relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
@@ -183,6 +183,30 @@ Next actions. Локальная сессия intercom в список не по
 называли `📥 HQ`; не поправлял: они текст знака не читают.
 **Supersedes:** #4
 
+### #10 / 2026-11-20 / Штаб проекта — `echelon hq` через каталог intercom; в проекте-руках `--hq` спрашивает про штаб
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** Sidetrack #4 (письмо www.t23b.org `vdx/hq-session-on-hands-project`, п. 1). Два пути на выбор: каталог
+intercom или ключ профиля с командой; владелец 2026-11-20: «Да, давай так» — на вариант 1, каталог.
+**Context:** до этого vdx знал об echelon только `agent.hq_args` профиля. `echelon hq <корень>` (их `cmd_hq`, `mcp_server.hq`):
+stdout — одна строка, имя штаба из `head` в `mcp.yaml`; пусто — сам себе штаб (`role: hq`) или штаба нет (тогда строка в
+stderr), код 0; ошибка в `mcp.yaml` — код 1, штаб неизвестен. Около 0,2 с на m3. 2026-11-20: www.t23b.org → `t23b-program`,
+vdx → `infra-hq`, `~` — пусто со строкой «штаба нет». Путь echelon на m3 и lft один (`~/AI Projects/echelon`), так что ключ
+профиля тоже работал бы, но тогда путь лежал бы в профиле.
+**Why:** роль `access-layer` в каталоге для того и есть: код спрашивает каталог, а не держит имя агента или путь машины
+(skill intercom, «Roles»; так же ищут его общие правила). Путь не записан нигде, кроме каталога, который пишут сами сессии.
+**Implication:** `cli/src/hq.ts`: корень хранилища intercom (`VDM_INTERCOM_ROOT` → `intercom.root` в
+`~/.claude/vdm-plugins.json` → `~/.claude/vdm/intercom`), записи `_registry/*.json` без копий Syncthing; держатель роли — ровно
+один, его первая копия на этой машине не в `…/plugins/cache|marketplaces/…`, команда `bin/<его identity>`. Имя штаба — запись
+каталога по identity, aliases, names после свёртки intercom (ASCII в нижний регистр, пробелы и `_` → `-`), корень штаба — её
+первая копия здесь. Нет каталога, держателя, команды, пустой ответ — старт как раньше, молча; код 1 или нет ответа за 10 с —
+старт как раньше со строкой `note:`. Проект-руки (`--hq`, не `--restart`): в терминале `Open <штаб>'s HQ session instead?
+[Y/n]`, Enter — `vdx ai '<корень штаба>' --hq` с теми же ключами (без `--conversation`), `n` — ничего, код 4; без терминала и
+`--no-input` — отказ, код 2, со строкой для штаба и тем, где штаб меняют (`head` в `mcp.yaml` echelon); `--yes` — да; корня
+штаба здесь нет — отказ с его именем в обоих случаях. `--dry-run` — что сделал бы старт, код 0. `--restart` не спрашивает:
+это про идущую сессию, а перезапуск изнутри идёт без терминала.
+
 ## Sidetracks
 
 ### #3. Пробы в папке vdx оставили отметки у echelon
@@ -232,7 +256,7 @@ anyway?». То же сегодня у сессии intercom. Строка др�
 `--hq` в папке vdx (DL #6, #7): у vdx штаб — infra-hq. П. 2 и 3 письма (строка хука, whatsup) — у echelon, их кристалл
 `hq-session-on-hands-project` (status ready, 2026-11-19).
 
-**Status:** open
+**Status:** open — путь к штабу решён (DL #10), код в работе 2026-11-20
 
 ## Next actions
 
@@ -257,7 +281,12 @@ anyway?». То же сегодня у сессии intercom. Строка др�
 - [ ] Sidetrack #1: решить по живому использованию, искать ли `--find` в разговорах HQ-сессии
 - [ ] Sidetrack #2: убрать лишний вопрос про агента на другой машине, если мешает вживую
 - [ ] Sidetrack #4: `vdx ai --hq` в проекте-руках (`echelon hq <корень>` — другой проект) — вопрос в терминале, без
-      терминала отказ; оба называют штаб и строку его HQ-сессии; тест; выпуск
+      терминала отказ; оба называют штаб и строку его HQ-сессии; тест; выпуск — 2026-11-20: путь — DL #10; код
+      (`cli/src/hq.ts`, `handsHq` в `ai.ts`), тесты (`hq.test.ts` — 8, `ai.test.ts` — «in a hand»; каждый падает без
+      своей правки), справка, `environment-format.md`, README, `cli/README.md`, скилл `vdx-ai` (плагин 0.15.14),
+      `architecture.md`; живьём на невыпущенном: `--dry-run` на m3 и lft — www.t23b.org → t23b-program, vdx → infra-hq,
+      t23b-program — план как раньше; `--no-input` в www.t23b.org на m3 — код 2, ничего не поднято. Осталось: коммит,
+      выпуск 0.66.0 (minor), станции, итог www.t23b.org
 - [x] Outcome to `www.t23b.org`: принято, Sidetrack #4 (`hq-session-on-hands-project-outcome`, 2026-11-20)
 - [ ] Итог www.t23b.org после выпуска Sidetrack #4 — when: выпуск CLI с отказом
 

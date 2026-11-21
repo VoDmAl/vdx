@@ -56,6 +56,7 @@ import {
   type PersonalHost,
 } from './memory.ts';
 import { at, errorMessage, isStringList, str } from './narrow.ts';
+import { projectHq, sameDir, type ProjectHq } from './hq.ts';
 import { CMUX_TOKEN_ENV_VAR, CMUX_TOKEN_OPTION, cmuxToken, takeCmuxLine, watchTopic } from './cmux.ts';
 import {
   TAB_FROM_ENV_VAR,
@@ -1281,6 +1282,8 @@ export interface AiDeps {
   handOff?: (args: string[], env: NodeJS.ProcessEnv, logFile: string) => number | null;
   /** What the agent process `pid` lags behind; read from Claude Code's files when not given. */
   lag?: (pid: number, projectRoot: string, command: string) => Lag | null;
+  /** Whose HQ the project is (`--hq`); default: the access layer the intercom directory names (hq.ts). */
+  projectHq?: (projectRoot: string) => ProjectHq;
 }
 
 function machineLag(deps: AiDeps, pid: number, projectRoot: string, command: string): Lag | null {
@@ -4884,7 +4887,62 @@ function describeLag(lag: Lag): string {
   return lag.plugins.length > 0 ? `${claude}; plugins updated since it loaded them: ${names}` : claude;
 }
 
-export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.pid): number {
+/**
+ * `--hq` in a project whose HQ is another one — a hand (hq-session-mode DL #10, письмо www.t23b.org
+ * `hq-session-on-hands-project`): its own HQ session would take the HQ's sheet and queue for its own.
+ * At a terminal the question, Enter opens the HQ's HQ session; with nobody to ask, a refusal with its
+ * line. The exit code; null — the project is its own HQ, or nobody can say: the start goes on.
+ */
+function handsHq(
+  opts: AiOptions,
+  projectRoot: string,
+  given: AiDeps,
+  deps: AiDeps,
+  selfPid: number,
+  hqFrom: string[],
+): number | null {
+  const answer = (deps.projectHq ?? ((root: string) => projectHq(root, deps.env, deps.home)))(projectRoot);
+  if (answer.kind === 'own') return null;
+  if (answer.kind === 'unknown') {
+    deps.log(`note: ${answer.note}`);
+    return null;
+  }
+  const { log } = deps;
+  const project = path.basename(projectRoot);
+  const where = "whose hand a project is: head in echelon's mcp.yaml";
+  log(`${project} is a hand of ${answer.hq} (echelon hq): the sheet and what comes from outside are its HQ's`);
+  if (!answer.root) {
+    log(
+      `vdx ai: no HQ session here, and ${answer.hq} has no checkout on this machine — nothing started; ` +
+        `its HQ session is started in its folder: vdx ai <its folder> --hq (${where})`,
+    );
+    return EXIT_USAGE;
+  }
+  const line = `vdx ai ${shellQuote(answer.root)} --hq`;
+  if (opts.dryRun) {
+    log(`→ dry run: a start asks to open ${answer.hq}'s HQ session instead — ${line}`);
+    return EXIT_OK;
+  }
+  // A chain of hands (head of a head) is followed; one that comes back is not.
+  const hqRoot = answer.root;
+  if (hqFrom.some((p) => sameDir(p, hqRoot))) {
+    log(`vdx ai: echelon names ${answer.hq} the HQ, and it leads back here — nothing started (${where})`);
+    return EXIT_USAGE;
+  }
+  if (!asks(deps)) {
+    log(`vdx ai: no HQ session in a hand — nothing started; ${answer.hq}'s HQ session: ${line} (${where})`);
+    return EXIT_USAGE;
+  }
+  const reply = deps.ask(`Open ${answer.hq}'s HQ session instead? [Y/n]: `);
+  if (reply === null || !/^(y(es)?)?$/i.test(reply.trim())) {
+    log(`nothing started — ${answer.hq}'s HQ session: ${line}`);
+    return EXIT_LAUNCH_FAILED;
+  }
+  log(`→ ${answer.hq}: ${line}`);
+  return runAi({ ...opts, path: answer.root, conversation: undefined }, given, selfPid, [...hqFrom, projectRoot]);
+}
+
+export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.pid, hqFrom: string[] = []): number {
   const { log, tmux } = given;
   if (opts.yes && opts.noInput) {
     log('vdx ai: --yes answers every question, --no-input puts none — pick one');
@@ -4928,6 +4986,12 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   if (typeof prepared === 'number') return prepared;
   const { projectRoot, environment, profileDir } = prepared;
   let { plan } = prepared;
+  // An HQ session only where the project is its own HQ (hq-session-mode DL #10). A restart is about the
+  // session that runs, and from inside it no terminal is there to ask.
+  if (plan.hq && !opts.restart) {
+    const hands = handsHq(opts, projectRoot, given, deps, selfPid, hqFrom);
+    if (hands !== null) return hands;
+  }
   // Run by a focused session's agent about itself: a new topic, nothing started. Read before the
   // marks below go: VDX_FOCUSED here is the agent's.
   const changed = changeTopic(opts, plan, deps, selfPid);

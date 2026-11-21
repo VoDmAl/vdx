@@ -94,7 +94,8 @@ report.ts      markdown, ansi, json
   состояние — у GitHub через `hosting.ts`. Тем же путём `vdx publish` пушит
   коммит выпуска (кристалл `hosting-extension`, DL #8–#10).
 - `ai.ts` — запуск агента в tmux по личному профилю (`vdx-environment.yaml`),
-  с машиной и разговором, сессия intercom проекта (`--intercom`, `--close`), HQ-сессия (`--hq`) и
+  с машиной и разговором, сессия intercom проекта (`--intercom`, `--close`), HQ-сессия (`--hq`; `hq.ts` — чей штаб
+  проект: держатель роли `access-layer` в каталоге intercom и его `hq <корень>`, кристалл `hq-session-mode` DL #10) и
   тема focused-сессии — опция tmux `@vdx_topic` (`--focused <тема>`, кристалл
   `focused-topic`); `cmux.ts` — тема описанием workspace cmux, пока `vdx ai` держит `tmux attach`
   (наблюдатель — `bin/vdx-cmux-topic.cjs`, DL #6); `conversations.ts` — разговоры Claude Code проекта, машина,

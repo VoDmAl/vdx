@@ -171,7 +171,12 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 --new and --focused leave it alone. --restore brings it back. --restart
                 keeps its conversation, with --new it gets a new one;
                 --conversation <id> brings it back to that one. Not with
-                --focused or --intercom; --close is not for it
+                --focused or --intercom; --close is not for it. In a hand — a
+                project whose HQ is another one, as echelon hq says (found
+                through the intercom directory's access layer, 0.66) — it asks
+                to open that one's HQ session instead, and Enter does; without
+                a terminal, and with --no-input, it refuses with that line,
+                exit 2
   --close [--waiting <n>]
                 inside the intercom session, or a focused one (0.56): it ends
                 itself — its pane closes 2 s later; one you started or attached to

@@ -85,7 +85,10 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
   outside. `VDX_HQ=1`, a new conversation in a tmux session of its own
   (`<name>-hq`) that opens with the profile's `agent.hq_args`; one per project and
   machine. The user sits at it and keeps it running: hand them the command, do
-  not start it for them. When the session-start line says this is the HQ
+  not start it for them. In a hand — a project whose HQ is another one, as
+  `echelon hq <root>` says — `--hq` (vdx 0.66+) asks to open the HQ's session
+  instead, and without a terminal refuses, exit 2, with the line for it: hand
+  the user that line, not `--hq` here. When the session-start line says this is the HQ
   session: `vdx ai --close` is not for it, and a topic that is not its work goes
   to a session of its own, by the line above.
 - **When the session-start line says this is the project's intercom session:**
@@ -118,7 +121,7 @@ Format: `docs/specs/environment-format.md` in the vdx repository.
 | `vdx ai --focused [path]` | a session nothing wakes (vdx 0.23+); from 0.25 a new conversation, as `--new`; a running agent keeps its mode until `--restart` |
 | `vdx ai [path] --focused "<topic>"` | the same, with its topic (vdx 0.41+), which opens a new conversation as its first prompt (vdx 0.49+); run inside the focused session by its agent — a new topic, nothing started. A topic that is not the same letter for letter is a search (vdx 0.58+): at a terminal the focused sessions on a topic sharing words with it are rows, a number attaches, Enter starts a new one |
 | `vdx ai --intercom [--detach] [path]` | the project's intercom session (vdx 0.36+): letters and wakes go there; every other start leaves it alone |
-| `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; `--hq` only narrows the choice — on a plain start's list it is a row whose number attaches to it as it is (vdx 0.52+), Enter and a start without a terminal leave it alone; `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one |
+| `vdx ai --hq [path]` | the project's HQ session (vdx 0.49+): what comes from outside goes there; `--hq` only narrows the choice — on a plain start's list it is a row whose number attaches to it as it is (vdx 0.52+), Enter and a start without a terminal leave it alone; `--restore` brings it back, `--restart` keeps its conversation, `--new` with it starts a new one; in a hand (vdx 0.66+) it asks to open the HQ's instead |
 | `vdx ai … --no-input` | no question put, as without a terminal (vdx 0.58+): the safe way, or a refusal naming what would do it — use it when you start a session yourself; `-y`/`--yes` is the user's: vdx answers every question itself (y, Enter) and says so |
 | `vdx ai --close [--waiting <n>]` | inside the intercom session or a focused one (vdx 0.56+): it ends itself (one the user started or attached to from a terminal stays, only the number changes); n — questions to the user still unanswered |
 | `vdx ai --conversation <id> [path]` | continue this Claude Code conversation: attach to the agent in it, or start one next to the running ones (`vdx ai@<host> … --conversation <id>` — on the machine it belongs to) |

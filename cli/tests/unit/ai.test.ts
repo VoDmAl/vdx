@@ -60,6 +60,7 @@ import {
   unreadableFolders,
   sharedTopicWords,
 } from '../../src/ai.ts';
+import type { ProjectHq } from '../../src/hq.ts';
 import {
   type LiveSession,
   HQ_LINE_PREFIX,
@@ -2629,6 +2630,92 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAi({ ...opts, path: root, hq: true }, deps())).toBe(EXIT_DRIFT);
     expect(logs.join('\n')).toContain(`vdx ai --restart --hq ${root}`);
   }, 60_000);
+
+  it('--hq in a hand (its HQ is another project): asks to open that one, without a terminal refuses with its line', () => {
+    writeProfile(['--base'], true, [], ['/first prompt']);
+    killServer(tmux);
+    const hqRoot = path.join(base, 'hqproj');
+    fs.mkdirSync(hqRoot, { recursive: true });
+    const said: ProjectHq[] = [];
+    const hand = (answer: ProjectHq) => (r: string) => {
+      const a = fs.realpathSync(r) === fs.realpathSync(root) ? answer : ({ kind: 'own' } as const);
+      said.push(a);
+      return a;
+    };
+    const asHand = hand({ kind: 'hand', hq: 'hqproj', root: hqRoot });
+    const line = `vdx ai ${shellQuote(hqRoot)} --hq`;
+    const sessions = () =>
+      (tmux.tryRun(['list-sessions', '-F', '#{session_name}']) ?? '').split('\n').filter(Boolean).sort();
+
+    // Nobody to ask: the refusal, its line and where the HQ is set; nothing started.
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, { ...deps(), projectHq: asHand })).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('proj is a hand of hqproj (echelon hq)');
+    expect(logs.join('\n')).toContain(
+      `hqproj's HQ session: ${line} (whose hand a project is: head in echelon's mcp.yaml)`,
+    );
+    expect(sessions()).toEqual([]);
+
+    // A dry run says what a start would do.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true, dryRun: true }, { ...deps(), projectHq: asHand })).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`→ dry run: a start asks to open hqproj's HQ session instead — ${line}`);
+
+    // No checkout of the HQ here: named, refused at a terminal too.
+    logs = [];
+    const asked: string[] = [];
+    const terminal = (reply: string | null, projectHq: AiDeps['projectHq']) => ({
+      ...deps(),
+      interactive: true,
+      projectHq,
+      ask: (p: string) => (asked.push(p), reply),
+    });
+    const away = hand({ kind: 'hand', hq: 'hqproj', root: null });
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, terminal('', away))).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('hqproj has no checkout on this machine — nothing started');
+    expect(asked).toEqual([]);
+
+    // At a terminal: n — nothing; Enter — the HQ's HQ session, and that project is not asked about again.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, terminal('n', asHand))).toBe(EXIT_LAUNCH_FAILED);
+    expect(asked).toEqual(["Open hqproj's HQ session instead? [Y/n]: "]);
+    expect(sessions()).toEqual([]);
+    logs = [];
+    said.length = 0;
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, terminal('', asHand))).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain(`→ hqproj: ${line}`);
+    expect(sessions()).toEqual(['hqproj@testhost-hq']);
+    expect(said.map((a) => a.kind)).toEqual(['hand', 'own']);
+
+    // --yes answers it the same; --no-input refuses.
+    logs = [];
+    expect(runAi({ ...opts, path: root, hq: true, detach: true, yes: true }, terminal(null, asHand))).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain("Open hqproj's HQ session instead? [Y/n]: y (--yes)");
+    expect(logs.join('\n')).toContain('✓ hqproj@testhost-hq: already running');
+    expect(runAi({ ...opts, path: root, hq: true, detach: true, noInput: true }, terminal('', asHand))).toBe(
+      EXIT_USAGE,
+    );
+
+    // Unknown — the access layer could not say: a note, and the start goes as it always did. A restart asks nothing.
+    logs = [];
+    const unknown = hand({ kind: 'unknown', note: 'echelon hq could not say whose HQ this project is (x)' });
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, { ...deps(), projectHq: unknown })).toBe(EXIT_OK);
+    expect(logs.join('\n')).toContain('note: echelon hq could not say whose HQ this project is (x)');
+    expect(sessions()).toContain('proj@testhost-hq');
+    said.length = 0;
+    expect(
+      runAi({ ...opts, path: root, hq: true, restart: true, detach: true }, { ...deps(), projectHq: asHand }),
+    ).toBe(EXIT_OK);
+    expect(said).toEqual([]);
+
+    // A head that leads back: not followed round.
+    logs = [];
+    const loop = (r: string): ProjectHq =>
+      fs.realpathSync(r) === fs.realpathSync(root)
+        ? { kind: 'hand', hq: 'hqproj', root: hqRoot }
+        : { kind: 'hand', hq: 'proj', root };
+    expect(runAi({ ...opts, path: root, hq: true, detach: true }, terminal('', loop))).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('echelon names proj the HQ, and it leads back here — nothing started');
+  }, 90_000);
 
   it('--focused <topic>: the topic is the first prompt; typed at the question, or with --conversation, it is not', () => {
     writeProfile(['--base'], true);
