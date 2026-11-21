@@ -967,13 +967,19 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
       нарушает: `graphite.zt.vorobyev.name` — CNAME на nyc с прокси Cloudflare (снаружи адреса Cloudflare), не
       используется — удалить или снять прокси решает владелец до включения проверки. Не поймает: чужой узел, которому
       владелец одобрил членство в сети
-- [ ] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-19
-      (due: 2026-11-19); check: `/vdm:intercom check`. 2026-11-12: `graphite.zt.vorobyev.name` — владелец «удаляй»
+- [ ] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-27
+      (due: 2026-11-27); check: `/vdm:intercom check`. 2026-11-12: `graphite.zt.vorobyev.name` — владелец «удаляй»
       (живой Graphite — `graphite.vorobyev.name`, этот нигде не упомянут и снаружи не работает); письмо nas-info
       `graphite-zt-delete`: удалить и назвать из журнала Cloudflare, кто и когда завёл — 2026-11-12 итог
       (`graphite-zt-delete-outcome`, взят 2026-11-13): удалена ~03:01Z, под зоной 8 записей A без прокси; заведена
       2026-03-16 21:13Z, кто — не установлено (журнал Cloudflare токену закрыт, только панель → Audit Log); JSON для
-      возврата — их DL #3 `zt-zone-owners`; итог проверки `cloudflare.zt_zone` — их срок 2026-11-19
+      возврата — их DL #3 `zt-zone-owners`; итог проверки `cloudflare.zt_zone` — их срок 2026-11-19 — 2026-11-20:
+      срок прошёл, письма нет; в их репо на m3 `zt_zone` в `checks/cloudflare.sh` нет, кристалл `zt-zone-owners` —
+      `ready` с 2026-11-12; по слову владельца («Напомни») письмо `nas-info/zt-zone-check-reminder` (итог или новый
+      срок), их сессия intercom поднята на m3 — 2026-11-20 ответ (`zt-zone-check-reminder-outcome`): проверки в коде
+      нет (checks/, lib/, ansible/config), план — их DL #1 `zt-zone-owners` без изменений, срок сдвинут на
+      2026-11-27; пишет их основная сессия, итог — письмом с `--reply-to vdx/zt-zone-stays-owners` (коммит, что ловит
+      и чего нет: чужой одобренный узел ZeroTier — их побег #1)
 - [ ] Sidetrack #6: к дате смены корня (её назовёт nas-info; обещано им 2026-10-24) — скрипт `vdx doctor
       --fix` по проектам корня (готов, `root-move-fix.sh`, 2026-10-24) — nas-info с командой. Профиль не
       меняется: ссылки останутся (2026-10-25). Кристалл открыт до него (DL #16)

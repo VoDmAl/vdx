@@ -45,6 +45,11 @@ agent:
         has_file: {path: signals/sources.yaml}
       args: [--dangerously-load-development-channels, plugin:echelon@echelon]
       wakes: true            # правило будит агента: --focused его пропускает
+    - id: hq-idle-compaction
+      description: "…"
+      if: {has_file: {path: signals/sources.yaml}}
+      session: hq            # только в этой сессии: hq | intercom | focused (с 0.67)
+      args: [--settings, '{"idleCompaction":true}']
       confirm:               # окна, которые этот флаг вызывает
         - screen: "Loading development channels"
           keys: [Enter]      # имена клавиш tmux: Enter, Down, Escape, …
@@ -92,7 +97,15 @@ session:
   истинном условии к запуску добавляются `args`, а `confirm` становится
   ожидаемым окном. `wakes: true` — правило нужно, чтобы агента будили (флаг
   канала): сессия `vdx ai --focused` его пропускает — ни `args`, ни `confirm`
-  (см. «`vdx ai --focused`»).
+  (см. «`vdx ai --focused`»). `session: hq | intercom | focused` (с 0.67) —
+  правило только в такой сессии (`vdx ai --hq`, `--intercom`, `--focused`); в
+  другой оно не действует, как ложное `if`: не в `matched`, не в пропущенных, и
+  `--check` не считает его флаги недостающими. `if` и тут обязателен. Так у
+  владельца HQ-сессии сжимают разговор в простое, а остальные нет
+  (`--settings` Claude Code сильнее `~/.claude/settings.json`; кристалл
+  `hq-session-mode`, DL #11). vdx до 0.67 ключ `session` молча пропускает и
+  дал бы такое правило всем сессиям: в профиль — после обновления vdx на
+  станциях.
 
 ### `confirm[]`
 
@@ -463,7 +476,7 @@ Claude Code без вопросов: агент, который в нём идё
   (echelon, intercom), и сессию не выбирают для побудки — это их сторона.
 - Правила `when[]` с `wakes: true` пропускаются: без флага канала Claude Code
   сам отбрасывает события echelon. В `--dry-run` — строка `focused:` и какие
-  правила пропущены.
+  правила пропущены. Правила с `session: focused` действуют только здесь (с 0.67).
 - Режим идущего агента vdx читает из его окружения (`ps -E` на macOS,
   `/proc/<pid>/environ` в Linux; у собственных бинарников Apple окружение
   скрыто, у `claude` — видно). Агент сохраняет свой режим:
@@ -568,7 +581,8 @@ Claude Code без вопросов: агент, который в нём идё
   агента до 15 с и говорит «another start got there first», код 0. Агент не
   появился — тот же старт заново в этой панели. В сессии без такого старта (агент
   умер, осталось другое окно) агент поднимается новым окном. Так же `--hq`.
-- Правила `wakes: true` остаются. Первый промпт — `agent.intercom_args`.
+- Правила `wakes: true` остаются, правила с `session: intercom` — только здесь (с 0.67).
+  Первый промпт — `agent.intercom_args`.
 - С `--focused` и с `--conversation` — ошибка вызова.
 - Обычный `vdx ai`, `--new`, `--focused` агента сессии intercom не видят: не
   подключаются к нему и не выбирают его из списка; в `--dry-run` он — строка
@@ -609,6 +623,9 @@ echelon `hq-session-mode`; кристалл `hq-session-mode`). С 0.49.
   идёт — подключение (`--detach` — «уже идёт», код 0), второй нет. Когда агент выходит,
   панель оставляет оболочку, как у обычной сессии.
 - Правила `wakes: true` остаются. Первый промпт — `agent.hq_args`, только новому разговору.
+  Правила с `session: hq` (с 0.67) — только здесь и при каждом старте, продолжение и
+  `--restart` тоже: так профиль владельца включает HQ-сессиям сжатие в простое
+  (`--settings`, кристалл `hq-session-mode`, DL #11).
 - Знак — опция `@vdx_topic` = `👑 HQ` и, при подключении из терминала cmux, описание рабочего
   места. Хук темы плагина и письма по теме читают опцию только у focused, HQ-сессии они не
   касаются. Значок в заголовке терминала — `@vdx_mode` у nas-info.

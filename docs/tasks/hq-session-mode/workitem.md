@@ -5,7 +5,7 @@ description: "Запускает отдельную сессию листа и �
 status: in-progress
 session-type: prd-work
 created: 2026-11-03
-last-updated: 2026-11-20
+last-updated: 2026-11-21
 relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
@@ -207,6 +207,31 @@ vdx → `infra-hq`, `~` — пусто со строкой «штаба нет»
 штаба здесь нет — отказ с его именем в обоих случаях. `--dry-run` — что сделал бы старт, код 0. `--restart` не спрашивает:
 это про идущую сессию, а перезапуск изнутри идёт без терминала.
 
+### #11 / 2026-11-21 / Сжатие в простое — только в HQ-сессиях: правило профиля с `session: hq`, порог 350k
+
+**Source:** user
+**Basis:** user-stated
+**Basis-detail:** владелец 2026-11-21: «включить автокомпактизацию для hq. Они long running но low input»; на два пути —
+«Да давай вариант 1 + поднимем CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS до 350k т.к. пока у меня дефолт из-за раздутых правил
+на старте уже почти 200k». «Автокомпактизация» здесь — сжатие в простое («я про idle конечно»).
+**Context:** у владельца в `~/.claude/settings.json` (m3 и lft) `"idleCompaction": false`. Это сжатие разговора в
+простое, пока не истёк кэш промпта (TTL 1 ч), от 200k токенов (`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, не ниже 100k).
+Срабатывало до выключения: limeflow 2026-10-09, www.t23b.org 2026-10-13 («Compacted while idle»). Автокомпактизация по
+окну включена: ~967k при окне 1M, в ноябре 17 раз. Claude Code 2.1.329 (по коду): настройка берётся из старшего
+источника, где она есть, — policy, flag (`--settings`), local, project, user; `env` каждого источника, флаг тоже, идёт в
+окружение процесса. Замер за 7 дней по транскриптам со строкой HQ-сессии (в выборку попало и несколько не-HQ, эта
+сессия тоже): ~68 пробуждений после простоя больше часа, на каждом весь контекст 0.3–0.9M снова пишется в кэш, ~21M из
+~89M записи в кэш этих сессий.
+**Why:** HQ — режим сессии, его знает vdx, а не файлы проекта: `when[].if` смотрит в файлы, `hq_args` — только первый
+промпт нового разговора. Второй путь — `{"idleCompaction": true}` в `.claude/settings.local.json` проектов со штабом —
+включил бы сжатие во всех сессиях проекта, `--focused` тоже, и каждому новому штабу руками.
+**Implication:** правило `agent.when[]` получает `session: hq | intercom | focused` — правило только в такой сессии (с
+`if`, как всегда). В профиле правило `hq-idle-compaction`: `if` — `signals/sources.yaml`, `session: hq`, `args:
+[--settings, '{"idleCompaction":true,"env":{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS":"350000"}}']`. Глобально сжатие в
+простое остаётся выключенным. vdx до этой версии ключ `session` молча пропускает и дал бы флаг всем сессиям
+потребителей echelon, а `~/.vdx-environment.yaml` — ссылка на рабочую копию сета: правка профиля — только после выпуска
+vdx и обновления обеих станций. Идущие HQ подхватят флаг на `vdx ai --hq --restart` (разговор продолжается).
+
 ## Sidetracks
 
 ### #3. Пробы в папке vdx оставили отметки у echelon
@@ -288,10 +313,33 @@ anyway?». То же сегодня у сессии intercom. Строка др�
       t23b-program — план как раньше; `--no-input` в www.t23b.org на m3 — код 2, ничего не поднято. Коммит `461b347`,
       CLI 0.66.0 (выпуск `995f458`, тег `v0.66.0`), плагин 0.15.14; m3 и lft — 0.66.0 (`npm update -g --prefer-online`);
       на выпущенном на обеих: `--dry-run` в www.t23b.org — t23b-program, `--no-input` — код 2, `t23b@…-hq` не поднята,
-      t23b-program — план как раньше. Вопрос в терминале вживую не задавался — только тест
+      t23b-program — план как раньше. Вопрос в терминале — владелец проверил вживую 2026-11-20 («супер. проверил»)
 - [x] Outcome to `www.t23b.org`: принято, Sidetrack #4 (`hq-session-on-hands-project-outcome`, 2026-11-20)
 - [x] Итог www.t23b.org после выпуска Sidetrack #4 — `hq-session-on-hands-project-shipped` (2026-11-20), их сессия
       intercom поднята на m3; мяч п. 2–3 — echelon (их кристалл `hq-session-on-hands-project`)
+- [ ] DL #11: `session:` у правила `when[]` — код, тесты, справка, `environment-format.md`, README, `cli/README.md`,
+      скилл `vdx-ai` (плагин 0.15.15), PROJECT_CHANGELOG — 2026-11-21: тесты (`planLaunch`, `--check` в HQ и обычной,
+      JSON через логин-шелл, отказ `session: plain`); оба новых теста про правило падают без проверки в `planLaunch`.
+      На невыпущенном с копией профиля: `--dry-run --hq` в t23b-program (m3) и global-auth-gap (lft) — правило в
+      `matched`, флаг в строке агента, идущая HQ — `missing --settings …`; обычный и `--focused` — без него. Claude
+      Code 2.1.329 по-настоящему (`claude -p`, haiku, папка scratchpad, транскрипт удалён): `env` из `--settings`
+      доходит до сессии — `printenv` дал 350000. Порядок: правило в профиле первым, до `echelon-channel` (prompt после
+      списка каналов тот проглатывает, `--settings` перед ним — нет)
+- [ ] DL #11: выпуск CLI (minor), m3 и lft на нём — до правки профиля
+- [ ] DL #11: сет `vdx-rubric-vodmal` — правило `hq-idle-compaction` (minor, тег, push), `--dry-run --hq` на m3 и lft;
+      зеркало `docs/specs/vdx-environment.example.yaml` и `DEFAULT_BASELINE` — следующим коммитом vdx
+- [ ] DL #11: идущие HQ — `vdx ai --hq --restart` (их перезапускает владелец или я по его слову); проверка —
+      флаг в процессе агента и строка «✓ this session carries the profile's flags»
+- [ ] DL #11 вживую: в транскрипте HQ строка «Compacted while idle» после часа простоя с контекстом ≥350k — when:
+      первый такой простой после перезапуска; check: grep по транскриптам HQ-сессий
+- [x] Письмо echelon: HQ-сессия отдаёт тяжёлые запросы (сбор листа, работа по пунктам) своим сессиям, а не делает их у
+      себя — слово владельца 2026-11-21; замер контекста HQ за неделю (0.6–0.97M) — `echelon/hq-heavy-work-out`
+      (2026-11-21), их сессия intercom на m3 поднята
+- [ ] Итог echelon на `hq-heavy-work-out`: что сделали (коммит) или почему не нужно — when: их письмо, срока нет;
+      check: `/vdm:intercom check` — 2026-11-21 первый ответ (`hq-heavy-work-out-outcome`): решено отдавать (их DL #23,
+      кристалл `hq-session`): сбор листа и работа по пункту — субагентом или своей `--focused --detach`, в основной —
+      лист, ответ владельцу, решения; правка `hq_role` (`runtime/echelon/hooks.py`) и скилла whatsup — их основная
+      сессия; сжатие в простое у них записано дополнением, наш замер — точка «до»; итог с коммитом — вторым письмом
 
 ## References
 

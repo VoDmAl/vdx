@@ -313,6 +313,7 @@ describe('parseEnvironment', () => {
     ['session: {machines: m3}', 'session.machines'],
     ['session: {machines: [m3, -oProxyCommand=x]}', 'session.machines[1]'],
     ['agent: {command: claude, when: [{id: a, if: true, wakes: "true"}]}', 'agent.when[0].wakes'],
+    ['agent: {command: claude, when: [{id: a, if: true, session: plain}]}', 'agent.when[0].session'],
     ['session: {folders_fix: ""}', 'session.folders_fix'],
     ['session: {wrap_skills: vdm:wrap}', 'session.wrap_skills'],
     ['session: {machine_icons: [m3]}', 'session.machine_icons'],
@@ -485,6 +486,67 @@ describe('planLaunch', () => {
     expect(plain.opening).toEqual([]);
   });
 
+  // hq-session-mode DL #11: the owner's HQ sessions compact while idle, the rest of his sessions do not (2026-11-21).
+  it('a rule with session: holds only in that kind of session, and elsewhere is neither matched nor left out', () => {
+    fs.mkdirSync(path.join(root, 'signals'));
+    fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  watch:\n    zone: UTC\n');
+    const settings = '{"idleCompaction":true,"env":{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS":"350000"}}';
+    const withRules = parseEnvironment(
+      OWNER_LIKE.replace(
+        '  when:\n',
+        [
+          '  when:',
+          '    - id: hq-idle-compaction',
+          '      if: {has_file: {path: signals/sources.yaml}}',
+          '      session: hq',
+          `      args: [--settings, '${settings}']`,
+          '    - id: mail-only',
+          '      if: true',
+          '      session: intercom',
+          '      args: [--mail-only]',
+          '    - id: focused-only',
+          '      if: true',
+          '      session: focused',
+          '      args: [--focused-only]',
+          '',
+        ].join('\n'),
+      ),
+      'p.yaml',
+    );
+    const mode = (over: { hq?: boolean; focused?: boolean; intercom?: boolean }) =>
+      planLaunch({
+        environment: withRules,
+        profilePath: 'p.yaml',
+        agent: withRules.agent!,
+        projectRoot: root,
+        project: 'proj',
+        host: 'lft',
+        ...over,
+      });
+    const hq = mode({ hq: true });
+    expect(hq.args).toEqual([
+      '--dangerously-skip-permissions',
+      '--settings',
+      settings,
+      '--dangerously-load-development-channels',
+      'plugin:echelon@echelon',
+    ]);
+    expect(hq.matched).toEqual(['hq-idle-compaction', 'echelon-channel']);
+    const plain = mode({});
+    expect(plain.args).toEqual([
+      '--dangerously-skip-permissions',
+      '--dangerously-load-development-channels',
+      'plugin:echelon@echelon',
+    ]);
+    expect(plain.matched).toEqual(['echelon-channel']);
+    expect(mode({ intercom: true }).matched).toEqual(['mail-only', 'echelon-channel']);
+    const focused = mode({ focused: true });
+    expect([focused.matched, focused.skipped]).toEqual([['focused-only'], ['echelon-channel']]);
+    // Its `if` still decides: in a project with no sources.yaml the HQ session has no such flag.
+    fs.rmSync(path.join(root, 'signals'), { recursive: true });
+    expect(mode({ hq: true }).matched).toEqual([]);
+  });
+
   it('leaves the flag out when sources.yaml has mail but no watch (the space-hq case)', () => {
     fs.mkdirSync(path.join(root, 'signals'));
     fs.writeFileSync(path.join(root, 'signals', 'sources.yaml'), 'mail:\n  config: mail.yaml\n');
@@ -642,6 +704,19 @@ describe('shell quoting', () => {
       "exec env DISABLE_AUTO_UPDATE=true /bin/zsh -lic 'claude --dangerously-skip-permissions'",
     );
     expect(tmuxShellCommand(line, null)).toBe(line);
+  });
+
+  it('a JSON word for --settings reaches the agent as it is, through the login shell the pane runs', () => {
+    const settings = '{"idleCompaction":true,"env":{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS":"350000"}}';
+    const line = commandLine('printf', ['%s\\n', '--settings', settings]);
+    const out = execFileSync('/bin/sh', ['-c', tmuxShellCommand(line, '/bin/sh', false)], {
+      encoding: 'utf8',
+      env: { PATH: process.env['PATH'], HOME: os.tmpdir() },
+    });
+    expect(out).toBe(`--settings\n${settings}\n`);
+    expect(missingArgs(`/opt/homebrew/bin/claude --settings ${settings} --continue`, ['--settings', settings])).toEqual(
+      [],
+    );
   });
 });
 
@@ -5211,6 +5286,29 @@ describe('vdx ai --check: the session the agent itself runs in', () => {
     const file = path.join(home, `${ID.a}.jsonl`);
     fs.writeFileSync(file, [hookLine(text.trimEnd()), userLine('hi')].join('\n') + '\n');
     expect(readConversation(file, new Date())?.machine).toBe('m3');
+  });
+
+  it('a rule for the HQ session: missing from an HQ session is said, from a plain one it is not missing', () => {
+    fs.writeFileSync(
+      path.join(home, 'env.yaml'),
+      OWNER_LIKE.replace(
+        '  when:\n',
+        '  when:\n    - id: hq-idle\n      if: true\n      session: hq\n      args: [--settings, \'{"idleCompaction":true}\']\n',
+      ),
+    );
+    const plainArgs =
+      '--dangerously-skip-permissions --dangerously-load-development-channels plugin:echelon@echelon --continue';
+    expect(runAiCheck(root, deps(chain(plainArgs)), 40)).toBe(EXIT_OK);
+    expect(out.join('')).toContain("✓ this session carries the profile's flags");
+    out = [];
+    expect(runAiCheck(root, deps(chain(plainArgs), { VDX_HQ: '1' }), 40)).toBe(EXIT_DRIFT);
+    expect(out.join('')).toContain('✗ this session runs without --settings {"idleCompaction":true}');
+    out = [];
+    const hqArgs = `--dangerously-skip-permissions --settings {"idleCompaction":true} --dangerously-load-development-channels plugin:echelon@echelon --continue`;
+    expect(runAiCheck(root, deps(chain(hqArgs), { VDX_HQ: '1' }), 40)).toBe(EXIT_OK);
+    expect(out.join('')).toContain(
+      "✓ this session carries the profile's flags (profile conditions met here: hq-idle, echelon-channel)",
+    );
   });
 
   it('a focused session: says so, and the rule that wakes it is not missing', () => {

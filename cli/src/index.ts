@@ -104,7 +104,8 @@ $VDX_ENVIRONMENT, else ~/.vdx-environment.yaml, else a plain claude/codex.
 
 Launch flags live in the profile, not in a command to type: agent.args for
 every project, agent.when[] for a class of projects (a rubric predicate over
-the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
+the project's files), and with session: hq, intercom or focused for that kind
+of session only (0.67). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
 
   project_path  the project (default: cwd); its git toplevel is used
   @host         the same command on <host> over ssh: its vdx, profile and tmux
@@ -163,8 +164,9 @@ the project's files). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 project and machine — a running one is attached to, never a
                 second. You sit at it and keep it running; nothing starts it for
                 you. The agent, its hooks and MCP servers get VDX_HQ=1, the
-                profile's \`wakes\` rules stay, and it opens with agent.hq_args (its
-                first prompt). Its sign: @vdx_topic and, attached from a cmux
+                profile's \`wakes\` rules stay, its rules with session: hq hold
+                here alone, on every start (0.67), and it opens with
+                agent.hq_args (its first prompt). Its sign: @vdx_topic and, attached from a cmux
                 terminal, the workspace's description. --hq only narrows the
                 choice to it: on a plain start's list it is a row whose number
                 attaches to it as it is (0.52); Enter, a start without a terminal,

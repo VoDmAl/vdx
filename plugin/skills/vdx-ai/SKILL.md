@@ -15,7 +15,9 @@ from a personal profile, not from a command anyone types:
 - `agent.when[]` — flags for a class of projects: a rubric predicate over the
   project's files (`config_value`, `has_file`, …) and the `args` it adds,
   plus `confirm` for a prompt the flag causes; `wakes: true` marks a rule
-  that is there to wake the agent (a channel flag);
+  that is there to wake the agent (a channel flag); `session: hq` (or
+  `intercom`, `focused`; vdx 0.67+) — a rule only for that kind of session,
+  such as Claude Code settings for the HQ session alone (`--settings '<json>'`);
 - `resume_args` — continue the last conversation on every start except `--new`,
   `--focused`, `--intercom` and `--hq`;
 - `intercom_args`, `hq_args` — what the project's intercom session and HQ session

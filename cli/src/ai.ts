@@ -146,7 +146,13 @@ interface WhenRule {
   confirm?: ConfirmRule[];
   /** The rule is there to wake the agent: a focused session (`vdx ai --focused`) leaves it out. */
   wakes?: boolean;
+  /** The rule holds only in this kind of session (0.67): `vdx ai --hq`, `--intercom` or `--focused`. */
+  session?: SessionKind;
 }
+
+/** The kinds of session a `when` rule can be limited to (`session:`). */
+const SESSION_KINDS = ['hq', 'intercom', 'focused'] as const;
+type SessionKind = (typeof SESSION_KINDS)[number];
 
 export interface AgentProfile {
   command: string;
@@ -363,6 +369,9 @@ export function parseEnvironment(text: string, source: string): Environment {
           fail(`${at}.args`, 'must be a list of strings');
         }
         if (rule.wakes !== undefined && typeof rule.wakes !== 'boolean') fail(`${at}.wakes`, 'must be true or false');
+        if (rule.session !== undefined && !(SESSION_KINDS as readonly unknown[]).includes(rule.session)) {
+          fail(`${at}.session`, `must be one of ${SESSION_KINDS.join(', ')}`);
+        }
         if (rule.confirm !== undefined) {
           if (!Array.isArray(rule.confirm)) fail(`${at}.confirm`, 'must be a list');
           rule.confirm.forEach((c, j) => {
@@ -620,7 +629,10 @@ export function planLaunch(input: {
   const matched: string[] = [];
   const skipped: string[] = [];
   const confirm: ConfirmRule[] = [];
+  const kind: SessionKind | null = focused ? 'focused' : intercom ? 'intercom' : hq ? 'hq' : null;
   for (const rule of agent.when ?? []) {
+    // A rule of another kind of session does not hold here, as a false `if` does not: nothing to leave out.
+    if (rule.session !== undefined && rule.session !== kind) continue;
     if (!evalPredicate(rule.if, ctx)) continue;
     if (focused && rule.wakes) {
       skipped.push(rule.id);

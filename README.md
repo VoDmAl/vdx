@@ -124,6 +124,10 @@ agent:
       args: [--dangerously-load-development-channels, plugin:echelon@echelon]
       confirm:                          # the prompt this flag causes, answered in tmux
         - {screen: "Loading development channels", keys: [Enter]}
+    - id: hq-idle-compaction            # only in the HQ session (vdx ai --hq; vdx 0.67+)
+      if: {has_file: {path: signals/sources.yaml}}
+      session: hq                       # hq | intercom | focused
+      args: [--settings, '{"idleCompaction":true}']
 session:
   multiplexer: tmux                     # falls back to this terminal without tmux
   name: "{project}@{host}"              # {host} = $VDX_HOST or the short hostname
