@@ -256,7 +256,7 @@ anyway?». То же сегодня у сессии intercom. Строка др�
 `--hq` в папке vdx (DL #6, #7): у vdx штаб — infra-hq. П. 2 и 3 письма (строка хука, whatsup) — у echelon, их кристалл
 `hq-session-on-hands-project` (status ready, 2026-11-19).
 
-**Status:** open — путь к штабу решён (DL #10), код в работе 2026-11-20
+**Status:** resolved — путь к штабу — DL #10; CLI 0.66.0 (2026-11-20), на m3 и lft; п. 2–3 письма — у echelon
 
 ## Next actions
 
@@ -280,15 +280,18 @@ anyway?». То же сегодня у сессии intercom. Строка др�
 - [x] Sidetrack #3: отметки проб убраны — в `data/watch/` их нет (2026-11-03)
 - [ ] Sidetrack #1: решить по живому использованию, искать ли `--find` в разговорах HQ-сессии
 - [ ] Sidetrack #2: убрать лишний вопрос про агента на другой машине, если мешает вживую
-- [ ] Sidetrack #4: `vdx ai --hq` в проекте-руках (`echelon hq <корень>` — другой проект) — вопрос в терминале, без
+- [x] Sidetrack #4: `vdx ai --hq` в проекте-руках (`echelon hq <корень>` — другой проект) — вопрос в терминале, без
       терминала отказ; оба называют штаб и строку его HQ-сессии; тест; выпуск — 2026-11-20: путь — DL #10; код
       (`cli/src/hq.ts`, `handsHq` в `ai.ts`), тесты (`hq.test.ts` — 8, `ai.test.ts` — «in a hand»; каждый падает без
       своей правки), справка, `environment-format.md`, README, `cli/README.md`, скилл `vdx-ai` (плагин 0.15.14),
       `architecture.md`; живьём на невыпущенном: `--dry-run` на m3 и lft — www.t23b.org → t23b-program, vdx → infra-hq,
-      t23b-program — план как раньше; `--no-input` в www.t23b.org на m3 — код 2, ничего не поднято. Осталось: коммит,
-      выпуск 0.66.0 (minor), станции, итог www.t23b.org
+      t23b-program — план как раньше; `--no-input` в www.t23b.org на m3 — код 2, ничего не поднято. Коммит `461b347`,
+      CLI 0.66.0 (выпуск `995f458`, тег `v0.66.0`), плагин 0.15.14; m3 и lft — 0.66.0 (`npm update -g --prefer-online`);
+      на выпущенном на обеих: `--dry-run` в www.t23b.org — t23b-program, `--no-input` — код 2, `t23b@…-hq` не поднята,
+      t23b-program — план как раньше. Вопрос в терминале вживую не задавался — только тест
 - [x] Outcome to `www.t23b.org`: принято, Sidetrack #4 (`hq-session-on-hands-project-outcome`, 2026-11-20)
-- [ ] Итог www.t23b.org после выпуска Sidetrack #4 — when: выпуск CLI с отказом
+- [x] Итог www.t23b.org после выпуска Sidetrack #4 — `hq-session-on-hands-project-shipped` (2026-11-20), их сессия
+      intercom поднята на m3; мяч п. 2–3 — echelon (их кристалл `hq-session-on-hands-project`)
 
 ## References
 
