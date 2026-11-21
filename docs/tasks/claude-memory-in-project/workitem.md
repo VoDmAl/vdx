@@ -869,7 +869,16 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 - [ ] Перенос в `GA/` и `SPACE/` по списку Sidetrack #7 (`vdx move … '<папка>'`, по команде на папку) — when: итог
       echelon `moved-hq-sources` (правка `echelon moved` для `signals/sources.yaml` HQ, их основная сессия, срока нет) и
       слово владельца о моменте — он закрывает сессии `global-auth-gap@lft` (и HQ), `limeflow@lft`, HQ `space-hq@lft`;
-      check: `/vdm:intercom check`, затем `vdx move … --dry-run` по обоим спискам
+      check: `/vdm:intercom check`, затем `vdx move … --dry-run` по обоим спискам — 2026-11-21 владелец: «будем сразу
+      двигать куда-нибудь на Working рядом c repos. Но имя и концепт нужно будет сначала решить с nas info или
+      infra-hq». Начало — у nas-info: DL #76 их кристалла `syncthing-relay-and-backup` (dormant, 2026-11-19) — рабочая
+      папка проектов `/Volumes/Working/repos` (папка Syncthing lft, m3, nyc; с 20.11 в `GIT_CONFLICT_ROOTS`), туда
+      `vdx move` переносит из `AI Projects` и `PhpstormProjects`, владелец там: «мы уйдём в итоге от обоих папок в пользу
+      только repos»; их DL #74 (смена корня на `/Volumes/Working`) этим, вероятно, заменяется — у них не решено. В
+      `repos` сейчас — по хостам git (`github.com`, `git.vorobyev.name`, …). Цель переноса GA/SPACE — по итогу владельца
+      с nas-info — владелец: «Дай bash для focused» — строка фокус-сессии nas-info (тема «проекты на /Volumes/Working:
+      имя и концепт», итог — письмом с `--reply-to vdx/claude-memory-in-project`) отдана 2026-11-21; владелец
+      запустил: tmux `nas-info@m3-3`
 - [ ] Sidetrack #7: перенос в `GA/` и `SPACE/` — владелец правит список (`finam*`?) — 2026-11-14: «Список-черновик -
       окей», `finam*` — «пока оставь там где есть», план — «согласен»; `vdx move` чинит worktree — 2026-11-14:
       код (`worktreeGroups`, `repairScript` в `move.ts`), строки плана, справка, `environment-format.md`; два теста
@@ -986,6 +995,9 @@ PhpstormProjects). Когда nas-info его закоммитит, `~/nas-info`
 - [x] Sidetrack #3: строка о коммите, когда проект игнорирует `.claude/` (2026-10-23)
 - [x] Outcome to `nas-info`: `claude-memory-in-project-outcome` (2026-10-23) — по
       четырём пунктам, список; мяч — владелец (0.37.1, скрипт, перенос папок)
+- [ ] Итог nas-info: куда и под каким именем проекты переезжают на `/Volumes/Working` (рядом с `repos`, концепт —
+      владелец с ними, фокус-сессия `nas-info@m3-3` с 2026-11-21) — по нему список Sidetrack #7 и `vdx move` на новую
+      цель вместо `GA/` и `SPACE/` в `~/AI Projects` — when: их письмо, срока нет; check: `/vdm:intercom check`
 
 ## References
 

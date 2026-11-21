@@ -676,6 +676,10 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       (`mail-session-suggest-on-backlog`): vdm 2.64.0, 2026-10-27
 - [x] Sidetrack #5: строка выбора разговора называет почтовый, когда другого нет
       (2026-10-23, выйдет в 0.37.1)
+- [ ] В `data/watch/` echelon на m3 лежат `alive-vdx-mail-probe-lft.json` (2026-10-22 14:07) и
+      `alive-vdx-mail-probe-2-lft.json` (22:28) — по имени следы проб почтовой сессии vdx на lft; живых таких сессий
+      нет. Узнать, наши ли и мешают ли (echelon считает живые сессии по `alive-*`), убрать письмом echelon — найдено
+      2026-11-21 при пробе `claude -p`
 
 ## References
 

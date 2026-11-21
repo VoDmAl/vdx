@@ -102,7 +102,10 @@ pre-commit-line`, а что на нём, назначает личный про�
       отличный от падения Python (1); ждём путь обёртки — отправлен 2026-11-14 (`echelon/commit-wait-wrapper`); check:
       `/vdm:intercom check` — 2026-11-14 ответ (`commit-wait-wrapper-outcome`): принято, `commit-wait-wrapper.sh` и свой
       код «не доехало» делает их основная сессия (кристалл `cross-machine-session-delivery`), путь и код — письмом vdx,
-      срока нет
+      срока нет — 2026-11-21: в репо echelon обёртки нет (`git ls-files`, `git log`); владелец: «дай bash focused я
+      запущу сейчас» — строка фокус-сессии echelon (тема «обёртка ожидания перед коммитом для vdx», задача и условия — в
+      `--prompt`, итог — письмом с `--reply-to vdx/commit-wait-wrapper-outcome`) отдана владельцу; владелец запустил:
+      tmux `echelon@m3-2`, тема «обёртка ожидания перед коммитом для vdx» (2026-11-21)
 - [ ] vdx: событие `pre-commit-line` в `git.hooks` (`GIT_HOOK_EVENTS`, `vdx doctor`), тесты, `environment-format.md`;
       сет `vdx-rubric-vodmal` (minor) — запись с обёрткой echelon, зеркало, `DEFAULT_BASELINE`; `vdx doctor --fix` на
       m3 и lft; итоги echelon и ai-dev-plugins — 2026-11-14: событие в рабочем дереве (`LINE_HOOK_EVENTS` в
