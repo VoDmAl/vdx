@@ -247,6 +247,10 @@ export interface MoveHook {
 
 interface MoveProfile {
   after?: MoveHook[];
+  /** `vdx take` puts projects here: the desk, laid out by name and the owner's groups (`~` is home). */
+  desk?: string;
+  /** The shelf: every clone, by `<host>/<path from the remote>`; `vdx shelve` puts a project back here. */
+  shelf?: string;
 }
 
 export interface Environment {
@@ -508,6 +512,9 @@ export function parseEnvironment(text: string, source: string): Environment {
   const moveDoc = envDoc.move;
   if (moveDoc !== undefined) {
     if (typeof moveDoc !== 'object' || moveDoc === null || Array.isArray(moveDoc)) fail('move', 'must be a mapping');
+    for (const key of ['desk', 'shelf'] as const)
+      if (moveDoc[key] !== undefined && (typeof moveDoc[key] !== 'string' || moveDoc[key].trim() === ''))
+        fail(`move.${key}`, 'must be a path');
     if (moveDoc.after !== undefined) {
       if (!Array.isArray(moveDoc.after)) fail('move.after', 'must be a list');
       moveDoc.after.forEach((h, i) => {

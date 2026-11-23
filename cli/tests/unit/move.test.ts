@@ -14,6 +14,7 @@ import {
   type MoveDeps,
   zoxideScript,
 } from '../../src/move.ts';
+import { runShelve, runTake } from '../../src/shelf.ts';
 
 // `vdx move`: two machines are two homes here — "m3" is reached by a fake ssh that runs
 // the same script with its own HOME (claude-memory-in-project DL #17, #18).
@@ -501,6 +502,169 @@ describe('vdx move', () => {
     expect(runMove({ sources: [projDir(here)], folder: path.join(here, 'AI Projects'), dryRun: false }, deps())).toBe(
       EXIT_USAGE,
     );
+  });
+});
+
+// vdx take / vdx shelve (claude-memory-in-project DL #26–#28): each machine's desk and shelf under its own
+// ~/Working, three Syncthing folders on each; the project's origin is on example.com.
+describe('vdx take and vdx shelve', () => {
+  const desk = (home: string) => path.join(home, 'Working', 'desk');
+  const shelf = (home: string) => path.join(home, 'Working', 'repos');
+  const onShelf = (home: string) => path.join(shelf(home), 'example.com', 'grp', 'proj');
+  const ORIGIN = 'git@example.com:grp/proj.git';
+  const take = (input: { sources?: string[]; group?: string } = {}, over: Partial<MoveDeps> = {}, dryRun = false) =>
+    runTake({ sources: [projDir(here)], group: 'GA', dryRun, ...input }, deps(over));
+  const shelve = (sources: string[], dryRun = false) => runShelve({ sources, dryRun }, deps());
+  /** A clone of the project's server on both shelves, its origin the project's. */
+  const secondClone = () => {
+    const server = path.join(base, 'server.git');
+    execFileSync('git', ['clone', '-q', '--bare', projDir(here), server]);
+    execFileSync('git', ['clone', '-q', server, onShelf(here)]);
+    git(onShelf(here), 'remote', 'set-url', 'origin', ORIGIN);
+    fs.cpSync(onShelf(here), onShelf(m3), { recursive: true });
+  };
+
+  beforeEach(() => {
+    for (const home of [here, m3]) {
+      fs.mkdirSync(shelf(home), { recursive: true });
+      fs.mkdirSync(desk(home), { recursive: true });
+      setSync(home, (c) => {
+        const peer = [{ device: ID(home === here ? m3 : here), name: 'peer' }];
+        c.folders = {
+          'AI Projects': { path: path.join(home, 'AI Projects'), peers: peer },
+          desk: { path: desk(home), peers: peer },
+          repos: { path: shelf(home), peers: peer },
+        };
+      });
+    }
+    git(projDir(here), 'remote', 'add', 'origin', ORIGIN);
+    const env = path.join(base, 'env.yaml');
+    fs.writeFileSync(
+      env,
+      fs.readFileSync(env, 'utf8').replace('move:\n', 'move:\n  desk: ~/Working/desk\n  shelf: ~/Working/repos\n'),
+    );
+  });
+
+  it('take: onto the desk group on every machine, the same relative link on every shelf, the shelf paused too', () => {
+    expect(take()).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) {
+      expect(fs.existsSync(projDir(home))).toBe(false);
+      expect(fs.existsSync(path.join(desk(home), 'GA', 'proj', 'README.md'))).toBe(true);
+      expect(fs.readlinkSync(onShelf(home))).toBe('../../../desk/GA/proj');
+      expect(fs.existsSync(path.join(onShelf(home), 'README.md'))).toBe(true);
+      expect(pausedLog(home)).toContain('repos true');
+      expect(pausedLog(home)).toContain('repos false');
+    }
+    const out = logs.join('\n');
+    expect(out).toContain('vdx take — 1 project(s) → ~/Working/desk/GA/');
+    expect(out).toContain('shelf: link ~/Working/repos/example.com/grp/proj → ../../../desk/GA/proj, on here, m3');
+    expect(out).toContain('✓ proj: link ~/Working/repos/example.com/grp/proj → ../../../desk/GA/proj on here, m3');
+  });
+
+  it('take --dry-run: the plan with the link, nothing made', () => {
+    expect(take({}, {}, true)).toBe(EXIT_MOVED);
+    expect(logs.join('\n')).toContain('dry run: nothing moved');
+    for (const home of [here, m3]) {
+      expect(fs.existsSync(projDir(home))).toBe(true);
+      expect(fs.existsSync(onShelf(home))).toBe(false);
+    }
+  });
+
+  it('take: a second clone with nothing of its own gives its place to the link on every machine', () => {
+    secondClone();
+    expect(take()).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) {
+      expect(fs.lstatSync(onShelf(home)).isSymbolicLink()).toBe(true);
+      expect(fs.existsSync(path.join(onShelf(home), 'README.md'))).toBe(true);
+    }
+    expect(logs.join('\n')).toContain('second clone ~/Working/repos/example.com/grp/proj: nothing of its own');
+  });
+
+  it('take: a second clone with its own work is left as it is, and no link is made', () => {
+    secondClone();
+    write(path.join(onShelf(here), 'draft.txt'), 'mine\n');
+    expect(take()).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) {
+      expect(fs.lstatSync(onShelf(home)).isDirectory()).toBe(true);
+      expect(fs.existsSync(path.join(desk(home), 'GA', 'proj'))).toBe(true);
+    }
+    expect(fs.existsSync(path.join(onShelf(here), 'draft.txt'))).toBe(true);
+    expect(logs.join('\n')).toContain('1 uncommitted — its own, left as it is; no link made');
+  });
+
+  it("take from the shelf: the link takes the project's own place there", () => {
+    for (const home of [here, m3]) {
+      fs.mkdirSync(path.dirname(onShelf(home)), { recursive: true });
+      fs.renameSync(projDir(home), onShelf(home));
+    }
+    expect(take({ sources: [onShelf(here)], group: undefined })).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) {
+      expect(fs.readlinkSync(onShelf(home))).toBe('../../../desk/proj');
+      expect(fs.existsSync(path.join(desk(home), 'proj', 'README.md'))).toBe(true);
+    }
+  });
+
+  it('take of a project in its place: the missing link only, on the machine that lacks it; then nothing to do', () => {
+    expect(take()).toBe(EXIT_MOVED);
+    fs.unlinkSync(onShelf(m3));
+    logs = [];
+    expect(take({ sources: [path.join(desk(here), 'GA', 'proj')] })).toBe(EXIT_MOVED);
+    expect(fs.readlinkSync(onShelf(m3))).toBe('../../../desk/GA/proj');
+    expect(logs.join('\n')).toContain('— stays where it is');
+    logs = [];
+    expect(take({ sources: [path.join(desk(here), 'GA', 'proj')] })).toBe(EXIT_MOVED);
+    expect(logs.join('\n')).toContain('nothing to do: every project is in its place');
+  });
+
+  it('take into another group: the project moves on the desk and its link follows', () => {
+    expect(take()).toBe(EXIT_MOVED);
+    expect(take({ sources: [path.join(desk(here), 'GA', 'proj')], group: 'SPACE' })).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) expect(fs.readlinkSync(onShelf(home))).toBe('../../../desk/SPACE/proj');
+  });
+
+  it('take: a project without origin goes onto the desk only; --in must name a group inside the desk', () => {
+    git(projDir(here), 'remote', 'remove', 'origin');
+    expect(take()).toBe(EXIT_MOVED);
+    expect(logs.join('\n')).toContain('no origin — it lives on the desk only');
+    expect(fs.existsSync(path.join(shelf(here), 'example.com'))).toBe(false);
+    expect(take({ group: '../x' })).toBe(EXIT_USAGE);
+  });
+
+  it('shelve: in place of its link on every machine; the link goes first', () => {
+    expect(take()).toBe(EXIT_MOVED);
+    expect(shelve([path.join(desk(here), 'GA', 'proj')])).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) {
+      expect(fs.lstatSync(onShelf(home)).isDirectory()).toBe(true);
+      expect(fs.existsSync(path.join(onShelf(home), 'README.md'))).toBe(true);
+      expect(fs.existsSync(path.join(desk(home), 'GA', 'proj'))).toBe(false);
+    }
+    expect(logs.join('\n')).toContain(
+      'shelf: the link ~/Working/repos/example.com/grp/proj → ../../../desk/GA/proj goes',
+    );
+  });
+
+  it('shelve without a link: at <host>/<path> of its origin; refused without origin, or where a clone stands', () => {
+    expect(shelve([projDir(here)])).toBe(EXIT_MOVED);
+    for (const home of [here, m3]) expect(fs.existsSync(path.join(onShelf(home), 'README.md'))).toBe(true);
+    expect(shelve([onShelf(here)])).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('is on the shelf already');
+  });
+
+  it('shelve refuses a project without origin, and a place a clone of it holds', () => {
+    git(projDir(here), 'remote', 'remove', 'origin');
+    expect(shelve([projDir(here)])).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('no origin — the shelf keeps clones by their remote');
+    git(projDir(here), 'remote', 'add', 'origin', ORIGIN);
+    secondClone();
+    logs = [];
+    expect(shelve([projDir(here)])).toBe(EXIT_USAGE);
+    expect(logs.join('\n')).toContain('on the shelf is taken by a clone of it');
+    expect(fs.existsSync(projDir(here))).toBe(true);
+  });
+
+  it('the profile takes move.desk and move.shelf as paths', () => {
+    expect(parseEnvironment('move:\n  desk: /d\n  shelf: /s\n', 'p').move?.desk).toBe('/d');
+    expect(() => parseEnvironment('move:\n  desk: [x]\n', 'p')).toThrow('move.desk must be a path');
   });
 });
 

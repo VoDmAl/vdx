@@ -98,10 +98,37 @@ interface Machine {
   host: string | null;
 }
 
-interface Planned {
+/** One project that moves: `vdx move`, or `vdx take`/`vdx shelve` with their steps on the shelf. */
+export interface Planned {
   name: string;
   from: string;
   to: string;
+  /** `vdx take` of a project already in its place: only its link on the shelf is made. */
+  stay?: boolean;
+  shelf?: ShelfSteps;
+  /** Lines for the plan: what `vdx take`/`vdx shelve` found on the shelf. */
+  notes?: string[];
+  /** After the move, on this machine: what the project keeps beside it on the shelf; false — a step failed, said. */
+  finish?: () => boolean;
+}
+
+/**
+ * What `vdx take` and `vdx shelve` do on the shelf, on every machine that has it, while the
+ * folders are paused: one machine's step alone Syncthing carries wrongly — a link made on one
+ * machine is lost to the others' deletion, a folder deleted on one keeps the others' ignored
+ * files (claude-memory-in-project DL #28).
+ */
+export interface ShelfSteps {
+  /** The shelf's folder: a machine without it gets no step here. */
+  root: string;
+  /** `vdx take`: a link at `path`, relative, to the project's new place. */
+  link?: { path: string; target: string };
+  /** `vdx take`: what stands at the link's place goes first — a second clone of the project, without its own. */
+  dropClone?: boolean;
+  /** `vdx take`: a link at the place to another target goes, if it leads into this folder (the desk). */
+  replaceLinksInto?: string;
+  /** `vdx shelve`: the link at the new place goes first, if it still has this target. */
+  unlink?: { path: string; target: string };
 }
 
 /** syncthing-caught-up's answer for one path on one machine. */
@@ -124,9 +151,16 @@ interface Probe {
   old: Set<number>;
   /** Projects whose new place is taken on this machine. */
   dest: Set<number>;
-  /** syncthing-caught-up answered: per project, where its old and new path lie in Syncthing. */
+  /** Projects whose new place is a link on this machine, with its target. */
+  destLink: Map<number, string>;
+  /** Projects whose shelf this machine has. */
+  shelf: Set<number>;
+  /** At the place of a project's shelf link: a link (its target), or something else (taken). */
+  link: Map<number, string>;
+  linkTaken: Set<number>;
+  /** syncthing-caught-up answered: per project, where its old and new path (and its shelf link) lie in Syncthing. */
   caughtUp: boolean;
-  sync: Map<number, { from: SyncAt; to: SyncAt }>;
+  sync: Map<number, { from: SyncAt; to: SyncAt; link?: SyncAt }>;
   /** Folder id → its peers, as syncthing-caught-up names them. */
   peers: Map<string, Peer[]>;
   /** This machine's Syncthing device id (`syncthing cli`); null — no syncthing command here. */
@@ -176,6 +210,15 @@ interface ProjectPlan {
 }
 
 const SYNC_POLL_MS = 5_000;
+/** A project that stays where it is (`vdx take` of one in its place): no copy moves, nothing of its own pauses. */
+const stays = (): ProjectPlan => ({
+  copies: [],
+  pick: false,
+  chosen: [],
+  pause: new Map(),
+  receivers: [],
+  outside: [],
+});
 /** Paths under the home directory whose content a cloud service keeps the same on every machine. */
 const CLOUD_DIRS = ['Dropbox', 'Library/CloudStorage', 'Library/Mobile Documents'];
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'fish', 'ksh', 'tcsh']);
@@ -229,7 +272,7 @@ export function zoxideScript(from: string, to: string, home: string): string {
 }
 
 /** `p` with its existing part resolved through links: the new folder may not be there yet. */
-function realish(p: string): string {
+export function realish(p: string): string {
   const abs = path.resolve(p);
   try {
     return fs.realpathSync(abs);
@@ -239,11 +282,15 @@ function realish(p: string): string {
   }
 }
 
-function tilde(p: string, home: string): string {
+export function expandHome(p: string, home: string): string {
+  return p.replace(/^~(?=$|\/)/, home);
+}
+
+export function tilde(p: string, home: string): string {
   return p === home || p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
 }
 
-function within(child: string, parent: string): boolean {
+export function within(child: string, parent: string): boolean {
   return child === parent || child.startsWith(parent + path.sep);
 }
 
@@ -290,12 +337,19 @@ function probeScript(moves: Planned[], home: string): string {
       `    echo "git ${i} $(git -C "$o${i}" rev-parse --short HEAD 2>/dev/null || echo -) $(git -C "$o${i}" status --porcelain 2>/dev/null | wc -l | tr -d ' ') $(git -C "$o${i}" log -1 --format=%ct 2>/dev/null || echo -)"`,
       '  fi',
       'fi',
-      `if [ -e "$d${i}" ]; then echo "dest ${i}"; fi`,
+      `if [ -L "$d${i}" ]; then printf 'destlink ${i} %s\\n' "$(readlink "$d${i}")"; elif [ -e "$d${i}" ]; then echo "dest ${i}"; fi`,
     );
+    const s = m.shelf;
+    if (s) lines.push(`[ -d ${remotePathWord(s.root, home)} ] && echo "shelf ${i}"`);
+    if (s?.link)
+      lines.push(
+        `l${i}=${remotePathWord(s.link.path, home)}`,
+        `if [ -L "$l${i}" ]; then printf 'link ${i} %s\\n' "$(readlink "$l${i}")"; elif [ -e "$l${i}" ]; then echo "linktaken ${i}"; fi`,
+      );
   });
   // Not --fast: with files needed anywhere in the Syncthing folder it cannot tell whether
   // they lie in this one, and a busy folder always needs some (exit 3, 2026-10-27).
-  const words = moves.map((_, i) => `"$o${i}" "$d${i}"`).join(' ');
+  const words = moves.map((m, i) => `"$o${i}" "$d${i}"${m.shelf?.link ? ` "$l${i}"` : ''}`).join(' ');
   lines.push(
     `if [ -x "$c" ]; then printf 'caught '; "$c" --json ${words} 2>/dev/null | tr -d '\\n'; echo; else echo "caught none"; fi`,
     'if command -v docker >/dev/null 2>&1; then',
@@ -317,7 +371,7 @@ function probeScript(moves: Planned[], home: string): string {
   return lines.join('\n');
 }
 
-function parseCaught(text: string, probe: Probe, count: number): void {
+function parseCaught(text: string, probe: Probe, moves: Planned[]): void {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -329,7 +383,13 @@ function parseCaught(text: string, probe: Probe, count: number): void {
     folder: str(at(p, 'folder')) ?? null,
     code: VERDICT_CODE[str(at(p, 'verdict')) ?? ''] ?? 3,
   });
-  for (let i = 0; i < count; i++) probe.sync.set(i, { from: syncAt(paths[2 * i]), to: syncAt(paths[2 * i + 1]) });
+  // The paths as probeScript gave them: old and new place, then the shelf link's place, if any.
+  let k = 0;
+  moves.forEach((m, i) => {
+    const from = syncAt(paths[k++]);
+    const to = syncAt(paths[k++]);
+    probe.sync.set(i, m.shelf?.link ? { from, to, link: syncAt(paths[k++]) } : { from, to });
+  });
   for (const [id, f] of Object.entries(dict(at(data, 'folders')) ?? {})) {
     const peers = list(at(f, 'peers')).flatMap((p) => {
       const device = str(at(p, 'device'));
@@ -340,12 +400,16 @@ function parseCaught(text: string, probe: Probe, count: number): void {
   probe.caughtUp = true;
 }
 
-function parseProbe(text: string, count: number): Probe {
+function parseProbe(text: string, moves: Planned[]): Probe {
   const report = parseMachineReport(text);
   const probe: Probe = {
     ...report,
     old: new Set(),
     dest: new Set(),
+    destLink: new Map(),
+    shelf: new Set(),
+    link: new Map(),
+    linkTaken: new Set(),
     caughtUp: false,
     sync: new Map(),
     peers: new Map(),
@@ -358,7 +422,12 @@ function parseProbe(text: string, count: number): Probe {
   };
   for (const line of text.split('\n')) {
     if (line.startsWith('caught ')) {
-      if (line !== 'caught none') parseCaught(line.slice('caught '.length), probe, count);
+      if (line !== 'caught none') parseCaught(line.slice('caught '.length), probe, moves);
+      continue;
+    }
+    const lk = line.match(/^(link|destlink) (\d+) (.*)$/);
+    if (lk) {
+      (lk[1] === 'link' ? probe.link : probe.destLink).set(Number(lk[2]), lk[3]!);
       continue;
     }
     if (line === 'docker') {
@@ -389,12 +458,19 @@ function parseProbe(text: string, count: number): Probe {
       });
       continue;
     }
-    const m = line.match(/^(old|dest|shared|volume) (\d+)$/);
+    const m = line.match(/^(old|dest|shared|volume|shelf|linktaken) (\d+)$/);
     if (!m) continue;
     const i = Number(m[2]);
-    ({ old: probe.old, dest: probe.dest, shared: probe.shared, volume: probe.otherVolume })[
-      m[1] as 'old' | 'dest' | 'shared' | 'volume'
-    ].add(i);
+    (
+      ({
+        old: probe.old,
+        dest: probe.dest,
+        shared: probe.shared,
+        volume: probe.otherVolume,
+        shelf: probe.shelf,
+        linktaken: probe.linkTaken,
+      }) as const
+    )[m[1] as 'old' | 'dest' | 'shared' | 'volume' | 'shelf' | 'linktaken'].add(i);
   }
   return probe;
 }
@@ -424,6 +500,24 @@ function endScript(live: LiveSession, agent: string): string {
     ...(pane ? [`tmux kill-pane -t ${shellQuote(pane)} 2>/dev/null`] : []),
     'exit 0',
   ].join('; ');
+}
+
+/**
+ * A link at `link.path`, made on this machine: a link already there goes first; something else only when it is
+ * the second clone that goes (`drop`, a clone: `.git` in it) — else exit 3, nothing touched.
+ */
+function linkScript(link: { path: string; target: string }, drop: boolean, home: string): string {
+  return [
+    `l=${remotePathWord(link.path, home)}`,
+    'if [ -L "$l" ]; then rm "$l" || exit 1',
+    `elif [ -e "$l" ]; then ${drop ? '[ -e "$l/.git" ] || exit 3; rm -rf "$l" || exit 1' : 'exit 3'}; fi`,
+    `mkdir -p "\${l%/*}" && ln -s ${shellQuote(link.target)} "$l"`,
+  ].join('\n');
+}
+
+/** The link at the new place goes, if it is still a link with this target; else exit 3. */
+function unlinkScript(link: { path: string; target: string }, home: string): string {
+  return `l=${remotePathWord(link.path, home)}; [ -L "$l" ] && [ "$(readlink "$l")" = ${shellQuote(link.target)} ] || exit 3; rm "$l"`;
 }
 
 function mvScript(from: string, to: string, home: string): string {
@@ -525,42 +619,46 @@ function describeSession(f: Found): string {
   return `${where} on ${f.machine.label} (${f.live.status ?? 'no status'}, conversation ${f.live.conversation.slice(0, 8)})`;
 }
 
+/** The profile, or null after its error is said (exit 2). */
+export function loadProfile(verb: string, deps: MoveDeps): Environment | null {
+  const profilePath = resolveEnvironmentPath(deps.env, deps.home);
+  if (!profilePath) return {};
+  try {
+    return loadEnvironment(profilePath);
+  } catch (e) {
+    deps.log(`vdx ${verb}: ${errorMessage(e)}`);
+    return null;
+  }
+}
+
+/** A named project folder: its root, or why it is none. */
+export function projectRootOf(src: string, deps: MoveDeps): { root: string } | { refusal: string } {
+  const { home } = deps;
+  const abs = realish(expandHome(src, home));
+  const root = resolveProjectRoot(abs);
+  if (!root) return { refusal: `${src}: no such folder` };
+  if (root !== abs)
+    return { refusal: `${src} lies inside the project ${tilde(root, home)} — name the project's own folder` };
+  if (within(realish(home), root) || within(root, realish(claudeConfigDir(deps.env, home))))
+    return { refusal: `${tilde(root, home)} is no project folder` };
+  return { root };
+}
+
 export function runMove(input: { sources: string[]; folder: string; dryRun: boolean }, deps: MoveDeps): number {
   const { log, home } = deps;
-  const expand = (p: string) => p.replace(/^~(?=$|\/)/, home);
+  const environment = loadProfile('move', deps);
+  if (!environment) return EXIT_USAGE;
 
-  let environment: Environment = {};
-  const profilePath = resolveEnvironmentPath(deps.env, home);
-  if (profilePath) {
-    try {
-      environment = loadEnvironment(profilePath);
-    } catch (e) {
-      log(`vdx move: ${errorMessage(e)}`);
-      return EXIT_USAGE;
-    }
-  }
-  const agent = path.basename(environment.agent?.command ?? 'claude');
-
-  const folder = realish(expand(input.folder));
-  const config = realish(claudeConfigDir(deps.env, home));
-  const homeReal = realish(home);
+  const folder = realish(expandHome(input.folder, home));
   const moves: Planned[] = [];
   const refusals: string[] = [];
   for (const src of input.sources) {
-    const abs = realish(expand(src));
-    const root = resolveProjectRoot(abs);
-    if (!root) {
-      refusals.push(`${src}: no such folder`);
+    const found = projectRootOf(src, deps);
+    if ('refusal' in found) {
+      refusals.push(found.refusal);
       continue;
     }
-    if (root !== abs) {
-      refusals.push(`${src} lies inside the project ${tilde(root, home)} — name the project's own folder`);
-      continue;
-    }
-    if (within(homeReal, root) || within(root, config)) {
-      refusals.push(`${tilde(root, home)} is no project folder`);
-      continue;
-    }
+    const { root } = found;
     const to = path.join(folder, path.basename(root));
     if (to === root) refusals.push(`${tilde(root, home)} is in ${tilde(folder, home)} already`);
     else if (within(folder, root)) refusals.push(`${tilde(folder, home)} lies inside ${tilde(root, home)}`);
@@ -573,6 +671,23 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     log('nothing moved');
     return EXIT_USAGE;
   }
+  return carryOut({ verb: 'move', moves, environment, dryRun: input.dryRun, into: `${tilde(folder, home)}/` }, deps);
+}
+
+/**
+ * The checks on every machine, the plan, the questions, then the move: sessions closed, folders paused,
+ * `mv` (and the shelf's steps) on every machine, resumed; conversations, trust, memory path, zoxide,
+ * `move.after`; sessions started again. Shared by `vdx move`, `vdx take` and `vdx shelve`.
+ */
+export function carryOut(
+  input: { verb: string; moves: Planned[]; environment: Environment; dryRun: boolean; into: string },
+  deps: MoveDeps,
+): number {
+  const { log, home } = deps;
+  const { moves, environment } = input;
+  const expand = (p: string) => expandHome(p, home);
+  const agent = path.basename(environment.agent?.command ?? 'claude');
+  const refusals: string[] = [];
 
   const hereLabel = hostLabel(deps.env);
   const here: Machine = { label: hereLabel, host: null };
@@ -587,13 +702,13 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
   const probes = new Map<Machine, Probe>();
   const probe = (m: Machine): Probe | null => {
     const ran = runOn(m, probeScript(moves, home), deps);
-    return ran && ran.status === 0 ? parseProbe(ran.stdout, moves.length) : null;
+    return ran && ran.status === 0 ? parseProbe(ran.stdout, moves) : null;
   };
   for (const m of machines) {
     const p = probe(m);
     if (!p) {
       log(
-        `vdx move: ${m.label} does not answer over ssh — its sessions and its copy of the folder cannot be checked; nothing moved`,
+        `vdx ${input.verb}: ${m.label} does not answer over ssh — its sessions and its copy of the folder cannot be checked; nothing moved`,
       );
       return EXIT_REFUSED;
     }
@@ -606,7 +721,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     for (;;) {
       const pending = moves.some((_, i) => {
         const s = sync(m, i);
-        return (probes.get(m)!.old.has(i) && s?.from.code === 1) || s?.to.code === 1;
+        return (probes.get(m)!.old.has(i) && s?.from.code === 1) || s?.to.code === 1 || s?.link?.code === 1;
       });
       if (!pending || Date.now() >= waitUntil) break;
       log(`… Syncthing on ${m.label} has changes on the way — waiting`);
@@ -616,7 +731,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     }
   }
 
-  const plans = moves.map((mv, i) => planProject(mv, i, machines, here, probes, home));
+  const plans = moves.map((mv, i) => (mv.stay ? stays() : planProject(mv, i, machines, here, probes, home)));
   // Which copy goes is asked first: the checks below are about the machines it touches.
   for (const [i, plan] of plans.entries()) {
     if (!plan.pick || input.dryRun) continue;
@@ -648,8 +763,13 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     const plan = plans[i]!;
     const at = affected(i);
     const movers = mvOn(i);
-    for (const m of [...new Set([...movers, ...plan.receivers])])
+    for (const m of [...new Set([...movers, ...plan.receivers])]) {
       if (probes.get(m)!.dest.has(i)) refusals.push(`${tilde(mv.to, home)} is taken on ${m.label}`);
+      const dl = probes.get(m)!.destLink.get(i);
+      if (dl !== undefined && dl !== mv.shelf?.unlink?.target)
+        refusals.push(`${tilde(mv.to, home)} is taken on ${m.label} — a link to ${dl}`);
+    }
+    shelfChecks(mv, i, plan, machines, probes, home, refusals);
     for (const m of movers) {
       const p = caughtUpProblem(sync(m, i)?.from.code);
       if (p) refusals.push(`${mv.name} on ${m.label}: ${p}`);
@@ -705,7 +825,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
         lines[i]!.push(`another volume on ${m.label}: mv copies, then deletes — slow, and not undone halfway`);
   });
   // git worktree links, by absolute paths: repaired after the mv (worktreeGroups).
-  const worktrees = worktreeGroups(moves);
+  const worktrees = worktreeGroups(moves.filter((mv) => !mv.stay));
   const nameOf = (p: string) => path.basename(p);
   for (const [main, wts] of worktrees) {
     const mi = moves.findIndex((mv) => mv.from === main);
@@ -723,13 +843,15 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
   for (const s of busy) refusals.push(`a session of ${moves[s.project]!.name} is not idle: ${describeSession(s)}`);
   const noSync = machines.filter((m) => !probes.get(m)!.caughtUp);
 
-  log(`vdx move — ${moves.length} project(s) → ${tilde(folder, home)}/`);
+  log(`vdx ${input.verb} — ${moves.length} project(s) → ${input.into}`);
   moves.forEach((mv, i) => {
     const plan = plans[i]!;
-    log(`  ${mv.name}: ${tilde(mv.from, home)} → ${tilde(mv.to, home)}`);
+    log(`  ${mv.name}: ${tilde(mv.from, home)} ${mv.stay ? '— stays where it is' : `→ ${tilde(mv.to, home)}`}`);
     const on = machines.filter((m) => probes.get(m)!.old.has(i)).map((m) => m.label);
     log(`    folder on: ${on.length ? on.join(', ') : '—'}`);
-    log(`    Syncthing: ${describeSyncthing(plan, i, probes)}`);
+    if (!mv.stay) log(`    Syncthing: ${describeSyncthing(plan, i, probes)}`);
+    for (const l of describeShelf(mv, i, machines, probes, home)) log(`    ${l}`);
+    for (const n of mv.notes ?? []) log(`    ${n}`);
     if (plan.pause.size)
       log(
         `    paused while it moves: ${[...plan.pause].map(([m, f]) => `${[...f].join(', ')} on ${m.label}`).join('; ')}`,
@@ -764,6 +886,17 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     for (const r of refusals) log(`✗ ${r}`);
     log('nothing moved');
     return EXIT_REFUSED;
+  }
+  // vdx take of projects in their place, each with its link on every machine already: nothing to pause or make.
+  const work = moves.some(
+    (mv, i) =>
+      !mv.stay ||
+      (!!mv.shelf?.link &&
+        machines.some((m) => probes.get(m)!.shelf.has(i) && probes.get(m)!.link.get(i) !== mv.shelf!.link!.target)),
+  );
+  if (!work) {
+    log('nothing to do: every project is in its place');
+    return EXIT_MOVED;
   }
   if (input.dryRun) {
     if (plans.some((p) => p.pick)) log('dry run: which copy goes is asked at the move; Enter takes 1');
@@ -838,6 +971,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     log(`✓ closed ${describeSession(f)}`);
   }
 
+  let shelfFailed = false;
   // Pause every folder involved on every machine that has it; resume whatever happens.
   const toPause = new Map<Machine, Set<string>>();
   for (const plan of plans) for (const [m, f] of plan.pause) toPause.set(m, new Set([...(toPause.get(m) ?? []), ...f]));
@@ -878,29 +1012,83 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
       }
 
     const done = new Set<number>();
+    const failedBack = () => {
+      resume();
+      startAgain((x) => (done.has(x.project) ? moves[x.project]!.to : moves[x.project]!.from));
+      return EXIT_FAILED;
+    };
     for (const [i, mv] of moves.entries()) {
-      const movedOn: Machine[] = [];
-      for (const m of mvOn(i)) {
-        const ran = runOn(m, mvScript(mv.from, mv.to, home), deps);
-        if (ran && ran.status === 0) {
-          movedOn.push(m);
-          continue;
-        }
-        log(`✗ ${mv.name}: mv on ${m.label} failed${ran ? ` (exit ${ran.status})` : ' — no answer'}`);
-        for (const back of movedOn) {
-          const undo = runOn(back, `mv ${remotePathWord(mv.to, home)} ${remotePathWord(mv.from, home)}`, deps);
+      // vdx shelve: the link at the new place goes first, on every machine that has it; put back if the mv fails.
+      const unlink = mv.shelf?.unlink;
+      const unlinked: Machine[] = [];
+      const relink = () => {
+        for (const m of unlinked) {
+          const ran = runOn(m, linkScript(unlink!, false, home), deps);
           log(
-            undo && undo.status === 0
-              ? `  put back on ${back.label}`
-              : `  ✗ could not put it back on ${back.label}: ${tilde(mv.to, home)} → ${tilde(mv.from, home)} by hand`,
+            ran && ran.status === 0
+              ? `  the link ${tilde(unlink!.path, home)} is back on ${m.label}`
+              : `  ✗ the link ${tilde(unlink!.path, home)} is not back on ${m.label}: ln -s ${shellQuote(unlink!.target)} ${shellQuote(unlink!.path)}`,
           );
         }
-        resume();
-        startAgain((x) => (done.has(x.project) ? moves[x.project]!.to : moves[x.project]!.from));
-        return EXIT_FAILED;
+      };
+      if (unlink)
+        for (const m of machines.filter((x) => probes.get(x)!.destLink.get(i) === unlink.target)) {
+          const ran = runOn(m, unlinkScript(unlink, home), deps);
+          if (ran && ran.status === 0) {
+            unlinked.push(m);
+            continue;
+          }
+          log(
+            `✗ ${mv.name}: the link ${tilde(unlink.path, home)} on ${m.label} did not go${ran ? ` (exit ${ran.status})` : ' — no answer'}`,
+          );
+          relink();
+          return failedBack();
+        }
+      if (!mv.stay) {
+        const movedOn: Machine[] = [];
+        for (const m of mvOn(i)) {
+          const ran = runOn(m, mvScript(mv.from, mv.to, home), deps);
+          if (ran && ran.status === 0) {
+            movedOn.push(m);
+            continue;
+          }
+          log(`✗ ${mv.name}: mv on ${m.label} failed${ran ? ` (exit ${ran.status})` : ' — no answer'}`);
+          for (const back of movedOn) {
+            const undo = runOn(back, `mv ${remotePathWord(mv.to, home)} ${remotePathWord(mv.from, home)}`, deps);
+            log(
+              undo && undo.status === 0
+                ? `  put back on ${back.label}`
+                : `  ✗ could not put it back on ${back.label}: ${tilde(mv.to, home)} → ${tilde(mv.from, home)} by hand`,
+            );
+          }
+          relink();
+          return failedBack();
+        }
+        done.add(i);
+        log(
+          `✓ ${mv.name}: ${tilde(mv.from, home)} → ${tilde(mv.to, home)} on ${movedOn.map((m) => m.label).join(', ')}`,
+        );
       }
-      done.add(i);
-      log(`✓ ${mv.name}: ${tilde(mv.from, home)} → ${tilde(mv.to, home)} on ${movedOn.map((m) => m.label).join(', ')}`);
+      // vdx take: the link on the shelf, on every machine that has the shelf — the project is in place either way.
+      const link = mv.shelf?.link;
+      if (link) {
+        const ok: string[] = [];
+        for (const m of machines.filter((x) => probes.get(x)!.shelf.has(i))) {
+          if (probes.get(m)!.link.get(i) === link.target) {
+            ok.push(m.label);
+            continue;
+          }
+          const ran = runOn(m, linkScript(link, mv.shelf?.dropClone === true, home), deps);
+          if (ran && ran.status === 0) ok.push(m.label);
+          else {
+            shelfFailed = true;
+            log(
+              `✗ ${mv.name}: no link ${tilde(link.path, home)} on ${m.label}${ran ? ` (exit ${ran.status})` : ' — no answer'} — vdx take ${shellQuote(mv.to)} makes it`,
+            );
+          }
+        }
+        if (ok.length) log(`✓ ${mv.name}: link ${tilde(link.path, home)} → ${link.target} on ${ok.join(', ')}`);
+      }
     }
     // While the folders are paused, on every machine that moved one end: each fixes its own copy.
     for (const [main, wts] of worktrees) {
@@ -926,6 +1114,10 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
 
   for (const [i, mv] of moves.entries()) {
     const plan = plans[i]!;
+    if (mv.stay) {
+      if (mv.finish && !mv.finish()) shelfFailed = true;
+      continue;
+    }
     // What Claude Code files by the path. The conversations first: without a memory path
     // set, `vdx doctor --fix` would not take them along.
     const projects = path.join(claudeConfigDir(deps.env, home), 'projects');
@@ -977,12 +1169,74 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
             : `  ${m.label} keeps its own copy in ${old}`,
         );
       }
+    if (mv.finish && !mv.finish()) shelfFailed = true;
     zoxideOn([...probes.keys()], mv, probes, deps);
     for (const h of hooks) runHook(h, mv, deps);
   }
 
   startAgain((x) => moves[x.project]!.to);
-  return EXIT_MOVED;
+  return shelfFailed ? EXIT_FAILED : EXIT_MOVED;
+}
+
+/** The shelf's steps in the plan: the link to make (or already there), what goes first. */
+function describeShelf(
+  mv: Planned,
+  i: number,
+  machines: Machine[],
+  probes: Map<Machine, Probe>,
+  home: string,
+): string[] {
+  const s = mv.shelf;
+  if (!s) return [];
+  const on = machines.filter((m) => probes.get(m)!.shelf.has(i));
+  const where = on.length ? `on ${on.map((m) => m.label).join(', ')}` : 'on no machine — the shelf is missing';
+  const out: string[] = [];
+  if (s.unlink)
+    out.push(`shelf: the link ${tilde(s.unlink.path, home)} → ${s.unlink.target} goes, the project takes its place`);
+  if (s.link) {
+    const ready = on.length > 0 && on.every((m) => probes.get(m)!.link.get(i) === s.link!.target);
+    if (ready) out.push(`shelf: the link ${tilde(s.link.path, home)} → ${s.link.target} is there already`);
+    else
+      out.push(
+        `shelf: link ${tilde(s.link.path, home)} → ${s.link.target}, ${where}${s.dropClone ? ', in place of the second clone' : ''}`,
+      );
+  }
+  return out;
+}
+
+/**
+ * The shelf link's place on every machine that has the shelf: free, the same link already, a link of
+ * ours into the desk (replaced), or the second clone that goes; Syncthing caught up there. Its folder
+ * pauses with the others.
+ */
+function shelfChecks(
+  mv: Planned,
+  i: number,
+  plan: ProjectPlan,
+  machines: Machine[],
+  probes: Map<Machine, Probe>,
+  home: string,
+  refusals: string[],
+): void {
+  const s = mv.shelf;
+  if (!s?.link) return;
+  const place = tilde(s.link.path, home);
+  for (const m of machines.filter((x) => probes.get(x)!.shelf.has(i))) {
+    const p = probes.get(m)!;
+    const cur = p.link.get(i);
+    if (cur !== undefined && cur !== s.link.target) {
+      const into = s.replaceLinksInto;
+      const there = path.resolve(path.dirname(onMachine(s.link.path, home, p.home)), cur);
+      if (!into || !within(there, onMachine(into, home, p.home)))
+        refusals.push(`${place} on ${m.label} is a link to ${cur} — not one into the desk`);
+    }
+    // Taken by the project itself — taken from the shelf, it leaves before the link is made.
+    if (p.linkTaken.has(i) && !s.dropClone && s.link.path !== mv.from) refusals.push(`${place} is taken on ${m.label}`);
+    const at = p.sync.get(i)?.link;
+    if (at?.code === 1) refusals.push(`${mv.name} on ${m.label}: Syncthing has something on the way to ${place}`);
+    if (at?.code === 3) refusals.push(`${mv.name} on ${m.label}: Syncthing cannot tell about ${place}`);
+    if (at?.folder) plan.pause.set(m, new Set([...(plan.pause.get(m) ?? []), at.folder]));
+  }
 }
 
 /**

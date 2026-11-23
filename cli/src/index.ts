@@ -58,7 +58,8 @@ import {
   sleepSync,
 } from './ai.ts';
 import { isConversationId } from './conversations.ts';
-import { defaultMoveDeps, runMove } from './move.ts';
+import { defaultMoveDeps, type MoveDeps, runMove } from './move.ts';
+import { runShelve, runTake } from './shelf.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -71,6 +72,8 @@ const USAGE = `Usage:
   vdx doctor  [project_path] [--check | --fix] [--format=ansi|markdown|json] [--json]          (default: cwd)
   vdx ai[@host] [project_path] [--new | --conversation <id>] [--focused [<topic>] | --intercom | --hq] [--restart] [--detach] [--dry-run]   (default: cwd; @host: over ssh, in tmux there)
   vdx move    <project_path>... <folder> [--dry-run]       (on every machine of the profile, with its Claude Code memory and conversations)
+  vdx take    <project_path>... [--in <group>] [--dry-run]  (onto the desk, move.desk; a link stays on the shelf, move.shelf)
+  vdx shelve  <project_path>... [--dry-run]                 (back onto the shelf, where its link is)
   vdx <command> --help                   what the command does; an unknown option is refused (exit 2)
   vdx --version
 `;
@@ -511,6 +514,57 @@ their own files.
 
 Exit codes: 0 moved; 2 usage or profile error; 3 refused by a check, nothing moved;
 4 a step failed — what was moved is put back where it could be, and named.
+`,
+    bools: ['dry-run'],
+    positionals: 64,
+  },
+  take: {
+    usage: 'vdx take <project_path>... [--in <group>] [--dry-run]',
+    help: `Takes the projects onto the desk — move.desk in your profile, where projects at work
+live by name and in your groups — and leaves a link on the shelf (move.shelf, every clone
+by <host>/<path from the remote>), so the shelf knows every project of the desk that has
+a remote. It is vdx move into <desk>/ (or <desk>/<group>/ with --in) — every machine of
+the profile, its checks, the pause of the Syncthing folders, the memory path, the
+conversations, the trust, zoxide, move.after — with the shelf's steps on every machine
+that has the shelf, while the folders are paused: a link made on one machine only is
+lost to Syncthing, and a folder deleted on one keeps the others' ignored files.
+
+Where the link goes: a project taken from the shelf — its own place there. Else the
+clone of its origin on the shelf (found by the remote, host and path, not by its place):
+when nothing in it is its own (commits the server has not, uncommitted files, stashes,
+files git ignores that Syncthing carries), the link takes its place, and what Syncthing
+does not carry (node_modules and the like) goes with it; else it is named and left, and no
+link is made. No such clone — <shelf>/<host>/<path from the remote>. A project without
+origin lives on the desk only. A project of the desk taken again: its link follows it
+(--in another group), or is made where it is missing.
+
+  --in <group>  a group on the desk: GA, SPACE, limex-team/sparta; without it, the top
+  --dry-run     print the plan — the move, the link, the second clone; change nothing
+
+Exit codes: 0 taken; 2 usage or profile error; 3 refused by a check, nothing moved;
+4 a step failed — what was moved is put back where it could be, and named; a link that
+failed is named, and vdx take on the project's new place makes it.
+`,
+    bools: ['dry-run'],
+    values: ['in'],
+    positionals: 64,
+  },
+  shelve: {
+    usage: 'vdx shelve <project_path>... [--dry-run]',
+    help: `Puts the projects back onto the shelf (move.shelf in your profile): in place of the
+link to it there, else at <shelf>/<host>/<path from the remote>. It is vdx move with every
+machine of the profile, its checks, the pause of the Syncthing folders, the memory path,
+the conversations, the trust, zoxide, move.after; the link goes on every machine that has
+it, while the folders are paused, and comes back if the move fails. A project without
+origin is refused — it lives on the desk; a place taken by a clone is refused, with its
+path. What is the project's own — commits the server has not, uncommitted files, stashes,
+files git ignores — is named before it goes.
+
+  --dry-run     print the plan; change nothing
+
+Exit codes: 0 shelved; 2 usage or profile error, or a project that cannot go onto the
+shelf; 3 refused by a check, nothing moved; 4 a step failed — what was moved is put back
+where it could be, and named.
 `,
     bools: ['dry-run'],
     positionals: 64,
@@ -1114,13 +1168,8 @@ function cmdAi(opts: ParsedArgs): void {
   process.exit(runAi(options, deps));
 }
 
-function cmdMove(opts: ParsedArgs): void {
-  if (opts.positionals.length < 2) {
-    process.stderr.write(
-      `vdx move: name the project(s) and the folder to move them into\nUsage: ${COMMANDS['move']!.usage}\n`,
-    );
-    process.exit(2);
-  }
+/** What vdx move, take and shelve run with: this terminal, ssh to the profile's machines, the agent's restart. */
+function moveDeps(): MoveDeps {
   const ai = { ...defaultDeps(), version: readCliVersion() };
   const restart = (input: {
     host: string | null;
@@ -1141,7 +1190,7 @@ function cmdMove(opts: ParsedArgs): void {
     };
     return input.host === null ? runAi(options, ai) : runAiRemote(options, input.host, ai);
   };
-  const deps = defaultMoveDeps({
+  return defaultMoveDeps({
     env: process.env,
     home: os.homedir(),
     interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
@@ -1150,6 +1199,34 @@ function cmdMove(opts: ParsedArgs): void {
     sleep: sleepSync,
     restart,
   });
+}
+
+function cmdTake(opts: ParsedArgs): void {
+  if (opts.positionals.length < 1) {
+    process.stderr.write(`vdx take: name the project(s) to take onto the desk\nUsage: ${COMMANDS['take']!.usage}\n`);
+    process.exit(2);
+  }
+  const group = typeof opts.flags['in'] === 'string' ? opts.flags['in'] : undefined;
+  process.exit(runTake({ sources: opts.positionals, group, dryRun: opts.flags['dry-run'] === true }, moveDeps()));
+}
+
+function cmdShelve(opts: ParsedArgs): void {
+  if (opts.positionals.length < 1) {
+    process.stderr.write(
+      `vdx shelve: name the project(s) to put onto the shelf\nUsage: ${COMMANDS['shelve']!.usage}\n`,
+    );
+    process.exit(2);
+  }
+  process.exit(runShelve({ sources: opts.positionals, dryRun: opts.flags['dry-run'] === true }, moveDeps()));
+}
+
+function cmdMove(opts: ParsedArgs): void {
+  if (opts.positionals.length < 2) {
+    process.stderr.write(
+      `vdx move: name the project(s) and the folder to move them into\nUsage: ${COMMANDS['move']!.usage}\n`,
+    );
+    process.exit(2);
+  }
   process.exit(
     runMove(
       {
@@ -1157,7 +1234,7 @@ function cmdMove(opts: ParsedArgs): void {
         folder: opts.positionals[opts.positionals.length - 1]!,
         dryRun: opts.flags['dry-run'] === true,
       },
-      deps,
+      moveDeps(),
     ),
   );
 }
@@ -1172,6 +1249,8 @@ else if (parsed.cmd === 'push') cmdPush(checkArgs('push', parsed));
 else if (parsed.cmd === 'doctor') cmdDoctor(checkArgs('doctor', parsed));
 else if (parsed.cmd === 'ai' || parsed.cmd.startsWith('ai@')) cmdAi(checkArgs('ai', parsed));
 else if (parsed.cmd === 'move') cmdMove(checkArgs('move', parsed));
+else if (parsed.cmd === 'take') cmdTake(checkArgs('take', parsed));
+else if (parsed.cmd === 'shelve') cmdShelve(checkArgs('shelve', parsed));
 else if ((LIFECYCLE_VERBS as readonly string[]).includes(parsed.cmd)) {
   checkArgs(parsed.cmd, parsed);
   cmdRun(parsed.cmd as LifecycleVerb);
