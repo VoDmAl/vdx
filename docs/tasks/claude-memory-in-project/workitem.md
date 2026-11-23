@@ -1151,7 +1151,12 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       `vdx take … --in <group>` (`deskLinkNotes`; обход полки m3 — 0,4 с, 428 клонов, только для проекта стола).
       Ещё по `state.json`: путь файла — только внутри проекта (без абсолютных и `..`), ветка не с `-`; тест —
       файл `../../escape.txt` не копируется, набор остаётся (падает без проверки)
-- [ ] Сет minor (`vdx-rubric-vodmal`): `move.desk`, `move.shelf`; `git.author_pool` — стол (и его группы: `scanPool`
+- [ ] Сет minor (`vdx-rubric-vodmal`): `move.desk`, `move.shelf` — 2026-11-22 v1.19.0 записан (профиль, `metadata.version`
+      обоих файлов, `CHANGELOG.md`); владелец закоммитил и запушил — `296997a`, тег `v1.19.0` на GitHub (`ls-remote`:
+      `refs/tags/v1.19.0^{}` = `296997a`); vdx 0.67.0 профиль читает (`vdx ai --check`). Зеркала в vdx (`cli/rubric/vdx-rubric.yaml`,
+      `docs/specs/vdx-*.example.yaml`, `DEFAULT_BASELINE` `@v1.19.0`) — 2026-11-22 одним коммитом с невыполненной строкой
+      `vdx@m3-2` (сет v1.18.0, её изменения прочитаны и взяты как есть; владелец: «собери свою со всеми изменениями»).
+      Осталось: `git.author_pool` — стол (и его группы: `scanPool`
       читает только детей каталога); зеркало `docs/specs/vdx-environment.example.yaml` — после строки коммита
       соседней сессии `vdx@m3-2` (держит этот файл в индексе с 2026-11-21 19:25). Пути echelon в хуках
       (`echelon-guard`, `echelon-ref-race`, `echelon-commit-wait` — `$HOME/AI Projects/echelon`) — к переезду echelon,

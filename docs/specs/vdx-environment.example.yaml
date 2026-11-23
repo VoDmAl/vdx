@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.17.0"
+  version: "1.19.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -169,6 +169,19 @@ git:
       event: reference-transaction
       command: '[ "$1" = preparing ] || exit 0; s="${ECHELON_HOME:-$HOME/AI Projects/echelon}/plugin/scripts/ref-race-guard.sh"; [ -x "$s" ] || exit 0; "$s"'
       when_exists: "~/AI Projects/echelon/plugin/scripts/ref-race-guard.sh"
+    # echelon's wait before a commit: git-guard's commit line runs the
+    # pre-commit-line event before `git commit` (vdm-git 2.27+, only when
+    # `git hook list` names a hook on it), and this one waits up to 60 s for
+    # the other machine's branch to arrive here. 0 — commit (arrived, the same,
+    # the machine silent over ssh, the repo not synced); 3 — the line stops,
+    # the reason on stderr; a crash of echelon lets the line pass with a line.
+    # ECHELON_REF_GUARD=off goes around it, as around echelon-ref-race. vdx
+    # 0.58+ reads the event; a machine without echelon passes in the shell.
+    - name: echelon-commit-wait
+      description: "echelon: a commit line waits for the other machine's branch to arrive here"
+      event: pre-commit-line
+      command: 's="${ECHELON_HOME:-$HOME/AI Projects/echelon}/plugin/scripts/commit-wait-guard.sh"; [ -x "$s" ] || exit 0; "$s"'
+      when_exists: "~/AI Projects/echelon/plugin/scripts/commit-wait-guard.sh"
     # vdx's guard of Claude Code's memory: a commit that stages .claude/memory/
     # goes only where nobody but the owner reads every place it reaches (origin,
     # the mirrors above; GitHub asked with gh's token, no answer — refused). The
@@ -180,8 +193,17 @@ git:
 
 # What `vdx move` (vdx 0.40+) runs on this machine once a project's folder has
 # moved, with VDX_MOVE_FROM and VDX_MOVE_TO set: tools that keep the project's
-# path in their own files. Without the path, the entry is skipped.
+# path in their own files. Without the path, the entry is skipped. `vdx take`
+# and `vdx shelve` run them too.
 move:
+  # The desk and the shelf of `vdx take` / `vdx shelve` (vdx 0.68+). The desk:
+  # projects at work, by name and the owner's groups (GA, SPACE, finam, avatar,
+  # limex-team). The shelf: every clone by <host>/<path from the remote>, kept
+  # up to date by nas-info. They lie side by side on every station (nyc:
+  # /mnt/lvm/work/{repos,desk}), so the links take leaves on the shelf are
+  # relative; shelve keeps a project's own work beside its clone, <place>.own/.
+  desk: /Volumes/Working/desk
+  shelf: /Volumes/Working/repos
   after:
     # echelon's consumers.yaml and mcp.yaml name projects by path (`echelon
     # moved`: only `path:` lines, safe to repeat). Its checkout comes from the
