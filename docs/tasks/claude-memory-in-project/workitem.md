@@ -1151,21 +1151,30 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       `vdx take … --in <group>` (`deskLinkNotes`; обход полки m3 — 0,4 с, 428 клонов, только для проекта стола).
       Ещё по `state.json`: путь файла — только внутри проекта (без абсолютных и `..`), ветка не с `-`; тест —
       файл `../../escape.txt` не копируется, набор остаётся (падает без проверки)
-- [ ] Сет minor (`vdx-rubric-vodmal`): `move.desk`, `move.shelf` — 2026-11-22 v1.19.0 записан (профиль, `metadata.version`
+- [x] Сет minor (`vdx-rubric-vodmal`): `move.desk`, `move.shelf` — 2026-11-22 v1.19.0 записан (профиль, `metadata.version`
       обоих файлов, `CHANGELOG.md`); владелец закоммитил и запушил — `296997a`, тег `v1.19.0` на GitHub (`ls-remote`:
       `refs/tags/v1.19.0^{}` = `296997a`); vdx 0.67.0 профиль читает (`vdx ai --check`). Зеркала в vdx (`cli/rubric/vdx-rubric.yaml`,
       `docs/specs/vdx-*.example.yaml`, `DEFAULT_BASELINE` `@v1.19.0`) — 2026-11-22 одним коммитом с невыполненной строкой
       `vdx@m3-2` (сет v1.18.0, её изменения прочитаны и взяты как есть; владелец: «собери свою со всеми изменениями»).
-      Осталось: `git.author_pool` — стол (и его группы: `scanPool`
-      читает только детей каталога); зеркало `docs/specs/vdx-environment.example.yaml` — после строки коммита
-      соседней сессии `vdx@m3-2` (держит этот файл в индексе с 2026-11-21 19:25). Пути echelon в хуках
-      (`echelon-guard`, `echelon-ref-race`, `echelon-commit-wait` — `$HOME/AI Projects/echelon`) — к переезду echelon,
-      последним (их DL #10)
-- [ ] Sidetrack #8: выпуск CLI с `take`/`shelve`; итог nas-info — письмо с версией, `--reply-to nas-info/desk-and-shelf-take-shelve-outcome`
+      Коммит `0dc6307`, в `main` через CI (2026-11-22)
+- [ ] Профиль: `git.author_pool` для стола — `scanPool` (`cli/src/author.ts`) читает только детей каталога, а на
+      столе группы (`desk/GA/…`): либо каталог стола и его группы в профиле, либо `scanPool` на уровень глубже в
+      каталоги без `.git` — решить, когда на стол поедут первые проекты (письмо nas-info, их п. 7) — when: первые
+      `take` вживую; check: `vdx ai` в проекте стола без своего автора предлагает адрес из пула
+- [ ] Профиль: пути echelon в хуках (`echelon-guard`, `echelon-ref-race`, `echelon-commit-wait` —
+      `$HOME/AI Projects/echelon`) — к переезду echelon на стол, последним (их DL #10), вместе с правкой путей
+      nas-info (`VDX_PROFILE`, `ECHELON_DIR`) — when: слово владельца о переезде echelon; check: `vdx doctor` на m3
+      и lft после переезда — хуки на месте
+- [x] Sidetrack #8: выпуск CLI с `take`/`shelve`; итог nas-info — письмо с версией, `--reply-to nas-info/desk-and-shelf-take-shelve-outcome`
       (первый ответ ушёл 2026-11-21: принято, п. 8 — не дефект, мяч — vdx): ссылки на каждой машине (DL #28),
-      `<имя>.own/` рядом с клоном на полке — их обновлению полки и проверкам знать — срока нет
-- [ ] Письмо nas-info «`desk` готова» на lft, m3, nyc — с него `take`/`shelve` вживую (до него — `--dry-run`, пробное
-      дерево) — when: их письмо после шифрования Working на m3 (владелец), срока нет; check: `/vdm:intercom check`
+      `<имя>.own/` рядом с клоном на полке — их обновлению полки и проверкам знать — срока нет — 2026-11-22:
+      `@vodmal/vdx-cli@0.68.0` (`7d6e261`, тег `v0.68.0` на GitHub), m3 и lft — 0.68.0 (`npm update -g
+      --prefer-online`, по одной), холостой `take … --in GA` на выпущенном на обеих — ссылка на обеих. Письмо
+      nas-info `desk-take-shelve-released` (`--reply-to nas-info/desk-and-shelf-take-shelve-outcome`): выпуск, итог
+      теста ссылок, `.own/` рядом с клонами, алиасы `stash`/`github`, их п. 7; их сессия intercom на m3 поднята
+- [ ] Sidetrack #8: письмо nas-info «`desk` готова» на lft, m3, nyc — с него `take`/`shelve` вживую (до него —
+      `--dry-run`, пробное дерево), первые `take` — по слову владельца о моменте — when: их письмо после шифрования
+      Working на m3 (владелец), срока нет; check: `/vdm:intercom check`; ответ на `desk-take-shelve-released` — там же
 
 ## References
 
