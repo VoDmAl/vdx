@@ -75,6 +75,12 @@ vdx ai --state [project-path] [--conversation <id>]   # the tmux option @vdx_sta
 # Within, into, out of or beside Syncthing: its folders pause while it moves; copies Syncthing would merge — one goes
 vdx move <project-path>... <folder> [--dry-run]
 
+# The same onto the desk (move.desk) and back onto the shelf (move.shelf): take leaves a relative link on the shelf
+# at the project's place; shelve puts it there and keeps its own work (commits, stashes, changes, ignored files)
+# beside the clone in <place>.own/, which the next take brings back
+vdx take <project-path>... [--in <group>] [--dry-run]
+vdx shelve <project-path>... [--dry-run]
+
 # What a command does and takes; nothing runs (ai: also where launch flags live)
 vdx <command> --help
 
@@ -224,6 +230,8 @@ npm run typecheck
 - `src/ai.ts`         — `vdx ai`: profile loader, launch plan, tmux session handling
 - `src/cmux.ts`       — the focused topic as the cmux workspace description while `vdx ai` holds the attach (`bin/vdx-cmux-topic.cjs` watches it)
 - `src/move.ts`       — `vdx move`: checks on every machine (Syncthing folders and peers, copies, containers, processes), Syncthing paused for the mv on each, memory path, conversations and trust follow
+- `src/shelf.ts`      — `vdx take` / `vdx shelve`: the desk and the shelf, the clone of a remote, the link's place; the steps on the shelf run on every machine within the pause
+- `src/own.ts`        — a project's own work beside its clone on the shelf (`<place>.own/`), and back
 - `src/report.ts`     — markdown / JSON output
 - `src/index.ts`      — CLI entry
 - `src/mcp-server.ts` — MCP stdio server (9 tools)

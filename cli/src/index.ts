@@ -59,7 +59,7 @@ import {
 } from './ai.ts';
 import { isConversationId } from './conversations.ts';
 import { defaultMoveDeps, type MoveDeps, runMove } from './move.ts';
-import { runShelve, runTake } from './shelf.ts';
+import { deskLinkNotes, runShelve, runTake } from './shelf.ts';
 
 const DEFAULT_RUBRIC = resolveDefaultRubric();
 
@@ -531,12 +531,15 @@ lost to Syncthing, and a folder deleted on one keeps the others' ignored files.
 
 Where the link goes: a project taken from the shelf — its own place there. Else the
 clone of its origin on the shelf (found by the remote, host and path, not by its place):
-when nothing in it is its own (commits the server has not, uncommitted files, stashes,
-files git ignores that Syncthing carries), the link takes its place, and what Syncthing
-does not carry (node_modules and the like) goes with it; else it is named and left, and no
-link is made. No such clone — <shelf>/<host>/<path from the remote>. A project without
-origin lives on the desk only. A project of the desk taken again: its link follows it
-(--in another group), or is made where it is missing.
+when nothing in it is its own (commits no remote branch has, uncommitted files, stashes),
+the link takes its place — files git ignores that Syncthing carries (.env and the like) go
+beside it first, into <place>.own/<date> second clone/, and what Syncthing does not carry
+(node_modules) goes with it; else it is named and left, and no link is made. No such clone —
+<shelf>/<host>/<path from the remote>. A project without origin lives on the desk only. A
+project of the desk taken again: its link follows it (--in another group), or is made
+where it is missing. A project taken from the shelf gets back what vdx shelve kept beside
+it: its branches, stashes, uncommitted work and ignored files; the set beside it goes once
+all of it is back, and what did not come back is named and stays there.
 
   --in <group>  a group on the desk: GA, SPACE, limex-team/sparta; without it, the top
   --dry-run     print the plan — the move, the link, the second clone; change nothing
@@ -557,8 +560,12 @@ machine of the profile, its checks, the pause of the Syncthing folders, the memo
 the conversations, the trust, zoxide, move.after; the link goes on every machine that has
 it, while the folders are paused, and comes back if the move fails. A project without
 origin is refused — it lives on the desk; a place taken by a clone is refused, with its
-path. What is the project's own — commits the server has not, uncommitted files, stashes,
-files git ignores — is named before it goes.
+path. The shelf stays a mirror of the server: what is the project's own — branches with
+commits no remote branch has, stashes, uncommitted and untracked files (git stash -u),
+files git ignores that Syncthing carries (.env, an ignored .claude/memory/) — goes beside
+the clone into <place>.own/<date> shelve/ (work.bundle, files/, state.json, README), and
+only once all of it is read back the clone goes onto its server branch, clean. The next
+vdx take brings it back. The memory path is left as it is; that take sets it.
 
   --dry-run     print the plan; change nothing
 
@@ -1227,14 +1234,16 @@ function cmdMove(opts: ParsedArgs): void {
     );
     process.exit(2);
   }
+  const deps = moveDeps();
   process.exit(
     runMove(
       {
         sources: opts.positionals.slice(0, -1),
         folder: opts.positionals[opts.positionals.length - 1]!,
         dryRun: opts.flags['dry-run'] === true,
+        notesFor: (root, environment) => deskLinkNotes(root, environment, deps),
       },
-      moveDeps(),
+      deps,
     ),
   );
 }

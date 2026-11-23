@@ -14,7 +14,7 @@ import {
   type MoveDeps,
   zoxideScript,
 } from '../../src/move.ts';
-import { runShelve, runTake } from '../../src/shelf.ts';
+import { deskLinkNotes, runShelve, runTake } from '../../src/shelf.ts';
 
 // `vdx move`: two machines are two homes here — "m3" is reached by a fake ssh that runs
 // the same script with its own HOME (claude-memory-in-project DL #17, #18).
@@ -631,6 +631,7 @@ describe('vdx take and vdx shelve', () => {
   });
 
   it('shelve: in place of its link on every machine; the link goes first', () => {
+    withServer();
     expect(take()).toBe(EXIT_MOVED);
     expect(shelve([path.join(desk(here), 'GA', 'proj')])).toBe(EXIT_MOVED);
     for (const home of [here, m3]) {
@@ -644,6 +645,7 @@ describe('vdx take and vdx shelve', () => {
   });
 
   it('shelve without a link: at <host>/<path> of its origin; refused without origin, or where a clone stands', () => {
+    withServer();
     expect(shelve([projDir(here)])).toBe(EXIT_MOVED);
     for (const home of [here, m3]) expect(fs.existsSync(path.join(onShelf(home), 'README.md'))).toBe(true);
     expect(shelve([onShelf(here)])).toBe(EXIT_USAGE);
@@ -660,6 +662,155 @@ describe('vdx take and vdx shelve', () => {
     expect(shelve([projDir(here)])).toBe(EXIT_USAGE);
     expect(logs.join('\n')).toContain('on the shelf is taken by a clone of it');
     expect(fs.existsSync(projDir(here))).toBe(true);
+  });
+
+  /** The project's origin a real server: its branches are on origin, the upstream set; the URL stays example.com. */
+  const withServer = (): string => {
+    const root = projDir(here);
+    const server = path.join(base, 'server.git');
+    execFileSync('git', ['clone', '-q', '--bare', root, server]);
+    git(root, 'remote', 'set-url', 'origin', server);
+    git(root, 'fetch', '-q', 'origin');
+    const branch = git(root, 'symbolic-ref', '--short', 'HEAD').toString().trim();
+    git(root, 'branch', '-q', `--set-upstream-to=origin/${branch}`);
+    git(root, 'remote', 'set-url', 'origin', ORIGIN);
+    return branch;
+  };
+  const sh = (cwd: string, script: string) => execFileSync('sh', ['-c', script], { cwd, encoding: 'utf8' }).trim();
+
+  it('shelve keeps its own beside the clone, which goes onto the server branch; take brings all of it back', () => {
+    const branch = withServer();
+    const root = projDir(here);
+    write(path.join(root, '.gitignore'), '.env\nnode_modules/\n');
+    git(root, 'add', '.gitignore');
+    git(root, 'commit', '-q', '-m', 'own commit');
+    write(path.join(root, '.env'), 'SECRET=1\n');
+    write(path.join(root, 'README.md'), 'changed\n');
+    expect(shelve([root])).toBe(EXIT_MOVED);
+    const clone = onShelf(here);
+    const set = `${clone}.own/2026-10-27 shelve`;
+    expect(sh(clone, 'git status --porcelain')).toBe('');
+    expect(sh(clone, 'git rev-parse HEAD')).toBe(sh(clone, `git rev-parse origin/${branch}`));
+    expect(fs.existsSync(path.join(clone, '.env'))).toBe(false);
+    expect(fs.readFileSync(path.join(set, 'files', '.env'), 'utf8')).toBe('SECRET=1\n');
+    expect(sh(clone, `git bundle verify -q '${set}/work.bundle' && echo ok`)).toBe('ok');
+    expect(fs.existsSync(path.join(set, 'README'))).toBe(true);
+    const out = logs.join('\n');
+    expect(out).toContain('⚠ its own: 1 commit(s) on no remote branch it knows');
+    expect(out).toMatch(
+      /⚠ its own — 1 commit\(s\) on .*, \d+ uncommitted, .*\.env.* — kept beside it in proj\.own\/2026-10-27 shelve\//,
+    );
+    expect(out).toContain(`the clone is on origin/${branch}, as the server has it`);
+
+    logs = [];
+    expect(take({ sources: [clone], group: undefined })).toBe(EXIT_MOVED);
+    const back = path.join(desk(here), 'proj');
+    expect(fs.readFileSync(path.join(back, '.env'), 'utf8')).toBe('SECRET=1\n');
+    expect(fs.readFileSync(path.join(back, 'README.md'), 'utf8')).toBe('changed\n');
+    expect(sh(back, 'git log -1 --format=%s')).toBe('own commit');
+    expect(sh(back, 'git symbolic-ref --short HEAD')).toBe(branch);
+    expect(fs.existsSync(path.join(back, 'node_modules', 'x.js'))).toBe(true);
+    expect(sh(back, 'git stash list')).toBe('');
+    expect(fs.existsSync(`${clone}.own`)).toBe(false);
+    expect(logs.join('\n')).toContain('✓ 2026-10-27 shelve: its own is back in the project');
+  });
+
+  it('a branch named with shell syntax goes beside the clone and comes back as a name, run by nobody', () => {
+    withServer();
+    const root = projDir(here);
+    const name = 'own$(touch${IFS}pwned)';
+    git(root, 'checkout', '-q', '-b', name);
+    write(path.join(root, 'f.txt'), 'f\n');
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'on a strange branch');
+    expect(shelve([root])).toBe(EXIT_MOVED);
+    expect(take({ sources: [onShelf(here)], group: undefined })).toBe(EXIT_MOVED);
+    const back = path.join(desk(here), 'proj');
+    expect(sh(back, 'git symbolic-ref --short HEAD')).toBe(name);
+    for (const dir of [base, here, back, onShelf(here), '/'])
+      expect(fs.existsSync(path.join(dir, 'pwned'))).toBe(false);
+  });
+
+  it('take: a set whose state.json names a file outside the project leaves it, and the set stays', () => {
+    withServer();
+    const root = projDir(here);
+    write(path.join(root, '.gitignore'), '.env\n');
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'ignore');
+    write(path.join(root, '.env'), 'SECRET=1\n');
+    expect(shelve([root])).toBe(EXIT_MOVED);
+    const set = `${onShelf(here)}.own/2026-10-27 shelve`;
+    const state = json(path.join(set, 'state.json'));
+    write(path.join(set, 'files', '..', '..', 'escape.txt'), 'x\n');
+    fs.writeFileSync(
+      path.join(set, 'state.json'),
+      JSON.stringify({ ...state, files: [...(state['files'] as string[]), '../../escape.txt'] }),
+    );
+    expect(take({ sources: [onShelf(here)], group: undefined })).toBe(EXIT_FAILED);
+    expect(fs.existsSync(path.join(desk(here), 'proj', '..', '..', 'escape.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(desk(here), 'proj', '.env'))).toBe(true);
+    expect(fs.existsSync(set)).toBe(true);
+    expect(logs.join('\n')).toContain('../../escape.txt (not a path inside the project)');
+  });
+
+  it('shelve of a project with nothing of its own: no set beside it', () => {
+    withServer();
+    const root = projDir(here);
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'all of it');
+    git(root, 'push', '-q', path.join(base, 'server.git'), 'HEAD');
+    git(root, 'fetch', '-q', path.join(base, 'server.git'), '+refs/heads/*:refs/remotes/origin/*');
+    expect(shelve([root])).toBe(EXIT_MOVED);
+    expect(fs.existsSync(`${onShelf(here)}.own`)).toBe(false);
+    expect(logs.join('\n')).toContain('nothing of its own');
+  });
+
+  it('shelve without a server branch: its own stays inside the clone, untouched, and is named', () => {
+    write(path.join(projDir(here), 'draft.txt'), 'mine\n');
+    expect(shelve([projDir(here)])).toBe(EXIT_MOVED);
+    expect(fs.existsSync(path.join(onShelf(here), 'draft.txt'))).toBe(true);
+    expect(fs.existsSync(`${onShelf(here)}.own`)).toBe(false);
+    expect(logs.join('\n')).toContain('⚠ its own stays inside the clone: no server branch to put it on');
+  });
+
+  it('take: a second clone with ignored files only — they go beside it, the link takes its place', () => {
+    secondClone();
+    write(path.join(onShelf(here), '.gitignore'), '.env\n');
+    git(onShelf(here), 'add', '.gitignore');
+    git(onShelf(here), 'commit', '-q', '-m', 'ignore');
+    git(onShelf(here), 'push', '-q', path.join(base, 'server.git'), 'HEAD');
+    git(onShelf(here), 'fetch', '-q', path.join(base, 'server.git'), '+refs/heads/*:refs/remotes/origin/*');
+    write(path.join(onShelf(here), '.env'), 'CLONE=1\n');
+    fs.rmSync(onShelf(m3), { recursive: true });
+    fs.cpSync(onShelf(here), onShelf(m3), { recursive: true });
+    expect(take()).toBe(EXIT_MOVED);
+    const kept = `${onShelf(here)}.own/2026-10-27 second clone`;
+    expect(fs.readFileSync(path.join(kept, 'files', '.env'), 'utf8')).toBe('CLONE=1\n');
+    for (const home of [here, m3]) expect(fs.lstatSync(onShelf(home)).isSymbolicLink()).toBe(true);
+    expect(logs.join('\n')).toContain(
+      'files git ignores, which Syncthing carries, go beside it into proj.own/2026-10-27 second clone/: .env',
+    );
+  });
+
+  it('vdx move of a desk project names its link on the shelf, which would lead to the old place', () => {
+    expect(take()).toBe(EXIT_MOVED);
+    const from = path.join(desk(here), 'GA', 'proj');
+    const d = deps();
+    logs = [];
+    expect(
+      runMove(
+        {
+          sources: [from],
+          folder: path.join(desk(here), 'SPACE'),
+          dryRun: true,
+          notesFor: (root, environment) => deskLinkNotes(root, environment, d),
+        },
+        d,
+      ),
+    ).toBe(EXIT_MOVED);
+    expect(logs.join('\n')).toContain(
+      "shelf: the link ~/Working/repos/example.com/grp/proj leads here and would lead to the old place — vdx take '~/Working/desk/GA/proj' --in <group> moves it with the link",
+    );
   });
 
   it('the profile takes move.desk and move.shelf as paths', () => {

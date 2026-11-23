@@ -101,6 +101,8 @@ vdx ai
 
 # 7. Move projects into a folder on all your machines, Claude Code memory and conversations along
 vdx move ~/work/app ~/work/clients/
+vdx take ~/work/app --in clients   # onto the desk (move.desk); a link stays on the shelf (move.shelf)
+vdx shelve ~/desk/clients/app      # back onto the shelf, where its link is; its own work kept beside it
 
 # 8. What a command does, before running it; an unknown option is refused (exit 2)
 vdx init --help

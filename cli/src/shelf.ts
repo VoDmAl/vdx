@@ -3,6 +3,17 @@ import * as path from 'node:path';
 import { type Environment, shellQuote } from './ai.ts';
 import { remoteParts } from './author.ts';
 import {
+  dropSet,
+  hasShelveSets,
+  keepOwn,
+  keepSecondClone,
+  otherSets,
+  type Own,
+  OWN_SUFFIX,
+  ownOf,
+  restoreOwn,
+} from './own.ts';
+import {
   carryOut,
   EXIT_USAGE,
   expandHome,
@@ -29,8 +40,6 @@ import {
 
 /** How deep the shelf is walked for clones and links: host, groups, repo; clones are not walked into. */
 const MAX_DEPTH = 6;
-/** The folder beside a clone that keeps what is the project's own, not the repo's (DL #27). */
-const OWN_SUFFIX = '.own';
 
 interface Remote {
   host: string;
@@ -162,64 +171,6 @@ function linkLeadsTo(link: { path: string; target: string }): string {
   return realish(path.resolve(path.dirname(link.path), link.target));
 }
 
-/** What in a repository is its own: what the server does not have, and what git ignores. */
-interface Own {
-  /** Commits on its branches (or HEAD) that no remote branch has; null — git could not tell. */
-  commits: number | null;
-  /** Changed and untracked files (git status). */
-  uncommitted: number;
-  stashes: number;
-  /** Files and folders git ignores that Syncthing carries — they would be lost with the folder. */
-  carried: string[];
-  /** Ones Syncthing does not carry (node_modules and the like): each machine's own. */
-  skipped: string[];
-}
-
-/**
- * Reads what is a repository's own, on this machine, without writing its index (`--no-optional-locks`: the
- * repository is in a synced folder). Whether Syncthing carries an ignored entry — `syncthing cli debug file`
- * of the Syncthing folder it lies in; no answer counts as carried.
- */
-function ownOf(repo: string, deps: MoveDeps): Own {
-  const q = shellQuote(repo);
-  const ran = deps.sh(
-    [
-      `cd ${q} || exit 1`,
-      'g() { git --no-optional-locks "$@" 2>/dev/null; }',
-      'printf "commits %s\\n" "$(g rev-list --count HEAD --branches --not --remotes || echo -)"',
-      'printf "uncommitted %s\\n" "$(g status --porcelain | wc -l | tr -d " ")"',
-      'printf "stashes %s\\n" "$(g stash list | wc -l | tr -d " ")"',
-      // The Syncthing folder of the repository: its id, then the repository's path inside it (two lines).
-      'here=$(pwd -P)',
-      'f=$(syncthing cli config folders list 2>/dev/null | while IFS= read -r id; do',
-      '  p=$(syncthing cli config folders "$id" path get 2>/dev/null) || continue',
-      // Syncthing keeps a path under home as `~/…`.
-      '  case "$p" in ("~"|"~/"*) p="$HOME${p#"~"}";; esac',
-      '  p=$(cd "$p" 2>/dev/null && pwd -P) || continue',
-      '  case "$here/" in ("$p"/*) printf "%s\\n%s\\n" "$id" "${here#"$p"}";; esac',
-      'done | head -n 2)',
-      'id=$(printf "%s\\n" "$f" | sed -n 1p); rel=$(printf "%s\\n" "$f" | sed -n 2p); rel=${rel#/}',
-      'g ls-files --others --ignored --exclude-standard --directory | while IFS= read -r e; do',
-      '  e=${e%/}',
-      '  if [ -n "$id" ] && out=$(syncthing cli debug file "$id" "${rel:+$rel/}$e" 2>/dev/null); then',
-      '    case "$out" in (*\'"ignored": true\'*) echo "skipped $e";; (*) echo "carried $e";; esac',
-      '  else echo "carried $e"; fi',
-      'done',
-    ].join('\n'),
-  );
-  const own: Own = { commits: null, uncommitted: 0, stashes: 0, carried: [], skipped: [] };
-  for (const line of (ran?.stdout ?? '').split('\n')) {
-    const m = /^(commits|uncommitted|stashes|carried|skipped) (.*)$/.exec(line);
-    if (!m) continue;
-    const v = m[2]!;
-    if (m[1] === 'carried' || m[1] === 'skipped') own[m[1]].push(v);
-    else if (m[1] === 'commits') own.commits = /^\d+$/.test(v) ? Number(v) : null;
-    else own[m[1] as 'uncommitted' | 'stashes'] = Number(v) || 0;
-  }
-  if (!ran || ran.status !== 0) own.commits = null;
-  return own;
-}
-
 /** "2 commits not on the server, 3 uncommitted, 1 stash" — what blocks replacing a clone; [] — nothing. */
 function workOf(own: Own): string[] {
   const out: string[] = [];
@@ -230,8 +181,25 @@ function workOf(own: Own): string[] {
   return out;
 }
 
+/** A step's lines, under the project in the output; whether it went through. */
+function said(result: { ok: boolean; lines: string[] }, deps: MoveDeps): boolean {
+  for (const l of result.lines) deps.log(`  ${l}`);
+  return result.ok;
+}
+
 function named(list: string[], max = 4): string {
   return list.length <= max ? list.join(', ') : `${list.slice(0, max).join(', ')} and ${list.length - max} more`;
+}
+
+/** Before the pause: a second clone's ignored files beside it; the undo removes them if the take does not happen. */
+function keepBeside(clone: string, own: Own, deps: MoveDeps): (() => void) | null {
+  const kept = keepSecondClone(clone, own, deps.today, deps);
+  if ('error' in kept) {
+    deps.log(`✗ ${path.basename(clone)}: its ignored files did not go beside it — ${kept.error}`);
+    return null;
+  }
+  deps.log(`✓ ${path.basename(clone)}: ${named(own.carried)} → ${tilde(kept.set, deps.home)}/`);
+  return () => dropSet(kept.set);
 }
 
 /** The link `vdx take` leaves on the shelf for a project going to `to`, or null with the reason in `notes`. */
@@ -242,9 +210,10 @@ function takeLink(
   places: { desk: string; shelf: string },
   scan: ShelfScan,
   deps: MoveDeps,
-  notes: string[],
+  planned: Planned,
 ): ShelfSteps | null {
   const { home } = deps;
+  const notes = planned.notes!;
   const { desk, shelf } = places;
   const target = (at: string) => path.relative(path.dirname(at), to);
   const base = { root: shelf, replaceLinksInto: desk };
@@ -270,17 +239,15 @@ function takeLink(
       notes.push(`second clone ${tilde(clone, home)}: ${work.join(', ')} — its own, left as it is; no link made`);
       return null;
     }
-    if (own.carried.length) {
-      notes.push(
-        `second clone ${tilde(clone, home)}: files git ignores, which Syncthing carries (${named(own.carried)}) — left as it is; no link made`,
-      );
-      return null;
-    }
+    const beside = `${path.basename(clone)}${OWN_SUFFIX}/${deps.today} second clone/`;
     notes.push(
       `second clone ${tilde(clone, home)}: nothing of its own — the link takes its place${
-        own.skipped.length ? `; gone with it, as Syncthing does not carry them: ${named(own.skipped)}` : ''
-      }`,
+        own.carried.length
+          ? `; files git ignores, which Syncthing carries, go beside it into ${beside}: ${named(own.carried)}`
+          : ''
+      }${own.skipped.length ? `; gone with it, as Syncthing does not carry them: ${named(own.skipped)}` : ''}`,
     );
+    if (own.carried.length) planned.prepare = () => keepBeside(clone, own, deps);
     return { ...base, link: { path: clone, target: target(clone) }, dropClone: true };
   }
   const place = placeFor(shelf, remote);
@@ -300,6 +267,25 @@ function takeLink(
     return null;
   }
   return { ...base, link: { path: place, target: target(place) } };
+}
+
+/**
+ * `vdx move` of a project of the desk: its link on the shelf would go on leading to the old place — said in the
+ * plan, with the command that moves the project and its link together.
+ */
+export function deskLinkNotes(root: string, environment: Environment, deps: MoveDeps): string[] {
+  const { home } = deps;
+  const desk = environment.move?.desk;
+  const shelf = environment.move?.shelf;
+  if (!desk || !shelf || !within(root, realish(expandHome(desk, home)))) return [];
+  const at = realish(expandHome(shelf, home));
+  if (!fs.existsSync(at)) return [];
+  return scanShelf(at, () => null)
+    .links.filter((l) => linkLeadsTo(l) === root)
+    .map(
+      (l) =>
+        `shelf: the link ${tilde(l.path, home)} leads here and would lead to the old place — vdx take ${shellQuote(tilde(root, home))} --in <group> moves it with the link`,
+    );
 }
 
 function badGroup(group: string): boolean {
@@ -352,8 +338,22 @@ export function runTake(input: { sources: string[]; group?: string; dryRun: bool
     else if (!fs.existsSync(places.shelf)) notes.push(`the shelf ${tilde(places.shelf, home)} is not here — no link`);
     else {
       scan ??= scanShelf(places.shelf, keyOf);
-      const steps = takeLink(root, to, remote, places, scan, deps, notes);
+      const steps = takeLink(root, to, remote, places, scan, deps, planned);
       if (steps) planned.shelf = steps;
+    }
+    // Taken from the shelf: what vdx shelve kept beside it comes back after the move.
+    if (within(root, places.shelf)) {
+      if (hasShelveSets(root)) {
+        notes.push(
+          `its own, kept beside it by vdx shelve in ${path.basename(root)}${OWN_SUFFIX}/, comes back after the move`,
+        );
+        planned.finish = () => said(restoreOwn(to, root, deps), deps);
+      }
+      const others = otherSets(root);
+      if (others.length)
+        notes.push(
+          `beside it, and not brought back: ${named(others.map((o) => path.basename(o)))} in ${path.basename(root)}${OWN_SUFFIX}/`,
+        );
     }
     if (planned.stay && !planned.shelf) {
       log(`${planned.name}: on the desk already, in ${tilde(folder, home)}/ — ${notes.join('; ') || 'nothing to do'}`);
@@ -436,8 +436,19 @@ export function runShelve(input: { sources: string[]; dryRun: boolean }, deps: M
       notes.push(`another clone of its origin on the shelf: ${named(others.map((c) => tilde(c.path, home)))}`);
     const own = ownOf(root, deps);
     const mine = [...workOf(own), ...(own.carried.length ? [`git ignores ${named(own.carried)}`] : [])];
-    if (mine.length) notes.push(`⚠ its own: ${mine.join(', ')} — goes onto the shelf inside the clone`);
-    moves.push({ name: path.basename(root), from: root, to, shelf: steps, notes });
+    if (mine.length)
+      notes.push(
+        `⚠ its own: ${mine.join(', ')} — after the move, beside it in ${path.basename(to)}${OWN_SUFFIX}/${deps.today} shelve/; the clone goes onto the server branch`,
+      );
+    moves.push({
+      name: path.basename(root),
+      from: root,
+      to,
+      shelf: steps,
+      notes,
+      finish: () => said(keepOwn(to, deps.today, deps), deps),
+      fixMemory: false,
+    });
   }
   if (refusals.length) {
     for (const r of refusals) log(`vdx shelve: ${r}`);

@@ -31,6 +31,7 @@ vdx запускает. Такого `node` нет — ошибка называ
 | `vdx push` | `gate.ts` |
 | `vdx ai[@host]` | `ai.ts` |
 | `vdx move` | `move.ts` |
+| `vdx take`, `vdx shelve` | `shelf.ts` → `carryOut` в `move.ts`; своё рядом с клоном — `own.ts` |
 
 Свой раннер vdx не держит: глаголы исполняет mise (D3).
 
@@ -124,7 +125,19 @@ report.ts      markdown, ansi, json
   закрытие простаивающих сессий, пауза папок Syncthing, `mv` на каждой машине копии, снятие
   паузы, разговоры (`moveConversations`), доверие (`.claude.json`), путь памяти
   (`fixProjectMemory`), `move.after` профиля, сессии — снова, в том же разговоре
-  (`runAi`, `runAiRemote`).
+  (`runAi`, `runAiRemote`). Этот ход — `carryOut`; `runMove` только разбирает аргументы.
+- `shelf.ts` — `vdx take` и `vdx shelve`: стол и полка из профиля (`move.desk`, `move.shelf`),
+  обход полки без захода в клоны (`scanShelf`), клон по remote (`<хост>/<путь>` без учёта
+  регистра; хост без точки — через `ssh -G`), место ссылки. Шаги на полке (`ShelfSteps`:
+  ссылка, второй клон, снятие ссылки) `carryOut` делает на каждой машине с полкой, пока папки
+  Syncthing на паузе: ссылка одной машины теряется, папка, удалённая на одной, остаётся у
+  других с игнорируемым (DL #28 кристалла `claude-memory-in-project`).
+- `own.ts` — своё проекта, не его репо: `ownOf` (коммиты не в ветках remote, правки, stash,
+  игнорируемое git — возит ли его Syncthing, `syncthing cli debug file`); `keepOwn` после
+  `shelve` кладёт его в `<место>.own/<дата> shelve/` (`work.bundle`, `files/`, `state.json`,
+  `README`) и только после проверки ставит клон на ветку сервера; `restoreOwn` после `take`
+  возвращает и удаляет набор, когда вернулось всё; `keepSecondClone` — игнорируемое второго
+  клона перед тем, как его место займёт ссылка.
 - `mcp-server.ts` — MCP по stdio: `list_capabilities`, `vdx_audit`, глаголы,
   `vdx_record_success_path` (`specs/mcp-api.md`).
 

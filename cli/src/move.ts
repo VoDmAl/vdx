@@ -108,8 +108,12 @@ export interface Planned {
   shelf?: ShelfSteps;
   /** Lines for the plan: what `vdx take`/`vdx shelve` found on the shelf. */
   notes?: string[];
-  /** After the move, on this machine: what the project keeps beside it on the shelf; false — a step failed, said. */
+  /** Right after the move, on this machine: what the project keeps beside it on the shelf; false — failed, said. */
   finish?: () => boolean;
+  /** false: the memory path stays as it is (`vdx shelve`: the shelf is an archive; the next take sets it). */
+  fixMemory?: boolean;
+  /** After the questions, before the pause, on this machine: its undo, or null — failed and said, nothing moves. */
+  prepare?: () => (() => void) | null;
 }
 
 /**
@@ -644,7 +648,16 @@ export function projectRootOf(src: string, deps: MoveDeps): { root: string } | {
   return { root };
 }
 
-export function runMove(input: { sources: string[]; folder: string; dryRun: boolean }, deps: MoveDeps): number {
+export function runMove(
+  input: {
+    sources: string[];
+    folder: string;
+    dryRun: boolean;
+    /** Lines for a project's plan (`vdx move` of a desk project: its link on the shelf). */
+    notesFor?: (root: string, environment: Environment) => string[];
+  },
+  deps: MoveDeps,
+): number {
   const { log, home } = deps;
   const environment = loadProfile('move', deps);
   if (!environment) return EXIT_USAGE;
@@ -664,7 +677,7 @@ export function runMove(input: { sources: string[]; folder: string; dryRun: bool
     else if (within(folder, root)) refusals.push(`${tilde(folder, home)} lies inside ${tilde(root, home)}`);
     else if (moves.some((m) => m.from === root || m.to === to))
       refusals.push(`${tilde(root, home)}: named twice, or another project has its name`);
-    else moves.push({ name: path.basename(root), from: root, to });
+    else moves.push({ name: path.basename(root), from: root, to, notes: input.notesFor?.(root, environment) ?? [] });
   }
   if (refusals.length) {
     for (const r of refusals) log(`vdx move: ${r}`);
@@ -972,6 +985,24 @@ export function carryOut(
   }
 
   let shelfFailed = false;
+  // What goes beside the shelf's clones before the pause (a second clone's ignored files); undone if nothing moves.
+  // Per project; gone once its steps on the shelf begin — from then on the set is all that is left of those files.
+  const undos = new Map<number, () => void>();
+  const undoPrepared = () => {
+    for (const u of undos.values()) u();
+    undos.clear();
+  };
+  for (const [i, mv] of moves.entries()) {
+    if (!mv.prepare) continue;
+    const undo = mv.prepare();
+    if (!undo) {
+      undoPrepared();
+      startAgain((x) => moves[x.project]!.from);
+      log('nothing moved');
+      return EXIT_FAILED;
+    }
+    undos.set(i, undo);
+  }
   // Pause every folder involved on every machine that has it; resume whatever happens.
   const toPause = new Map<Machine, Set<string>>();
   for (const plan of plans) for (const [m, f] of plan.pause) toPause.set(m, new Set([...(toPause.get(m) ?? []), ...f]));
@@ -1003,6 +1034,7 @@ export function carryOut(
         if (!ran || ran.status !== 0) {
           log(`✗ could not pause ${f} on ${m.label}${ran ? ` (exit ${ran.status})` : ' — no answer'}`);
           resume();
+          undoPrepared();
           startAgain((x) => moves[x.project]!.from);
           log('nothing moved');
           return EXIT_FAILED;
@@ -1014,6 +1046,7 @@ export function carryOut(
     const done = new Set<number>();
     const failedBack = () => {
       resume();
+      undoPrepared();
       startAgain((x) => (done.has(x.project) ? moves[x.project]!.to : moves[x.project]!.from));
       return EXIT_FAILED;
     };
@@ -1072,6 +1105,7 @@ export function carryOut(
       // vdx take: the link on the shelf, on every machine that has the shelf — the project is in place either way.
       const link = mv.shelf?.link;
       if (link) {
+        undos.delete(i);
         const ok: string[] = [];
         for (const m of machines.filter((x) => probes.get(x)!.shelf.has(i))) {
           if (probes.get(m)!.link.get(i) === link.target) {
@@ -1114,10 +1148,10 @@ export function carryOut(
 
   for (const [i, mv] of moves.entries()) {
     const plan = plans[i]!;
-    if (mv.stay) {
-      if (mv.finish && !mv.finish()) shelfFailed = true;
-      continue;
-    }
+    // What the project keeps beside it on the shelf, before the memory path is read: vdx take brings back
+    // settings.local.json and an ignored .claude/memory/ first.
+    if (mv.finish && !mv.finish()) shelfFailed = true;
+    if (mv.stay) continue;
     // What Claude Code files by the path. The conversations first: without a memory path
     // set, `vdx doctor --fix` would not take them along.
     const projects = path.join(claudeConfigDir(deps.env, home), 'projects');
@@ -1136,7 +1170,7 @@ export function carryOut(
       const ctx = { env: deps.env, home };
       if (fs.existsSync(mv.to) && memoryApplies(mv.to, ctx)) {
         const state = memoryState(mv.to, ctx);
-        if (state.kind === 'moved') {
+        if (state.kind === 'moved' && mv.fixMemory !== false) {
           const fixed = fixProjectMemory(mv.to, state, ctx, {
             ask: () => null,
             log,
@@ -1169,7 +1203,6 @@ export function carryOut(
             : `  ${m.label} keeps its own copy in ${old}`,
         );
       }
-    if (mv.finish && !mv.finish()) shelfFailed = true;
     zoxideOn([...probes.keys()], mv, probes, deps);
     for (const h of hooks) runHook(h, mv, deps);
   }

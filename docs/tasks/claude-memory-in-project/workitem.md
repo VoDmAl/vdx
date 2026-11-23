@@ -1128,16 +1128,35 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       `tx-auth-widget` — второй клон чистый, ссылка на его место, `php-telegram-bot` с полки — ссылка на своё место.
       До шага 2 своё при `shelve` только называется, второй клон с игнорируемым, что Syncthing возит, — не трогается.
       `ssh -G` на m3 алиасы `stash`/`github` не раскрывает: их 15 клонов по remote не находятся — строка без ссылки
-- [ ] Sidetrack #8, шаг 2: `<имя>.own/` — своё при `shelve` (bundle, `files/`, README, клон — на ветку сервера) и
-      возврат при `take`; игнорируемое второго клона — `<дата> second clone/`; тесты
-- [ ] Sidetrack #8, шаг 3: справка `vdx take`/`vdx shelve`, `docs/architecture.md`, `vdx move` называет ссылку
-      проекта стола; холостой прогон на m3 и lft с профилем из scratchpad (до сета)
+- [x] Sidetrack #8, шаг 2: `<имя>.own/` — своё при `shelve` (bundle, `files/`, README, клон — на ветку сервера) и
+      возврат при `take`; игнорируемое второго клона — `<дата> second clone/`; тесты — 2026-11-22: `cli/src/own.ts`
+      (`keepOwn`, `restoreOwn`, `keepSecondClone`), в `carryOut` — `prepare` до паузы (откат только у проектов, чьи
+      шаги на полке не начались: потом набор — единственная копия) и `finish` сразу после `mv`, до памяти (`take`
+      сначала возвращает `settings.local.json`); `shelve` путь памяти не трогает (`fixMemory: false`): отслеживаемый
+      `.claude/settings.json` личного проекта иначе сделал бы клон на полке «грязным». Без ветки сервера (нет
+      upstream и `origin/HEAD`) своё остаётся в клоне нетронутым, строкой `⚠`. Пробное репо в scratchpad: свой
+      коммит, ветка, stash, правка, неотслеживаемый, `.env` — после `shelve` клон чистый на `origin/main`, после
+      `take` — как было. Тесты: 16 в `vdx take and vdx shelve`; тест круга падает, если `restoreOwn` не делает
+      `stash pop`. Холостой прогон `take` на lft (своя копия рабочего CLI, профиль во временном файле, удалён) — тот
+      же план, что на m3. Автоматический обзор безопасности (2026-11-22) нашёл подстановку в shell без кавычек:
+      имена веток, sha и сообщения stash из `state.json` (синхронизируемая папка) шли в строку команды, а git
+      пускает в имя ветки `$`, `;`, `(` (`own$(touch${IFS}pwned)` — `check-ref-format` принимает). Починка: `gitIn`
+      берёт список аргументов, каждый в кавычках; sha из `state.json` — по `/^[0-9a-f]{40,64}$/`, ветка — через
+      `check-ref-format --branch`, дата — `YYYY-MM-DD`; тест — такая ветка проходит `shelve` → `take` именем, файла
+      `pwned` нигде нет (что тест падает на старом коде, не проверено: старый `own.ts` не был в коммите)
+- [x] Sidetrack #8, шаг 3: справка `vdx take`/`vdx shelve`, `docs/architecture.md`, `vdx move` называет ссылку
+      проекта стола; холостой прогон на m3 и lft с профилем из scratchpad (до сета) — 2026-11-22: справка обоих,
+      `README.md`, `cli/README.md`, `docs/architecture.md`, `docs/specs/environment-format.md` (ключи и поведение,
+      «vdx 0.68+» — сверить номер при выпуске); `vdx move` проекта стола — строка `shelf: the link … leads here` с
+      `vdx take … --in <group>` (`deskLinkNotes`; обход полки m3 — 0,4 с, 428 клонов, только для проекта стола).
+      Ещё по `state.json`: путь файла — только внутри проекта (без абсолютных и `..`), ветка не с `-`; тест —
+      файл `../../escape.txt` не копируется, набор остаётся (падает без проверки)
 - [ ] Сет minor (`vdx-rubric-vodmal`): `move.desk`, `move.shelf`; `git.author_pool` — стол (и его группы: `scanPool`
       читает только детей каталога); зеркало `docs/specs/vdx-environment.example.yaml` — после строки коммита
       соседней сессии `vdx@m3-2` (держит этот файл в индексе с 2026-11-21 19:25). Пути echelon в хуках
       (`echelon-guard`, `echelon-ref-race`, `echelon-commit-wait` — `$HOME/AI Projects/echelon`) — к переезду echelon,
       последним (их DL #10)
-- [ ] Выпуск CLI с `take`/`shelve`; итог nas-info — письмо с версией, `--reply-to nas-info/desk-and-shelf-take-shelve-outcome`
+- [ ] Sidetrack #8: выпуск CLI с `take`/`shelve`; итог nas-info — письмо с версией, `--reply-to nas-info/desk-and-shelf-take-shelve-outcome`
       (первый ответ ушёл 2026-11-21: принято, п. 8 — не дефект, мяч — vdx): ссылки на каждой машине (DL #28),
       `<имя>.own/` рядом с клоном на полке — их обновлению полки и проверкам знать — срока нет
 - [ ] Письмо nas-info «`desk` готова» на lft, m3, nyc — с него `take`/`shelve` вживую (до него — `--dry-run`, пробное
