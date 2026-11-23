@@ -53,9 +53,9 @@ auth внутрь `GA/`, а всё про space/limeflow — в `SPACE`; пут�
 **2026-11-22: стол и полка — `vdx take` / `vdx shelve` выпущены в 0.68.0 (`7d6e261`), сет v1.19.0 (`296997a`), на
 m3 и lft.** Смены корня не будет (DL #26): проекты по одному уходят на стол `/Volumes/Working/desk` (`move.desk`),
 полка `/Volumes/Working/repos` (`move.shelf`) знает каждый из них относительной ссылкой. Устройство — DL #27, #28,
-код — `cli/src/shelf.ts`, `cli/src/own.ts`, общий ход `carryOut` в `move.ts`. Вживую не запускалось ни разу: ждём
-письмо nas-info «`desk` готова» (Next actions, `when:`), до него — только `--dry-run` (на m3 и lft сходится).
-Первые `take` — Sidetrack #7 (`GA/`, `SPACE/`) и по слову владельца о моменте.
+код — `cli/src/shelf.ts`, `cli/src/own.ts`, общий ход `carryOut` в `move.ts`. Вживую не запускалось ни разу. Стол
+готов на m3, lft, nyc (письмо nas-info `desk-take-shelve-released-outcome`, 2026-11-23); первые `take` — по слову
+владельца о моменте (Next actions, `when:`), Sidetrack #7 (`GA/`, `SPACE/`).
 
 **2026-10-23: выпущено в 0.37.0 (`6b28794`), сет v1.7.0 (`383ffc3`); на lft и m3 —
 0.37.0.** В 0.37.0 вопрос «под git?» в `vdx doctor --fix` звучит, только когда и stdout
@@ -1135,7 +1135,10 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       `git.finam.ru/WT/kratos` с 2099 коммитами ни в одной ветке remote и stash — оставлен, ссылки нет,
       `tx-auth-widget` — второй клон чистый, ссылка на его место, `php-telegram-bot` с полки — ссылка на своё место.
       До шага 2 своё при `shelve` только называется, второй клон с игнорируемым, что Syncthing возит, — не трогается.
-      `ssh -G` на m3 алиасы `stash`/`github` не раскрывает: их 15 клонов по remote не находятся — строка без ссылки
+      `ssh -G` на m3 и lft алиасы `stash`/`github` не раскрывает: их 6 клонов (4 `stash:7999/jtt/…`, 2
+      `github:LimeBrokerage/…`) по remote не находятся — строка без ссылки. Не 15, как ушло в письме nas-info
+      `desk-take-shelve-released`: 15 — все клоны не по `<хост>/<путь>`, переименованные и старые в корне полки поиск
+      по remote находит; поправка — их счёт в `desk-take-shelve-released-outcome`, ответ им
 - [x] Sidetrack #8, шаг 2: `<имя>.own/` — своё при `shelve` (bundle, `files/`, README, клон — на ветку сервера) и
       возврат при `take`; игнорируемое второго клона — `<дата> second clone/`; тесты — 2026-11-22: `cli/src/own.ts`
       (`keepOwn`, `restoreOwn`, `keepSecondClone`), в `carryOut` — `prepare` до паузы (откат только у проектов, чьи
@@ -1180,9 +1183,17 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       --prefer-online`, по одной), холостой `take … --in GA` на выпущенном на обеих — ссылка на обеих. Письмо
       nas-info `desk-take-shelve-released` (`--reply-to nas-info/desk-and-shelf-take-shelve-outcome`): выпуск, итог
       теста ссылок, `.own/` рядом с клонами, алиасы `stash`/`github`, их п. 7; их сессия intercom на m3 поднята
-- [ ] Sidetrack #8: письмо nas-info «`desk` готова» на lft, m3, nyc — с него `take`/`shelve` вживую (до него —
+- [x] Sidetrack #8: письмо nas-info «`desk` готова» на lft, m3, nyc — с него `take`/`shelve` вживую (до него —
       `--dry-run`, пробное дерево), первые `take` — по слову владельца о моменте — when: их письмо после шифрования
-      Working на m3 (владелец), срока нет; check: `/vdm:intercom check`; ответ на `desk-take-shelve-released` — там же
+      Working на m3 (владелец), срока нет; check: `/vdm:intercom check`; ответ на `desk-take-shelve-released` — там же —
+      2026-11-23 (`desk-take-shelve-released-outcome`): `desk` на m3, lft — `/Volumes/Working/desk`, nyc —
+      `/mnt/ssd/personal/desk` (ссылка `/mnt/lvm/work/desk` рядом с полкой на HDD), idle, `syncthing-caught-up` 0,
+      364 правила игноров, relay и restic nyc `desk` раз в сутки; Working на m3 зашифрован (FileVault Yes); ссылки и
+      `.own/` их обновление полки учтёт (их кристалл `projects-on-working`, побеги #8, #9); клонов с алиасами — 6
+- [ ] Sidetrack #8: первые `vdx take`/`vdx shelve` вживую — стол готов (выше); с чего начать (Sidetrack #7, `GA/`,
+      `SPACE/`, или один проект без путей в конфигах) и когда — слово владельца — when: слово владельца о моменте;
+      check: `vdx take … --dry-run` на выпущенном, потом `take`; после — `readlink` ссылки на m3 и `ssh lft`, на nyc —
+      у nas-info
 
 ## References
 
