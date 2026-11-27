@@ -708,8 +708,10 @@ the wait») на старом поведении падают.
       2026-11-21 при пробе `claude -p`
 - [x] см. Sidetrack #11 — `settle()` ждёт агента, пока жив login-shell, а не 10 с; без `respawn` живого старта; тест
       (2026-11-26)
-- [ ] Итог global-auth-gap — после выпуска CLI, со ссылкой на коммит: `send global-auth-gap … --reply-to
-      vdx/intercom-detach-false-not-running` (первый ответ ушёл 2026-11-23 из сессии intercom)
+- [x] Итог global-auth-gap — после выпуска CLI, со ссылкой на коммит: `send global-auth-gap … --reply-to
+      vdx/intercom-detach-false-not-running` (первый ответ ушёл 2026-11-23 из сессии intercom) — 2026-11-27
+      `global-auth-gap/intercom-detach-false-not-running-released`: 0.69.0, `11db125`, мяч ничей; их сессия intercom
+      на m3 — в очереди (4 из 4)
 
 ## References
 

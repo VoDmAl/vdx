@@ -14,7 +14,7 @@ schema_version: "0.1"
 
 metadata:
   name: vdx-environment-vodmal
-  version: "1.19.0"
+  version: "1.20.0"
   owner: vodmal
   description: "How vodmal runs an agent in a project"
 
@@ -47,6 +47,23 @@ agent:
         has_file: {path: signals/sources.yaml}
       session: hq
       args: [--settings, '{"idleCompaction":true,"env":{"CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS":"350000"}}']
+    # The vercel plugin is on in ~/.claude/settings.json and brings about 40
+    # skills, near 15 KB, into the start of every session. Off everywhere but a
+    # Vercel project: vercel.json or .vercel at its root, or apps/web/vercel.json
+    # (limex-team/copilot keeps it there). vdx 0.69+ makes one --settings of this
+    # rule and hq-idle-compaction; an older vdx passes both, and Claude Code keeps
+    # only the last. Before the channel flag below, like the rule above. Asked by
+    # the owner 2026-11-25 (infra-hq vercel-plugin-by-project-class; vdx
+    # hq-session-mode, Sidetrack #6).
+    - id: vercel-only-in-vercel-projects
+      description: "Not a Vercel project (no vercel.json, .vercel, apps/web/vercel.json): the vercel plugin is off"
+      if:
+        not:
+          any_of:
+            - has_file: {path: vercel.json}
+            - has_file: {path: .vercel}
+            - has_file: {path: apps/web/vercel.json}
+      args: [--settings, '{"enabledPlugins":{"vercel@claude-plugins-official":false}}']
     # echelon sends its consumers' agents Claude Code channel events: mail
     # while the project's mail window is open (mail.watch), and to every
     # consumer "the project's slice is complete". A session started without

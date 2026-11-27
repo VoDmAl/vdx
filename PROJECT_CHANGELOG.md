@@ -2,6 +2,15 @@
 
 Значимые изменения vdx. Формат записи: заголовок + 1–2 предложения + ссылки.
 
+## 2026-11-27
+
+### Плагин vercel — только в проектах Vercel (сет v1.20.0)
+
+Правило профиля `vercel-only-in-vercel-projects` выключает плагин vercel (около 15 KB скиллов на старте каждой сессии)
+там, где нет `vercel.json`, `.vercel` или `apps/web/vercel.json`. С `hq-idle-compaction` оно живёт благодаря
+склейке `--settings` в 0.69; `--dry-run` на m3 и lft — в vdx выключен, в пяти проектах Vercel нет. Слово владельца
+через infra-hq 2026-11-25 ([hq-session-mode](docs/tasks/hq-session-mode/workitem.md), Sidetrack #6).
+
 ## 2026-11-26
 
 ### Несколько `--settings` из правил профиля — один флаг

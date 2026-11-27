@@ -432,12 +432,16 @@ infra-hq ⏰ 2026-12-02
 - [x] Sidetrack #6: владелец решает, какие плагины включать каким классам проектов — 2026-11-25 «да, согласен»: vercel
       только в проектах с `vercel.json` или `.vercel`, включая `limex-team/copilot` (`apps/web/vercel.json`); прочие
       плагины — не решались
-- [ ] Sidetrack #6: правило профиля — vercel выключен везде, кроме проектов с `vercel.json`, `.vercel` или
-      `apps/web/vercel.json` (правило с `not`; проверить, что `has_file` видит папку `.vercel`). После склейки
-      `--settings` (пункт выше): правило в сете (minor), зеркало, `--dry-run` на m3 и lft — vercel есть в `pixer/shop`,
-      `pixer/admin`, `og-image-generator`, `limex-team/copilot` и нет в vdx; итог infra-hq — `reply` или `send
-      infra-hq … --reply-to vdx/vercel-plugin-by-project-class-outcome` ⏰ 2026-12-02; итог echelon — письмом в цепочку
-      `session-start-load-outcome-vdx`
+- [x] Sidetrack #6: правило профиля — vercel выключен везде, кроме проектов с `vercel.json`, `.vercel` или
+      `apps/web/vercel.json` — 2026-11-27: `vercel-only-in-vercel-projects` в сете v1.20.0 (`has_file` видит папку —
+      `existsAsWritten`, `cli/src/facts.ts`), зеркало и `DEFAULT_BASELINE`; vdx 0.69.0 на m3 и lft. `--dry-run`: m3 —
+      правило в vdx, нет в `limex-team/copilot` и `og-image-generator`, HQ t23b-program — один `--settings` с
+      `idleCompaction` и `enabledPlugins` перед флагом канала; lft — то же в vdx, copilot, og-image-generator,
+      `PhpstormProjects/pixer/shop` и `pixer/admin` (у обоих `vercel.json`), HQ global-auth-gap. Идущие сессии
+      получат правило со своим перезапуском
+- [ ] Sidetrack #6: тег `v1.20.0` и push сета — строка владельца (2026-11-27)
+- [ ] Sidetrack #6: итог infra-hq — `send infra-hq … --reply-to vdx/vercel-plugin-by-project-class-outcome` после push
+      тега ⏰ 2026-12-02; итог echelon — письмом в цепочку `session-start-load-outcome-vdx`
 
 ## References
 
