@@ -4,6 +4,13 @@
 
 ## 2026-11-26
 
+### Несколько `--settings` из правил профиля — один флаг
+
+Claude Code из двух `--settings` берёт последний и молча теряет первый: правило с `enabledPlugins` и правило HQ с
+`idleCompaction` не жили бы вместе. `planLaunch` склеивает JSON всех `--settings` в один на месте первого — объекты по
+ключам, повтор ключа — из позднего правила; один `--settings` и путь к файлу не трогает. Шаг к плагину vercel только в
+проектах с `vercel.json` ([hq-session-mode](docs/tasks/hq-session-mode/workitem.md), Sidetrack #6).
+
 ### `vdx ai` ждёт агента, пока идёт логин-шелл старта
 
 Агента после старта ждали 10 с, и на lft под нагрузкой (шелл 39 с) `--detach` говорил «claude is not running» над стартом,

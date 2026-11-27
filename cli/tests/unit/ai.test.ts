@@ -23,6 +23,7 @@ import {
   hostLabel,
   isAgentProcess,
   listProcesses,
+  mergeSettings,
   missingArgs,
   onPath,
   parseEnvironment,
@@ -363,6 +364,68 @@ describe('clientSeat: which seat a terminal on a tmux session is at', () => {
     expect(nameSeats([agent(['m3', 'ssh:10.147.17.21'])], owners)[0]!.openAt).toEqual(['m3', 'lft']);
     // An address no machine of the profile has: another machine, which not known.
     expect(nameSeats([agent(['ssh:192.0.2.9'])], owners)[0]!.openAt).toEqual(['?']);
+  });
+});
+
+// Claude Code 2.1.331 takes the last of two --settings and drops the first silently (lft, 2026-11-24): the plugins
+// a rule switched off came back once the HQ rule's idleCompaction followed (hq-session-mode Sidetrack #6).
+describe('mergeSettings: one --settings of every rule that matched', () => {
+  it('two rules give one flag with the keys of both, where the first stood, ahead of a flag that takes a list', () => {
+    const profile = [
+      'agent:',
+      '  command: claude',
+      '  args: [--x]',
+      '  when:',
+      '    - id: plugins',
+      '      if: {has_file: vercel.json}',
+      `      args: [--settings, '{"enabledPlugins": {"vercel@claude-plugins-official": true}}']`,
+      '    - id: hq',
+      '      if: {has_file: vercel.json}',
+      `      args: [--settings, '{"idleCompaction":true,"env":{"A":"1"}}']`,
+      '    - id: chan',
+      '      if: {has_file: vercel.json}',
+      '      args: [--dangerously-load-development-channels, plugin:x@y]',
+      '',
+    ].join('\n');
+    const root = tmpDir('vdx-ai-settings-');
+    fs.writeFileSync(path.join(root, 'vercel.json'), '{}');
+    const env = parseEnvironment(profile, 'p.yaml');
+    const p = planLaunch({
+      environment: env,
+      profilePath: 'p.yaml',
+      agent: env.agent!,
+      projectRoot: root,
+      project: 'p',
+      host: 'm3',
+    });
+    fs.rmSync(root, { recursive: true, force: true });
+    expect(p.args).toEqual([
+      '--x',
+      '--settings',
+      '{"enabledPlugins":{"vercel@claude-plugins-official":true},"idleCompaction":true,"env":{"A":"1"}}',
+      '--dangerously-load-development-channels',
+      'plugin:x@y',
+    ]);
+  });
+
+  it('objects merge key by key; one key set twice — the later wins; the = form counts', () => {
+    expect(
+      mergeSettings([
+        '--settings',
+        '{"enabledPlugins":{"a":false},"env":{"K":"1"},"model":"x"}',
+        '--settings={"enabledPlugins":{"b":true},"model":"y"}',
+      ]),
+    ).toEqual(['--settings', '{"enabledPlugins":{"a":false,"b":true},"env":{"K":"1"},"model":"y"}']);
+  });
+
+  it('one JSON value is left as the profile wrote it; a path is not merged', () => {
+    const one = ['--settings', '{"idleCompaction": true}', '--y'];
+    expect(mergeSettings(one)).toBe(one);
+    const withPath = ['--settings', '/etc/claude.json', '--settings', '{"a":1}'];
+    expect(mergeSettings(withPath)).toBe(withPath);
+    expect(mergeSettings(['--settings', '/etc/claude.json', '--settings', '{"a":1}', '--settings', '{"b":2}'])).toEqual(
+      ['--settings', '/etc/claude.json', '--settings', '{"a":1,"b":2}'],
+    );
   });
 });
 

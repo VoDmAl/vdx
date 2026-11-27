@@ -657,7 +657,7 @@ export function planLaunch(input: {
     seat: input.seat ?? input.host,
     profilePath: input.profilePath,
     command: agent.command,
-    args,
+    args: mergeSettings(args),
     resumeArgs: [...(agent.resume_args ?? [])],
     matched,
     focused,
@@ -674,6 +674,53 @@ export function planLaunch(input: {
       }) + (intercom ? '-intercom' : hq ? '-hq' : ''),
     machines: (environment.session?.machines ?? []).filter((m) => m.toLowerCase() !== input.host.toLowerCase()),
   };
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function mergeObjects(into: Record<string, unknown>, from: Record<string, unknown>): Record<string, unknown> {
+  for (const [key, value] of Object.entries(from)) {
+    const was = into[key];
+    into[key] = isPlainObject(was) && isPlainObject(value) ? mergeObjects({ ...was }, value) : value;
+  }
+  return into;
+}
+
+/**
+ * Two `--settings` in one start: Claude Code takes the last and drops the rest silently (2.1.331 on lft,
+ * 2026-11-24: a rule's `enabledPlugins`, then `idleCompaction` of another — the plugin came back). So the JSON
+ * values of every `--settings` (and `--settings=`) become one, where the first stood: objects merge key by key,
+ * and for one key set twice the later wins — agent.args, then the rules in the profile's order. A value that is
+ * no JSON object (a file's path) stays as it is; one JSON value alone is not rewritten, so a running agent still
+ * carries it as the profile says (hq-session-mode Sidetrack #6).
+ */
+export function mergeSettings(args: string[]): string[] {
+  const at: { i: number; width: 1 | 2; value: Record<string, unknown> }[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    const inline = a.startsWith('--settings=') ? a.slice('--settings='.length) : null;
+    const raw = inline ?? (a === '--settings' ? args[i + 1] : undefined);
+    if (raw === undefined) continue;
+    let value: unknown;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      value = undefined;
+    }
+    if (isPlainObject(value)) at.push({ i, width: inline === null ? 2 : 1, value });
+    if (inline === null) i++;
+  }
+  if (at.length < 2) return args;
+  const merged = at.reduce<Record<string, unknown>>((acc, s) => mergeObjects(acc, s.value), {});
+  const drop = new Set(at.slice(1).flatMap((s) => (s.width === 2 ? [s.i, s.i + 1] : [s.i])));
+  const first = at[0]!;
+  return args.flatMap((a, i) => {
+    if (drop.has(i)) return [];
+    if (i === first.i) return ['--settings', JSON.stringify(merged)];
+    if (first.width === 2 && i === first.i + 1) return [];
+    return [a];
+  });
 }
 
 /**
