@@ -5,7 +5,7 @@ description: "Держит вывод UserPromptSubmit темы короче п�
 status: ready
 session-type: short-bug
 created: 2026-11-25
-last-updated: 2026-11-25
+last-updated: 2026-11-26
 relates-to: ["[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
@@ -67,18 +67,34 @@ relates-to: ["[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/w
 **Implication:** основная сессия берёт кристалл в работу сама; ответ отправителю ушёл из сессии
 intercom (Next actions).
 
+### #2 / 2026-11-26 / Предела длины темы в vdx нет; длинную тему чинит echelon: план — в `--prompt`
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** транскрипт echelon `18119876-…` (пример брифа), 2026-11-26: первый промпт сессии — 6 602 байта, и
+тема в строке хука начинается теми же словами («Шаг 40а очереди кода — Drive, этап 2 …»). Тема без `--prompt` и есть
+первый промпт (`cli/src/index.ts:130`). В echelon шаг очереди стартует `vdx ai@lft … --focused "…" --detach` без
+`--prompt` (их память `planned-queue-on-lft`, хук `runtime/echelon/hooks.py:1247`), а навык whatsup
+(`plugin/skills/whatsup/SKILL.md:303`) уже даёт `--focused "<тема>" --detach --prompt "<что сделать…>"`. Хук после
+правки на теме в 7 KB — меньше 9 793 байт (тест).
+**Context:** Next action «решить предел длины темы при установке: отказ, обрезка или ничего».
+**Why:** обрезка режет задачу шага, если тема и есть первый промпт; отказ без терминала ломает старт шагов HQ
+(`--detach`). После правки все виденные темы (до 6,6 KB) помещаются. Длинная тема — это то, что шаг передаёт план
+темой; это поправимо у отправителя, а их же навык уже знает, как правильно.
+**Implication:** echelon — бриф: шаг очереди стартует с короткой темой и планом в `--prompt`. Предел в vdx — если
+длинные темы придут и после этого.
+
 ## Sidetracks
 
 ## Next actions
 
-- [ ] `plugin/scripts/focused-topic.sh`: тема — один раз, в первой строке; во второй — «вне темы этой
-      сессии» без цитаты; 🎯-строка ответа — без цитаты или с началом темы + «…»
-- [ ] Решить предел длины темы при установке (`vdx ai --focused "<topic>"`, `setPaneTopic`): отказ с
-      вопросом в терминале, обрезка с сообщением или ничего; заодно — где его держать, чтобы intercom
-      и `--conversation` видели ту же тему
-- [ ] Тест в `cli/tests/unit/plugin-hook.test.ts`: тема в 7 KB → вывод хука короче 9 793 байт, вторая
-      строка целиком; тест падает, если вернуть две цитаты
-- [ ] Выпуск плагина: `version` в `plugin/.claude-plugin/plugin.json`, push `main` через `vdx push`
+- [x] `plugin/scripts/focused-topic.sh`: тема — один раз, в первой строке; 🎯-строка цитирует её оттуда, длинную —
+      первыми словами и «…» (2026-11-26; живой прогон на теме `vdx@m3-2` — 1 473 байта)
+- [x] Предел длины темы при установке — нет; бриф echelon о плане в `--prompt` (DL #2)
+- [x] Тест в `cli/tests/unit/plugin-hook.test.ts`: тема в 7 KB → вывод короче 9 793 байт, тема в нём один раз, вторая
+      строка целиком; с двумя цитатами тест падает (23 343 байта)
+- [ ] Выпуск плагина 0.15.16: `version` поднят, push `main` — `vdx push` владельца
+- [ ] Бриф echelon: шаг очереди — короткая тема, план в `--prompt` (DL #2)
 - [x] Outcome to `ai-dev-plugins`: что берём — ответ из сессии intercom 2026-11-25
       (`focused-topic-prompt-hook-overflow-outcome`)
 - [ ] Итог выпуска — `ai-dev-plugins` новым письмом с `--reply-to ai-dev-plugins/focused-topic-prompt-hook-overflow-outcome`:

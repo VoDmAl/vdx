@@ -23,6 +23,9 @@ project="${CLAUDE_PROJECT_DIR:-$PWD}"
 root="'$(printf '%s' "$project" | sed "s/'/'\\\\''/g")'"
 set_it="\`vdx ai $root --focused \"<topic>\"\` (it changes this session's topic and nothing else)"
 
+# The topic goes in once, on the first line: a topic of 6.6 KB quoted three times made 21 KB, past the ~10 000
+# characters Claude Code shows in full — the rest went to a file, and the session saw the topic's start and not
+# what to do with it (focused-topic-hook-budget). The model quotes it from the first line.
 # Braces before a non-ASCII character: under a UTF-8 locale bash 3.2 (/bin/sh on macOS) reads the
 # character's first byte as part of the name, and «$topic» came out as «U+FFFD (focused-topic Sidetrack #1).
 # A function, not `text=$(cat <<EOF …)`: inside $( ) bash 3.2 counts the heredoc's apostrophes too,
@@ -30,7 +33,7 @@ set_it="\`vdx ai $root --focused \"<topic>\"\` (it changes this session's topic 
 topic_text() {
   cat <<EOF
 vdx ai: the topic of this focused session is «${topic}»
-· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «${topic}»» in the user's language (Russian: «🎯 вне темы «${topic}»»), and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's intercom session, a session of its own: a line for the user to paste into a terminal, \`vdx ai $root --focused "<the topic you suggest>"\` — with the topic filled in, opening that session with it as its first prompt; do not run it yourself, here it would change this session's topic. A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it, and so is a question about this session itself (what next, what is left, whether to wrap it up). The 🎯 line answers a message of the user's, once per answer: work of your own off the topic, or a letter that came in, you name in plain words. The user names another topic («тема теперь Y»): run $set_it.
+· Keep the conversation in it. A message of the user's about something else: start the answer with one line, «🎯 off topic «<the topic>»» in the user's language (Russian: «🎯 вне темы «<the topic>»»), the topic as on the line above, a topic longer than a few words by its first words and «…», and offer where to put it aside — a sidetrack of the active crystal, a letter to the project's intercom session, a session of its own: a line for the user to paste into a terminal, \`vdx ai $root --focused "<the topic you suggest>"\` — with the topic filled in, opening that session with it as its first prompt; do not run it yourself, here it would change this session's topic. A short answer off the topic is given at once; edits, commits and letters off the topic wait for the user's «here» («здесь»). A message that goes on with the work at hand is on the topic, even when it does not name it, and so is a question about this session itself (what next, what is left, whether to wrap it up). The 🎯 line answers a message of the user's, once per answer: work of your own off the topic, or a letter that came in, you name in plain words. The user names another topic («тема теперь Y»): run $set_it.
 EOF
 }
 

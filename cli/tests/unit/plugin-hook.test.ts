@@ -188,7 +188,8 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
     expect(r.status).toBe(0);
     const text = contextOf(r.stdout);
     expect(text.split('\n')[0]).toBe(topicLine('релиз 0.41 «тема» $HOME `x`'));
-    expect(text).toContain('«🎯 off topic «релиз 0.41 «тема» $HOME `x`»»');
+    expect(text).toContain('«🎯 off topic «<the topic>»»');
+    expect(text).toContain('a topic longer than a few words by its first words and «…»');
     expect(text).toContain(`run \`vdx ai '/projects/it'\\''s mine' --focused "<topic>"\``);
     // Off the topic: the line the user copies, ready — and not one to run here.
     expect(text).toContain(`\`vdx ai '/projects/it'\\''s mine' --focused "<the topic you suggest>"\``);
@@ -203,6 +204,22 @@ describe('plugin UserPromptSubmit hook: the topic of a focused session', () => {
     const file = path.join(dir, `${ID.a}.jsonl`);
     fs.writeFileSync(file, [hookLine(text), userLine('hi')].join('\n') + '\n');
     expect(readConversation(file, new Date())?.topic).toBe('релиз 0.41 «тема» $HOME `x`');
+  });
+
+  it('a long topic goes in once: what to do with it still reaches the session (focused-topic-hook-budget)', () => {
+    // Claude Code shows a hook's output in full up to ~10 000 characters (the longest seen whole: 9 793), the
+    // rest goes to a file with a 2 KB preview. A topic of 6.6 KB, quoted three times, made 21 KB (echelon,
+    // 2026-11-24). Bytes, not characters: there are no fewer of them.
+    const topic = Array(120).fill('Шаг 40а очереди кода — план этапа.').join(' ');
+    expect(Buffer.byteLength(topic)).toBeGreaterThan(7000);
+    const text = contextOf(run({ STUB_TOPIC: topic, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' }).stdout);
+    expect(Buffer.byteLength(text)).toBeLessThan(9793);
+    expect(text.split(topic).length - 1).toBe(1);
+    const [first, second] = text.split('\n');
+    expect(first).toBe(topicLine(topic));
+    expect(second).toMatch(
+      /^· Keep the conversation in it\..*run `vdx ai .* --focused "<topic>"` \(it changes this session's topic and nothing else\)\.$/,
+    );
   });
 
   it('no topic yet: asks the agent to set one — only of a vdx that takes it', () => {
