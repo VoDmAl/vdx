@@ -1279,6 +1279,8 @@ export interface AiDeps {
   /** This machine's addresses; default its network interfaces (DL #32). */
   addresses?: () => string[];
   confirmTimeoutMs: number;
+  /** How long a start's agent is waited for while its login shell lives; default `AGENT_START_MS`. */
+  agentStartMs?: number;
   /** One line from the person at the terminal, or null when there is none. */
   ask: (prompt: string) => string | null;
   /** The terminal's width in cells; not given — not known. */
@@ -1574,7 +1576,15 @@ function answerOnScreen(pending: ConfirmRule[], paneId: string, deps: AiDeps): '
   return 'answered';
 }
 
-type SettleResult = 'ok' | 'not-running' | 'failed';
+/**
+ * How long a start's agent is waited for while the login shell that starts it still runs. On lft at load 23 that
+ * shell took 39 s, and a wait of 10 s said «not running» over a start that came up later (global-auth-gap,
+ * 2026-11-23, intercom-session-mode Sidetrack #11).
+ */
+const AGENT_START_MS = 90_000;
+
+/** 'starting' — no agent yet, and its start is still under way: it may come up, so nothing starts it again. */
+type SettleResult = 'ok' | 'not-running' | 'starting' | 'failed';
 
 /**
  * After a start or restart: answer the prompts the profile says will appear,
@@ -1599,8 +1609,12 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
 
   // Seen twice a second apart: an agent can quit right after its first prompt
   // is answered (claude --continue with no conversation does).
+  // Past 10 s the wait goes on only while the start is under way: a pane with nothing of it left has no agent to wait for.
   let proc: ProcInfo | null = null;
-  const procBy = Date.now() + 10_000;
+  const started = Date.now();
+  const procBy = started + 10_000;
+  const startBy = started + (deps.agentStartMs ?? AGENT_START_MS);
+  let underWay = false;
   for (;;) {
     const first = findAgentInPane(plan, paneId, deps);
     if (first) {
@@ -1611,8 +1625,21 @@ function settle(plan: LaunchPlan, paneId: string, deps: AiDeps): SettleResult {
         break;
       }
     }
-    if (Date.now() >= procBy) break;
+    const now = Date.now();
+    if (now >= procBy) {
+      underWay = startAlive(plan, paneId, deps);
+      if (!underWay || now >= startBy) break;
+    }
     deps.sleep(300);
+  }
+  if (!proc && underWay) {
+    log(
+      `✗ ${plan.command} is not up yet after ${Math.round((Date.now() - started) / 1000)} s: ` +
+        `its start is still under way in ${paneId} (the login shell runs) and may bring it up. The pane shows:`,
+    );
+    log(lastLines(tmux.capture(paneId), 8));
+    log(`  nothing starts it again; to stop it — ${tmux.commandHint(['kill-pane', '-t', paneId])}`);
+    return 'starting';
   }
   if (!proc) {
     log(`✗ ${plan.command} is not running in the pane. The pane shows:`);
@@ -1749,8 +1776,6 @@ export function handOffRestart(
   }
 }
 
-/** As long as a start waits for its own agent (settle): past that, the start that opened the pane has given up on it. */
-const START_UNDER_WAY_MS = 15_000;
 /**
  * An agent started this long ago or less is no empty place for a new conversation, whatever its
  * transcript says: its first message may not be written yet (echelon, 2026-11-17: a start seconds
@@ -1777,8 +1802,13 @@ function agentSessions(tmux: Tmux, procs: ProcInfo[], command: string): Set<stri
   );
 }
 
+/**
+ * As long as a start waits for its own agent while its login shell runs (settle): past that, the start that
+ * opened the pane has given up on it. At 15 s a second start killed a login shell that would have brought the
+ * agent up at 39 s on a busy machine (intercom-session-mode Sidetrack #11).
+ */
 function startUnderWayMs(deps: AiDeps): number {
-  return Math.min(START_UNDER_WAY_MS, deps.confirmTimeoutMs);
+  return deps.agentStartMs ?? AGENT_START_MS;
 }
 
 /**

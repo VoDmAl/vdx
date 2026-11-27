@@ -94,7 +94,11 @@ intercom (Next actions).
 - [x] Тест в `cli/tests/unit/plugin-hook.test.ts`: тема в 7 KB → вывод короче 9 793 байт, тема в нём один раз, вторая
       строка целиком; с двумя цитатами тест падает (23 343 байта)
 - [ ] Выпуск плагина 0.15.16: `version` поднят, push `main` — `vdx push` владельца
-- [ ] Бриф echelon: шаг очереди — короткая тема, план в `--prompt` (DL #2)
+- [x] Бриф echelon: шаг очереди — короткая тема, план в `--prompt` (DL #2) — `echelon/focused-step-topic-is-the-plan`,
+      2026-11-26, их сессия intercom разбужена; ответ (`focused-step-topic-is-the-plan-outcome`): память поправили, `hooks.py:1247` и
+      правило в файле очереди — их очередь кода на lft
+- [ ] Второй итог echelon — после их коммита `hooks.py:1247` на `--prompt` ⏰ 2026-12-01 — when: их письмо; check:
+      `/vdm:intercom check`
 - [x] Outcome to `ai-dev-plugins`: что берём — ответ из сессии intercom 2026-11-25
       (`focused-topic-prompt-hook-overflow-outcome`)
 - [ ] Итог выпуска — `ai-dev-plugins` новым письмом с `--reply-to ai-dev-plugins/focused-topic-prompt-hook-overflow-outcome`:

@@ -553,8 +553,13 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 больше нынешних 30 с `confirmTimeoutMs`), раньше — если старт умер; по сроку с живым shell — «старт ещё идёт N с, панель …», а не
 «not running», и без `respawn`. Какой код у «ещё идёт» — договор с ai-dev-plugins: по справке `send` код 4 значит «агент не
 поднялся, письмо ждёт». Тест — панель, где shell живёт дольше 10 с, а агент приходит потом.
+Сделано 2026-11-26: `settle()` после 10 с ждёт, пока `startAlive`, до `AGENT_START_MS` (90 с); к сроку шелл жив — исход
+`starting`: «not up yet … its start is still under way», код 4 (договор с ai-dev-plugins не меняется), без `respawn`.
+Второй старт той же сессии (`startUnderWay`) ждёт первый столько же — было 15 с, и он убивал шелл, который поднял бы
+агента. Тесты в `cli/tests/unit/ai.test.ts` («a login shell slower than 10 s», «a start still under way at the end of
+the wait») на старом поведении падают.
 
-**Status:** open
+**Status:** done — выпуск и итог global-auth-gap в Next actions
 
 ## Next actions
 - [x] DL #13: предел и очередь сессий intercom — 2026-11-19: `cli/src/intercom-queue.ts`, проверка в `runAi`, очередь в
@@ -701,8 +706,10 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       `alive-vdx-mail-probe-2-lft.json` (22:28) — по имени следы проб почтовой сессии vdx на lft; живых таких сессий
       нет. Узнать, наши ли и мешают ли (echelon считает живые сессии по `alive-*`), убрать письмом echelon — найдено
       2026-11-21 при пробе `claude -p`
-- [ ] см. Sidetrack #11 — `settle()` ждёт агента, пока жив login-shell, а не 10 с; без `respawn` живого старта; тест;
-      итог global-auth-gap — после выпуска, со ссылкой на коммит (ответ на письмо ушёл 2026-11-23 из сессии intercom)
+- [x] см. Sidetrack #11 — `settle()` ждёт агента, пока жив login-shell, а не 10 с; без `respawn` живого старта; тест
+      (2026-11-26)
+- [ ] Итог global-auth-gap — после выпуска CLI, со ссылкой на коммит: `send global-auth-gap … --reply-to
+      vdx/intercom-detach-false-not-running` (первый ответ ушёл 2026-11-23 из сессии intercom)
 
 ## References
 

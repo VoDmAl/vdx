@@ -2962,7 +2962,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
 
     it('one with no agent in time is started over in its pane, not next to it', () => {
       const stuck = startedElsewhere(60);
-      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, { ...deps(), confirmTimeoutMs: 1_000 })).toBe(
+      expect(runAi({ ...opts, path: root, intercom: true, detach: true }, { ...deps(), agentStartMs: 1_000 })).toBe(
         EXIT_OK,
       );
       expect(logs.join('\n')).toContain(
@@ -3114,6 +3114,32 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       expect(runAi(start, { ...deps(), shell: slowLogin(2), confirmTimeoutMs: 1_000 })).toBe(EXIT_OK);
       expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
     }, 30_000);
+
+    // global-auth-gap, 2026-11-23: on lft at load 23 the login shell took 39 s, and `--detach` said «claude is
+    // not running» at 10 s over a start that brought the agent up later (intercom-session-mode Sidetrack #11).
+    it('a login shell slower than 10 s: the agent is waited for while it runs', () => {
+      const start = { ...opts, path: root, intercom: true, detach: true };
+      expect(runAi(start, { ...deps(), shell: slowLogin(12), confirmTimeoutMs: 1_000 })).toBe(EXIT_OK);
+      expect(logs.join('\n')).not.toContain('is not running in the pane');
+      expect(logs.join('\n')).toContain('✓ answered "FAKE PROMPT" with Enter');
+    }, 40_000);
+
+    it('a start still under way at the end of the wait: said so, and not started again over it', () => {
+      const start = { ...opts, path: root, detach: true };
+      expect(runAi(start, { ...deps(), shell: slowLogin(60), confirmTimeoutMs: 1_000, agentStartMs: 11_000 })).toBe(
+        EXIT_LAUNCH_FAILED,
+      );
+      const said = logs.join('\n');
+      expect(said).toMatch(
+        /is not up yet after 1[12] s: its start is still under way in %\d+ \(the login shell runs\)/,
+      );
+      expect(said).not.toContain('is not running in the pane');
+      // With resume args a pane with no agent was started again, killing the start that was coming up.
+      expect(said).not.toContain('nothing to resume');
+      const panes = tmux.panes().filter((p) => p.session === 'proj@testhost');
+      expect(panes).toHaveLength(1);
+      expect(processTree(listProcesses(), panes[0]!.panePid).some((p) => p.args.includes('slow-login-60'))).toBe(true);
+    }, 40_000);
 
     it('a detached start finds the agent on a prompt nobody answered: it answers it', () => {
       const line = `VDX_INTERCOM=1 ${path.join(base, 'fake-agent')} '/first prompt' --base --chan plugin:x@y`;
