@@ -253,6 +253,17 @@ describe('the marks of the cmux sidebar on the list (vdx-ai-predictable Sidetrac
     expect(board([{ ...titled, title: null }]).lines[3]).toBe('→ 1  proj@m3  💤 idle  🎯  search');
   });
 
+  // The owner's sign for a session an agent started — the HQ session, a letter (vdx-ai-list-owner-findings DL #4).
+  it('🤖 after the mode: an agent started it — a running agent by its pane, a conversation by its start line', () => {
+    expect(board([agent({ focused: true, topic: 'step', by: 'hq' })]).lines[3]).toBe(
+      '→ 1  proj@m3  💤 idle  🎯🤖  Work',
+    );
+    expect(board([agent({ by: 'agent' })]).lines[3]).toBe('→ 1  proj@m3  💤 idle  🤖  Work');
+    const text = board([], [conv(ID.b, { topic: 'step', by: 'hq' }), conv(ID.c)]).lines.join('\n');
+    expect(text).toMatch(/unfinished +🎯🤖 +t bbbb/);
+    expect(text).toMatch(/unfinished +t cccc/);
+  });
+
   it('a focused conversation nobody runs shows its mode and its last topic; no id on the row', () => {
     const text = board(
       [],

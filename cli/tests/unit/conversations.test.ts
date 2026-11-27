@@ -38,6 +38,7 @@ import {
   liveSessionsHere,
   type LiveSession,
   machineLine,
+  STARTED_BY_LINE_PREFIX,
   machineOf,
   parseMachineReport,
   projectDirName,
@@ -201,6 +202,15 @@ describe('readConversation', () => {
       ).toBe(false);
       expect(closed('vdx ai --help | grep -- --close')).toBe(false);
       expect(closed('grep -n "intercom.sh close" README.md')).toBe(false);
+    });
+
+    it("who started it: an agent start's line marks it; a later start by the person clears the mark", () => {
+      const byHq = hookLine(
+        `${machineLine('lft')}; …\n${STARTED_BY_LINE_PREFIX} the project's HQ session (\`@vdx_by\` hq), not by the user.`,
+      );
+      expect(readWith([byHq, userLine('step 3')]).by).toBe('hq');
+      expect(readWith([byHq, userLine('step 3'), startedOn('lft'), userLine('mine now')]).by).toBe(null);
+      expect(readWith([startedOn('lft'), userLine('hi')]).by).toBe(null);
     });
 
     it("a program's run through the SDK is automated; one typed at a terminal is not", () => {

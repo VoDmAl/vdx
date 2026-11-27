@@ -31,6 +31,8 @@ export interface AgentFact {
   mail: boolean;
   /** The project's HQ session (`vdx ai --hq`); a vdx there older than it does not say. */
   hq?: boolean;
+  /** Who started it when not the person — the pane's `@vdx_by`: the HQ session, a letter, an agent. */
+  by?: 'hq' | 'letter' | 'agent' | null;
   /** The seats whose terminals show its session: machine labels; `?` — another machine, which not known. */
   openAt: string[];
   title: string | null;
@@ -232,8 +234,9 @@ export function stateIcon(a: AgentFact, now: Date): string {
 }
 
 /** The sidebar's mark of how the agent was started: 🎯 focused, 📬 the intercom session, 👑 the HQ session. */
-function modeIcon(a: { focused?: boolean; mail?: boolean; hq?: boolean }): string {
-  return a.focused ? '🎯' : a.mail ? '📬' : a.hq ? '👑' : '';
+/** The mode's sign, and 🤖 after it when an agent started it — the HQ session, a letter (vdx-ai-list-owner-findings DL #4). */
+function modeIcon(a: { focused?: boolean; mail?: boolean; hq?: boolean; by?: string | null }): string {
+  return (a.focused ? '🎯' : a.mail ? '📬' : a.hq ? '👑' : '') + (a.by ? '🤖' : '');
 }
 
 /** The profile's mark of a machine (`session.machine_icons`); null — none for it. */
@@ -386,7 +389,7 @@ export function buildBoard(input: BoardInput): Board {
       ]
         .filter(Boolean)
         .join(', '),
-      mode: modeIcon({ hq: c.hq, focused: !c.hq && c.topic !== null }),
+      mode: modeIcon({ hq: c.hq, focused: !c.hq && c.topic !== null, by: c.by }),
       text: c.title ?? c.topic ?? '',
       tail: '',
     };

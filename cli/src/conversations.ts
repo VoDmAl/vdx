@@ -35,6 +35,9 @@ const MACHINE_LINE_RE = /^vdx ai: this machine is `([^`]+)`/m;
 export const INTERCOM_LINE_PREFIX = "· this is the project's intercom session";
 /** The opening of the line `vdx ai --check` adds in an HQ session (`vdx ai --hq`). */
 export const HQ_LINE_PREFIX = "· this is the project's HQ session";
+/** `vdx ai --check`'s line when an agent started the session (`@vdx_by`): the list marks it 🤖. */
+export const STARTED_BY_LINE_PREFIX = '· this session was started by';
+const STARTED_BY_RE = /^· this session was started by .*\(`@vdx_by` (hq|letter|agent)\)/m;
 /** That line under its former name: older transcripts keep it, and their conversations stay the session's. */
 const FORMER_INTERCOM_LINE_PREFIX = "· this is the project's mail session";
 /**
@@ -79,6 +82,8 @@ export interface Conversation {
   mail: boolean;
   /** Last started as the project's HQ session (`vdx ai --hq`): continued only by that session. */
   hq: boolean;
+  /** Who last started it when not the person: the HQ session, a letter, an agent (`@vdx_by`, its start line). */
+  by?: 'hq' | 'letter' | 'agent' | null;
   /** A focused conversation's last topic; null — it never had one. */
   topic: string | null;
   /** Begun by `/clear` in a running agent: the pane stayed, the conversation is a new one. */
@@ -234,6 +239,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
   let machine: string | null = null;
   let mail = false;
   let hq = false;
+  let by: 'hq' | 'letter' | 'agent' | null = null;
   let topic: string | null = null;
   let aiTitle: string | null = null;
   let lastPrompt: string | null = null;
@@ -295,6 +301,8 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
           // The same text says whether that start was an intercom session's.
           mail = part.includes(INTERCOM_LINE_PREFIX) || part.includes(FORMER_INTERCOM_LINE_PREFIX);
           hq = part.includes(HQ_LINE_PREFIX);
+          // The same start's: a start the person made says nothing, and an earlier agent's mark goes.
+          by = (part.match(STARTED_BY_RE)?.[1] as 'hq' | 'letter' | 'agent' | undefined) ?? null;
         }
         topic = part.match(TOPIC_LINE_RE)?.[1] ?? topic;
       }
@@ -310,6 +318,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     title: aiTitle ?? lastPrompt,
     mail,
     hq,
+    by,
     topic,
     bornClear,
     typed,

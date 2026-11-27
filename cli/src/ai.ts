@@ -26,6 +26,7 @@ import {
   liveSessionsHere,
   liveStartedAt,
   HQ_LINE_PREFIX,
+  STARTED_BY_LINE_PREFIX,
   INTERCOM_LINE_PREFIX,
   machineLine,
   type MachineReport,
@@ -1249,6 +1250,34 @@ function setPaneTopic(tmux: Tmux, paneId: string, topic: string | null): boolean
   return tmux.tryRun(['set-option', '-p', '-t', paneId, TOPIC_OPTION, topic ?? '']) !== null;
 }
 
+/**
+ * Who started the pane's agent, when not the person (vdx-ai-list-owner-findings П. 3): `hq` — the project's HQ
+ * session (its shell carries VDX_HQ=1), `letter` — a letter's intercom session (`--intercom --detach`), `agent` —
+ * any other agent's shell (Claude Code's CLAUDECODE=1). A `!` command of the person's in Claude Code has that
+ * shell too and counts as an agent's. Read by `vdx ai --check` (its line in the transcript, the list's 🤖) and
+ * by the cmux sidebar of nas-info. A pane option, as the topic: a session may hold the person's agent beside it.
+ */
+const BY_OPTION = '@vdx_by';
+type StartedBy = 'hq' | 'letter' | 'agent';
+
+/** Read from the shell vdx runs in, before a start drops the mode marks of that shell from what it passes on. */
+function startedBy(opts: AiOptions, env: NodeJS.ProcessEnv): StartedBy | null {
+  if (opts.intercom && opts.detach) return 'letter';
+  if (env[HQ_ENV_VAR] === '1') return 'hq';
+  if (env['CLAUDECODE'] === '1') return 'agent';
+  return null;
+}
+
+/** Set it empty rather than unset for the person's start: an unset pane option shows the session's. */
+function setPaneBy(tmux: Tmux, paneId: string, by: StartedBy | null): void {
+  tmux.tryRun(['set-option', '-p', '-t', paneId, BY_OPTION, by ?? '']);
+}
+
+function paneBy(tmux: Tmux, paneId: string): StartedBy | null {
+  const v = paneId ? tmux.tryRun(['display-message', '-p', '-t', paneId, `#{${BY_OPTION}}`])?.trim() : null;
+  return v === 'hq' || v === 'letter' || v === 'agent' ? v : null;
+}
+
 /** Is this a session the person started or attached to: `--close` leaves it open. */
 function sessionStays(tmux: Tmux, session: string): boolean {
   return tmux.tryRun(['show-options', '-qv', '-t', `=${session}:`, STAYS_OPTION])?.trim() === '1';
@@ -2458,6 +2487,7 @@ function agentFacts(
       topic: focused ? paneTopic(deps.tmux, a.pane.paneId) : null,
       mail: modeOf.mail(a.proc.pid),
       hq: modeOf.hq(a.proc.pid),
+      by: paneBy(deps.tmux, a.pane.paneId),
       openAt: clients.filter((k) => k.session === a.pane.session).map((k) => clientSeat(k.pid, procs, plan.host)),
       title: c?.title ?? null,
       ...transcriptFacts(c, live !== null),
@@ -3874,6 +3904,14 @@ export function runAiCheck(
           `\`--close\` clears it.`,
       );
   }
+  // The conversation is known by this line as started by an agent (conversations.ts): the list marks it 🤖.
+  const byPane = own ? paneOfAgent(deps.tmux, procs, own.pid) : undefined;
+  const by = byPane ? paneBy(deps.tmux, byPane.paneId) : null;
+  if (by)
+    lines.push(
+      `${STARTED_BY_LINE_PREFIX} ${by === 'hq' ? "the project's HQ session" : by === 'letter' ? 'a letter, as its intercom session' : 'an agent'} ` +
+        `(\`${BY_OPTION}\` ${by}), not by the user.`,
+    );
   // The conversation is known by this line as an HQ session's (conversations.ts): keep its opening.
   if (hq)
     lines.push(
@@ -5127,6 +5165,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   // marks below go: VDX_FOCUSED here is the agent's.
   const changed = changeTopic(opts, plan, deps, selfPid);
   if (changed !== null) return changed;
+  const by = startedBy(opts, deps.env);
   // The agent started here runs on this machine: it does not inherit where the person sat,
   // and its mode is this start's flag, not the shell vdx runs in.
   delete deps.env[SEAT_ENV_VAR];
@@ -5951,6 +5990,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   // A window in a session that was there: its pane is set even with no topic, so a topic the session
   // kept from a vdx before 0.59 does not show through.
   if (paneId && (topic?.text || reuse)) setPaneTopic(tmux, paneId, topic?.text ?? null);
+  if (paneId) setPaneBy(tmux, paneId, by);
   markSessionStays(session, opts, deps);
   log(`▶ ${session}${reuse && !other ? ' (new window)' : ''}: ${line}`);
   topicSaid();

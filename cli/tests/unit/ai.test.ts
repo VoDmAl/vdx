@@ -65,6 +65,7 @@ import type { ProjectHq } from '../../src/hq.ts';
 import {
   type LiveSession,
   HQ_LINE_PREFIX,
+  STARTED_BY_LINE_PREFIX,
   INTERCOM_LINE_PREFIX,
   machineLine,
   readConversation,
@@ -2662,6 +2663,56 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
     expect(runAiCheck(root, inside(second!.proc.pid), 9_999_991)).toBe(EXIT_OK);
     expect(logs.join('')).toContain(topicLine('dvorobiev-ai'));
   }, 30_000);
+
+  // The owner on lft, 2026-11-26: a session an agent started is not told from one of his own; the sign is 🤖, and
+  // the cmux sidebar reads it from tmux (vdx-ai-list-owner-findings П. 3, DL #4).
+  it('who started the agent: `@vdx_by` of its pane — hq, a letter, an agent, or empty for the person — and the check line', () => {
+    writeProfile(['--base'], true, ['/first prompt']);
+    killServer(tmux);
+    const agents = () => findAgentPanes(tmux.panes(), listProcesses(), root, 'fake-agent');
+    const byOf = (paneId: string) => tmux.tryRun(['display-message', '-p', '-t', paneId, '#{@vdx_by}'])?.trim() ?? '';
+    const from = (env: NodeJS.ProcessEnv) => ({ ...deps(), env: { ...deps().env, ...env } });
+    const inside = (pid: number): AiDeps => ({
+      ...deps(),
+      env: { ...deps().env, VDX_FOCUSED: '1' },
+      processes: () => [...listProcesses(), { pid: 9_999_991, ppid: pid, args: 'node vdx ai' }],
+      lag: () => null,
+    });
+    const newest = (before: string[]) => agents().find((a) => !before.includes(a.pane.paneId))!;
+
+    let before = agents().map((a) => a.pane.paneId);
+    expect(
+      runAi(
+        { ...opts, path: root, focused: true, topic: 'step', detach: true },
+        from({ VDX_HQ: '1', CLAUDECODE: '1' }),
+      ),
+    ).toBe(EXIT_OK);
+    const step = newest(before);
+    expect(byOf(step.pane.paneId)).toBe('hq');
+    logs = [];
+    expect(runAiCheck(root, inside(step.proc.pid), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).toContain(
+      `${STARTED_BY_LINE_PREFIX} the project's HQ session (\`@vdx_by\` hq), not by the user.`,
+    );
+
+    before = agents().map((a) => a.pane.paneId);
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'other', detach: true }, from({ CLAUDECODE: '1' }))).toBe(
+      EXIT_OK,
+    );
+    expect(byOf(newest(before).pane.paneId)).toBe('agent');
+
+    before = agents().map((a) => a.pane.paneId);
+    expect(runAi({ ...opts, path: root, intercom: true, detach: true }, from({ CLAUDECODE: '1' }))).toBe(EXIT_OK);
+    expect(byOf(newest(before).pane.paneId)).toBe('letter');
+
+    before = agents().map((a) => a.pane.paneId);
+    expect(runAi({ ...opts, path: root, focused: true, topic: 'mine', detach: true }, deps())).toBe(EXIT_OK);
+    const mine = newest(before);
+    expect(byOf(mine.pane.paneId)).toBe('');
+    logs = [];
+    expect(runAiCheck(root, inside(mine.proc.pid), 9_999_991)).toBe(EXIT_OK);
+    expect(logs.join('')).not.toContain(STARTED_BY_LINE_PREFIX);
+  }, 60_000);
 
   it('a window in a session that kept a topic from a vdx before 0.59: the new agent does not show it', () => {
     writeProfile(['--base'], true);
