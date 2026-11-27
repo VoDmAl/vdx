@@ -3,9 +3,10 @@ title: "Хук темы focused-сессии — в бюджете превью"
 slug: focused-topic-hook-budget
 description: "Держит вывод UserPromptSubmit темы короче порога харнесса, чтобы инструкция доходила до сессии"
 status: ready
+deferred-until: 2026-12-01
 session-type: short-bug
 created: 2026-11-25
-last-updated: 2026-11-26
+last-updated: 2026-11-27
 relates-to: ["[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
