@@ -1101,7 +1101,7 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       нарушает: `graphite.zt.vorobyev.name` — CNAME на nyc с прокси Cloudflare (снаружи адреса Cloudflare), не
       используется — удалить или снять прокси решает владелец до включения проверки. Не поймает: чужой узел, которому
       владелец одобрил членство в сети
-- [ ] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-27
+- [x] Итог nas-info по проверке `cloudflare.zt_zone` — письмо со ссылкой на коммит; их срок пересмотра 2026-11-27
       (due: 2026-11-27); check: `/vdm:intercom check`. 2026-11-12: `graphite.zt.vorobyev.name` — владелец «удаляй»
       (живой Graphite — `graphite.vorobyev.name`, этот нигде не упомянут и снаружи не работает); письмо nas-info
       `graphite-zt-delete`: удалить и назвать из журнала Cloudflare, кто и когда завёл — 2026-11-12 итог
@@ -1113,7 +1113,15 @@ profile» (Syncthing строит её копию из блоков), а ссы�
       срок), их сессия intercom поднята на m3 — 2026-11-20 ответ (`zt-zone-check-reminder-outcome`): проверки в коде
       нет (checks/, lib/, ansible/config), план — их DL #1 `zt-zone-owners` без изменений, срок сдвинут на
       2026-11-27; пишет их основная сессия, итог — письмом с `--reply-to vdx/zt-zone-stays-owners` (коммит, что ловит
-      и чего нет: чужой одобренный узел ZeroTier — их побег #1)
+      и чего нет: чужой одобренный узел ZeroTier — их побег #1) — 2026-11-27 итог (`zt-zone-check-shipped`, ответ на
+      `zt-zone-check-reminder`): суточная `cloudflare.zt_zone` на nyc выкачена, nas-info `3f33956`
+      (`lib/zt-zone.sh`, `checks/cloudflare.sh`, `ZT_ZONE`, `ZT_ZONE_EXTRA_MEMBERS` в `nyc.conf`; их
+      `docs/features/cloudflare-dns.md` → «Зона zt.vorobyev.name»). Error: под зоной не A или `*.zt`, прокси
+      Cloudflare, адрес вне сети ZeroTier, имя не объявлено, 1.1.1.1/8.8.8.8 отвечают иначе, свои NS у зоны, NS
+      `vorobyev.name` не Cloudflare; нет токена, сети или ответа — warn «не проверено». Живой прогон на nyc 27.11 —
+      ok, 8 A в 10.243.0.0/16. Не ловит чужой одобренный узел ZeroTier — нужен токен API ZeroTier Central, вопрос
+      владельцу у nas-info. Новая машина в сети без nas-info — строка в `ZT_ZONE_EXTRA_MEMBERS`, иначе её запись
+      покраснеет. Мяч — ничей, закрыто
 - [x] Sidetrack #6: к дате смены корня (её назовёт nas-info; обещано им 2026-10-24) — скрипт `vdx doctor
       --fix` по проектам корня (готов, `root-move-fix.sh`, 2026-10-24) — nas-info с командой. Профиль не
       меняется: ссылки останутся (2026-10-25). Кристалл открыт до него (DL #16) — снят 2026-11-21: смены корня

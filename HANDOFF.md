@@ -103,8 +103,9 @@
 
 ### Следующий выпуск CLI
 
-Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет);
-ответ nas-info на `zt-zone-stays-owners` — проверка зоны ZeroTier, которую профиль называет личной.
+Дальше — P2+ (переход на открытую вкладку cmux); nas-info ставит `--restore` в свой `tmux-server.sh` (срока нет).
+Проверка зоны ZeroTier, которую профиль называет личной, — у nas-info на nyc с 2026-11-27 (`cloudflare.zt_zone`,
+их `3f33956`).
 Перенос в `GA/` и `SPACE/` — уже на стол, `vdx take … --in GA` (0.68; стол готов, nas-info 2026-11-23), после правки
 `echelon moved` и слова владельца о моменте (`claude-memory-in-project` Sidetrack #7); `git.author_pool` для стола —
 там же, Next actions.
