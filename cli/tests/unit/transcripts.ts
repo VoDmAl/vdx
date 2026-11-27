@@ -27,6 +27,15 @@ export const skillLine = (skill: string) =>
     type: 'assistant',
     message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Skill', input: { skill } }] },
   });
+/** The agent's Bash call, as Claude Code writes it. */
+export const bashCallLine = (command: string) =>
+  JSON.stringify({
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'toolu_2', name: 'Bash', input: { command, description: 'x' } }],
+    },
+  });
 /** The agent's text: one block per entry, as Claude Code writes them. */
 export const replyLine = (text: string) =>
   JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });

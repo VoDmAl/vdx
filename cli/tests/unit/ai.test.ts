@@ -1741,6 +1741,89 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runs()).toEqual(['--base']);
     });
 
+    // The owner on lft, 2026-11-26: «Если сессия была focused насколько правильно ее запуск такой — все настройки будут
+    // восстановлены?» — a 🎯 row went on as a plain agent, with the channel flag and no topic (vdx-ai-list-owner-findings).
+    describe('a row goes on as what it was', () => {
+      const recording = (rule = '') => {
+        fs.writeFileSync(
+          path.join(home, 'bin', 'claude'),
+          '#!/bin/sh\necho "F=$VDX_FOCUSED H=$VDX_HQ $*" >> "$(dirname "$0")/../runs"\n',
+          { mode: 0o755 },
+        );
+        fs.writeFileSync(path.join(root, 'wake-me'), '');
+        fs.writeFileSync(
+          path.join(home, 'env.yaml'),
+          `agent: {command: ${path.join(home, 'bin', 'claude')}, args: [--base], resume_args: [--continue], ` +
+            `when: [{id: chan, if: {has_file: {path: wake-me}}, args: [--chan], wakes: true}${rule}]}\n` +
+            'session: {multiplexer: none, wrap_skills: [vdm:wrap]}\n',
+        );
+      };
+      // Finished and newest: the start asks, and the rows are picked by number.
+      const wrapped = (id: string) =>
+        writeConversation(
+          path.join(home, 'cc'),
+          root,
+          id,
+          [startedOn('lft'), userLine('done'), skillLine('vdm:wrap')],
+          1,
+        );
+      const focusedConv = (id: string, minutesAgo: number) =>
+        writeConversation(
+          path.join(home, 'cc'),
+          root,
+          id,
+          [startedOn('lft'), hookLine(topicLine('step 7')), userLine('hi')],
+          minutesAgo,
+        );
+
+      it('a 🎯 row: focused, its topic back, the waking rule left out; the command under it says --focused', () => {
+        recording();
+        focusedConv(ID.a, 5);
+        conv(ID.b, 'lft', 30);
+        // Newest and unfinished: taken without a question — focused all the same.
+        expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+        expect(runs()).toEqual([`F=1 H= --base --resume ${ID.a}`]);
+        wrapped(ID.c);
+        logs = [];
+        expect(runAi({ ...opts, path: root, list: true }, deps())).toBe(EXIT_OK);
+        expect(text()).toContain(`vdx ai ${shellQuote(root)} --focused --conversation ${ID.a}`);
+        expect(text()).toContain(`vdx ai ${shellQuote(root)} --conversation ${ID.b}`);
+        answers = ['3', '2'];
+        expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+        expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+        // Not a 🎯 row: as it was, the waking rule kept.
+        expect(runs().slice(1)).toEqual([`F= H= --base --chan --resume ${ID.b}`, `F=1 H= --base --resume ${ID.a}`]);
+      });
+
+      it('a focused conversation named without --focused: started as asked, and a line says how to have it focused', () => {
+        recording();
+        focusedConv(ID.a, 5);
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, deps())).toBe(EXIT_OK);
+        expect(runs()).toEqual([`F= H= --base --chan --resume ${ID.a}`]);
+        expect(text()).toContain(
+          `note: ${ID.a.slice(0, 8)} was a focused conversation «step 7» — this start is not focused; ` +
+            `focused again: vdx ai ${shellQuote(root)} --focused --conversation ${ID.a}`,
+        );
+        logs = [];
+        expect(runAi({ ...opts, path: root, conversation: ID.a, focused: true }, deps())).toBe(EXIT_OK);
+        expect(text()).not.toContain('was a focused conversation');
+      });
+
+      // DL #5: a past HQ conversation is found in «all conversations», 👑, and goes on as the HQ session.
+      it('`a` lists the HQ session’s conversations with 👑; one picked goes on as the HQ session', () => {
+        recording();
+        const hqStart = hookLine(`${machineLine('lft')}; …\n${HQ_LINE_PREFIX} (\`vdx ai --hq\`): …`);
+        writeConversation(path.join(home, 'cc'), root, ID.c, [hqStart, userLine('/echelon:whatsup')], 60);
+        conv(ID.a, 'lft', 5);
+        conv(ID.b, 'lft', 10);
+        wrapped(ID.d);
+        answers = ['a', '4'];
+        expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
+        expect(text()).toMatch(/\n {2}4 {2}lft .+ unfinished +👑\n/);
+        expect(runs()).toEqual([`F= H=1 --base --chan --resume ${ID.c}`]);
+      });
+    });
+
     it('`a` shows every conversation; n starts a new one', () => {
       withWrap();
       remoteLive = [];

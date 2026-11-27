@@ -4,6 +4,14 @@
 
 ## 2026-11-27
 
+### Список `vdx ai`: строка продолжается тем, чем разговор был; закрытый `--close` — ✅
+
+🎯-строка продолжается как `--focused --conversation <id>` — с темой, без правил `wakes`; команда под строкой — с
+`--focused`. В «all conversations» — разговоры HQ-сессии с 👑, они продолжаются как `--hq --conversation <id>`. Голый
+`--conversation` focused-разговора говорит строкой, как вернуть его focused. Разговор, где агент сам закрыл сессию
+(`vdx ai --close`, `intercom.sh close`), — `finished`; та же строка в тексте задачи или heredoc — нет. Вопросы владельца
+через nas-info 26.11 ([vdx-ai-list-owner-findings](docs/tasks/vdx-ai-list-owner-findings/workitem.md), пп. 1, 2, 4).
+
 ### Плагин vercel — только в проектах Vercel (сет v1.20.0)
 
 Правило профиля `vercel-only-in-vercel-projects` выключает плагин vercel (около 15 KB скиллов на старте каждой сессии)

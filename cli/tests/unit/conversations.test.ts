@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
+  bashCallLine,
   bashLine,
   commandLine,
   compactLine,
@@ -170,6 +171,36 @@ describe('readConversation', () => {
       expect(readWith([startedOn('lft'), userLine('work'), commandLine('vdm:wrap')]).finished).toBe(true);
       expect(readWith([startedOn('lft'), skillLine('vdm:wrap'), userLine('one more thing')]).finished).toBe(false);
       expect(readWith([startedOn('lft'), userLine('work'), skillLine('vdm:intercom')]).finished).toBe(false);
+    });
+
+    // nas-info, 2026-11-26: of 14 conversations «Задача от HQ-сессии» in t23b-program, 11 ended with `vdx ai --close`
+    // and still stood «unfinished» (vdx-ai-list-owner-findings П. 2). The forms are those the transcripts hold.
+    it('finished: the session closed itself — `vdx ai --close` or intercom close — with nothing typed after', () => {
+      const closed = (command: string, after: string[] = []) =>
+        readWith([startedOn('lft'), userLine('work'), bashCallLine(command), ...after]).finished;
+      expect(closed('vdx ai --close 2>&1 | tail -3')).toBe(true);
+      expect(closed(`cd "/Users/vdm/AI Projects/echelon" && vdx ai --close 2>&1 | tail -3`)).toBe(true);
+      expect(
+        closed(`cd "/Users/vdm/AI Projects/echelon"; "/Users/vdm/.claude/plugins/x/intercom.sh" close 2>&1 | tail -15`),
+      ).toBe(true);
+      expect(closed('I=~/x/intercom.sh; "$I" check --count; "$I" close')).toBe(true);
+      expect(closed('vdx ai --close', [userLine('one more thing')])).toBe(false);
+    });
+
+    it('a close named in a brief or a heredoc is no close', () => {
+      const closed = (command: string) =>
+        readWith([startedOn('lft'), userLine('work'), bashCallLine(command)]).finished;
+      // The HQ session starting a step: the step's prompt says how it ends itself.
+      expect(
+        closed(`vdx ai '/p' --focused "Шаг 3" --detach --prompt "Сделай X; итог — письмом; vdx ai --close в конце"`),
+      ).toBe(false);
+      expect(
+        closed(
+          `cat > /tmp/brief.txt <<'EOF'\nЗадача от HQ-сессии.\nvdx ai --close\nEOF\nvdx ai '/p' --focused "Шаг" --prompt "$(cat /tmp/brief.txt)"`,
+        ),
+      ).toBe(false);
+      expect(closed('vdx ai --help | grep -- --close')).toBe(false);
+      expect(closed('grep -n "intercom.sh close" README.md')).toBe(false);
     });
 
     it("a program's run through the SDK is automated; one typed at a terminal is not", () => {

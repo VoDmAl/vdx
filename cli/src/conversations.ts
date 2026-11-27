@@ -177,6 +177,46 @@ function skillRun(entry: unknown): string | null {
   return null;
 }
 
+/** `vdx ai … --close`, as a command of its own: a session ending itself (an HQ step, an intercom session). */
+const VDX_CLOSE_RE = /^(?:\w+=\S*\s+)*(?:\S*\/)?vdx\s+ai(?:\s+\S+)*?\s--close(?:\s|$)/;
+/** `"<…>/intercom.sh" close` or `"$I" close`: an intercom session ending itself through vdm, which runs `vdx ai --close`. */
+const INTERCOM_CLOSE_RE = /^(?:(?:ba)?sh\s+)?["']?(?:[^\s"']*\/)?(?:intercom\.sh|\$\{?\w+\}?)["']?\s+close(?:\s|$)/;
+
+/**
+ * The shell's commands of `command` as words: heredoc bodies gone, and a quoted span one word whose spaces and
+ * separators are `_` — so a brief in `--prompt "…; vdx ai --close"` is not cut into a command.
+ */
+function commandPieces(command: string): string[] {
+  const kept: string[] = [];
+  let heredoc: string | null = null;
+  for (const line of command.split('\n')) {
+    if (heredoc !== null) {
+      if (line.trim() === heredoc) heredoc = null;
+      continue;
+    }
+    kept.push(line);
+    heredoc = line.match(/<<-?\s*['"]?(\w+)['"]?/)?.[1] ?? null;
+  }
+  const words = kept.join('\n').replace(/"[^"]*"|'[^']*'/g, (q) => q.slice(1, -1).replace(/[\s;&|]/g, '_'));
+  return words.split(/\n|&&|\|\||;|\|/).map((s) => s.trim());
+}
+
+/**
+ * The agent ran a close of its own session in a Bash call. Only a command that starts a piece of the line between
+ * `&&`, `||`, `;` and `|` counts: the text of a brief or a heredoc that names `vdx ai --close` is no close
+ * (t23b-program, 2026-11-25: an HQ session's step prompt said how the step ends itself; vdx-ai-list-owner-findings П. 2).
+ */
+function closeRun(entry: unknown): boolean {
+  const content = at(entry, 'message', 'content');
+  if (!Array.isArray(content)) return false;
+  for (const p of content as unknown[]) {
+    if (at(p, 'type') !== 'tool_use' || at(p, 'name') !== 'Bash') continue;
+    const pieces = commandPieces(str(at(p, 'input', 'command')) ?? '');
+    if (pieces.some((s) => VDX_CLOSE_RE.test(s) || INTERCOM_CLOSE_RE.test(s))) return true;
+  }
+  return false;
+}
+
 const COMMAND_RE = /<command-name>\/?([^<\s]+)<\/command-name>/;
 
 /**
@@ -217,7 +257,8 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     if (!turns && isUser) turns = true;
     const isTurn = isUser && !line.includes('"tool_result"');
     const isSkill = wraps.size > 0 && line.includes('"name":"Skill"');
-    if (!isHook && !isTitle && !isTurn && !isSkill) continue;
+    const isClose = line.includes('"name":"Bash"') && line.includes('close');
+    if (!isHook && !isTitle && !isTurn && !isSkill && !isClose) continue;
     let entry: unknown;
     try {
       entry = JSON.parse(line);
@@ -241,7 +282,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
       }
     } else if (type === 'assistant') {
       const skill = skillRun(entry);
-      if (skill && wraps.has(skill)) wrapAt = n;
+      if ((skill && wraps.has(skill)) || closeRun(entry)) wrapAt = n;
     } else if (type === 'ai-title' && title !== undefined) aiTitle = title;
     else if (type === 'last-prompt' && prompt !== undefined) lastPrompt = prompt;
     else if (type === 'attachment' && at(entry, 'attachment', 'type') === 'hook_additional_context') {

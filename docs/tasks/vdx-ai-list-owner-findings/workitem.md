@@ -120,6 +120,21 @@ HQ-сессии начинает новый.
 **Implication:** «all conversations» показывает HQ-разговоры с 👑; Enter на такой строке продолжает её как
 `--hq --conversation <id>`, как 🎯 — как focused (п. 1). `--hq` без идущей HQ-сессии ведёт себя как сейчас.
 
+### #6 / 2026-11-27 / П. 1: голый `--conversation` focused-разговора — как набран, со строкой
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** вопрос владельца в сессии nas-info 2026-11-26 (DL #3): «Если сессия была focused насколько правильно
+ее запуск такой — все настройки будут восстановлены?» — о строке `vdx ai@lft … --conversation 8e662cf9`; память
+проекта `feedback-cli-ask-not-refuse` (вопрос с безвредным Enter, отказ — только без терминала).
+**Context:** Next action п. 1 оставлял выбор: голый `--conversation <id>` разговора с темой — вернуть focused самому
+или сказать строкой.
+**Why:** явная команда делает, что набрано: агент мог её набрать нарочно без focused (канал echelon в разговоре
+нужен). Строка отвечает на вопрос владельца — «нет, не focused, вот команда» — и ничего не меняет молча. Список
+(Enter, ctrl-y) продолжает 🎯 как focused сам: там выбор строки, а не набранный флаг.
+**Implication:** `note: <id8> was a focused conversation «тема» — this start is not focused; focused again: vdx ai
+<корень> --focused --conversation <id>`. Владелец может сказать «возвращай сам» — тогда это одна правка в том же месте.
+
 ## Sidetracks
 
 ### #1. Проверка id в трёх местах `index.ts`
@@ -136,22 +151,31 @@ HQ-сессии начинает новый.
 **Описание:** сессия intercom закрывается `/vdm:intercom close`, а тот сам зовёт `vdx ai --close --waiting <n>`: в
 транскрипте вызов Bash — `intercom.sh close`, не `vdx ai --close`. Признак «завершён» для п. 2 должен узнать оба (или
 выход хука `--close`, если он пишет строку). Выведено из SKILL intercom 2.85.0, транскрипты не смотрел.
+2026-11-27 по транскриптам всех проектов m3: `"<…>/intercom.sh" close` — самая частая форма (66 раз голой, ещё
+десятки с `cd … &&` и `| tail`), рядом `"$I" close`; `vdx ai --close` — реже.
 
-**Status:** open
+**Status:** done — 2026-11-27, `INTERCOM_CLOSE_RE` в `cli/src/conversations.ts` (П. 2)
 
 ## Next actions
 
-- [ ] П. 1 — строка 🎯 продолжается как `--focused --conversation <id>`: Enter (своя машина и `remote`) и ctrl-y
-      (`reachOf`). Голый `--conversation <id>` разговора с темой — решить: вернуть focused сам или сказать строкой, что
-      разговор был focused
-- [ ] П. 2 — разговор, где `vdx ai --close` (и `intercom.sh close`, Sidetrack #2) прошёл после последнего промпта
-      человека, — `finished`. Проверка у nas-info: в t23b-program за 24–25.11 из 14 разговоров «Задача от HQ-сессии»
-      11 станут ✅, три без `--close` (`9b1f7a57`, `e1c76f56`, `f616a070`) — нет
+- [x] П. 1 — строка 🎯 продолжается как `--focused --conversation <id>`: Enter (своя машина и `remote`) и ctrl-y
+      (`reachOf`) — 2026-11-27 (`ConversationChoice.focused`, `modeOfConversation`, `listTopic` в `cli/src/ai.ts`):
+      план focused, тема из разговора, правила `wakes` в стороне; старт без вопроса (новейший разговор машины) — так
+      же; другая машина — `runAiRemote` с `focused`. Голый `--conversation <id>` разговора с темой — как набран, строкой
+      `note: … was a focused conversation «…» — … focused again: vdx ai … --focused --conversation <id>` (DL #6)
+- [x] П. 2 — разговор, где `vdx ai --close` (и `intercom.sh close`, Sidetrack #2) прошёл после последнего промпта
+      человека, — `finished` — 2026-11-27 (`closeRun`, `commandPieces` в `cli/src/conversations.ts`). Замер на
+      транскриптах t23b-program на m3: «Задача от HQ-сессии» 24–25.11 — 15 разговоров, все 15 ✅; три, что nas-info
+      назвал «без `--close`» (`9b1f7a57`, `e1c76f56`, `f616a070`), закрылись `sleep N; vdx ai --close` в фоне, и
+      сессия после него кончилась — поиск nas-info эту форму пропустил. HQ-разговор `ec3379d7`, где `vdx ai --close`
+      только в тексте задачи шага, — не ✅
 - [ ] П. 3 — стойкий признак, кто запустил сессию (HQ-сессия проекта, письмо, человек): строкой хука в транскрипте —
       для списка разговоров — и опцией tmux (предложено `@vdx_by`) — для заголовка cmux. Знак — 🤖 (DL #4): в списке
       `vdx ai` у строк, запущенных агентом, ставит vdx; в заголовке cmux — nas-info по опции
-- [ ] П. 4 — путь к прошлому HQ-разговору без grep: 👑-строки в «all conversations», Enter продолжает как
-      `--hq --conversation <id>` (решение владельца — DL #5)
+- [x] П. 4 — путь к прошлому HQ-разговору без grep: 👑-строки в «all conversations», Enter продолжает как
+      `--hq --conversation <id>` (решение владельца — DL #5) — 2026-11-27: `everyOne` берёт и HQ-разговоры, строка с
+      👑 (`board.ts`), команда под ней с `--hq`; HQ-сессия идёт на той машине — отказ с командой подключения и
+      `--hq --restart --conversation <id>`
 - [ ] П. 5 — клавиша в списке «продолжить на …» (другая машина профиля) с проверкой `behind`; та же проверка для
       явного `--conversation`
 - [x] П. 6 — снят без кода: короткий id владелец сократил в вопросе, дополнения префикса не просил (DL #3)

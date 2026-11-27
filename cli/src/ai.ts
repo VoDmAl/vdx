@@ -2605,6 +2605,12 @@ interface ConversationChoice {
   askHere?: { id: string; why: string };
   /** The person ended the question (Ctrl-D): start nothing. */
   abort?: boolean;
+  /**
+   * A conversation picked on the list goes on as what it was: a focused one with its topic, the HQ session's as
+   * the HQ session (vdx-ai-list-owner-findings П. 1, П. 4).
+   */
+  focused?: { topic: string };
+  hq?: boolean;
   /** A new conversation nobody picked, while an agent of the project runs on these machines: only after a yes. */
   elsewhere?: string[];
   /** For the person: what was found and what is taken. */
@@ -3038,6 +3044,9 @@ function boardStart(
   for (const id of busy) if (id) behind.delete(id);
   const continuable = k.all.filter((c) => !isEmpty(c) && !busy.has(c.id));
   const conversationOf = (a: AgentFact) => k.all.find((c) => c.id === a.conversation) ?? copy(a.conversation);
+  // A conversation nobody runs goes on as what it was (vdx-ai-list-owner-findings П. 1, П. 4).
+  const modeOfConversation = (c: Conversation): { focused?: { topic: string }; hq?: boolean } =>
+    c.hq ? { hq: true } : c.topic !== null ? { focused: { topic: c.topic } } : {};
   const outcomeOf = (pick: Pick, why: string[]): BoardOutcome => {
     if (pick.kind === 'session')
       return { kind: 'session', host: pick.session.machine, session: pick.session.session, lines: why };
@@ -3059,25 +3068,40 @@ function boardStart(
     }
     if (pick.kind === 'conversation') {
       const m = pick.machine;
+      const c = pick.conversation;
+      const mode = modeOfConversation(c);
+      // One HQ session per project and machine: the one running there is where its work goes on.
+      const hqThere = c.hq && agents.find((a) => a.hq && sameMachine(a.machine, m ?? plan.host));
+      if (hqThere)
+        return {
+          kind: 'abort',
+          lines: [
+            ...why,
+            `the HQ session runs on ${hqThere.machine}: ${reachOf({ kind: 'agent', agent: hqThere }) ?? 'vdx ai --hq'} attaches to it; ` +
+              `to go on with ${c.id.slice(0, 8)} in it instead — vdx ai${sameMachine(hqThere.machine, plan.seat) ? '' : `@${hqThere.machine}`} ${k.root} --hq --restart --conversation ${c.id}`,
+          ],
+        };
       if (m && !sameMachine(m, plan.host)) {
         return {
           kind: 'continue',
           choice: {
             args: [],
-            remote: { host: m, id: pick.conversation.id, reachable: k.reach.get(m) != null },
-            lines: [...why, `continuing on ${m}: ${describeConversation(pick.conversation, m)}`],
+            remote: { host: m, id: c.id, reachable: k.reach.get(m) != null },
+            ...mode,
+            lines: [...why, `continuing on ${m}: ${describeConversation(c, m)}`],
           },
         };
       }
-      const chosen = k.take(pick.conversation);
-      return { kind: 'continue', choice: { ...chosen, lines: [...why, ...chosen.lines] } };
+      const chosen = k.take(c);
+      return { kind: 'continue', choice: { ...chosen, ...mode, lines: [...why, ...chosen.lines] } };
     }
     if (pick.kind === 'new') return { kind: 'new', focused: pick.focused, lines: why };
     if (pick.kind === 'restore') return { kind: 'restore' };
     return { kind: 'abort', lines: why };
   };
 
-  // `a`: every conversation of the project, not only the newest the start read.
+  // `a`: every conversation of the project, not only the newest the start read — the HQ session's among them,
+  // marked 👑: a past HQ conversation is found there, not by grep (vdx-ai-list-owner-findings DL #5).
   const everyOne = () =>
     listConversations({
       env: deps.env,
@@ -3085,7 +3109,7 @@ function boardStart(
       projectRoot: plan.projectRoot,
       limit: Infinity,
       wrapSkills,
-    }).filter(isPersons);
+    }).filter((c) => isPersons(c) || (c.hq && !c.mail && !c.automated));
   // The command that reaches a row from this seat (Sidetrack #7): a running agent by its conversation,
   // which attaches to it, on its machine; a conversation nobody runs, continued there.
   const reachOf = (p: Pick): string | null => {
@@ -3101,10 +3125,13 @@ function boardStart(
     if (p.kind === 'agent' && (!p.agent.session || !p.agent.conversation)) return null;
     const id = p.kind === 'agent' ? p.agent.conversation! : p.conversation.id;
     const m = p.kind === 'agent' ? p.agent.machine : p.machine;
-    if (m === null) return `on its machine: vdx ai@<machine> ${k.root} --conversation ${id}`;
+    // A conversation nobody runs goes on as what it was; a running agent keeps its mode on its own.
+    const as =
+      p.kind !== 'conversation' ? '' : p.conversation.hq ? ' --hq' : p.conversation.topic !== null ? ' --focused' : '';
+    if (m === null) return `on its machine: vdx ai@<machine> ${k.root}${as} --conversation ${id}`;
     return sameMachine(m, plan.seat)
-      ? `vdx ai ${k.rootOn(m)} --conversation ${id}`
-      : `vdx ai@${m} ${k.root} --conversation ${id}`;
+      ? `vdx ai ${k.rootOn(m)}${as} --conversation ${id}`
+      : `vdx ai@${m} ${k.root}${as} --conversation ${id}`;
   };
   // At a terminal the list is a table: titles bold, commands dim, captions cut to its width.
   const look = {
@@ -3239,7 +3266,10 @@ function boardStart(
     }
     if (mineConv) {
       const chosen = k.take(mineConv);
-      return { kind: 'continue', choice: { ...chosen, lines: [...chosen.lines, ...notes] } };
+      return {
+        kind: 'continue',
+        choice: { ...chosen, ...modeOfConversation(mineConv), lines: [...chosen.lines, ...notes] },
+      };
     }
     const why =
       k.all.length === 0
@@ -4894,6 +4924,11 @@ function chooseTopic(
   return typed ? { text: typed, from: 'typed' } : { text: null, from: AGENT_TAKES_TOPIC };
 }
 
+/** The topic of a 🎯 row picked on the list: the conversation's own (vdx-ai-list-owner-findings П. 1). */
+function listTopic(choice: ConversationChoice | null): Topic | null {
+  return choice?.focused ? { text: choice.focused.topic, from: 'from the conversation' } : null;
+}
+
 /**
  * `vdx ai <path> --focused <topic>` run by the agent of a focused session of the project, about
  * itself: its tmux pane gets the new topic, and nothing starts (focused-topic DL #3). In the
@@ -5356,6 +5391,10 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       }
       case 'continue':
         boardChoice = outcome.choice;
+        // A 🎯 row goes on focused, a 👑 one as the HQ session — not as a plain agent with the channel flag
+        // (vdx-ai-list-owner-findings П. 1, П. 4).
+        if (outcome.choice.hq) plan = { ...prepared.replan(false, true), resumeArgs: plan.resumeArgs };
+        else if (outcome.choice.focused) plan = { ...prepared.replan(true), resumeArgs: plan.resumeArgs };
         break;
       case 'restore': {
         // Everything a fall took down, as `vdx ai --restore` (restore-after-any-crash DL #4): this tab stays.
@@ -5477,7 +5516,22 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   else if (!current || opts.restart) {
     // The intercom session runs next to the person's agents on any machine by design: nothing to ask.
     if (plan.intercom) choice = { args: [], lines: [] };
-    else if (opts.conversation) choice = { args: resumeId(opts.conversation), lines: [] };
+    else if (opts.conversation) {
+      // A focused conversation named without --focused goes on as asked, and the line says what it was and how
+      // to have it back (vdx-ai-list-owner-findings П. 1: «все настройки будут восстановлены?»).
+      const was = plan.focused
+        ? null
+        : conversationTopic({ env: deps.env, home: deps.home, projectRoot, id: opts.conversation });
+      choice = {
+        args: resumeId(opts.conversation),
+        lines: was
+          ? [
+              `note: ${opts.conversation.slice(0, 8)} was a focused conversation «${clip(was, 60)}» — this start is not focused; ` +
+                `focused again: vdx ai ${shellQuote(projectRoot)} --focused --conversation ${opts.conversation}`,
+            ]
+          : [],
+      };
+    }
     // So does the HQ session, and it is a new conversation — but a restart keeps the one it is in:
     // a restart for a plugin should not cost it its context (hq-session-mode DL #3).
     else if (plan.hq) {
@@ -5529,7 +5583,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       : !plan.focused
         ? null
         : multiplexer === 'tmux'
-          ? chooseTopic(opts, plan, deps, current, false)
+          ? (listTopic(boardChoice) ?? chooseTopic(opts, plan, deps, current, false))
           : { text: null, from: 'none: a topic lives in the tmux pane, and this start has none' };
     // The same branches as the start below: an agent it attaches to, one it restarts, or a place of
     // its own. The plan used to name a new session for an agent it attaches to (2026-11-05).
@@ -5577,7 +5631,9 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   let askHere = choice?.askHere;
   if (choice?.remote) {
     const { host, id, reachable } = choice.remote;
-    if (reachable) return runAiRemote({ ...opts, path: projectRoot, conversation: id }, host, deps, plan.seat);
+    // There the conversation brings its topic back itself (chooseTopic): the flag is enough.
+    const as = choice.hq ? { hq: true } : choice.focused ? { focused: true } : {};
+    if (reachable) return runAiRemote({ ...opts, ...as, path: projectRoot, conversation: id }, host, deps, plan.seat);
     log(`✗ ${host} does not answer over ssh — its conversation ${id.slice(0, 8)} cannot be continued there`);
     askHere = { id, why: `If it still runs on ${host}, both machines will write to it` };
   }
@@ -5760,7 +5816,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
   // The topic goes into the tmux session before the agent starts: its session-start hook reads it.
   let topic: Topic | null = plan.hq ? HQ_TOPIC : null;
   if (plan.focused) {
-    topic = chooseTopic(opts, plan, deps, reused ? undefined : current, !topicAnswered);
+    topic = listTopic(boardChoice) ?? chooseTopic(opts, plan, deps, reused ? undefined : current, !topicAnswered);
     if (!topic) {
       log('no answer — nothing started');
       return EXIT_LAUNCH_FAILED;

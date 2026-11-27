@@ -386,7 +386,7 @@ export function buildBoard(input: BoardInput): Board {
       ]
         .filter(Boolean)
         .join(', '),
-      mode: modeIcon({ focused: c.topic !== null }),
+      mode: modeIcon({ hq: c.hq, focused: !c.hq && c.topic !== null }),
       text: c.title ?? c.topic ?? '',
       tail: '',
     };
