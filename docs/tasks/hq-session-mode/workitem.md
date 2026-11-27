@@ -334,8 +334,8 @@ JSON; что делать, когда два правила задают оди�
 2026-12-02. `has_file` берёт путь от корня проекта, без glob (`cli/src/predicates.ts`, `fileExists`): copilot — отдельным
 условием `has_file: apps/web/vercel.json` рядом с `vercel.json` и `.vercel`.
 
-**Status:** open — решено владельцем; склеить `--settings`, потом правило в профиле — работа основной сессии, итог
-infra-hq ⏰ 2026-12-02
+**Status:** done — 2026-11-27: склейка `--settings` в vdx 0.69.0 (`ceaf216`), правило `vercel-only-in-vercel-projects`
+в сете v1.20.0, `--dry-run` на m3 и lft; итоги infra-hq и echelon отправлены
 
 ## Next actions
 
@@ -439,9 +439,11 @@ infra-hq ⏰ 2026-12-02
       `idleCompaction` и `enabledPlugins` перед флагом канала; lft — то же в vdx, copilot, og-image-generator,
       `PhpstormProjects/pixer/shop` и `pixer/admin` (у обоих `vercel.json`), HQ global-auth-gap. Идущие сессии
       получат правило со своим перезапуском
-- [ ] Sidetrack #6: тег `v1.20.0` и push сета — строка владельца (2026-11-27)
-- [ ] Sidetrack #6: итог infra-hq — `send infra-hq … --reply-to vdx/vercel-plugin-by-project-class-outcome` после push
-      тега ⏰ 2026-12-02; итог echelon — письмом в цепочку `session-start-load-outcome-vdx`
+- [x] Sidetrack #6: тег `v1.20.0` и push сета — строка владельца (2026-11-27): сет `7a18fd1`, тег на GitHub
+- [x] Sidetrack #6: итог infra-hq — `send infra-hq … --reply-to vdx/vercel-plugin-by-project-class-outcome` после push
+      тега ⏰ 2026-12-02; итог echelon — письмом в цепочку `session-start-load-outcome-vdx` — 2026-11-27:
+      `infra-hq/vercel-plugin-by-project-class-done`, `echelon/session-start-load-vercel-done`, мяч ничей; их сессии
+      intercom подняты на m3
 
 ## References
 
