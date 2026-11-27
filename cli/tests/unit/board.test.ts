@@ -408,6 +408,25 @@ describe('readAnswer', () => {
     expect(readAnswer('/', b)).toBeNull();
     expect(readAnswer('9', b)).toBeNull();
     expect(b.lines.at(-1)).toContain('/<phrase> find');
+    // One machine in the profile: no other to continue on, and no key for it.
+    expect(b.lines.at(-1)).not.toContain('@<machine>');
+  });
+
+  // The owner, 2026-11-26: «было бы классно иметь возможность в not runs now сессии выбрать ГДЕ её запустить»
+  // (vdx-ai-list-owner-findings П. 5).
+  it('<n>@<machine> — that row on that machine; <n>@ — the machine is asked; the key is named with two machines', () => {
+    const b = board([agent()], [conv(ID.b)], { machines: ['m3', 'lft'] });
+    expect(readAnswer('2@lft', b)).toEqual({ kind: 'where', row: b.rows[1], on: 'lft' });
+    expect(readAnswer(' 2 @ M3 ', b)).toEqual({ kind: 'where', row: b.rows[1], on: 'M3' });
+    expect(readAnswer('2@', b)).toEqual({ kind: 'where', row: b.rows[1], on: null });
+    expect(readAnswer('9@lft', b)).toBeNull();
+    expect(b.lines.at(-1)).toContain('f new focused · <n>@<machine> on another machine');
+    expect(b.picker.header.at(-1)).toBe(
+      "Enter takes the row · ctrl-s searches what was said for the typed words · ctrl-y prints the row's command" +
+        ' · ctrl-o continues it on another machine · Esc leaves',
+    );
+    // Nothing nobody runs: nothing to continue elsewhere.
+    expect(board([agent()], [], { machines: ['m3', 'lft'] }).lines.at(-1)).not.toContain('@<machine>');
   });
 });
 
@@ -590,6 +609,9 @@ describe('buildBoard: the same list for a picker with a cursor (Sidetrack #15)',
     expect(on(3, 'ctrl-s', '  ')).toBeNull();
     // Another key that ended the picker is not a choice of the row: the command key is the start's.
     expect(on(3, 'ctrl-y')).toBeNull();
+    // ctrl-o: the row on a machine the person picks next (vdx-ai-list-owner-findings П. 5); a title — nothing.
+    expect(on(3, 'ctrl-o')).toEqual({ kind: 'where', row: b.rows[1], on: null });
+    expect(on(0, 'ctrl-o')).toBeNull();
   });
 
   it('after tmux fell: bringing back is the first row, under the cursor, with who went down in its panel', () => {

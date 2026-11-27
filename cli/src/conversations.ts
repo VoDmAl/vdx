@@ -464,6 +464,23 @@ export function conversationFiles(input: ProjectInput): { file: string; updated:
   return files.sort((a, b) => b.updated.getTime() - a.updated.getTime());
 }
 
+/** A copy of a conversation's transcript on one machine: when it was last written (ms) and how long it is. */
+export interface TranscriptCopy {
+  mtime: number;
+  size: number;
+}
+
+/**
+ * Whether `theirs` is ahead of `ours` — two copies of one transcript on two machines, Syncthing between them
+ * (vdx-ai-list-owner-findings DL #8). A transcript only grows: the longer copy is the newer one; of two the
+ * same length, the one written later, past the 2 s a sync takes to carry the time over. No copy here — any
+ * there is ahead. Never true both ways, so two machines never send a start to each other.
+ */
+export function copyAhead(theirs: TranscriptCopy, ours: TranscriptCopy | null): boolean {
+  if (!ours) return true;
+  return theirs.size > ours.size || (theirs.size === ours.size && theirs.mtime > ours.mtime + 2_000);
+}
+
 /**
  * The project's conversations, newest first; at most `limit` files are read — the rest stay
  * unread, `conversationFiles` counts them. `wrapSkills` as in readConversation.

@@ -11,7 +11,7 @@ describe('fzfArgs: the list of vdx ai as fzf shows it (vdx-ai-predictable Sidetr
     expect(args).toContain('--delimiter=\t');
     expect(args).toContain('--no-sort');
     expect(args).toContain('--print-query');
-    expect(args).toContain('--expect=ctrl-s,ctrl-y');
+    expect(args).toContain('--expect=ctrl-s,ctrl-y,ctrl-o');
     // The terminal's own selection works in it, and the input line says what typing does.
     expect(args).toContain('--no-mouse');
     expect(args).toContain('--prompt=type to filter: ');

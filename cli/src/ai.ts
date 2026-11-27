@@ -33,6 +33,7 @@ import {
   machineOf,
   conversationById,
   conversationFiles,
+  copyAhead,
   findInConversations,
   isEmpty,
   readConversation,
@@ -46,6 +47,7 @@ import {
   parseMachineReport,
   runsInProject,
   topicLine,
+  type TranscriptCopy,
 } from './conversations.ts';
 import {
   describeMemory,
@@ -2629,8 +2631,11 @@ interface Shown {
 /** What a start continues: resume args here, or a conversation on another machine. */
 interface ConversationChoice {
   args: string[];
-  /** Continue it on that machine (`vdx ai@<host>`); `reachable` — it answered over ssh just now. */
-  remote?: { host: string; id: string; reachable: boolean };
+  /**
+   * Continue it on that machine (`vdx ai@<host>`); `reachable` — it answered over ssh just now. `ask` — why it
+   * goes there though the start named it here: put to the person first (vdx-ai-list-owner-findings DL #8).
+   */
+  remote?: { host: string; id: string; reachable: boolean; ask?: string };
   /** Continue it here only after a yes: another machine's that cannot be asked, or one running here already. */
   askHere?: { id: string; why: string };
   /** The person ended the question (Ctrl-D): start nothing. */
@@ -2806,6 +2811,52 @@ function conversationContext(
 }
 
 /**
+ * Before a start that names its conversation (`--conversation <id>`) goes on in it here: whether it runs on another
+ * machine, or a copy there is ahead of this one — the list's check, for a start that skips the list
+ * (vdx-ai-list-owner-findings П. 5, DL #8). The profile's machines and the conversation's own are asked over ssh.
+ * `there` — the machine it goes on on instead, and why; `notes` — the machines that did not answer.
+ */
+function conversationElsewhere(
+  plan: LaunchPlan,
+  deps: AiDeps,
+  id: string,
+): { there: { host: string; why: string } | null; notes: string[] } {
+  const input = { env: deps.env, home: deps.home, projectRoot: plan.projectRoot };
+  const own = conversationById({ ...input, id })?.machine ?? null;
+  const machines: string[] = [];
+  for (const m of [...plan.machines, own])
+    if (m && !sameMachine(m, plan.host) && !machines.some((x) => sameMachine(x, m))) machines.push(m);
+  const file = conversationFiles(input).find((f) => path.basename(f.file, '.jsonl') === id);
+  const ours: TranscriptCopy | null = file ? { mtime: file.updated.getTime(), size: file.size } : null;
+  const notes: string[] = [];
+  let lead: { host: string; copy: TranscriptCopy } | null = null;
+  for (const m of machines) {
+    const r = askMachine(m, deps, plan.projectRoot);
+    if (!r) {
+      notes.push(
+        `note: ${m} does not answer over ssh — whether ${id.slice(0, 8)} runs there, or its copy there is newer, is not known`,
+      );
+      continue;
+    }
+    const live = r.sessions.find((l) => l.conversation === id);
+    if (live) {
+      const where = live.tmux ? ` (${live.tmux.replace(/:.*$/, '')})` : '';
+      return { there: { host: m, why: `${id.slice(0, 8)} runs on ${m} right now${where}` }, notes };
+    }
+    const t = r.report?.transcripts.find((x) => x.id === id);
+    if (t && copyAhead(t, lead?.copy ?? ours)) lead = { host: m, copy: t };
+  }
+  if (!lead) return { there: null, notes };
+  const more = ours ? lead.copy.size - ours.size : 0;
+  const why = !ours
+    ? `${plan.host} has no copy of ${id.slice(0, 8)} yet, ${lead.host} has`
+    : `the copy of ${id.slice(0, 8)} on ${plan.host} is behind ${lead.host}'s` +
+      (more > 0 ? ` by ${Math.max(1, Math.round(more / 1024))} KB` : '') +
+      ' — Syncthing has not brought it yet';
+  return { there: { host: lead.host, why }, notes };
+}
+
+/**
  * Which conversation a start continues. Other agents keep the profile's
  * resume_args. For Claude Code vdx reads the project's conversations and the
  * machine each belongs to (conversations.ts): `--continue` would take the
@@ -2971,15 +3022,22 @@ function boardStart(
       f,
     ]),
   );
+  const fileCopy = (id: string): TranscriptCopy | null => {
+    const f = files.get(id);
+    return f ? { mtime: f.updated.getTime(), size: f.size } : null;
+  };
+  // Of several machines ahead of ours, the one most ahead.
+  const leadCopy = new Map<string, TranscriptCopy>();
   for (const [m, r] of k.reach) {
     if (!r) continue;
     if (r.report) {
       there.push(...r.report.agents.map((a) => ({ ...a, machine: m })));
       for (const id of r.report.typed) if (!typedOn.has(id)) typedOn.set(id, m);
-      // Their copy newer or longer than ours: ours is behind, and that machine writes it.
+      // Their copy ahead of ours: ours is behind, and that machine writes it.
       for (const t of r.report.transcripts) {
-        const ours = files.get(t.id);
-        if (!ours || t.mtime > ours.updated.getTime() + 2_000 || t.size > ours.size) behind.set(t.id, m);
+        if (!copyAhead(t, leadCopy.get(t.id) ?? fileCopy(t.id))) continue;
+        behind.set(t.id, m);
+        leadCopy.set(t.id, t);
       }
       continue;
     }
@@ -3037,6 +3095,46 @@ function boardStart(
   // `?` — a terminal over ssh from a machine nothing names: the attaches of a vdx older than 0.44
   // carry no seat mark. When the profile has one machine besides the agent's, it is that one.
   const machinesAll = [plan.host, ...plan.machines];
+  // The machines a conversation nobody runs can go on on (vdx-ai-list-owner-findings П. 5): the profile's, this one first.
+  const choices = machinesAll.filter((m, i) => machinesAll.findIndex((x) => sameMachine(x, m)) === i);
+  // A copy of a conversation on a machine: its length and time; none there; the machine did not answer; or its vdx
+  // sends no copies (older than 0.44).
+  type CopyOn = { kind: 'copy'; copy: TranscriptCopy } | { kind: 'none' | 'silent' | 'old' };
+  const copyOn = (m: string, id: string): CopyOn => {
+    if (sameMachine(m, plan.host)) {
+      const c = fileCopy(id);
+      return c ? { kind: 'copy', copy: c } : { kind: 'none' };
+    }
+    const r = [...k.reach].find(([x]) => sameMachine(x, m))?.[1];
+    if (!r) return { kind: 'silent' };
+    if (!r.report) return { kind: 'old' };
+    const t = r.report.transcripts.find((x) => x.id === id);
+    return t ? { kind: 'copy', copy: t } : { kind: 'none' };
+  };
+  /**
+   * Whether conversation `id` may go on on machine `m`, in the words of its row: only where the copy is the newest —
+   * a copy behind another machine's would go on without its end, and Syncthing would keep two (DL #8).
+   */
+  const copyState = (m: string, id: string): { ok: boolean; word: string } => {
+    const s = copyOn(m, id);
+    if (s.kind === 'silent') return { ok: false, word: 'does not answer over ssh' };
+    if (s.kind === 'old') return { ok: true, word: 'its vdx sends no copies (older than 0.44): not compared' };
+    const ours = s.kind === 'copy' ? s.copy : null;
+    let lead: { m: string; copy: TranscriptCopy } | null = null;
+    for (const x of choices) {
+      if (sameMachine(x, m)) continue;
+      const o = copyOn(x, id);
+      if (o.kind === 'copy' && copyAhead(o.copy, lead?.copy ?? ours)) lead = { m: x, copy: o.copy };
+    }
+    if (lead)
+      return {
+        ok: false,
+        word: ours
+          ? `its copy is behind ${lead.m}'s — Syncthing has not brought it yet`
+          : `no copy yet — ${lead.m} has it`,
+      };
+    return ours ? { ok: true, word: 'its copy is the newest' } : { ok: false, word: 'no copy there' };
+  };
   const seatOf = <T extends { machine: string; openAt: string[] }>(a: T): T => {
     const others = machinesAll.filter((m) => !sameMachine(m, a.machine));
     return a.openAt.includes('?') && others.length === 1
@@ -3097,7 +3195,7 @@ function boardStart(
       return { kind: 'remote', host: a.machine, conversation: a.conversation, lines: why };
     }
     if (pick.kind === 'conversation') {
-      const m = pick.machine;
+      const m = pick.on ?? pick.machine;
       const c = pick.conversation;
       const mode = modeOfConversation(c);
       // One HQ session per project and machine: the one running there is where its work goes on.
@@ -3111,6 +3209,16 @@ function boardStart(
               `to go on with ${c.id.slice(0, 8)} in it instead — vdx ai${sameMachine(hqThere.machine, plan.seat) ? '' : `@${hqThere.machine}`} ${k.root} --hq --restart --conversation ${c.id}`,
           ],
         };
+      // Here by the person's choice, though its machine is another: the copy here is the newest (П. 5).
+      if (pick.on && sameMachine(pick.on, plan.host))
+        return {
+          kind: 'continue',
+          choice: {
+            args: resumeId(c.id),
+            ...mode,
+            lines: [...why, `continuing ${k.on(plan.host)}: ${describeConversation(c, pick.machine)}`],
+          },
+        };
       if (m && !sameMachine(m, plan.host)) {
         return {
           kind: 'continue',
@@ -3118,7 +3226,7 @@ function boardStart(
             args: [],
             remote: { host: m, id: c.id, reachable: k.reach.get(m) != null },
             ...mode,
-            lines: [...why, `continuing on ${m}: ${describeConversation(c, m)}`],
+            lines: [...why, `continuing on ${m}: ${describeConversation(c, pick.machine)}`],
           },
         };
       }
@@ -3128,6 +3236,72 @@ function boardStart(
     if (pick.kind === 'new') return { kind: 'new', focused: pick.focused, lines: why };
     if (pick.kind === 'restore') return { kind: 'restore' };
     return { kind: 'abort', lines: why };
+  };
+
+  /**
+   * The machine to continue conversation `c` on, picked by the person (`ctrl-o`, `<n>@`): the profile's machines,
+   * each with the state of its copy; the cursor on the first other one where it may go on. Null — back to the list.
+   */
+  const pickMachine = (c: Conversation, own: string | null): string | null => {
+    const states = choices.map((m) => ({ m, ...copyState(m, c.id) }));
+    const line = (s: (typeof states)[number]) =>
+      `${s.m}${sameMachine(s.m, plan.seat) ? ' (where you are)' : ''}  ${s.word}${own && sameMachine(s.m, own) ? ' · it was last here' : ''}`;
+    const other = states.findIndex((s) => s.ok && !(own && sameMachine(s.m, own)));
+    const cursor =
+      other >= 0
+        ? other
+        : Math.max(
+            0,
+            states.findIndex((s) => s.ok),
+          );
+    const title = `${c.id.slice(0, 8)}${c.title ? ` «${clip(c.title, 50)}»` : ''} — go on on which machine?`;
+    // The panel: the machine's copy, as the rows compare it.
+    const copyFacts = (m: string): string[] => {
+      const o = copyOn(m, c.id);
+      if (o.kind === 'copy')
+        return [
+          `COPY      ${Math.max(1, Math.round(o.copy.size / 1024))} KB, written ${describeAge(new Date(o.copy.mtime))}`,
+        ];
+      return [
+        `COPY      ${o.kind === 'none' ? 'none' : o.kind === 'silent' ? 'not known — no answer over ssh' : 'not known — its vdx is older than 0.44'}`,
+      ];
+    };
+    if (deps.pick) {
+      const answer = deps.pick({
+        header: [title, 'Enter takes the machine · Esc — back to the list'],
+        items: states.map((s) => ({ text: line(s), detail: copyFacts(s.m) })),
+        cursor,
+        columns: deps.columns,
+      });
+      if (answer === null || answer === 'failed' || answer.key !== '' || answer.index === null) return null;
+      return states[answer.index]?.m ?? null;
+    }
+    deps.log(title);
+    states.forEach((s, i) => deps.log(`  ${i + 1}) ${line(s)}`));
+    const answer = deps.ask(`Which machine? [${cursor + 1}]: `);
+    if (answer === null) return null;
+    const a = answer.trim();
+    if (a === '') return states[cursor]!.m;
+    return /^\d+$/.test(a) ? (states[Number(a) - 1]?.m ?? a) : a;
+  };
+  /**
+   * A row to continue on another machine (vdx-ai-list-owner-findings П. 5, DL #8): only a conversation nobody runs,
+   * and only where its copy is the newest. A string — why not, said above the list; null — back to the list.
+   */
+  const goElsewhere = (p: { row: Pick; on: string | null }): BoardOutcome | string | null => {
+    if (p.row.kind !== 'conversation')
+      return p.row.kind === 'agent'
+        ? 'that agent runs — Enter attaches to it; only a conversation nobody runs goes on on another machine'
+        : 'only a conversation nobody runs goes on on another machine';
+    if (choices.length < 2) return 'the profile names no other machine (session.machines)';
+    const c = p.row.conversation;
+    const on = p.on ?? pickMachine(c, p.row.machine);
+    if (on === null) return null;
+    const target = choices.find((m) => sameMachine(m, on));
+    if (!target) return `${on} is not a machine of the profile: ${choices.join(', ')}`;
+    const state = copyState(target, c.id);
+    if (!state.ok) return `${c.id.slice(0, 8)} does not go on on ${target}: ${state.word}`;
+    return outcomeOf({ kind: 'conversation', conversation: c, machine: p.row.machine, on: target }, []);
   };
 
   // `a`: every conversation of the project, not only the newest the start read — the HQ session's among them,
@@ -3183,6 +3357,7 @@ function boardStart(
       machineOf,
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
+      machines: choices,
       limit,
       restore: mode === 'ask' ? restore : 0,
       restoreWhat: lostWords.what,
@@ -3220,6 +3395,7 @@ function boardStart(
       machineOf,
       behind,
       silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
+      machines: choices,
       find: { phrase, searched: files.size, around },
       // Nobody to ask: the command for each row — the conversation's id is not on the row whole.
       reach: print ? reachOf : undefined,
@@ -3380,7 +3556,11 @@ function boardStart(
       const pick = readPicked(answer, board);
       if (pick?.kind === 'all') board = make('all');
       else if (pick?.kind === 'find') searched(pick.phrase);
-      else if (pick) return outcomeOf(pick, []);
+      else if (pick?.kind === 'where') {
+        const went = goElsewhere(pick);
+        if (typeof went === 'string') said = went;
+        else if (went) return went;
+      } else if (pick) return outcomeOf(pick, []);
     }
   }
   // Nothing found leaves the board as it was: the line says so, the question comes again.
@@ -3410,9 +3590,17 @@ function boardStart(
       searchFor(pick.phrase);
       continue;
     }
+    if (pick?.kind === 'where') {
+      const went = goElsewhere(pick);
+      if (typeof went === 'string') deps.log(went);
+      if (went === null || typeof went === 'string') continue;
+      return went;
+    }
     if (pick) return outcomeOf(pick, []);
     wrong++;
-    deps.log(`  1–${board.rows.length}, a, /<phrase>, n${board.restore ? ', f or r' : ' or f'}`);
+    deps.log(
+      `  1–${board.rows.length}${choices.length > 1 ? ', <n>@<machine>' : ''}, a, /<phrase>, n${board.restore ? ', f or r' : ' or f'}`,
+    );
   }
   return { kind: 'abort', lines: ['nothing started'] };
 }
@@ -5561,14 +5749,23 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       const was = plan.focused
         ? null
         : conversationTopic({ env: deps.env, home: deps.home, projectRoot, id: opts.conversation });
+      // Not on a copy behind another machine's, nor beside the agent that writes it there (DL #8).
+      const away = conversationElsewhere(plan, deps, opts.conversation);
       choice = {
         args: resumeId(opts.conversation),
-        lines: was
-          ? [
-              `note: ${opts.conversation.slice(0, 8)} was a focused conversation «${clip(was, 60)}» — this start is not focused; ` +
-                `focused again: vdx ai ${shellQuote(projectRoot)} --focused --conversation ${opts.conversation}`,
-            ]
-          : [],
+        ...(away.there
+          ? { remote: { host: away.there.host, id: opts.conversation, reachable: true, ask: away.there.why } }
+          : {}),
+        lines: [
+          ...away.notes,
+          ...(away.there ? [away.there.why] : []),
+          ...(was
+            ? [
+                `note: ${opts.conversation.slice(0, 8)} was a focused conversation «${clip(was, 60)}» — this start is not focused; ` +
+                  `focused again: vdx ai ${shellQuote(projectRoot)} --focused --conversation ${opts.conversation}`,
+              ]
+            : []),
+        ],
       };
     }
     // So does the HQ session, and it is a new conversation — but a restart keeps the one it is in:
@@ -5638,6 +5835,10 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
     }
     deps.out(renderPlan(plan, multiplexer, running, focusedOf, target, asideWords, topic));
     for (const l of choice?.lines ?? []) deps.out(`  conversation: ${l}\n`);
+    if (choice?.remote?.ask)
+      deps.out(
+        `  conversation: the start asks to continue it on ${choice.remote.host} instead (Enter — yes); with no terminal, nothing starts\n`,
+      );
     for (const l of folders) deps.out(`  ${l}\n`);
     ensureAuthor(projectRoot, poolDirs, deps, true);
     ensureMemory(
@@ -5669,9 +5870,22 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
 
   let askHere = choice?.askHere;
   if (choice?.remote) {
-    const { host, id, reachable } = choice.remote;
+    const { host, id, reachable, ask } = choice.remote;
     // There the conversation brings its topic back itself (chooseTopic): the flag is enough.
     const as = choice.hq ? { hq: true } : choice.focused ? { focused: true } : {};
+    // A start that named its conversation here, and it runs there or its copy there is ahead: there, after a yes
+    // whose Enter is harmless; with no terminal to ask, nothing (DL #8).
+    if (ask) {
+      const answer = asks(deps) ? deps.ask(`Continue it on ${host} instead? [Y/n]: `) : null;
+      if (answer === null || /^n(o)?$/i.test(answer.trim())) {
+        const flags = `${plan.hq ? ' --hq' : plan.focused ? ' --focused' : ''} --conversation ${id}`;
+        log(
+          `nothing started${asks(deps) ? '' : ' — no terminal to ask'}. On ${host}: vdx ai@${host} ${shellQuote(projectRoot)}${flags}` +
+            ` · ${atSeat ? 'here' : `on ${plan.host}`}, once Syncthing has brought it: ${vdxAiHere} ${shellQuote(projectRoot)}${flags}`,
+        );
+        return EXIT_LAUNCH_FAILED;
+      }
+    }
     if (reachable) return runAiRemote({ ...opts, ...as, path: projectRoot, conversation: id }, host, deps, plan.seat);
     log(`✗ ${host} does not answer over ssh — its conversation ${id.slice(0, 8)} cannot be continued there`);
     askHere = { id, why: `If it still runs on ${host}, both machines will write to it` };

@@ -1825,6 +1825,173 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       });
     });
 
+    // The owner on lft, 2026-11-26: «было бы классно иметь возможность в not runs now сессии выбрать ГДЕ её запустить» —
+    // and never on a copy Syncthing has not brought yet (vdx-ai-list-owner-findings П. 5, DL #8).
+    describe('a conversation nobody runs goes on on a machine the person picks', () => {
+      /** m3's copy of `file`: as it is here, or `more` bytes longer. */
+      const copyOf = (id: string, file: string, more = 0) => {
+        const st = fs.statSync(file);
+        return { id, mtime: st.mtimeMs, size: st.size + more };
+      };
+
+      it("<n>@lft continues m3's conversation here, where its copy is as new; <n>@m3 — lft's on m3", () => {
+        withWrap();
+        const a = conv(ID.a, 'm3', 5);
+        const b = conv(ID.b, 'lft', 30);
+        answers = ['1@lft'];
+        const d = () => report({ transcripts: [copyOf(ID.a, a), copyOf(ID.b, b)] });
+        expect(runAi({ ...opts, path: root }, d())).toBe(EXIT_OK);
+        expect(text()).toContain('<n>@<machine> on another machine');
+        expect(text()).toContain(`continuing here: m3  5 min ago  ${ID.a.slice(0, 8)}`);
+        expect(runs()).toEqual([`--base --resume ${ID.a}`]);
+        expect(remoteRuns()).toEqual([]);
+        answers = ['2@M3'];
+        expect(runAi({ ...opts, path: root }, d())).toBe(EXIT_OK);
+        expect(text()).toContain(`continuing on m3: lft  30 min ago  ${ID.b.slice(0, 8)}`);
+        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+        expect(runs()).toHaveLength(1);
+      });
+
+      it('not on a machine whose copy is behind, or has none: the line says why, and the question comes again', () => {
+        withWrap();
+        const a = conv(ID.a, 'm3', 5);
+        conv(ID.b, 'lft', 30);
+        // m3 wrote on in ID.a since our copy; ID.b never reached m3.
+        answers = ['1@lft', '2@m3', '3@m3', '1@nyc', 'n'];
+        const d = report({ transcripts: [copyOf(ID.a, a, 4096)] });
+        expect(runAi({ ...opts, path: root }, d)).toBe(EXIT_OK);
+        expect(text()).toContain(
+          `${ID.a.slice(0, 8)} does not go on on lft: its copy is behind m3's — Syncthing has not brought it yet`,
+        );
+        expect(text()).toContain(`${ID.b.slice(0, 8)} does not go on on m3: no copy yet — lft has it`);
+        // A row past the list is not understood; a machine not in the profile is said so.
+        expect(text()).toContain('1–2, <n>@<machine>, a, /<phrase>, n or f');
+        expect(text()).toContain('nyc is not a machine of the profile: lft, m3');
+        expect(runs()).toEqual(['--base']);
+        expect(remoteRuns()).toEqual([]);
+      });
+
+      it('with a picker: ctrl-o asks the machine — each with its copy, the cursor on the other one; Esc — the list again', () => {
+        withWrap();
+        conv(ID.a, 'm3', 5);
+        const b = conv(ID.b, 'lft', 30);
+        const shown: PickerInput[] = [];
+        const steps = ['ctrl-o', 'esc', 'ctrl-o', 'enter'];
+        const pick = (input: PickerInput) => {
+          shown.push(input);
+          const step = steps.shift();
+          if (step === 'esc') return null;
+          if (step === 'ctrl-o')
+            return { key: 'ctrl-o', index: input.items.findIndex((i) => i.text.includes('30 min ago')), query: '' };
+          return { key: '', index: input.cursor, query: '' };
+        };
+        // ID.a never reached m3 — the machines are not compared for it here.
+        const d = report({ transcripts: [copyOf(ID.b, b)] });
+        expect(runAi({ ...opts, path: root }, { ...d, pick })).toBe(EXIT_OK);
+        expect(shown[0]!.header.at(-1)).toContain('ctrl-o continues it on another machine');
+        const machines = shown[1]!;
+        expect(machines.header[0]).toBe(`${ID.b.slice(0, 8)} «prompt ${ID.b.slice(0, 4)}» — go on on which machine?`);
+        expect(machines.items.map((i) => i.text)).toEqual([
+          'lft (where you are)  its copy is the newest · it was last here',
+          'm3  its copy is the newest',
+        ]);
+        expect(machines.cursor).toBe(1);
+        expect(machines.items[1]!.detail).toEqual([`COPY      1 KB, written 30 min ago`]);
+        // Esc there is back to the list, not out of it.
+        expect(shown[2]!.items).toEqual(shown[0]!.items);
+        expect(shown).toHaveLength(4);
+        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+        expect(runs()).toEqual([]);
+      });
+
+      it('with a picker: ctrl-o on a running agent says Enter attaches to it', () => {
+        withWrap();
+        conv(ID.a, 'm3', 5);
+        const steps = [1, null];
+        const said: string[] = [];
+        const pick = (input: PickerInput) => {
+          said.push(input.header[0]!);
+          const index = steps.shift();
+          return index === null ? null : { key: 'ctrl-o', index: index!, query: '' };
+        };
+        // Open here: the list is shown, not attached to it at once.
+        const d = report({ agents: [agentThere({ conversation: ID.c, openAt: ['lft'] })] });
+        expect(runAi({ ...opts, path: root }, { ...d, pick })).toBe(EXIT_LAUNCH_FAILED);
+        expect(said[1]).toBe(
+          'that agent runs — Enter attaches to it; only a conversation nobody runs goes on on another machine',
+        );
+      });
+    });
+
+    // The same check for a start that names its conversation (vdx-ai-list-owner-findings П. 5, DL #8).
+    describe('--conversation <id>: not on a copy behind another machine, nor beside the agent writing it there', () => {
+      it("m3's copy is ahead: at a terminal Enter continues it there; n starts nothing and names both commands", () => {
+        withWrap();
+        const a = conv(ID.a, 'lft', 30);
+        const ahead = () =>
+          report({ transcripts: [{ id: ID.a, mtime: Date.now(), size: fs.statSync(a).size + 3 * 1024 }] });
+        answers = [''];
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, ahead())).toBe(EXIT_OK);
+        expect(text()).toContain(
+          `the copy of ${ID.a.slice(0, 8)} on lft is behind m3's by 3 KB — Syncthing has not brought it yet`,
+        );
+        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.a}`);
+        expect(runs()).toEqual([]);
+        answers = ['n'];
+        expect(runAi({ ...opts, path: root, conversation: ID.a, focused: true }, ahead())).toBe(EXIT_LAUNCH_FAILED);
+        expect(text()).toMatch(
+          new RegExp(
+            `nothing started\\. On m3: vdx ai@m3 \\S+ --focused --conversation ${ID.a} · here, once Syncthing has brought it: vdx ai \\S+ --focused --conversation ${ID.a}`,
+          ),
+        );
+        expect(remoteRuns()).toHaveLength(1);
+        expect(runs()).toEqual([]);
+      });
+
+      it('no terminal: nothing starts; --yes goes there; --dry-run says what the start would ask', () => {
+        withWrap();
+        const a = conv(ID.a, 'lft', 30);
+        const ahead = (over: Partial<AiDeps> = {}) => ({
+          ...report({ transcripts: [{ id: ID.a, mtime: Date.now(), size: fs.statSync(a).size + 10 }] }),
+          ...over,
+        });
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, ahead({ interactive: false }))).toBe(
+          EXIT_LAUNCH_FAILED,
+        );
+        expect(text()).toContain('nothing started — no terminal to ask. On m3: vdx ai@m3');
+        expect(runAi({ ...opts, path: root, conversation: ID.a, dryRun: true }, ahead())).toBe(EXIT_OK);
+        expect(text()).toContain(
+          'conversation: the start asks to continue it on m3 instead (Enter — yes); with no terminal, nothing starts',
+        );
+        expect(remoteRuns()).toEqual([]);
+        expect(runAi({ ...opts, path: root, conversation: ID.a, yes: true }, ahead())).toBe(EXIT_OK);
+        expect(text()).toContain('Continue it on m3 instead? [Y/n]: y (--yes)');
+        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.a}`);
+        expect(runs()).toEqual([]);
+      });
+
+      it('it runs on m3 right now: the question too; a copy here as new, or m3 silent — it goes on here', () => {
+        withWrap();
+        const a = conv(ID.a, 'lft', 30);
+        const live = { pid: 10984, conversation: ID.a, tmux: 'proj@m3:@1.%1', status: 'busy', cwd: null };
+        answers = ['n'];
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, report({ sessions: [live] }))).toBe(
+          EXIT_LAUNCH_FAILED,
+        );
+        expect(text()).toContain(`${ID.a.slice(0, 8)} runs on m3 right now (proj@m3)`);
+        const st = fs.statSync(a);
+        const same = report({ transcripts: [{ id: ID.a, mtime: st.mtimeMs, size: st.size }] });
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, same)).toBe(EXIT_OK);
+        remoteLive = null;
+        expect(runAi({ ...opts, path: root, conversation: ID.a }, deps())).toBe(EXIT_OK);
+        expect(text()).toContain(
+          `note: m3 does not answer over ssh — whether ${ID.a.slice(0, 8)} runs there, or its copy there is newer, is not known`,
+        );
+        expect(runs()).toEqual([`--base --resume ${ID.a}`, `--base --resume ${ID.a}`]);
+        expect(remoteRuns()).toEqual([]);
+      });
+    });
+
     it('`a` shows every conversation; n starts a new one', () => {
       withWrap();
       remoteLive = [];

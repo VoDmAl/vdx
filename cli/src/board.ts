@@ -120,7 +120,13 @@ export function inputDraft(screen: string | null): number {
 export type Pick =
   | { kind: 'agent'; agent: AgentFact }
   | { kind: 'session'; session: SessionFact }
-  | { kind: 'conversation'; conversation: Conversation; machine: string | null }
+  /** `on` — the machine the person chose to continue it on (`ctrl-o`, `<n>@<machine>`); not given — its own. */
+  | { kind: 'conversation'; conversation: Conversation; machine: string | null; on?: string }
+  /**
+   * A row to continue on another machine (vdx-ai-list-owner-findings П. 5): `ctrl-o` on it, or `<n>@<machine>`.
+   * `on` null — the machine is asked next.
+   */
+  | { kind: 'where'; row: Pick; on: string | null }
   | { kind: 'new'; focused: boolean }
   | { kind: 'all' }
   | { kind: 'find'; phrase: string }
@@ -147,6 +153,8 @@ export interface BoardInput {
   behind?: Map<string, string>;
   /** Machines that did not answer: what runs there is not known. */
   silent?: string[];
+  /** The profile's machines, this one among them: with two or more, a conversation can go on on another one. */
+  machines?: string[];
   /** How many conversations nobody runs to show; `all` — every one. */
   limit?: number | 'all';
   /**
@@ -578,6 +586,8 @@ export function buildBoard(input: BoardInput): Board {
   const back =
     input.restoreWhat || `bring back ${restore === 1 ? 'the agent' : `the ${restore} agents`} tmux took down`;
   const more = input.find ? 'the whole list' : hidden > 0 ? `all (${unread ? 'up to ' : ''}${hidden} more)` : null;
+  // A conversation nobody runs goes on on another machine of the profile (vdx-ai-list-owner-findings П. 5).
+  const elsewhere = (input.machines?.length ?? 0) > 1 && idle.length > 0;
   const keys = [
     `Enter → ${enterKey({ enter })}`,
     ...(restore > 0 ? [`r ${back}`] : []),
@@ -585,6 +595,7 @@ export function buildBoard(input: BoardInput): Board {
     input.find ? '/<phrase> another search' : '/<phrase> find',
     'n new',
     'f new focused',
+    ...(elsewhere ? ['<n>@<machine> on another machine'] : []),
   ];
   const blocks = [
     [head],
@@ -633,7 +644,9 @@ export function buildBoard(input: BoardInput): Board {
         head,
         ...nothing,
         ...notes.map((n) => n.trim()),
-        `Enter takes the row · ${SEARCH_KEY} searches what was said for the typed words · ${COMMAND_KEY} prints the row's command · Esc leaves`,
+        `Enter takes the row · ${SEARCH_KEY} searches what was said for the typed words · ${COMMAND_KEY} prints the row's command` +
+          (elsewhere ? ` · ${ELSEWHERE_KEY} continues it on another machine` : '') +
+          ' · Esc leaves',
       ],
       items,
       cursor: Math.max(
@@ -651,15 +664,25 @@ export const SEARCH_KEY = 'ctrl-s';
  * command is folded inside a frame, and what the terminal copies from there is not a command.
  */
 export const COMMAND_KEY = 'ctrl-y';
+/**
+ * The picker's key that continues the conversation under the cursor on a machine the person picks next — the
+ * profile's machines, each with the state of its copy (vdx-ai-list-owner-findings П. 5).
+ */
+export const ELSEWHERE_KEY = 'ctrl-o';
 
 /**
  * What the person did in the picker: Enter on a row is that row; ctrl-s searches the conversations
- * for the phrase typed as the filter. Null — a title, or nothing typed to search: the list again.
+ * for the phrase typed as the filter; ctrl-o — the row on a machine to pick. Null — a title, or nothing
+ * typed to search: the list again.
  */
 export function readPicked(answer: { key: string; index: number | null; query: string }, board: Board): Pick | null {
   if (answer.key === SEARCH_KEY) {
     const phrase = answer.query.trim();
     return phrase ? { kind: 'find', phrase } : null;
+  }
+  if (answer.key === ELSEWHERE_KEY) {
+    const row = answer.index === null ? null : board.picker.items[answer.index]?.pick;
+    return row ? { kind: 'where', row, on: null } : null;
   }
   // Enter only: another key that ended the picker is not a choice of the row.
   if (answer.key !== '' || answer.index === null) return null;
@@ -671,7 +694,10 @@ export function enterKey(board: { enter: Board['enter'] }): string {
   return board.enter === 'new' ? 'n' : board.enter === 'restore' ? 'r' : String(board.enter + 1);
 }
 
-/** The person's answer: a row, `a`, `/<phrase>`, `n`, `f`, `r`; Enter is the marked one. Null — not understood. */
+/**
+ * The person's answer: a row, `<n>@<machine>`, `a`, `/<phrase>`, `n`, `f`, `r`; Enter is the marked one. Null — not
+ * understood.
+ */
 export function readAnswer(answer: string, board: Board): Pick | null {
   const a = answer.trim();
   if (a === '')
@@ -685,6 +711,12 @@ export function readAnswer(answer: string, board: Board): Pick | null {
   if (/^f$/i.test(a)) return { kind: 'new', focused: true };
   if (/^a(ll)?$/i.test(a)) return { kind: 'all' };
   if (/^\d+$/.test(a)) return board.rows[Number(a) - 1] ?? null;
+  // `<n>@<machine>`: that row on that machine; `<n>@` — the machine is asked next.
+  const at = a.match(/^(\d+)\s*@\s*(\S*)$/);
+  if (at) {
+    const row = board.rows[Number(at[1]) - 1];
+    return row ? { kind: 'where', row, on: at[2] || null } : null;
+  }
   const phrase = a.match(/^\/\s*(.+)$/)?.[1];
   return phrase ? { kind: 'find', phrase } : null;
 }

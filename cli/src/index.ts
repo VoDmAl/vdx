@@ -192,7 +192,11 @@ of session only (0.67). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 it the mark is cleared). Anywhere else: refused, nothing closed
   --conversation <id>
                 continue this Claude Code conversation: attach to the agent in
-                it, or start one next to the agents running here
+                it, or start one next to the agents running here. The other
+                machines are asked first (0.71): if it runs there, or their copy
+                is ahead of this one (Syncthing has not brought it), a terminal
+                is asked "Continue it on <machine> instead? [Y/n]" — Enter goes
+                there; with no terminal nothing starts, and the line names it
   --restart     restart the running agent in its pane — applies a changed profile;
                 with --new or --conversation, it is replaced by that; with
                 --focused it goes on focused in the conversation it is in, a
@@ -325,7 +329,9 @@ row's command and starts nothing, Esc starts nothing.
 VDX_PLAIN_LIST=1 keeps the numbered list. Another
 machine's conversation is continued on that machine (if it does not answer, vdx
 asks before continuing it here), and one whose copy here is behind that
-machine's — Syncthing has not brought it yet — too. After the tmux server here
+machine's — Syncthing has not brought it yet — too. <n>@<machine> (ctrl-o with
+fzf, the machine picked next) continues a conversation nobody runs on another
+machine of the profile — only where its copy is the newest (0.71). After the tmux server here
 fell, the list opens with what it took down (of this project; of every project
 where session.restore_all holds), and in a cmux tab with the tabs here that lost
 their sessions (0.59), never silent: Enter and r bring back everything, as

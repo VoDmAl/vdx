@@ -24,6 +24,7 @@ import {
 import {
   claudeConfigDir,
   claudeTrusts,
+  copyAhead,
   describeAge,
   findInConversations,
   historyMarks,
@@ -425,6 +426,25 @@ describe('left after a look: /clear long after the last word (vdx-ai-predictable
 
   it('no history.jsonl: nothing', () => {
     expect(historyMarks({}, home, new Set([ID.a])).size).toBe(0);
+  });
+});
+
+describe('copyAhead: which of two copies of a transcript is the newer (vdx-ai-list-owner-findings DL #8)', () => {
+  const at = 1_800_000_000_000;
+  it('the longer copy is ahead; of two the same length, the one written later than the 2 s a sync takes', () => {
+    expect(copyAhead({ mtime: at, size: 2000 }, { mtime: at, size: 1000 })).toBe(true);
+    expect(copyAhead({ mtime: at + 3000, size: 1000 }, { mtime: at, size: 1000 })).toBe(true);
+    expect(copyAhead({ mtime: at + 1500, size: 1000 }, { mtime: at, size: 1000 })).toBe(false);
+    expect(copyAhead({ mtime: at, size: 1000 }, { mtime: at, size: 1000 })).toBe(false);
+    // No copy here: any there is ahead.
+    expect(copyAhead({ mtime: at, size: 1 }, null)).toBe(true);
+  });
+
+  it('never ahead both ways: a later but shorter copy is behind the longer one', () => {
+    const later = { mtime: at + 60_000, size: 1000 };
+    const longer = { mtime: at, size: 2000 };
+    expect(copyAhead(later, longer)).toBe(false);
+    expect(copyAhead(longer, later)).toBe(true);
   });
 });
 
