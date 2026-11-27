@@ -5,7 +5,7 @@ description: "Чтобы человек знал заранее, что сдел
 status: in-progress
 session-type: prd-prep
 created: 2026-10-30
-last-updated: 2026-11-24
+last-updated: 2026-11-27
 relates-to: ["[[vdx-ai/workitem|vdx-ai]]", "[[focused-topic/workitem|focused-topic]]"]
 ---
 
@@ -1571,6 +1571,29 @@ global-auth-gap 2026-11-24, «для всех штабов». Что есть: `
 **Status:** open — работа основной сессии vdx; срока нет (шаг кода echelon — после их выпуска листа с пунктами i и j
 `sheet-sync-on-full-pass`)
 
+### #27. Строка старта и скилл `vdx-ai`: новую задачу открывают `--focused --prompt`, голый `vdx ai` продолжает
+
+**Возникло в:** сессия intercom vdx на m3, письмо mkrivosheeva.ru `vdx-ai-hint-new-task-line` (2026-11-27).
+**Описание:** агент mkrivosheeva.ru передал работу агенту og-image-generator и дал владельцу строку
+`cd ~/PhpstormProjects/git.vorobyev.name/og-image-generator && vdx ai`. Профиль владельца — `resume_args: [--continue]`,
+так что `vdx ai` продолжил последний разговор проекта, от 14 ноября. Владелец ему: «я запустил … vdx ai - и у попал в
+сессию от 14 ноября, не знаю кто виноват … твоя строка запуска отличается от того что другие агенты предлагают. Почему
+такие расхождения?» Скилл `vdx-ai` правильную строку знает («A new topic for a session of its own»:
+`vdx ai '<root>' --focused "<topic>" --prompt "<what to do>"`), но агент его не открыл, и на то две причины:
+1. Строка старта (`cli/src/ai.ts`, функция строки хука, ~4036: «Hand the user \`vdx ai\`, not \`claude --<flag>\`»)
+   выглядит образцом того, что давать человеку, и не говорит, что голый `vdx ai` продолжает последний разговор.
+   Предлагают дописать рядом: новая задача — `vdx ai '<root>' --focused "<тема>" --prompt "<что сделать>"`, голый
+   `vdx ai` продолжает последний разговор проекта.
+2. В `description` скилла (`plugin/skills/vdx-ai/SKILL.md`) нет случая «агент сам даёт человеку строку, чтобы открыть
+   сессию под задачу — здесь или в другом проекте». Предлагают: «Use before handing the user any `vdx ai` line — to
+   open a session for a task in this or another project».
+Что держать в уме: «продолжает» верно только при `resume_args` в профиле (`--help`: `--new` — «instead of continuing
+the last one»), а в терминале голый `vdx ai` может сперва показать список (DL #23) — формулировка не должна обещать
+одно поведение. Строка старта едет с выпуском CLI, описание скилла — с подъёмом `version` в
+`plugin/.claude-plugin/plugin.json`. Примеры в `.md` по репо — заодно (память «Sync CLI usage examples»).
+**Status:** open — работа основной сессии vdx; итог mkrivosheeva.ru — `reply` на `vdx-ai-hint-new-task-line` с
+решением по обеим правкам; срока нет («на твоё усмотрение»)
+
 ## Next actions
 
 - [x] DL #32, шаг 1 — места сессии по всем клиентам tmux — 2026-11-20: метка своей машины под `sshd` — не место,
@@ -1913,6 +1936,10 @@ global-auth-gap 2026-11-24, «для всех штабов». Что есть: `
       `--json` к списку (сейчас его нет). Правило «реплики человека» сверить с `chat_turns` echelon. Итог echelon —
       второе письмо после `list-owner-last-turn-outcome` (`send echelon … --reply-to vdx/list-owner-last-turn`): имена
       полей в `--json` и версия vdx. Срока нет
+- [ ] см. Sidetrack #27 — строка старта (`cli/src/ai.ts`) и `description` скилла `vdx-ai`: новая задача —
+      `vdx ai '<root>' --focused "<тема>" --prompt "<что сделать>"`, голый `vdx ai` продолжает последний разговор.
+      Итог mkrivosheeva.ru — `reply vdx-ai-hint-new-task-line --slug vdx-ai-hint-new-task-line-outcome-2` (письмо в
+      `_done/` vdx, первый итог — «взято в кристалл»): решение по обеим правкам и версия. Срока нет
 
 ## References
 

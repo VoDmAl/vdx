@@ -221,10 +221,12 @@ start's flag») — читать до этого. Тема — опция пан
       явного `--conversation` — 2026-11-27 (DL #8): `ctrl-o` и `<n>@<машина>`, список машин с копией у каждой
       (`pickMachine`, `goElsewhere`, `copyState` в `boardStart`), сверка явного старта (`conversationElsewhere`),
       правило `copyAhead`; живьём из `cli/` на m3 — `ctrl-o` в fzf, отказ на молчащей lft, `note:` у явного старта
-- [ ] П. 5 вживую на двух машинах: копия впереди на другой машине и разговор, идущий там, — вопрос
-      «Continue it on … instead?»; список машин с обеими ответившими — when: lft отвечает по ssh (2026-11-27 11:05
-      «Host is down»); check: с lft `npm run vdx -- ai '<путь vdx>' --conversation <id идущего на m3> --dry-run` из
-      `cli/` — строка `runs on m3 right now`, и `ctrl-o` в списке на m3
+- [x] П. 5 вживую на двух машинах — 2026-11-27 11:3x, из `cli/` (дерево `e11825d`, синхронизировано на lft): с lft
+      `--conversation fe218e3c --dry-run` (разговор идёт на m3) — `fe218e3c runs on m3 right now (vdx@m3)` и строка
+      вопроса; с lft `--no-input` — `nothing started — no terminal to ask`, сессий vdx на lft не прибавилось; на m3
+      `ctrl-o` — обе машины ответили, у обеих `its copy is the newest`, панель `COPY 5199 KB, written 44 min ago`.
+      Нашлось: у идущего там разговора строка отказа предлагала и «здесь, когда Syncthing довезёт» — для идущего
+      это не выход; поправлено (`runs` у `remote`), «здесь» — только у отставшей копии
 - [x] П. 6 — снят без кода: короткий id владелец сократил в вопросе, дополнения префикса не просил (DL #3)
 - [x] Итог nas-info — второе письмо после ответа сессии intercom 2026-11-26 (`send nas-info … --reply-to
       vdx/sidebar-agent-started-icon` — последнее звено цепочки, DL #4): версия с пунктами, имя опции tmux из п. 3 —

@@ -1979,6 +1979,8 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
           EXIT_LAUNCH_FAILED,
         );
         expect(text()).toContain(`${ID.a.slice(0, 8)} runs on m3 right now (proj@m3)`);
+        expect(text()).toMatch(new RegExp(`On m3, where it runs: vdx ai@m3 \\S+ --conversation ${ID.a}$`, 'm'));
+        expect(text()).not.toContain('once Syncthing has brought it');
         const st = fs.statSync(a);
         const same = report({ transcripts: [{ id: ID.a, mtime: st.mtimeMs, size: st.size }] });
         expect(runAi({ ...opts, path: root, conversation: ID.a }, same)).toBe(EXIT_OK);

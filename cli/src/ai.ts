@@ -2635,7 +2635,7 @@ interface ConversationChoice {
    * Continue it on that machine (`vdx ai@<host>`); `reachable` — it answered over ssh just now. `ask` — why it
    * goes there though the start named it here: put to the person first (vdx-ai-list-owner-findings DL #8).
    */
-  remote?: { host: string; id: string; reachable: boolean; ask?: string };
+  remote?: { host: string; id: string; reachable: boolean; ask?: string; runs?: boolean };
   /** Continue it here only after a yes: another machine's that cannot be asked, or one running here already. */
   askHere?: { id: string; why: string };
   /** The person ended the question (Ctrl-D): start nothing. */
@@ -2820,7 +2820,7 @@ function conversationElsewhere(
   plan: LaunchPlan,
   deps: AiDeps,
   id: string,
-): { there: { host: string; why: string } | null; notes: string[] } {
+): { there: { host: string; why: string; runs?: boolean } | null; notes: string[] } {
   const input = { env: deps.env, home: deps.home, projectRoot: plan.projectRoot };
   const own = conversationById({ ...input, id })?.machine ?? null;
   const machines: string[] = [];
@@ -2841,7 +2841,7 @@ function conversationElsewhere(
     const live = r.sessions.find((l) => l.conversation === id);
     if (live) {
       const where = live.tmux ? ` (${live.tmux.replace(/:.*$/, '')})` : '';
-      return { there: { host: m, why: `${id.slice(0, 8)} runs on ${m} right now${where}` }, notes };
+      return { there: { host: m, why: `${id.slice(0, 8)} runs on ${m} right now${where}`, runs: true }, notes };
     }
     const t = r.report?.transcripts.find((x) => x.id === id);
     if (t && copyAhead(t, lead?.copy ?? ours)) lead = { host: m, copy: t };
@@ -5754,7 +5754,15 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       choice = {
         args: resumeId(opts.conversation),
         ...(away.there
-          ? { remote: { host: away.there.host, id: opts.conversation, reachable: true, ask: away.there.why } }
+          ? {
+              remote: {
+                host: away.there.host,
+                id: opts.conversation,
+                reachable: true,
+                ask: away.there.why,
+                runs: away.there.runs,
+              },
+            }
           : {}),
         lines: [
           ...away.notes,
@@ -5870,7 +5878,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
 
   let askHere = choice?.askHere;
   if (choice?.remote) {
-    const { host, id, reachable, ask } = choice.remote;
+    const { host, id, reachable, ask, runs } = choice.remote;
     // There the conversation brings its topic back itself (chooseTopic): the flag is enough.
     const as = choice.hq ? { hq: true } : choice.focused ? { focused: true } : {};
     // A start that named its conversation here, and it runs there or its copy there is ahead: there, after a yes
@@ -5879,9 +5887,13 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
       const answer = asks(deps) ? deps.ask(`Continue it on ${host} instead? [Y/n]: `) : null;
       if (answer === null || /^n(o)?$/i.test(answer.trim())) {
         const flags = `${plan.hq ? ' --hq' : plan.focused ? ' --focused' : ''} --conversation ${id}`;
+        // Running there, it is that agent's: here only once Syncthing has brought a copy that is behind.
         log(
-          `nothing started${asks(deps) ? '' : ' — no terminal to ask'}. On ${host}: vdx ai@${host} ${shellQuote(projectRoot)}${flags}` +
-            ` · ${atSeat ? 'here' : `on ${plan.host}`}, once Syncthing has brought it: ${vdxAiHere} ${shellQuote(projectRoot)}${flags}`,
+          `nothing started${asks(deps) ? '' : ' — no terminal to ask'}. On ${host}${runs ? ', where it runs' : ''}: ` +
+            `vdx ai@${host} ${shellQuote(projectRoot)}${flags}` +
+            (runs
+              ? ''
+              : ` · ${atSeat ? 'here' : `on ${plan.host}`}, once Syncthing has brought it: ${vdxAiHere} ${shellQuote(projectRoot)}${flags}`),
         );
         return EXIT_LAUNCH_FAILED;
       }
