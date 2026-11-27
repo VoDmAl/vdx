@@ -5,7 +5,7 @@ description: "Поднимает сессию проекта для писем i
 status: in-progress
 session-type: prd-work
 created: 2026-10-22
-last-updated: 2026-11-19
+last-updated: 2026-11-23
 ---
 
 # Почтовая сессия проекта: `vdx ai --intercom`
@@ -535,6 +535,27 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
 **Status:** resolved — 2026-11-04: `remoteDistance` в `cli/src/publish.ts`, только под защитой ветки и только при `ahead > 0`; GitHub не
 ответил — решает ссылка, как раньше. Выйдет следующим выпуском
 
+### #11. `--detach` говорит «claude is not running» через 10 с, пока login-shell ещё поднимает агента
+
+**Возникло в:** письмо global-auth-gap `intercom-detach-false-not-running` (2026-11-23), взято сессией intercom vdx на lft
+**Описание:** lft, vdx 0.68.0. global-auth-gap по подсказке `send` запустил `vdx ai --intercom --detach '<корень echelon>'`:
+вызов в 18:39:10Z, вывод в 18:39:34Z — «✗ claude is not running in the pane … (nothing on it)». Панель `echelon@lft-intercom`
+`%435`: `zsh -lic` с 13:39:22 EST, `/usr/local/bin/claude` в ней с 13:40:01 — 39 с login-shell; load average 23 на 12 ядрах (в
+13:44, `uptime`). vdx сдался около 13:39:34, за 27 с до агента; сессия потом сама взяла письмо. Вывод шёл у них через `tail`,
+поэтому `exit=0` в их выводе — код `tail`; код vdx — 4 (`not-running`).
+Причина — `settle()` в `cli/src/ai.ts`: процесс агента ждут фиксированные 10 с (`procBy`), жив ли ещё старт — не смотрят.
+Правка 2026-11-08 (`vdx-ai-predictable`, побег про `intercom-start-channels-prompt-late`, `5ff7fb9`) продлила только ожидание
+подсказок `confirm`, пока `startAlive`; у сессии intercom на lft подсказок нет, тот цикл пропускается, остаётся 10 с.
+Второе следствие, в коде, живьём не видели: `settleResumed` на `not-running` при непустом `plan.resumeArgs` (профиль: `resume_args:
+[--continue]`) делает `respawn-pane -k` — убивает старт, который ещё идёт, и поднимает без resume; на медленной станции
+обычный `vdx ai` может потерять продолжение разговора.
+Направление правки: ждать процесс, пока `startAlive` (login-shell, чья строка называет агента), до долгого срока (39 с — уже
+больше нынешних 30 с `confirmTimeoutMs`), раньше — если старт умер; по сроку с живым shell — «старт ещё идёт N с, панель …», а не
+«not running», и без `respawn`. Какой код у «ещё идёт» — договор с ai-dev-plugins: по справке `send` код 4 значит «агент не
+поднялся, письмо ждёт». Тест — панель, где shell живёт дольше 10 с, а агент приходит потом.
+
+**Status:** open
+
 ## Next actions
 - [x] DL #13: предел и очередь сессий intercom — 2026-11-19: `cli/src/intercom-queue.ts`, проверка в `runAi`, очередь в
       `--close`; тесты падают без предела; справка, спека, CHANGELOG; скилл `vdx-ai` (плагин 0.15.13) — строка `⏸` не отказ
@@ -680,6 +701,8 @@ not running in the pane. The pane shows: [oh-my-zsh] Would you like to update? [
       `alive-vdx-mail-probe-2-lft.json` (22:28) — по имени следы проб почтовой сессии vdx на lft; живых таких сессий
       нет. Узнать, наши ли и мешают ли (echelon считает живые сессии по `alive-*`), убрать письмом echelon — найдено
       2026-11-21 при пробе `claude -p`
+- [ ] см. Sidetrack #11 — `settle()` ждёт агента, пока жив login-shell, а не 10 с; без `respawn` живого старта; тест;
+      итог global-auth-gap — после выпуска, со ссылкой на коммит (ответ на письмо ушёл 2026-11-23 из сессии intercom)
 
 ## References
 

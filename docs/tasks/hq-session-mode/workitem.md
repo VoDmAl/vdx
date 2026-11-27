@@ -5,7 +5,7 @@ description: "Запускает отдельную сессию листа и �
 status: in-progress
 session-type: prd-work
 created: 2026-11-03
-last-updated: 2026-11-21
+last-updated: 2026-11-24
 relates-to: ["[[intercom-session-mode/workitem|intercom-session-mode]]", "[[focused-topic/workitem|focused-topic]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
@@ -307,6 +307,36 @@ intercom, отметка «сделан»), хук пропускает сжат
 
 **Status:** open
 
+### #6. Два `--settings` в одном старте: действует последний — плагины по классу проектов столкнутся с `hq-idle-compaction`
+
+**Возникло в:** сессия intercom vdx на lft, письмо echelon `session-start-load` (2026-11-24): может ли профиль включать
+плагины по классу проектов, чтобы список скиллов в сессии был только из нужных. По замеру t23b-program список скиллов на
+старте фокус-сессии — 56,7 KB, у сессии intercom echelon — 61,6 KB, из них около 15 KB — vercel (счёт echelon, грубый).
+**Описание:** Claude Code 2.1.331 на lft, 2026-11-24: `claude -p --model haiku --no-session-persistence`, событие `init`,
+папка scratchpad вне репо, транскрипта нет.
+- Без флага — 129 скиллов и 169 команд, из них 40 скиллов vercel.
+- `--settings '{"enabledPlugins":{"vercel@claude-plugins-official":false}}'` — 89 скиллов, 126 команд, vercel нет.
+- Обратно тоже работает: superpowers, выключенный в `~/.claude/settings.json`, с `--settings` и `true` дал 15 скиллов.
+- Два `--settings` подряд (плагины, потом `{"idleCompaction":true}`) — vercel вернулся: действует только последний.
+
+Правило `when[]` с `args: [--settings, '{"enabledPlugins":…}']` работает без кода vdx. Но в HQ-сессии потребителя
+echelon оно столкнётся с `hq-idle-compaction` (DL #11): один из двух флагов молча пропадёт. vdx берёт `args` правил как
+есть, `--settings` в `cli/src/ai.ts` не разбирается. Чинить в vdx: значения `--settings` всех сработавших правил — в один
+JSON; что делать, когда два правила задают один ключ, — решить. Проекты с `vercel.json` или `.vercel` на lft (`find` до
+глубины 4 по `AI Projects`, `PhpstormProjects` и `/Volumes/Working/repos`): `pixer/shop`, `pixer/admin`,
+`git.vorobyev.name/og-image-generator`.
+
+**Решение владельца (2026-11-25):** спрошено через лист infra-hq (письмо `infra-hq/vercel-plugin-by-project-class`),
+пункт 8. Штаб рекомендовал: vercel — только в проектах с `vercel.json`, и так, чтобы правило видело `limex-team/copilot`:
+там `vercel.json` лежит в `apps/web`, не в корне (сверка штаба 2026-11-24 на lft; файл там есть,
+`AI Projects/limex-team/copilot/apps/web/vercel.json`). Владелец 25.11 18:55 UTC, своими словами в HQ-сессии infra-hq:
+«"Плагин vercel" - да согласен». Ответ штаба — `vdx/vercel-plugin-by-project-class-outcome`, срок итога infra-hq —
+2026-12-02. `has_file` берёт путь от корня проекта, без glob (`cli/src/predicates.ts`, `fileExists`): copilot — отдельным
+условием `has_file: apps/web/vercel.json` рядом с `vercel.json` и `.vercel`.
+
+**Status:** open — решено владельцем; склеить `--settings`, потом правило в профиле — работа основной сессии, итог
+infra-hq ⏰ 2026-12-02
+
 ## Next actions
 
 - [x] Код: `--hq`, метка, сессия, `agent.hq_args`, список, `--restore`, `vdx move`, `--check`; тема как первый промпт; тесты
@@ -396,6 +426,17 @@ intercom, отметка «сделан»), хук пропускает сжат
 - [ ] Тест: `metadata.version` копии рубрики в CLI (`cli/rubric/vdx-rubric.yaml`) совпадает с тегом в
       `DEFAULT_BASELINE` — копия стояла на 1.12.0, пока `DEFAULT_BASELINE` дошёл до v1.16.1, и никто не заметил
       (найдено 2026-11-21 при v1.17.0; содержимое совпадало, кроме версии)
+- [ ] Sidetrack #6: vdx склеивает значения `--settings` всех сработавших правил в один флаг; тест — два правила с
+      `--settings` дают один флаг с ключами обоих. Сделать до того, как в профиль войдёт второе правило с `--settings`
+- [x] Sidetrack #6: владелец решает, какие плагины включать каким классам проектов — 2026-11-25 «да, согласен»: vercel
+      только в проектах с `vercel.json` или `.vercel`, включая `limex-team/copilot` (`apps/web/vercel.json`); прочие
+      плагины — не решались
+- [ ] Sidetrack #6: правило профиля — vercel выключен везде, кроме проектов с `vercel.json`, `.vercel` или
+      `apps/web/vercel.json` (правило с `not`; проверить, что `has_file` видит папку `.vercel`). После склейки
+      `--settings` (пункт выше): правило в сете (minor), зеркало, `--dry-run` на m3 и lft — vercel есть в `pixer/shop`,
+      `pixer/admin`, `og-image-generator`, `limex-team/copilot` и нет в vdx; итог infra-hq — `reply` или `send
+      infra-hq … --reply-to vdx/vercel-plugin-by-project-class-outcome` ⏰ 2026-12-02; итог echelon — письмом в цепочку
+      `session-start-load-outcome-vdx`
 
 ## References
 

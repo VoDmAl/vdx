@@ -5,7 +5,7 @@ description: "Чтобы человек знал заранее, что сдел
 status: in-progress
 session-type: prd-prep
 created: 2026-10-30
-last-updated: 2026-11-17
+last-updated: 2026-11-24
 relates-to: ["[[vdx-ai/workitem|vdx-ai]]", "[[focused-topic/workitem|focused-topic]]"]
 ---
 
@@ -1555,6 +1555,22 @@ isEmpty(c) : started`) — только что запущенный первый
 На 2026-11-19 он всё ещё `queued`. Отменить предложено владельцу 2026-11-11, ответа не было.
 **Status:** open — решение владельца, отменять ли
 
+### #26. `vdx ai --list`: когда человек сказал последним и кто последний — полями, для листа штабов
+
+**Возникло в:** сессия intercom vdx на lft, письмо echelon `list-owner-last-turn` (2026-11-24).
+**Описание:** echelon просит у каждой строки `vdx ai --list` (идущей сессии и незапущенного разговора) два поля:
+момент последней реплики, которую набрал человек, и кто последний в разговоре — владелец, сессия (ход ассистента
+кончился текстом или вопросом) или работа идёт. Это для блока «Начато, не доведено» в листе дня штабов (навык whatsup
+echelon). Порог 16 часов и решение «не доведено» считает echelon, от vdx — только поля. Слово владельца — через штаб
+global-auth-gap 2026-11-24, «для всех штабов». Что есть: `readConversation` (`cli/src/conversations.ts`) уже проходит
+набранные реплики (`typed`, а `typedAt` — номер записи, не время); `userText` отбрасывает `isMeta` и
+`isCompactSummary`. Времени последней реплики и того, кто последний, в `Conversation` нет. **`--json` у `vdx ai` нет** —
+флаг есть только у `audit` и `doctor`, а письмо считает, что он есть. `--report` печатает JSON, но только по одной машине и
+для vdx на другой машине. Для сверки — правило echelon `chat_turns` в `runtime/echelon/mcp_server.py` их репо
+(`turnOrigin: human`, `queued_command` с `origin.kind: human`, без `isCompactSummary`, `isMeta`, `isSidechain`).
+**Status:** open — работа основной сессии vdx; срока нет (шаг кода echelon — после их выпуска листа с пунктами i и j
+`sheet-sync-on-full-pass`)
+
 ## Next actions
 
 - [x] DL #32, шаг 1 — места сессии по всем клиентам tmux — 2026-11-20: метка своей машины под `sshd` — не место,
@@ -1893,6 +1909,10 @@ isEmpty(c) : started`) — только что запущенный первый
       шёл. Остаётся `gh run delete 43096216592 -R VoDmAl/vdx` (из истории, без возврата) — по слову владельца —
       владелец: «Да удаляй без возврата»; `gh run delete` — HTTP 403 «Could not delete the workflow run», статус
       по-прежнему `queued`. Отменить и удалить GitHub не даёт; дальше — только поддержка GitHub, если мешать начнёт
+- [ ] см. Sidetrack #26 — `vdx ai --list`: у каждой строки время последней реплики человека и кто последний, и
+      `--json` к списку (сейчас его нет). Правило «реплики человека» сверить с `chat_turns` echelon. Итог echelon —
+      второе письмо после `list-owner-last-turn-outcome` (`send echelon … --reply-to vdx/list-owner-last-turn`): имена
+      полей в `--json` и версия vdx. Срока нет
 
 ## References
 
