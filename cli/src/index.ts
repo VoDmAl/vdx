@@ -279,6 +279,10 @@ of session only (0.67). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 machine shows it (0.61). Neither: nothing, exit 0; the session not running:
                 exit 4, the note stays (0.53) — while a restore brings that session
                 back after a reboot, the tab waits for it up to 3 minutes (0.59).
+                The link of vdx ai@<host> dropped under the attach (the machines
+                slept): in a cmux tab vdx waits for the machine to answer and goes
+                back into the same session by its mark, never a new one; Ctrl-C
+                leaves (0.71).
                 cmux types "cmux restore --surface" into a tab it brings back itself
                 (cmux 0.65): --tab reads that line off the terminal before it
                 attaches, up to 5 s, unless a restore typed the command

@@ -1225,8 +1225,9 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     // The vdx there reports on the project; an older one, or none — the script of live sessions.
     expect(asked()).toEqual([expect.stringMatching(/^vdx ai .* --report 2>\/dev\/null \|\| sh -c .*sessions/)]);
     expect(remoteRuns()).toHaveLength(1);
-    expect(remoteRuns()[0]!.slice(0, 2)).toEqual(['-t', 'm3']);
-    expect(remoteRuns()[0]![2]).toContain(`exec vdx ai ${root} --conversation ${ID.b}`);
+    // The attach's own ssh options first (restore-after-any-crash DL #10), then the terminal, the machine, the script.
+    expect(remoteRuns()[0]!.slice(-3, -1)).toEqual(['-t', 'm3']);
+    expect(remoteRuns()[0]!.at(-1)).toContain(`exec vdx ai ${root} --conversation ${ID.b}`);
   });
 
   it('Ctrl-D at the question starts nothing — it is a cancel, not "no terminal"', () => {
@@ -1332,7 +1333,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
     expect(answers).toHaveLength(1);
     expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\), and no terminal at your seat shows it/);
     expect(remoteRuns()).toHaveLength(1);
-    expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+    expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.c}`);
     expect(runs()).toEqual([]);
   });
 
@@ -1435,7 +1436,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(asked()).toEqual(['m3']); // never this machine
       expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\)/);
-      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+      expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.c}`);
       expect(runs()).toEqual([]);
     });
 
@@ -1526,7 +1527,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(runAi({ ...opts, path: root }, deps())).toBe(EXIT_OK);
       expect(text()).toMatch(/the only agent of .* runs on m3 \(proj@m3\)/);
       expect(remoteRuns()).toHaveLength(1);
-      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.c}`);
+      expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.c}`);
       expect(runs()).toEqual([]);
     });
 
@@ -1709,7 +1710,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
       expect(text()).toMatch(/3 {2}m3 +30 min ago +not here yet from m3 — continues there/);
       expect(text()).toMatch(/4 {2}m3 +40 min ago +unfinished/);
       expect(text()).toContain('note: 1 conversation not here yet from another machine (sync behind)');
-      expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+      expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.b}`);
       expect(runs()).toEqual([]);
     });
 
@@ -1848,7 +1849,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         answers = ['2@M3'];
         expect(runAi({ ...opts, path: root }, d())).toBe(EXIT_OK);
         expect(text()).toContain(`continuing on m3: lft  30 min ago  ${ID.b.slice(0, 8)}`);
-        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+        expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.b}`);
         expect(runs()).toHaveLength(1);
       });
 
@@ -1900,7 +1901,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         // Esc there is back to the list, not out of it.
         expect(shown[2]!.items).toEqual(shown[0]!.items);
         expect(shown).toHaveLength(4);
-        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.b}`);
+        expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.b}`);
         expect(runs()).toEqual([]);
       });
 
@@ -1935,7 +1936,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         expect(text()).toContain(
           `the copy of ${ID.a.slice(0, 8)} on lft is behind m3's by 3 KB — Syncthing has not brought it yet`,
         );
-        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.a}`);
+        expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.a}`);
         expect(runs()).toEqual([]);
         answers = ['n'];
         expect(runAi({ ...opts, path: root, conversation: ID.a, focused: true }, ahead())).toBe(EXIT_LAUNCH_FAILED);
@@ -1966,7 +1967,7 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
         expect(remoteRuns()).toEqual([]);
         expect(runAi({ ...opts, path: root, conversation: ID.a, yes: true }, ahead())).toBe(EXIT_OK);
         expect(text()).toContain('Continue it on m3 instead? [Y/n]: y (--yes)');
-        expect(remoteRuns()[0]![2]).toContain(`--conversation ${ID.a}`);
+        expect(remoteRuns()[0]!.at(-1)).toContain(`--conversation ${ID.a}`);
         expect(runs()).toEqual([]);
       });
 
@@ -3761,7 +3762,7 @@ describe.skipIf(!tmuxAvailable)('runAi in tmux (isolated server)', () => {
       );
       const calls: { script: string; noted: boolean }[] = [];
       const ssh = (args: string[]) => {
-        calls.push({ script: args[2]!, noted: fs.existsSync(record('SURF-5')) });
+        calls.push({ script: args.at(-1)!, noted: fs.existsSync(record('SURF-5')) });
         return { status: 0, stdout: '' };
       };
       expect(runAiTab('.', { ...inTab('SURF-5', tmux), ssh })).toBe(EXIT_OK);
@@ -5294,6 +5295,115 @@ describe('vdx ai@host', () => {
       0,
     );
     expect(said[0]).toMatch(/^→ m3: vdx ai \S+ --new --focused 'two words'$/);
+  });
+
+  // nas-info, 2026-11-25 (letter vdx-ai-reattach-after-ssh-drop): both stations slept past ssh's keepalive, and 11 cmux
+  // tabs `vdx ai@lft` on m3 were bare shells by the time the owner came back; his word: «Давай попробуем
+  // автоматически» (restore-after-any-crash Sidetrack #5, DL #10).
+  describe('the link drops under an attach: back into the same session once the machine answers', () => {
+    /**
+     * ssh as the steps say: an attach — whether its link came up (ssh then runs LocalCommand) and its code; a
+     * question to the machine — whether it answers.
+     */
+    const machine = (attaches: { up: boolean; status: number }[], answers: boolean[] = []) => {
+      const said: string[] = [];
+      const calls: { args: string[]; capture: boolean }[] = [];
+      let slept = 0;
+      const d = {
+        env: {},
+        home: '/h',
+        interactive: true,
+        version: '1.0.0',
+        log: (l: string) => said.push(l),
+        sleep: () => slept++,
+        ssh: (args: string[], capture: boolean) => {
+          calls.push({ args, capture });
+          if (capture) return { status: (answers.shift() ?? true) ? 0 : 255, stdout: '' };
+          const step = attaches.shift() ?? { up: true, status: 0 };
+          const local = args.find((a) => a.startsWith('LocalCommand=touch '));
+          if (step.up && local) {
+            // As the person's shell runs it: the path in its quotes.
+            spawnSync('sh', ['-c', local.slice('LocalCommand='.length)]);
+          }
+          return { status: step.status, stdout: '' };
+        },
+      } as unknown as AiDeps;
+      const scripts = () => calls.filter((c) => !c.capture).map((c) => c.args.at(-1)!);
+      return { d, said, calls, scripts, slept: () => slept };
+    };
+
+    it('a drop: asked until it answers, then `--tab` with the same mark — again after a second drop', () => {
+      const m = machine(
+        [
+          { up: true, status: 255 },
+          { up: true, status: 255 },
+          { up: true, status: 0 },
+        ],
+        [false, false, true, true],
+      );
+      expect(runAiRemote({ ...opts, path: '/h/p', focused: true, topic: 'docs' }, 'lft', m.d, 'm3', 'abc123')).toBe(
+        EXIT_OK,
+      );
+      const scripts = m.scripts();
+      expect(scripts).toHaveLength(3);
+      expect(scripts[0]).toMatch(/exec vdx ai \S+ --focused docs$/);
+      for (const back of scripts.slice(1)) {
+        expect(back).toContain('export VDX_AI_CMUX=abc123; ');
+        expect(back).toMatch(/exec vdx ai \S+ --tab$/);
+      }
+      // Asked until it answered: two that did not, with a wait after each.
+      expect(m.calls.filter((c) => c.capture).map((c) => c.args.at(-1))).toEqual(['true', 'true', 'true', 'true']);
+      expect(m.slept()).toBe(2);
+      expect(m.said).toContain(
+        '⚠ the link to lft dropped — waiting for lft to answer, then back into the same session; Ctrl-C leaves',
+      );
+      expect(m.said).toContain('↻ lft answers — back into the session this terminal showed');
+      // Its own keepalive, and the file LocalCommand touches is gone after each call.
+      const first = m.calls[0]!.args;
+      expect(first.slice(0, 4)).toEqual(['-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3']);
+      const file = first
+        .find((a) => a.startsWith('LocalCommand='))!
+        .slice('LocalCommand=touch '.length)
+        .replace(/^'|'$/g, '');
+      expect(fs.existsSync(path.dirname(file))).toBe(false);
+    });
+
+    it('no link at all (it sleeps at the start), a detach, an error there: as before — no wait', () => {
+      for (const step of [
+        { up: false, status: 255 },
+        { up: true, status: 0 },
+        { up: true, status: 4 },
+      ]) {
+        const m = machine([step]);
+        expect(runAiRemote({ ...opts, path: '/h/p' }, 'lft', m.d, 'm3', 'abc123')).toBe(step.status);
+        expect(m.scripts()).toHaveLength(1);
+        expect(m.calls.filter((c) => c.capture)).toEqual([]);
+      }
+    });
+
+    it('the session there is gone: the `--tab` there says so, and nothing new starts', () => {
+      const m = machine([
+        { up: true, status: 255 },
+        { up: true, status: 4 },
+      ]);
+      expect(runAiRemote({ ...opts, path: '/h/p' }, 'lft', m.d, 'm3', 'abc123')).toBe(EXIT_LAUNCH_FAILED);
+      expect(m.scripts()).toHaveLength(2);
+      expect(m.scripts()[1]).toMatch(/--tab$/);
+    });
+
+    it('without a mark (not a cmux tab) which session it showed is not known: one line with the way back', () => {
+      const m = machine([{ up: true, status: 255 }]);
+      expect(runAiRemote({ ...opts, path: '/h/p' }, 'lft', m.d, 'm3')).toBe(255);
+      expect(m.said).toContain('⚠ the link to lft dropped — its tmux session there goes on; back: vdx ai@lft /h/p');
+      expect(m.calls).toHaveLength(1);
+    });
+
+    it('no terminal (--detach, --dry-run, a script): no options of an attach, no wait', () => {
+      const m = machine([{ up: true, status: 255 }]);
+      expect(runAiRemote({ ...opts, path: '/h/p', detach: true }, 'lft', m.d, 'm3', 'abc123')).toBe(255);
+      expect(m.calls[0]!.args[0]).toBe('-T');
+      expect(m.calls).toHaveLength(1);
+    });
   });
 
   // nas-info, 2026-11-11 (letter ai-peer-inside-tmux-nests): `vdx ai@lft --hq` typed in a pane of global-auth-gap@m3-hq

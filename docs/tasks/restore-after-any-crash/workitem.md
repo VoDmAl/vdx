@@ -5,7 +5,7 @@ description: "одно действие (а лучше ни одного) воз
 status: in-progress
 session-type: brainstorm
 created: 2026-11-17
-last-updated: 2026-11-25
+last-updated: 2026-11-27
 ---
 
 # Один возврат после любого падения: cmux, tmux, машина
@@ -384,7 +384,9 @@ keepalive для `ssh-peers` — назвать им, поставят.
 не было»; ждать ответа соседа — `askMachineOver` с BatchMode по кругу; нужен ли свой короткий keepalive у attach,
 чтобы обрыв замечался не через 3 мин после пробуждения.
 
-**Status:** open
+**Status:** done — 2026-11-27, DL #10: `runAiRemote` — `attachSshOptions`, `awaitMachine`, круг `--tab`; живьём на
+m3 → lft: подставная сессия `vdx-probe` с меткой, убитый ssh — новый ssh с той же меткой и `--tab`, снова в ней;
+detach — код 0, без нового подключения
 
 ## Next actions
 
@@ -459,10 +461,10 @@ keepalive для `ssh-peers` — назвать им, поставят.
 
 ### Pending sidetracks
 
-- [ ] см. Sidetrack #5 — `vdx ai@<машина>` сам возвращается в сессию после обрыва ssh (код 255), по слову владельца
-      2026-11-25 «попробуем автоматически»
+- [x] см. Sidetrack #5 — `vdx ai@<машина>` сам возвращается в сессию после обрыва ssh (код 255), по слову владельца
+      2026-11-25 «попробуем автоматически» — 2026-11-27 (DL #10), выйдет в 0.71.0
 - [ ] Письмо nas-info с версией, в которой вкладка возвращается сама (`--reply-to vdx/vdx-ai-reattach-after-ssh-drop`),
-      и значения keepalive для их `ssh-peers`, если понадобятся — when: выпуск с Sidetrack #5; их ход после — проверка на
+      и значения keepalive для их `ssh-peers`, если понадобятся (DL #10: не нужны — у подключения vdx свой keepalive 10 × 3) — when: выпуск с Sidetrack #5; их ход после — проверка на
       m3 и lft и правка раздела «После обрыва ssh» в их `docs/features/shared-terminal.md`
 
 ## References

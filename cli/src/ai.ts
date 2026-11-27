@@ -2349,6 +2349,35 @@ function giveWayInTmux(opts: AiOptions, host: string, projectPath: string, deps:
   return EXIT_LAUNCH_FAILED;
 }
 
+/** How often a machine whose link dropped is asked whether it answers again (restore-after-any-crash DL #10). */
+const LINK_POLL_MS = 5_000;
+/** How long one such question may take. */
+const LINK_ASK_TIMEOUT_MS = 15_000;
+
+/**
+ * The ssh options of an attach at a terminal (restore-after-any-crash DL #10): a link gone dead is noticed within
+ * 30 s, as with a question to another machine, and `up` is touched here once the link is up — ssh runs
+ * LocalCommand only then — so a 255 after it is a drop, not a start that never reached the machine.
+ */
+function attachSshOptions(up: string | null): string[] {
+  return [
+    '-o',
+    'ServerAliveInterval=10',
+    '-o',
+    'ServerAliveCountMax=3',
+    ...(up ? ['-o', 'PermitLocalCommand=yes', '-o', `LocalCommand=touch ${shellQuote(up).replace(/%/g, '%%')}`] : []),
+  ];
+}
+
+/** Wait until `host` answers over ssh again: no count of tries — it may sleep for hours; Ctrl-C leaves. */
+function awaitMachine(host: string, deps: AiDeps): void {
+  for (;;) {
+    const res = askMachineOver(deps, host, 'true', LINK_ASK_TIMEOUT_MS);
+    if (!res || res.status === 0) return;
+    deps.sleep(LINK_POLL_MS);
+  }
+}
+
 /** `from` — where the person sits; a vdx that `vdx ai@<host>` started passes its own on. */
 export function runAiRemote(
   opts: AiOptions,
@@ -2377,7 +2406,52 @@ export function runAiRemote(
   const watch = token ? watchTopic(deps.env, { host, token }, deps.home) : null;
   const forget = token ? noteTab(deps, { kind: 'there', host, project: projectPath, token }) : () => {};
   if (token) reportTabDirectory(deps, projectPath);
-  const res = (deps.ssh ?? runSsh)(args, false);
+  // One attach, and whether its link came up: the file LocalCommand touches lives only while ssh runs.
+  const attach = (a: string[]) => {
+    if (!tty) return { res: (deps.ssh ?? runSsh)(a, false), up: false };
+    let dir: string | null = null;
+    try {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-link-'));
+    } catch {
+      /* no mark of the link: a drop is then not told from a refused start */
+    }
+    const up = dir ? path.join(dir, 'up') : null;
+    try {
+      const res = (deps.ssh ?? runSsh)([...attachSshOptions(up), ...a], false);
+      return { res, up: up !== null && fs.existsSync(up) };
+    } finally {
+      if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  let { res, up } = attach(args);
+  // The link was up and dropped — the machines slept, the network went — not the person leaving: back into the
+  // same session by this terminal's mark, once the machine answers; never a new one (restore-after-any-crash DL #10).
+  while (res?.status === 255 && up) {
+    if (!token) {
+      deps.log(
+        `⚠ the link to ${host} dropped — its tmux session there goes on; back: vdx ai@${host} ${shellQuote(projectPath)}`,
+      );
+      break;
+    }
+    deps.log(
+      `⚠ the link to ${host} dropped — waiting for ${host} to answer, then back into the same session; Ctrl-C leaves`,
+    );
+    awaitMachine(host, deps);
+    deps.log(`↻ ${host} answers — back into the session this terminal showed`);
+    const back: AiOptions = { path: opts.path, restart: false, fresh: false, detach: false, dryRun: false, tab: true };
+    ({ res, up } = attach(
+      remoteAiArgs({
+        host,
+        from,
+        projectPath,
+        home: deps.home,
+        version: deps.version ?? '',
+        opts: back,
+        tty,
+        cmuxToken: token,
+      }),
+    ));
+  }
   // As here: a refused attach there, or a dropped connection, keeps the tab's record.
   if (res?.status === EXIT_OK) forget();
   watch?.stop();

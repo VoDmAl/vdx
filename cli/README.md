@@ -134,7 +134,9 @@ The session's `{project}` is `[_.vdx] name` (or the older `[vdx]`) from the proj
 first file in the profile's `session.project_names` that has one, else the repo
 name. `vdx ai@<host>` runs the same command on `<host>` over ssh — that machine's vdx,
 profile and tmux, the path taken under its home directory, and a terminal that machine has no
-entry for (cmux's `xterm-ghostty`) as `xterm-256color` (0.61); `--detach` only
+entry for (cmux's `xterm-ghostty`) as `xterm-256color` (0.61). The link dropped under the attach (0.71: the
+machines slept, the network went) — in a cmux tab vdx waits for that machine to answer and goes back into the same
+session there, never a new one, Ctrl-C leaves; elsewhere one line names the way back; `--detach` only
 starts it, and not in a folder Claude Code does not trust yet: nobody would answer
 its trust window (exit 4; start once without `--detach`). The machine's own label (`$VDX_HOST`) runs here. Where git knows no
 commit author, `vdx ai` proposes one (Enter writes it into `.git/config`).
