@@ -98,8 +98,10 @@ export function planPass(input: {
   for (const tab of input.memory.tabs) {
     const s = byKey.get(tab.key);
     if (!input.workspaces.has(tab.id)) {
-      // The tab is gone and its session is the same one: the person closed it.
-      if (s) {
+      // The tab is gone and its session is the same one: the person closed it — when it showed the session. One that
+      // never attached was empty: closing it says nothing of the session (2026-11-28: eight such tabs closed after
+      // the first run were taken for the person's word, and their sessions got no tab again).
+      if (s && tab.seen) {
         closed.add(tab.key);
         closedByHand.push(tab);
       }

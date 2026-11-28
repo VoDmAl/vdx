@@ -110,9 +110,18 @@ describe('planPass: which sessions get a tab, which tabs go (DL #2, #3)', () => 
 
   it('the session ended: its tab closes; the tab gone while the session runs: closed by hand, and stays closed', () => {
     const s = session();
-    const tab = { id: 'W-1', ref: 'workspace:9', key: keyOf(s) };
+    const tab = { id: 'W-1', ref: 'workspace:9', key: keyOf(s), seen: true };
     const memory = { ...emptyMemory(), tabs: [tab] };
     expect(pass({ sessions: [], workspaces: new Set(['W-1']), memory }).close).toEqual([tab]);
+    // A tab that never showed its session, closed: it was empty — forgotten, and the session gets a tab again.
+    const empty = pass({
+      sessions: [s],
+      workspaces: new Set(),
+      memory: { ...emptyMemory(), tabs: [{ ...tab, seen: false }] },
+    });
+    expect(empty.closedByHand).toEqual([]);
+    expect(empty.memory.closed).toEqual([]);
+    expect(empty.memory.tabs).toEqual([]);
     const byHand = pass({ sessions: [s], workspaces: new Set(), memory });
     expect(byHand.closedByHand).toEqual([tab]);
     expect(byHand.memory.closed).toEqual([keyOf(s)]);
