@@ -127,6 +127,29 @@ workspace create --focus false --cwd <каталог сессии> --group <«tm
 **Implication:** модуль `cli/src/watch.ts`; `--report` о `~` — `created` и сессии intercom; флаг `vdx ai --watch`;
 строку `~/.zshrc` для nas-info назвать в итоге. Живая проверка — у владельца: вкладка cmux вне tmux,
 `npm run vdx -- ai --watch` из `cli/`.
+Вместо `--report` о `~` вышел свой лёгкий отчёт `vdx ai --sessions` (все сессии, intercom тоже, с `created`).
+
+### #4 / 2026-11-28 / Первый живой прогон: 9 вкладок, ни одна не подключилась — `=сессия` в zsh, PATH и TERM вкладки cmux
+
+**Source:** assistant
+**Basis:** observed
+**Basis-detail:** владелец 2026-11-28 запустил `npm run vdx -- ai --watch` (коммит `f8536f9`) во вкладке cmux на
+m3. `watch.json`: 9 вкладок (7 сессий m3 без терминала и две сессии intercom, поднятые за это время), а у сессий —
+0 клиентов, процессов `tmux attach -t …` нет. Воспроизведено в `script` с `env -i PATH=/usr/bin:/bin
+TERM=xterm-ghostty /bin/zsh -fc '<команда>'`: `command -v tmux` — нет, `infocmp xterm-ghostty` — нет, и
+`zsh:1: vdx-probe2 not found` — zsh берёт голое `=имя` за путь команды. С кавычками, путём tmux и поправкой TERM —
+клиент `xterm-256color` на пробной сессии. Комментарий в `tabCommand` (`cli/src/ai.ts`) уже говорил «the tab's PATH is
+cmux's» — я его не применил.
+**Context:** DL #3, п. 4: команда вкладки.
+**Why:** (1) `shellQuote` в `watch.ts` берёт в кавычки слово с `=` в начале — и здесь, и в скрипте для ssh (на lft
+тоже zsh). (2) tmux — по полному пути, найденному наблюдателем в своём PATH; ssh — `/usr/bin/ssh`. (3) `TERM`, которого
+нет в terminfo, — `xterm-256color`, и здесь. (4) Вкладка, чья сессия два прохода так и не показана здесь, — «не
+подключилась»: наблюдатель её закрывает и пробует снова через 5 мин, мёртвых вкладок не копит; показанная и потом
+нет — отключились в ней (detach), закрыть и помнить как закрытую руками. Тест на zsh (`zsh -fc`) падает со старой
+кавычкой; `sh -n` прежнего теста этого не видел.
+**Implication:** вторая живая проверка у владельца — сначала убрать 9 мёртвых вкладок первого прогона (Ctrl-C в
+наблюдателе, закрыть группу «tmux», запись `watch.json` — стереть), потом снова `--watch`. Урок — в памяти проекта
+`feedback-generated-sh-scripts`.
 
 ## Sidetracks
 

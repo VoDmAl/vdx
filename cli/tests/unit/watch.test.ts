@@ -90,6 +90,7 @@ describe('planPass: which sessions get a tab, which tabs go (DL #2, #3)', () => 
       workspaces: new Set(),
       memory: emptyMemory(),
       warm: true,
+      now: 1_000_000,
       ...over,
     });
 
@@ -147,27 +148,85 @@ describe('planPass: which sessions get a tab, which tabs go (DL #2, #3)', () => 
     expect(p.memory.unshown).toEqual({ [keyOf(there)]: 1 });
   });
 
-  it('a session with a tab of the watcher is not opened twice, though the tab was detached', () => {
-    const s = session();
-    const memory = {
-      ...emptyMemory(),
-      tabs: [{ id: 'W-1', ref: 'workspace:9', key: keyOf(s) }],
-      unshown: { [keyOf(s)]: 5 },
-    };
-    const p = pass({ sessions: [s], workspaces: new Set(['W-1']), memory });
-    expect(p.open).toEqual([]);
-    expect(p.memory.unshown).toEqual({});
+  it('a new tab has two passes to attach: its session is not opened twice meanwhile; never shown — closed, retried later', () => {
+    const s0 = session();
+    const tab = { id: 'W-1', ref: 'workspace:9', key: keyOf(s0) };
+    const ws = new Set(['W-1']);
+    const p1 = pass({ sessions: [s0], workspaces: ws, memory: { ...emptyMemory(), tabs: [tab] } });
+    expect(p1.open).toEqual([]);
+    expect(p1.close).toEqual([]);
+    const p2 = pass({ sessions: [s0], workspaces: ws, memory: p1.memory });
+    expect(p2.failed).toEqual([expect.objectContaining({ id: 'W-1' })]);
+    expect(p2.close).toEqual(p2.failed);
+    expect(p2.memory.closed).toEqual([]);
+    // Not opened again at once — after RETRY_MS.
+    let m = p2.memory;
+    for (let i = 0; i < 3; i++) {
+      const p = pass({ sessions: [s0], memory: m, now: 1_000_000 + i * 5_000 });
+      expect(p.open).toEqual([]);
+      m = p.memory;
+    }
+    const later = pass({ sessions: [s0], memory: { ...m, unshown: { [keyOf(s0)]: 1 } }, now: 1_000_000 + 301_000 });
+    expect(later.open).toEqual([s0]);
+  });
+
+  it('shown in its tab, then no longer: detached there — closed, and not opened again while the session is the same', () => {
+    const s0 = session();
+    const tab = { id: 'W-1', ref: 'workspace:9', key: keyOf(s0) };
+    const ws = new Set(['W-1']);
+    const shown = pass({
+      sessions: [{ ...s0, openAt: ['m3'] }],
+      workspaces: ws,
+      memory: { ...emptyMemory(), tabs: [tab] },
+    });
+    expect(shown.memory.tabs).toEqual([{ ...tab, seen: true, passes: 0 }]);
+    const left = pass({ sessions: [s0], workspaces: ws, memory: shown.memory });
+    expect(left.detached).toEqual([expect.objectContaining({ id: 'W-1' })]);
+    expect(left.close).toEqual(left.detached);
+    expect(left.memory.closed).toEqual([keyOf(s0)]);
+    expect(pass({ sessions: [s0], memory: { ...left.memory, unshown: { [keyOf(s0)]: 5 } } }).open).toEqual([]);
   });
 });
 
 describe('attachCommand: a plain tmux attach with the seat’s mark', () => {
   it('here — tmux; another machine — through ssh -t, a terminal it does not know as xterm-256color; valid sh', () => {
-    const here = attachCommand(session({ session: "it's@m3" }), 'm3', 'm3', 'VDX_AI_SEAT');
-    expect(here).toBe(`exec env VDX_AI_SEAT=m3 tmux attach -t '=it'\\''s@m3'`);
-    const there = attachCommand(session({ machine: 'lft', session: 'proj@lft' }), 'm3', 'm3', 'VDX_AI_SEAT');
-    expect(there).toMatch(/^exec ssh -t lft '/);
-    expect(there).toContain('export TERM=xterm-256color; export VDX_AI_SEAT=m3; exec tmux attach -t =proj@lft');
+    // A tab cmux opens has cmux's PATH: tmux and ssh by their paths; cmux's TERM is unknown to tmux (2026-11-28).
+    const here = attachCommand(session({ session: "it's@m3" }), 'm3', 'm3', 'VDX_AI_SEAT', '/opt/homebrew/bin/tmux');
+    expect(here).toBe(
+      `infocmp "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color; exec env VDX_AI_SEAT=m3 /opt/homebrew/bin/tmux attach -t '=it'\\''s@m3'`,
+    );
+    const there = attachCommand(session({ machine: 'lft', session: 'proj@lft' }), 'm3', 'm3', 'VDX_AI_SEAT', '/x/tmux');
+    expect(there).toMatch(/^exec \/usr\/bin\/ssh -t lft '/);
+    expect(there).toContain(
+      `export TERM=xterm-256color; export VDX_AI_SEAT=m3; exec tmux attach -t '\\''=proj@lft'\\''`,
+    );
     for (const line of [here, there]) expect(spawnSync('sh', ['-n', '-c', line]).status).toBe(0);
+  });
+});
+
+// The owner's first run in cmux, 2026-11-28: nine tabs, and not one attached — zsh, the shell of a cmux tab, took the
+// bare `=main@m3` of `tmux attach -t =main@m3` for the path of a command «main@m3»: «main@m3 not found».
+describe.skipIf(spawnSync('zsh', ['-fc', 'true']).status !== 0)('attachCommand in zsh, the shell that runs it', () => {
+  it('the target reaches tmux as =<session>, here and in the script for the other machine', () => {
+    const words = (line: string) =>
+      spawnSync(
+        'zsh',
+        ['-fc', line.replace(/exec env /, 'print -r -- env ').replace(/exec tmux /, 'print -r -- tmux ')],
+        {
+          encoding: 'utf8',
+        },
+      );
+    const here = words(attachCommand(session(), 'm3', 'm3', 'VDX_AI_SEAT', '/opt/homebrew/bin/tmux'));
+    expect(here.stderr).toBe('');
+    expect(here.stdout.trim()).toBe('env VDX_AI_SEAT=m3 /opt/homebrew/bin/tmux attach -t =proj@m3');
+    // The other machine's script, as its shell gets it from ssh.
+    const there = attachCommand(session({ machine: 'lft', session: 'proj@lft' }), 'm3', 'm3', 'VDX_AI_SEAT', '/x/tmux');
+    const script = spawnSync('zsh', ['-fc', `print -r -- ${there.replace(/^exec \/usr\/bin\/ssh -t lft /, '')}`], {
+      encoding: 'utf8',
+    }).stdout.trim();
+    const remote = words(script);
+    expect(remote.stderr).toBe('');
+    expect(remote.stdout.trim()).toBe('tmux attach -t =proj@lft');
   });
 });
 
@@ -183,6 +242,7 @@ describe('watch: one watcher, its group, its passes (with cmux, tmux and ssh as 
     seat: 'm3',
     machines: ['m3', 'lft'],
     seatVar: 'VDX_AI_SEAT',
+    tmux: '/opt/homebrew/bin/tmux',
     passMs: 5_000,
     remoteEvery: 3,
     warmMs: 0,
@@ -244,7 +304,7 @@ describe('watch: one watcher, its group, its passes (with cmux, tmux and ssh as 
       '--group',
       'workspace_group:5',
       '--command',
-      expect.stringMatching(/^exec ssh -t lft '.*exec tmux attach -t =proj@lft'$/),
+      expect.stringMatching(/^exec \/usr\/bin\/ssh -t lft '.*exec tmux attach -t .*=proj@lft.*'$/),
     ]);
     expect(creates[0]).not.toContain('--name');
     expect(said.some((l) => l.includes('proj@lft: no terminal here showed it'))).toBe(true);

@@ -25,6 +25,10 @@ export interface WatchTab {
   id: string;
   ref: string;
   key: string;
+  /** A terminal of this seat showed its session since the tab opened: the attach took. */
+  seen?: boolean;
+  /** Passes since it opened with no terminal of this seat on its session. */
+  passes?: number;
 }
 
 /** What the watcher keeps between its passes and its runs: its tabs, the tabs closed by hand, sessions not shown yet. */
@@ -34,6 +38,8 @@ export interface WatchMemory {
   closed: string[];
   /** Passes in a row a session has gone with no terminal of this seat on it. */
   unshown: Record<string, number>;
+  /** Sessions whose tab did not attach: not opened again before this moment, ms. */
+  retryAt?: Record<string, number>;
 }
 
 export const emptyMemory = (): WatchMemory => ({ tabs: [], closed: [], unshown: {} });
@@ -46,6 +52,10 @@ const machineOfKey = (key: string): string => key.split('\t')[0] ?? '';
 
 /** Passes in a row with no terminal of this seat before a session gets a tab: a start attaches within one. */
 const UNSHOWN_PASSES = 2;
+/** Passes a new tab has to show its session; after them, the attach did not take. */
+const ATTACH_PASSES = 2;
+/** A tab whose attach did not take is opened again after this long, not at once — no tab after tab. */
+const RETRY_MS = 300_000;
 
 /**
  * One pass, decided from what the machines and cmux said (DL #3). A machine that did not answer says nothing: its
@@ -62,24 +72,51 @@ export function planPass(input: {
   workspaces: Set<string>;
   memory: WatchMemory;
   warm: boolean;
-}): { open: WatchedSession[]; close: WatchTab[]; closedByHand: WatchTab[]; memory: WatchMemory } {
+  now: number;
+}): {
+  open: WatchedSession[];
+  close: WatchTab[];
+  closedByHand: WatchTab[];
+  /** Its session was shown, then no longer: detached in it — closed, and remembered as closed by hand. */
+  detached: WatchTab[];
+  /** It never showed its session: the attach did not take — closed, opened again after RETRY_MS. */
+  failed: WatchTab[];
+  memory: WatchMemory;
+} {
   const answered = new Set(input.answered);
   const byKey = new Map(input.sessions.map((s) => [keyOf(s), s]));
   const known = (key: string) => answered.has(machineOfKey(key));
   const tabs: WatchTab[] = [];
   const close: WatchTab[] = [];
   const closedByHand: WatchTab[] = [];
+  const detached: WatchTab[] = [];
+  const failed: WatchTab[] = [];
   const closed = new Set(input.memory.closed);
+  const retryAt: Record<string, number> = {};
+  for (const [key, at] of Object.entries(input.memory.retryAt ?? {}))
+    if (at > input.now && !(known(key) && !byKey.has(key))) retryAt[key] = at;
   for (const tab of input.memory.tabs) {
-    const alive = byKey.has(tab.key);
+    const s = byKey.get(tab.key);
     if (!input.workspaces.has(tab.id)) {
       // The tab is gone and its session is the same one: the person closed it.
-      if (alive) {
+      if (s) {
         closed.add(tab.key);
         closedByHand.push(tab);
       }
-    } else if (known(tab.key) && !alive) close.push(tab);
-    else tabs.push(tab);
+    } else if (known(tab.key) && !s) close.push(tab);
+    else if (!s) tabs.push(tab);
+    else if (s.openAt.includes(input.seat)) tabs.push({ ...tab, seen: true, passes: 0 });
+    else if (tab.seen) {
+      // Shown, then no longer: detached in it — the person's leaving, as a tab closed by hand.
+      close.push(tab);
+      detached.push(tab);
+      closed.add(tab.key);
+    } else if ((tab.passes ?? 0) + 1 >= ATTACH_PASSES) {
+      // Never shown: the attach in it did not take — no dead tab left; tried again later.
+      close.push(tab);
+      failed.push(tab);
+      retryAt[tab.key] = input.now + RETRY_MS;
+    } else tabs.push({ ...tab, passes: (tab.passes ?? 0) + 1 });
   }
   // A session that ended, or was started again, is a new one: what was closed of the old one is forgotten.
   for (const key of [...closed]) if (known(key) && !byKey.has(key)) closed.delete(key);
@@ -88,14 +125,14 @@ export function planPass(input: {
   const open: WatchedSession[] = [];
   for (const s of input.sessions) {
     const key = keyOf(s);
-    if (s.openAt.includes(input.seat) || withTab.has(key) || closed.has(key)) continue;
+    if (s.openAt.includes(input.seat) || withTab.has(key) || closed.has(key) || retryAt[key] !== undefined) continue;
     const passes = (input.memory.unshown[key] ?? 0) + 1;
     if (passes >= UNSHOWN_PASSES && input.warm) open.push(s);
     else unshown[key] = passes;
   }
   // The count of a machine that did not answer stays as it was.
   for (const [key, n] of Object.entries(input.memory.unshown)) if (!known(key)) unshown[key] = n;
-  return { open, close, closedByHand, memory: { tabs, closed: [...closed], unshown } };
+  return { open, close, closedByHand, detached, failed, memory: { tabs, closed: [...closed], unshown, retryAt } };
 }
 
 /** The `id` and `ref` of each workspace in the output of `cmux workspace list --json` (cmux 0.65). */
@@ -136,20 +173,25 @@ export function findGroup(out: string, name: string): { ref: string; members: st
   }
 }
 
-const shellQuote = (s: string) => (/^[A-Za-z0-9_./:=@%+-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+// A word that starts with `=` is quoted: zsh, the shell of a cmux tab and of ssh there, takes a bare `=name` for the
+// path of the command `name` — `tmux attach -t =main@m3` failed with «main@m3 not found» (2026-11-28).
+const shellQuote = (s: string) =>
+  /^[A-Za-z0-9_./:@%+-][A-Za-z0-9_./:=@%+-]*$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
  * What the tab of `s` runs: a plain `tmux attach` with this seat's mark, so the session counts as shown here and
- * carries no `@vdx_stays` (п. 2, п. 4); another machine's — through `ssh -t`, a terminal unknown there as
- * `xterm-256color`, as `vdx ai@` does. `exec`: the tab's shell gives way to it, and a detach ends the terminal.
+ * carries no `@vdx_stays` (п. 2, п. 4); another machine's — through `ssh -t`, as `vdx ai@` does. A tab cmux opens
+ * with a command has cmux's PATH, not the person's shell's: tmux and ssh go by their paths here (`tmux` — the one
+ * the watcher found). A terminal tmux has no entry for — cmux's `xterm-ghostty` — is `xterm-256color`, here and
+ * there. `exec`: the tab's shell gives way to it, and a detach ends the terminal.
  */
-export function attachCommand(s: WatchedSession, here: string, seat: string, seatVar: string): string {
-  const attach = `tmux attach -t ${shellQuote(`=${s.session}`)}`;
-  if (s.machine === here) return `exec env ${seatVar}=${shellQuote(seat)} ${attach}`;
-  const there =
-    `infocmp "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color; ` +
-    `export ${seatVar}=${shellQuote(seat)}; exec ${attach}`;
-  return `exec ssh -t ${shellQuote(s.machine)} ${shellQuote(there)}`;
+export function attachCommand(s: WatchedSession, here: string, seat: string, seatVar: string, tmux: string): string {
+  const term = `infocmp "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color; `;
+  const target = shellQuote(`=${s.session}`);
+  if (s.machine === here)
+    return `${term}exec env ${seatVar}=${shellQuote(seat)} ${shellQuote(tmux)} attach -t ${target}`;
+  const there = `${term}export ${seatVar}=${shellQuote(seat)}; exec tmux attach -t ${target}`;
+  return `exec /usr/bin/ssh -t ${shellQuote(s.machine)} ${shellQuote(there)}`;
 }
 
 export interface WatchDeps {
@@ -175,6 +217,8 @@ export interface WatchConfig {
   machines: string[];
   /** The variable whose value is the seat in a tmux client's environment (`VDX_AI_SEAT`). */
   seatVar: string;
+  /** tmux here, by its path: a tab cmux opens has cmux's PATH. */
+  tmux: string;
   /** Between passes; another machine is asked every `remoteEvery` passes. */
   passMs: number;
   remoteEvery: number;
@@ -315,13 +359,19 @@ export function watch(config: WatchConfig, deps: WatchDeps): number {
       workspaces: new Set(list.map((w) => w.id)),
       memory,
       warm: deps.now() - started >= config.warmMs,
+      now: deps.now(),
     });
     memory = plan.memory;
     for (const tab of plan.closedByHand)
       deps.log(`  ${label(tab.key)}: tab closed — not opened again while the session is the same one`);
+    for (const tab of plan.detached)
+      deps.log(`  ${label(tab.key)}: detached in its tab — closed, not opened again while the session is the same one`);
+    for (const tab of plan.failed)
+      deps.log(`  ✗ ${label(tab.key)}: its tab did not attach — closed; tried again in ${RETRY_MS / 60_000} min`);
+    const quiet = new Set([...plan.detached, ...plan.failed]);
     for (const tab of plan.close) {
       deps.cmux(['workspace', 'close', tab.ref]);
-      deps.log(`  ${label(tab.key)}: the session ended — its tab closed`);
+      if (!quiet.has(tab)) deps.log(`  ${label(tab.key)}: the session ended — its tab closed`);
     }
     for (const s of plan.open) {
       const args = [
@@ -333,7 +383,7 @@ export function watch(config: WatchConfig, deps: WatchDeps): number {
         group,
         ...(s.machine === config.here && s.path && isDir(s.path) ? ['--cwd', s.path] : []),
         '--command',
-        attachCommand(s, config.here, config.seat, config.seatVar),
+        attachCommand(s, config.here, config.seat, config.seatVar, config.tmux),
       ];
       const res = deps.cmux(args);
       const ref = res.status === 0 ? parseCreated(res.out) : null;

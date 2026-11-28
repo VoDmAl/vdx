@@ -5437,6 +5437,20 @@ function watchedSessionsThere(deps: AiDeps, host: string, machines: string[]): W
   }
 }
 
+/** tmux by its path, from this shell's PATH: a tab cmux opens with a command has cmux's PATH (`tabCommand`). */
+function tmuxPath(env: NodeJS.ProcessEnv): string {
+  for (const dir of (env['PATH'] ?? '').split(path.delimiter)) {
+    if (!dir) continue;
+    try {
+      fs.accessSync(path.join(dir, 'tmux'), fs.constants.X_OK);
+      return path.join(dir, 'tmux');
+    } catch {
+      /* keep looking */
+    }
+  }
+  return 'tmux';
+}
+
 /**
  * `vdx ai --watch`: the cmux tab that gives every tmux session of the machines no terminal here shows a tab of its
  * own (crystal cmux-sidebar-all-tmux-sessions, DL #2, #3). Only in a cmux tab outside tmux: cmux answers its own tabs.
@@ -5468,6 +5482,7 @@ export function runAiWatch(deps: AiDeps, passes?: number, detach = false): numbe
       seat: seatLabel(deps.env),
       machines: all,
       seatVar: SEAT_MARK_ENV_VAR,
+      tmux: tmuxPath(deps.env),
       passMs: 5_000,
       remoteEvery: 3,
       warmMs: 30_000,
