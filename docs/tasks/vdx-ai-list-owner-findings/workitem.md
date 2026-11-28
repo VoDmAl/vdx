@@ -2,7 +2,7 @@
 title: "Список `vdx ai`: шесть расхождений, найденных владельцем 26.11"
 slug: vdx-ai-list-owner-findings
 description: "Чинит в списке vdx ai продолжение focused, «завершён», кто запустил, HQ-разговоры и выбор машины"
-status: ready
+status: done
 session-type: other
 created: 2026-11-26
 last-updated: 2026-11-27
@@ -232,7 +232,8 @@ start's flag») — читать до этого. Тема — опция пан
       vdx/sidebar-agent-started-icon` — последнее звено цепочки, DL #4): версия с пунктами, имя опции tmux из п. 3 —
       2026-11-27 `nas-info/vdx-ai-list-findings-0-70-0`: 0.70.0 (`70581f0`, на m3 и lft) с пп. 1–4, `@vdx_by`; их мяч —
       🤖 в заголовке cmux; их сессия intercom поднята на m3
-- [ ] Итог п. 5 nas-info — письмом в цепочку `nas-info/vdx-ai-list-findings-0-70-0` после выпуска с ним
+- [x] Итог п. 5 nas-info — письмом в цепочку `nas-info/vdx-ai-list-findings-0-70-0` после выпуска с ним — 2026-11-27
+      `nas-info/vdx-ai-list-findings-0-71-0`: 0.71.0 (`0f1f69e`), мяч — nobody, closed; их сессия intercom поднята на m3
 
 ## References
 
