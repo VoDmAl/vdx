@@ -466,7 +466,7 @@ detach — код 0, без нового подключения
 - [x] Письмо nas-info с версией, в которой вкладка возвращается сама (`--reply-to vdx/vdx-ai-reattach-after-ssh-drop`),
       и значения keepalive для их `ssh-peers`, если понадобятся (DL #10: не нужны — у подключения vdx свой keepalive 10 × 3) — when: выпуск с Sidetrack #5; их ход после — проверка на
       m3 и lft и правка раздела «После обрыва ssh» в их `docs/features/shared-terminal.md` — 2026-11-27: `nas-info/vdx-ai-reattach-after-ssh-drop-0-71-0` (0.71.0, `0f1f69e`; keepalive не трогать), их сессия intercom поднята на m3; их мяч — проверка на m3 и lft, правка раздела
-- [ ] 0.71.0 на lft — when: lft отвечает по ssh (2026-11-27 13:2x — нет); check: `ssh lft vdx --version` — 0.71.0, после `ssh lft npm update -g @vodmal/vdx-cli --prefer-online`; затем строка CLI в `HANDOFF.md`
+- [x] 0.71.0 на lft — 2026-11-27 20:2x, `vdx --version` 0.71.0 — when: lft отвечает по ssh (2026-11-27 13:2x — нет); check: `ssh lft vdx --version` — 0.71.0, после `ssh lft npm update -g @vodmal/vdx-cli --prefer-online`; затем строка CLI в `HANDOFF.md`
 
 ## References
 
