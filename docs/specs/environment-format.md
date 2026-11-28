@@ -997,6 +997,22 @@ CONVERSATIONS NOBODY RUNS · 5 newest of up to 59
 агент — `vdx ai <путь> --conversation <id>` (подключает к нему) на его машине (`vdx
 ai@<машина>` для другой), разговор — то же для продолжения; у HQ-сессии — её `--hq`.
 
+`--list --json` (с 0.72; письмо echelon `list-owner-last-turn`, лист штабов «Начато, не доведено», кристалл
+`vdx-ai-predictable`, Sidetrack #26) — те же строки одним объектом JSON для программы: `vdx`, `project`, `machine`
+(где шёл список), `seat`, `silent` (машины, что не ответили); `agents` — идущие агенты всех машин (`machine`,
+`session`, `pid`, `conversation`, `state` — `working` | `waiting` | `draft` | `empty` | `finished` | `idle`, `mode` —
+`focused` | `hq` | `intercom` | null, `by`, `topic`, `title`, `openAt`, `command`); `conversations` — все разговоры,
+которые никто не ведёт, как их показывает `a` (`id`, `machine`, `updated`, `state` — `unfinished` | `finished` |
+`left-after-look` | `behind`, `mode` — `focused` | `hq` | null, `by`, `topic`, `title`, `command`). У строк обоих
+видов — `lastPersonTurnAt` (ISO): когда человек последний раз сказал что-то в разговоре — ход, который харнесс метит
+его (`turnOrigin: human`, `queued_command` с `origin.kind: human`), без сводки компакции, `isMeta` и подагентов;
+первый промпт старта, который сделал агент (`@vdx_by`) или письмо (сессия intercom), — не его; транскрипт до этих
+меток — последний набранный промпт; и `lastTurnBy` — `person` (после его хода ответа нет), `session` (ход сессии
+после) или `working` (агент посреди хода); null — ни того, ни другого. Порог «давно» и вывод «не доведено» — у
+echelon. Читается каждый транскрипт: echelon, 385 файлов, — 7–8 с на m3 против 2 с у `--list`. `--json` — только
+с `--list` (не с `--find`), иначе код 2. Большой вывод выходит целым и через трубу: vdx выходит, когда stdout его
+принял (до 0.72 `--report` и вывод больше 64 КБ резались по размеру буфера трубы).
+
 (\*) Новый разговор, которого человек не выбрал в списке, при агенте проекта
 на другой машине — только после «да» (выше, «Какой разговор продолжается»).
 

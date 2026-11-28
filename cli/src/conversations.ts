@@ -91,6 +91,15 @@ export interface Conversation {
   /** Prompts the person typed: not a `!` command, a hook's text or a channel event. */
   typed: number;
   /**
+   * When the person last said something in it — a turn the harness marks theirs (`turnOrigin: human`, or a
+   * command they queued), never a compaction's summary, a meta entry or a subagent's; a start an agent made
+   * (`@vdx_by`, an intercom session) does not count its opening prompt. A transcript from before the harness
+   * marked turns: its last typed prompt. Null — nothing of theirs (vdx-ai-predictable Sidetrack #26).
+   */
+  personAt?: Date | null;
+  /** Who spoke last: the person (no answer after their turn) or the session (its turn came after); null — nobody yet. */
+  lastBy?: 'person' | 'session' | null;
+  /**
    * A wrap skill (`session.wrap_skills` of the profile) ran, and nothing was typed after it —
    * at most the `!` command it handed over: the conversation is done (vdx-ai-predictable DL #3).
    */
@@ -250,6 +259,14 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
   // Where the last wrap ran and the last prompt was typed: an order of entries, not of clocks.
   let wrapAt = -1;
   let typedAt = -1;
+  // The person's last turn and the session's last word (vdx-ai-predictable Sidetrack #26): entry numbers, and the
+  // clock of that turn. A start an agent made gives its opening prompt as the person's: it is passed over once.
+  let personLine = -1;
+  let personAt: Date | null = null;
+  let typedClock: Date | null = null;
+  let marked = false;
+  let opening = false;
+  let sessionLine = -1;
   const wraps = new Set(wrapSkills);
   let n = 0;
   for (const line of text.split('\n')) {
@@ -264,7 +281,12 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     const isTurn = isUser && !line.includes('"tool_result"');
     const isSkill = wraps.size > 0 && line.includes('"name":"Skill"');
     const isClose = line.includes('"name":"Bash"') && line.includes('close');
-    if (!isHook && !isTitle && !isTurn && !isSkill && !isClose) continue;
+    // The session's word: an assistant entry of this conversation, not a subagent's; counted, not read.
+    if (line.includes('"type":"assistant"') && !line.includes('"type":"user"') && !line.includes('"isSidechain":true'))
+      sessionLine = n;
+    const isHuman =
+      line.includes('"turnOrigin":"human"') || (line.includes('"queued_command"') && line.includes('"human"'));
+    if (!isHook && !isTitle && !isTurn && !isSkill && !isClose && !isHuman) continue;
     let entry: unknown;
     try {
       entry = JSON.parse(line);
@@ -274,6 +296,28 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     const type = at(entry, 'type');
     const title = str(at(entry, 'aiTitle'));
     const prompt = str(at(entry, 'lastPrompt'));
+    const clock = (): Date | null => {
+      const t = Date.parse(str(at(entry, 'timestamp')) ?? '');
+      return Number.isNaN(t) ? null : new Date(t);
+    };
+    // The person's turn, as the harness marks it: a prompt, a command, one queued while the agent worked.
+    const human =
+      (type === 'user' &&
+        at(entry, 'turnOrigin') === 'human' &&
+        at(entry, 'isMeta') !== true &&
+        at(entry, 'isCompactSummary') !== true &&
+        at(entry, 'isSidechain') !== true) ||
+      (type === 'attachment' &&
+        at(entry, 'attachment', 'type') === 'queued_command' &&
+        at(entry, 'attachment', 'origin', 'kind') === 'human');
+    if (human) {
+      marked = true;
+      if (opening) opening = false;
+      else {
+        personLine = n;
+        personAt = clock() ?? personAt;
+      }
+    }
     if (type === 'user') {
       entrypoint ??= str(at(entry, 'entrypoint'));
       const said = userText(entry);
@@ -285,6 +329,7 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
       else if (!command && !said.startsWith('<')) {
         typed++;
         typedAt = n;
+        typedClock = clock();
       }
     } else if (type === 'assistant') {
       const skill = skillRun(entry);
@@ -303,6 +348,8 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
           hq = part.includes(HQ_LINE_PREFIX);
           // The same start's: a start the person made says nothing, and an earlier agent's mark goes.
           by = (part.match(STARTED_BY_RE)?.[1] as 'hq' | 'letter' | 'agent' | undefined) ?? null;
+          // Its opening prompt is the agent's or the letter's, though the harness marks it the person's.
+          opening = by !== null || mail;
         }
         topic = part.match(TOPIC_LINE_RE)?.[1] ?? topic;
       }
@@ -310,6 +357,11 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
   }
   if (!turns) return null;
   const id = path.basename(file, '.jsonl');
+  // Before the harness marked turns: the last prompt typed.
+  if (!marked && typedAt >= 0) {
+    personLine = typedAt;
+    personAt = typedClock;
+  }
   return {
     id,
     updated,
@@ -322,6 +374,8 @@ export function readConversation(file: string, updated: Date, wrapSkills: readon
     topic,
     bornClear,
     typed,
+    personAt,
+    lastBy: personLine < 0 && sessionLine < 0 ? null : sessionLine > personLine ? 'session' : 'person',
     finished: wrapAt > typedAt,
     automated: entrypoint?.startsWith('sdk') === true,
   };

@@ -80,6 +80,7 @@ import {
   replyLine,
   skillLine,
   startedOn,
+  turnLine,
   userLine,
   writeConversation,
   writeHistory,
@@ -1922,6 +1923,49 @@ describe('vdx ai picks the conversation to continue (Claude Code)', () => {
           'that agent runs — Enter attaches to it; only a conversation nobody runs goes on on another machine',
         );
       });
+    });
+
+    // echelon's sheet of the HQs, «Начато, не доведено» (letter list-owner-last-turn; vdx-ai-predictable Sidetrack #26).
+    it("--list --json: the list's rows for a program, with the person's last turn and who spoke last", () => {
+      withWrap();
+      const t1 = '2026-11-27T10:00:00.000Z';
+      writeConversation(
+        path.join(home, 'cc'),
+        root,
+        ID.a,
+        [startedOn('lft'), turnLine('go', t1), replyLine('done')],
+        30,
+      );
+      conv(ID.b, 'm3', 60); // from before the harness marked turns, with no clock
+      const d = report({ agents: [agentThere({ status: 'busy', conversation: ID.c })] });
+      expect(runAi({ ...opts, path: root, list: true, json: true }, d)).toBe(EXIT_OK);
+      expect(logs.filter((l) => l.startsWith('{'))).toHaveLength(1);
+      const json = JSON.parse(logs.find((l) => l.startsWith('{'))!) as {
+        machine: string;
+        seat: string;
+        silent: string[];
+        agents: Record<string, unknown>[];
+        conversations: Record<string, unknown>[];
+      };
+      expect(json).toMatchObject({ machine: 'lft', seat: 'lft', silent: [] });
+      expect(json.agents).toEqual([
+        expect.objectContaining({
+          machine: 'm3',
+          session: 'proj@m3',
+          conversation: ID.c,
+          state: 'working',
+          lastTurnBy: 'working',
+        }),
+      ]);
+      expect(json.agents[0]!['command']).toMatch(new RegExp(`^vdx ai@m3 \\S+ --conversation ${ID.c}$`));
+      expect(
+        json.conversations.map((c) => [c['id'], c['machine'], c['state'], c['lastTurnBy'], c['lastPersonTurnAt']]),
+      ).toEqual([
+        [ID.a, 'lft', 'unfinished', 'session', t1],
+        [ID.b, 'm3', 'unfinished', 'person', null],
+      ]);
+      // Nothing else on stdout: a program reads it whole.
+      expect(text()).not.toContain('CONVERSATIONS NOBODY RUNS');
     });
 
     // The same check for a start that names its conversation (vdx-ai-list-owner-findings П. 5, DL #8).

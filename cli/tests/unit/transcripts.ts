@@ -56,6 +56,34 @@ export const toolResultLine = (text: string) =>
     message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: text }] },
   });
 export const titleLine = (text: string) => JSON.stringify({ type: 'ai-title', aiTitle: text });
+/**
+ * A turn as the harness files it since it marks whose turns are whose: `turnOrigin` and `origin.kind` — `human`
+ * for what the person typed, `task_notification` for a background task's news (fields as in a transcript of
+ * 2026-11-27).
+ */
+export const turnLine = (text: string, at: string, origin = 'human') =>
+  JSON.stringify({
+    type: 'user',
+    isSidechain: false,
+    message: { role: 'user', content: text },
+    timestamp: at,
+    turnOrigin: origin,
+    origin: { kind: origin === 'task_notification' ? 'task-notification' : origin },
+  });
+/** What the person typed while the agent worked: Claude Code files it as a queued command first. */
+export const queuedLine = (text: string, at: string) =>
+  JSON.stringify({
+    type: 'attachment',
+    isSidechain: false,
+    timestamp: at,
+    attachment: {
+      type: 'queued_command',
+      prompt: text,
+      commandMode: 'prompt',
+      origin: { kind: 'human' },
+      timestamp: at,
+    },
+  });
 export const startedOn = (machine: string) =>
   hookLine(`${machineLine(machine)}; the agent in this project is started with \`vdx ai\``);
 

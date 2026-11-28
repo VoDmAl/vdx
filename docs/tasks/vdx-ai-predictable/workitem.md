@@ -1568,8 +1568,8 @@ global-auth-gap 2026-11-24, «для всех штабов». Что есть: `
 флаг есть только у `audit` и `doctor`, а письмо считает, что он есть. `--report` печатает JSON, но только по одной машине и
 для vdx на другой машине. Для сверки — правило echelon `chat_turns` в `runtime/echelon/mcp_server.py` их репо
 (`turnOrigin: human`, `queued_command` с `origin.kind: human`, без `isCompactSummary`, `isMeta`, `isSidechain`).
-**Status:** open — работа основной сессии vdx; срока нет (шаг кода echelon — после их выпуска листа с пунктами i и j
-`sheet-sync-on-full-pass`)
+**Status:** done — 2026-11-27: `--list --json` с `lastPersonTurnAt` и `lastTurnBy` (`readConversation`,
+`listJson` в `boardStart`); итог echelon — после выпуска (Next actions)
 
 ### #27. Строка старта и скилл `vdx-ai`: новую задачу открывают `--focused --prompt`, голый `vdx ai` продолжает
 
@@ -1932,10 +1932,13 @@ the last one»), а в терминале голый `vdx ai` может спе�
       шёл. Остаётся `gh run delete 43096216592 -R VoDmAl/vdx` (из истории, без возврата) — по слову владельца —
       владелец: «Да удаляй без возврата»; `gh run delete` — HTTP 403 «Could not delete the workflow run», статус
       по-прежнему `queued`. Отменить и удалить GitHub не даёт; дальше — только поддержка GitHub, если мешать начнёт
-- [ ] см. Sidetrack #26 — `vdx ai --list`: у каждой строки время последней реплики человека и кто последний, и
-      `--json` к списку (сейчас его нет). Правило «реплики человека» сверить с `chat_turns` echelon. Итог echelon —
-      второе письмо после `list-owner-last-turn-outcome` (`send echelon … --reply-to vdx/list-owner-last-turn`): имена
-      полей в `--json` и версия vdx. Срока нет
+- [x] см. Sidetrack #26 — `vdx ai --list`: у каждой строки время последней реплики человека и кто последний, и
+      `--json` к списку (сейчас его нет). Правило «реплики человека» сверить с `chat_turns` echelon — 2026-11-27:
+      `--list --json`, поля `lastPersonTurnAt` и `lastTurnBy` (`person` | `session` | `working`); правило — как
+      `chat_turns` (`turnOrigin: human`, `queued_command` с `origin.kind: human`), первый промпт старта агента или
+      письма не в счёт; заодно вывод больше 64 КБ через трубу выходит целым (`exitFlushed`, тест: 65536 байт до правки)
+- [ ] Итог echelon — второе письмо после `list-owner-last-turn-outcome` (`send echelon … --reply-to
+      vdx/list-owner-last-turn`): имена полей в `--json` и версия vdx — when: выпуск с Sidetrack #26 (0.72)
 - [ ] см. Sidetrack #27 — строка старта (`cli/src/ai.ts`) и `description` скилла `vdx-ai`: новая задача —
       `vdx ai '<root>' --focused "<тема>" --prompt "<что сделать>"`, голый `vdx ai` продолжает последний разговор.
       Итог mkrivosheeva.ru — `reply vdx-ai-hint-new-task-line --slug vdx-ai-hint-new-task-line-outcome-2` (письмо в

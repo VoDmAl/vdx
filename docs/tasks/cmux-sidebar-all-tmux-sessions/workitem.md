@@ -2,10 +2,10 @@
 title: "Все сессии tmux в сайдбаре cmux: вкладка-наблюдатель"
 slug: cmux-sidebar-all-tmux-sessions
 description: "Открывает вкладку cmux для каждой сессии tmux на m3 и lft, которую сейчас не показывает ни одна вкладка"
-status: ready
+status: in-progress
 session-type: other
 created: 2026-11-26
-last-updated: 2026-11-26
+last-updated: 2026-11-27
 relates-to: ["[[restore-after-any-crash/workitem|restore-after-any-crash]]", "[[focused-topic/workitem|focused-topic]]", "[[intercom-session-mode/workitem|intercom-session-mode]]", "[[vdx-ai-predictable/workitem|vdx-ai-predictable]]"]
 ---
 
@@ -77,6 +77,22 @@ cmux слева выводить все сессии tmux … Или вот ко
 правками. Статус `ready` не занимает место активного.
 **Implication:** основная сессия берёт кристалл в работу (`in-progress`) или переносит пункты в другой кристалл.
 
+### #2 / 2026-11-27 / Ответы владельца: все сессии, своя вкладка, закрытая — до нового старта сессии, своя группа
+
+**Source:** owner
+**Basis:** observed
+**Basis-detail:** основная сессия vdx на m3, 2026-11-27, четыре вопроса с рекомендацией; на m3 тогда 7 из 12 сессий без
+клиента (`main@m3`, `nas-info@m3-3`, четыре `t23b-program`, `vdx@m3-2`). Владелец выбрал рекомендованное в каждом:
+«All sessions», «Its own tab», «When the session restarts», «A group of their own».
+**Context:** п. 1 оставлял сессии без агента на вопрос; Sidetrack #1 — как живёт наблюдатель; Sidetrack #2 — до какого
+события помнить закрытую вкладку; место вкладок в сайдбаре письмо не называло.
+**Why:** слово владельца.
+**Implication:** (1) Все сессии tmux m3 и lft, с агентом и без (`main@m3`, `gitolite-admin@lft`). (2) Своя вкладка
+«tmux» с `vdx ai --watch`; после перезапуска cmux её поднимает строка `~/.zshrc` от nas-info, как `vdx-tab` — строку
+назвать им в итоге (Sidetrack #1). (3) Закрытая руками вкладка помнится, пока сессия та же: новый старт сессии (другое
+время создания) или её конец снимают память (Sidetrack #2). (4) Вкладки наблюдателя — в своей группе cmux «tmux»
+(`new-workspace --group`), вкладки человека остаются где были.
+
 ## Sidetracks
 
 ### #1. Запуск наблюдателя — ключ vdx или строка в `~/.zshrc`
@@ -85,6 +101,7 @@ cmux слева выводить все сессии tmux … Или вот ко
 **Описание:** наблюдатель должен жить во вкладке cmux и пережить перезапуск cmux. Варианты: своя вкладка, которую
 поднимает строка в `~/.zshrc` (блок ставит модуль nas-info `ansible/modules/vdx.sh`, как `vdx-tab`), или работа внутри
 уже идущего `vdx ai --tab`. nas-info просит назвать строку, если она нужна.
+Решено DL #2: своя вкладка, строка в `~/.zshrc` — nas-info.
 
 **Status:** open
 

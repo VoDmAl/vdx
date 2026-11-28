@@ -99,6 +99,7 @@ import {
   type AgentFact,
   type SessionFact,
   agentLabel,
+  agentState,
   type Board,
   clip,
   buildBoard,
@@ -1193,6 +1194,8 @@ export interface AiOptions {
   attach?: string;
   /** `--list`: the list of a plain start, printed; nothing is asked or started. */
   list?: boolean;
+  /** `--json` with `--list`: the same rows as JSON, for a program — echelon's sheet (vdx-ai-predictable Sidetrack #26). */
+  json?: boolean;
   /** `--find <phrase>`: the list of the conversations whose replies have it (vdx-ai-predictable P5). */
   find?: string;
   /** `--tab`: back into the session this cmux tab showed before cmux restarted (vdx-ai-predictable DL #19). */
@@ -2161,6 +2164,7 @@ function remoteFlags(opts: AiOptions): string[] {
     opts.detach && '--detach',
     opts.dryRun && '--dry-run',
     opts.list && '--list',
+    opts.json && '--json',
     opts.find !== undefined && `--find ${shellQuote(opts.find)}`,
     opts.conversation && `--conversation ${shellQuote(opts.conversation)}`,
     opts.tab && '--tab',
@@ -3081,6 +3085,8 @@ function boardStart(
    * picker, and what `r` brings back.
    */
   lostWords: { footnotes: string[]; restoreDetail: string[]; what?: string } = { footnotes: [], restoreDetail: [] },
+  /** `--list --json`: the rows as JSON instead of the list. */
+  json = false,
 ): BoardOutcome {
   const k = conversationContext(plan, deps, wrapSkills);
   const here = agentFacts(local, plan, deps, procs, wrapSkills, modeOf);
@@ -3479,6 +3485,71 @@ function boardStart(
       ...look,
     });
   };
+  // `--list --json` (vdx-ai-predictable Sidetrack #26): the same rows for a program — echelon's sheet of what was
+  // begun and not finished. The conversations are every one nobody runs, as `a` shows them; both kinds carry when the
+  // person last said something and who spoke last, from the copy of the transcript here.
+  const listJson = () => {
+    const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+    const turns = (c: Conversation | null) => ({
+      lastPersonTurnAt: iso(c?.personAt),
+      lastTurnBy: (c?.lastBy ?? null) as 'person' | 'session' | 'working' | null,
+    });
+    const marked = new Map(k.all.map((c) => [c.id, c]));
+    return {
+      vdx: deps.version ?? null,
+      project: plan.project,
+      machine: plan.host,
+      seat: plan.seat,
+      silent: [...k.reach].filter(([, r]) => r === null).map(([m]) => m),
+      agents: agents.map((a) => {
+        const state = agentState(a);
+        const t = turns(conversationOf(a));
+        return {
+          machine: a.machine,
+          session: a.session,
+          pid: a.pid,
+          conversation: a.conversation,
+          state,
+          mode: a.mail ? 'intercom' : a.hq ? 'hq' : a.focused ? 'focused' : null,
+          by: a.by ?? null,
+          topic: a.topic,
+          title: a.title,
+          openAt: a.openAt,
+          lastPersonTurnAt: t.lastPersonTurnAt,
+          lastTurnBy: state === 'working' ? 'working' : t.lastTurnBy,
+          command: reachOf({ kind: 'agent', agent: a }),
+        };
+      }),
+      conversations: everyOne()
+        .map((c) => marked.get(c.id) ?? c)
+        .filter((c) => !isEmpty(c) && !busy.has(c.id))
+        .map((c) => {
+          const m = machineOf(c);
+          return {
+            id: c.id,
+            machine: m,
+            updated: c.updated.toISOString(),
+            state: behind.has(c.id)
+              ? 'behind'
+              : c.finished
+                ? 'finished'
+                : c.leftAfterLook
+                  ? 'left-after-look'
+                  : 'unfinished',
+            mode: c.hq ? 'hq' : c.topic !== null ? 'focused' : null,
+            by: c.by ?? null,
+            topic: c.topic,
+            title: c.title,
+            ...turns(c),
+            command: reachOf({ kind: 'conversation', conversation: c, machine: m }),
+          };
+        }),
+    };
+  };
+  if (mode === 'print' && json) {
+    deps.out(JSON.stringify(listJson()) + '\n');
+    return { kind: 'listed' };
+  }
   if (mode === 'print') {
     const b = find !== undefined ? search(find, true) : make(5);
     if (typeof b === 'string') deps.out(b + '\n');
@@ -5655,6 +5726,7 @@ export function runAi(opts: AiOptions, given: AiDeps, selfPid: number = process.
         ],
         what: restoreWhat,
       },
+      opts.json === true,
     );
     switch (outcome.kind) {
       case 'listed':

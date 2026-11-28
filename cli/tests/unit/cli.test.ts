@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { projectDirName } from '../../src/conversations.ts';
 
 const CLI_ROOT = path.resolve(__dirname, '..', '..');
 const BIN = path.join(CLI_ROOT, 'bin', 'vdx.cjs');
@@ -29,6 +30,41 @@ describe('vdx --version', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('vdx --version');
   });
+});
+
+// On macOS a pipe takes Node's writes asynchronously, and `process.exit` right after a large write cuts it: the JSON of
+// `vdx ai --list --json` for echelon came cut at 55 KB (2026-11-27), and `--report` — 50 KB there — is read over ssh
+// the same way: cut, it would read as a machine with an older vdx.
+describe('vdx ai output through a pipe comes whole', () => {
+  it('--report of a project with many transcripts', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vdx-pipe-')));
+    try {
+      const root = path.join(dir, 'proj');
+      fs.mkdirSync(root);
+      const transcripts = path.join(dir, 'cc', 'projects', projectDirName(root));
+      fs.mkdirSync(transcripts, { recursive: true });
+      // ~75 bytes of the report each: 1500 of them are well past a pipe's 64 KB.
+      for (let i = 0; i < 1500; i++)
+        fs.writeFileSync(
+          path.join(transcripts, `${i.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000.jsonl`),
+          '{"type":"user"}\n',
+        );
+      const profile = path.join(dir, 'env.yaml');
+      fs.writeFileSync(profile, 'schema_version: "0.1"\nagent:\n  command: claude\nsession: {multiplexer: none}\n');
+      const r = vdxEnv(
+        { VDX_ENVIRONMENT: profile, CLAUDE_CONFIG_DIR: path.join(dir, 'cc'), VDX_HOST: 'm3', TMUX_TMPDIR: dir },
+        'ai',
+        root,
+        '--report',
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout.length).toBeGreaterThan(70_000);
+      const report = JSON.parse(r.stdout) as { transcripts: unknown[] };
+      expect(report.transcripts).toHaveLength(1500);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe('vdx ai --help and unknown options', () => {
@@ -208,6 +244,8 @@ describe('every command: --help, unknown options, stray arguments', () => {
       [['init', '.', 'extra'], 'unexpected argument extra'],
       [['audit', '--stack'], '--stack needs a value'],
       [['init', '--baseline', '--dry-run'], '--baseline needs a value'],
+      [['ai', '--json'], '--json goes with --list'],
+      [['ai', '--list', '--json', '--find', 'x'], '--json goes with --list (not --find)'],
     ] as const) {
       const r = inDir(...args);
       expect(r.status, args.join(' ')).toBe(2);

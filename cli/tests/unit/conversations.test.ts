@@ -5,6 +5,8 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   bashCallLine,
+  queuedLine,
+  turnLine,
   bashLine,
   commandLine,
   compactLine,
@@ -426,6 +428,64 @@ describe('left after a look: /clear long after the last word (vdx-ai-predictable
 
   it('no history.jsonl: nothing', () => {
     expect(historyMarks({}, home, new Set([ID.a])).size).toBe(0);
+  });
+});
+
+// echelon's sheet of the HQs, «Начато, не доведено» (letter list-owner-last-turn): when the person last said
+// something, and who spoke last (vdx-ai-predictable Sidetrack #26).
+describe("readConversation: the person's last turn and who spoke last", () => {
+  let config: string;
+  let root: string;
+  beforeEach(() => {
+    config = tmpDir('vdx-turns-cc-');
+    root = tmpDir('vdx-turns-root-');
+  });
+  afterEach(() => {
+    fs.rmSync(config, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const read = (lines: string[]) => readConversation(writeConversation(config, root, ID.a, lines, 1), new Date())!;
+  const t1 = '2026-11-27T10:00:00.000Z';
+  const t2 = '2026-11-27T11:00:00.000Z';
+
+  it("the person's turn, the session's answer after it; a background task's news is not the person's", () => {
+    const c = read([
+      startedOn('m3'),
+      turnLine('go', t1),
+      replyLine('done'),
+      turnLine('<task-notification>', t2, 'task_notification'),
+    ]);
+    expect(c.personAt?.toISOString()).toBe(t1);
+    expect(c.lastBy).toBe('session');
+    // Typed last, with nothing after it: the person's word is the last.
+    const typed = read([startedOn('m3'), turnLine('go', t1), replyLine('done'), queuedLine('and this', t2)]);
+    expect(typed.personAt?.toISOString()).toBe(t2);
+    expect(typed.lastBy).toBe('person');
+  });
+
+  it("a start an agent made: its opening prompt is not the person's; their own word after it is", () => {
+    const byHq = hookLine(
+      `${machineLine('m3')}; …\n${STARTED_BY_LINE_PREFIX} the project's HQ session (\`@vdx_by\` hq), not by the user.`,
+    );
+    const c = read([byHq, turnLine('Задача от HQ-сессии: шаг 5', t1), replyLine('сделано')]);
+    expect(c.by).toBe('hq');
+    expect(c.personAt).toBeNull();
+    expect(c.lastBy).toBe('session');
+    const joined = read([byHq, turnLine('Задача от HQ-сессии', t1), replyLine('сделано'), turnLine('а ещё вот', t2)]);
+    expect(joined.personAt?.toISOString()).toBe(t2);
+    expect(joined.lastBy).toBe('person');
+  });
+
+  it("a compaction's summary is not the person's; a transcript from before the marks — its last typed prompt", () => {
+    const c = read([startedOn('m3'), turnLine('go', t1), replyLine('ok'), compactLine('Summary of the conversation')]);
+    expect(c.personAt?.toISOString()).toBe(t1);
+    const old = read([
+      startedOn('m3'),
+      JSON.stringify({ type: 'user', timestamp: t1, message: { role: 'user', content: 'old style' } }),
+      replyLine('ok'),
+    ]);
+    expect(old.personAt?.toISOString()).toBe(t1);
+    expect(old.lastBy).toBe('session');
   });
 });
 

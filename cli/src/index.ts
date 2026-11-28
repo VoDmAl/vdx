@@ -230,7 +230,14 @@ of session only (0.67). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 the machines (0.65): NOT OPEN HERE first — what no terminal at this
                 seat shows — then RUNNING NOW, then OTHER TMUX SESSIONS (a shell, an
                 agent outside ~); a session's row only attaches to it, as it is
-                (vdx ai --attach <session>), and the terminals on it stay
+                (vdx ai --attach <session>), and the terminals on it stay.
+                --json (0.72): the same rows as one JSON object, for a program:
+                agents (machine, session, conversation, state, mode, by, topic,
+                title, openAt, command) and every conversation nobody runs (id,
+                machine, updated, state, mode, by, topic, title, command); each with
+                lastPersonTurnAt — when you last said something in it (a turn the
+                harness marks yours; the opening prompt of a start an agent made is
+                not) — and lastTurnBy: person, session, or working for an agent mid-turn
   --find <phrase>
                 Claude Code: the list of the project's conversations whose replies
                 — yours and the agent's — have the phrase, with the text around it:
@@ -588,7 +595,7 @@ where it could be, and named.
   },
   ai: {
     usage:
-      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] [--prompt <text>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
+      'vdx ai[@host] [project_path] [--new | --conversation <id> | --find <phrase>] [--focused [<topic>] [--prompt <text>] | --intercom | --hq] [--restart] [--detach] [-y | --yes | --no-input] [--dry-run | --list [--json]] | vdx ai --restore [--forget] [--dry-run] | vdx ai --tab',
     help: AI_HELP,
     // `--resume` asked to continue in 0.12; continuing is the default now.
     bools: [
@@ -603,6 +610,7 @@ where it could be, and named.
       'forget',
       'close',
       'list',
+      'json',
       'report',
       'restore',
       'state',
@@ -1023,6 +1031,16 @@ function cmdDoctor(opts: ParsedArgs): void {
   if (report.missing > 0) process.exit(2);
 }
 
+/**
+ * Exit once stdout has taken everything written to it. On macOS a pipe takes Node's writes asynchronously, and
+ * `process.exit` right after a large write cut it at the pipe's 64 KB: `vdx ai --list --json` of echelon came cut,
+ * and `--report`, read over ssh, would read as a machine with an older vdx. A terminal or a file is written at once,
+ * and the callback comes at once.
+ */
+function exitFlushed(code: number): void {
+  process.stdout.write('', () => process.exit(code));
+}
+
 function cmdAi(opts: ParsedArgs): void {
   if (opts.flags.check === true) {
     // About the session this runs in — there is nothing to start, and no other machine. The vdx
@@ -1098,7 +1116,8 @@ function cmdAi(opts: ParsedArgs): void {
       );
       process.exit(2);
     }
-    process.exit(runAiReport(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
+    exitFlushed(runAiReport(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
+    return;
   }
   if (opts.flags.close === true || opts.flags.waiting !== undefined) {
     // Run inside the intercom session, about that session: nothing to start, no other machine.
@@ -1138,6 +1157,10 @@ function cmdAi(opts: ParsedArgs): void {
     process.stderr.write('vdx ai: --find takes a phrase to search for: --find "a piece of the screen"\n');
     process.exit(2);
   }
+  if (opts.flags.json === true && (opts.flags.list !== true || find !== undefined)) {
+    process.stderr.write('vdx ai: --json goes with --list (not --find): vdx ai [project_path] --list --json\n');
+    process.exit(2);
+  }
   if (conversation !== undefined && opts.flags.new === true) {
     process.stderr.write('vdx ai: --new and --conversation ask for different conversations — pick one\n');
     process.exit(2);
@@ -1164,6 +1187,7 @@ function cmdAi(opts: ParsedArgs): void {
     intercom: opts.flags.intercom === true,
     hq: opts.flags.hq === true,
     list: opts.flags.list === true,
+    json: opts.flags.json === true,
     find: find?.trim(),
     // `--attach <session>`: the row of a session in the list of `~` — attaches to it, starts nothing (DL #32).
     attach: typeof opts.flags.attach === 'string' ? opts.flags.attach : undefined,
@@ -1182,7 +1206,8 @@ function cmdAi(opts: ParsedArgs): void {
       process.exit(runAiRemote(options, host, deps));
     }
   }
-  process.exit(runAi(options, deps));
+  // The list, its JSON and a plan go to stdout: out whole before the exit.
+  exitFlushed(runAi(options, deps));
 }
 
 /** What vdx move, take and shelve run with: this terminal, ssh to the profile's machines, the agent's restart. */
