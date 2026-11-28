@@ -49,6 +49,8 @@ import {
   runAiClose,
   runAiTab,
   runAiReport,
+  runAiSessions,
+  runAiWatch,
   runAiRemote,
   defaultDeps,
   hostLabel,
@@ -297,6 +299,18 @@ of session only (0.67). Hand a person \`vdx ai\`, not \`<agent> --<flag>\`.
                 In a cmux tab, vdx ai tells cmux the project directory while it
                 holds the attach (0.61). The terminal tmux gets is the tab's own
                 device, even when the caller hands /dev/tty (0.59)
+  --watch       in a cmux tab of its own, outside tmux (0.72): every tmux session of
+                the machines (session.machines) that no terminal at your seat shows
+                gets a tab, without focus, in the cmux group tmux — this tab is its
+                head — attached with a plain tmux attach (through ssh -t for another
+                machine), so tmux's title reaches the sidebar; a session that ended
+                has its tab closed; a tab you close is not opened again while its
+                session is the same one. Waits 30 s after it starts, while cmux
+                brings its own tabs back. One per machine: a second one says where
+                the first runs. --detach: for a line in ~/.zshrc — the watcher's tab
+                (VDX_WATCH=1) once, nothing while one runs. Ctrl-C ends the watch
+  --sessions    for the watcher of another machine, over ssh: every tmux session
+                here, as JSON — when it was created, its folder, who shows it
   --report      for the vdx of another machine, over ssh: this machine on the project,
                 as JSON — what runs here, what its terminals show, its transcripts
   --check       for the agent's own session: how the agent here is launched,
@@ -612,6 +626,8 @@ where it could be, and named.
       'list',
       'json',
       'report',
+      'sessions',
+      'watch',
       'restore',
       'state',
       'tab',
@@ -1117,6 +1133,21 @@ function cmdAi(opts: ParsedArgs): void {
       process.exit(2);
     }
     exitFlushed(runAiReport(opts.positionals[0] ?? '.', { ...defaultDeps(), version: readCliVersion() }));
+    return;
+  }
+  if (opts.flags.sessions === true || opts.flags.watch === true) {
+    // `--sessions`: what the watcher of another machine asks over ssh. `--watch`: the watcher itself, in its cmux tab.
+    const flag = opts.flags.watch === true ? 'watch' : 'sessions';
+    // `--watch --detach`: the line in `~/.zshrc` — the watcher's tab, once.
+    const others = Object.keys(opts.flags).filter((f) => f !== flag && !(flag === 'watch' && f === 'detach'));
+    if (others.length > 0 || opts.positionals.length > 0 || opts.cmd !== 'ai') {
+      process.stderr.write(
+        `vdx ai: --${flag} takes no project path and no other flag${flag === 'watch' ? ' but --detach' : ''}\n`,
+      );
+      process.exit(2);
+    }
+    const deps = { ...defaultDeps(), version: readCliVersion() };
+    exitFlushed(flag === 'watch' ? runAiWatch(deps, undefined, opts.flags.detach === true) : runAiSessions(deps));
     return;
   }
   if (opts.flags.close === true || opts.flags.waiting !== undefined) {

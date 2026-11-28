@@ -117,6 +117,7 @@ import {
 import { fzfPick, type PickerAnswer, type PickerInput, rowsWidth } from './picker.ts';
 import { awaitReach, reach } from './reach.ts';
 import { dequeue, enqueue, intercomLimit, lettersSessions, queued } from './intercom-queue.ts';
+import { startWatch, watch, type WatchedSession } from './watch.ts';
 
 /**
  * `vdx ai` — start the person's agent in a project, with the flags their
@@ -5379,6 +5380,112 @@ function sessionFactsHere(deps: AiDeps, host: string): SessionFact[] {
       command: command ?? '',
       openAt: clients.filter((c) => c.session === name).map((c) => clientSeat(c.pid, procs, host)),
     }));
+}
+
+/**
+ * Every tmux session here — intercom sessions too — with when it was created, its folder and the seats whose
+ * terminals show it: what `vdx ai --sessions` answers and the watcher reads (cmux-sidebar-all-tmux-sessions DL #3).
+ * No tmux, or no server: none.
+ */
+function watchedSessionsHere(deps: AiDeps, host: string): WatchedSession[] {
+  if (!deps.tmux.available()) return [];
+  const out = deps.tmux.tryRun(['list-sessions', '-F', '#{session_name}\t#{session_created}\t#{session_path}']) ?? '';
+  const procs = deps.processes();
+  const clients = deps.tmux.clients();
+  const owners = new Map((deps.addresses ?? ownAddresses)().map((ip) => [ip, host] as const));
+  return nameSeats(
+    out
+      .split('\n')
+      .map((l) => l.split('\t'))
+      .filter(([name]) => name)
+      .map(([name, created, dir]) => ({
+        machine: host,
+        session: name!,
+        created: Number(created) || 0,
+        path: dir || null,
+        openAt: clients.filter((c) => c.session === name).map((c) => clientSeat(c.pid, procs, host)),
+      })),
+    owners,
+  );
+}
+
+/** `vdx ai --sessions`: this machine's tmux sessions as JSON — the watcher of another machine asks for it over ssh. */
+export function runAiSessions(deps: AiDeps): number {
+  const host = hostLabel(deps.env);
+  deps.out(
+    JSON.stringify({ vdx: deps.version ?? '', machine: host, sessions: watchedSessionsHere(deps, host) }) + '\n',
+  );
+  return EXIT_OK;
+}
+
+/** Another machine's sessions by its `vdx ai --sessions`; null — it did not answer, or its vdx has no such report. */
+function watchedSessionsThere(deps: AiDeps, host: string, machines: string[]): WatchedSession[] | null {
+  const res = askMachineOver(deps, host, 'vdx ai --sessions 2>/dev/null', 15_000);
+  if (!res || res.status !== 0) return null;
+  try {
+    const parsed = JSON.parse(res.stdout) as { sessions?: WatchedSession[] };
+    if (!Array.isArray(parsed.sessions)) return null;
+    // `?` there — a terminal over ssh from a machine nothing names: with two machines, it is the other one.
+    const others = machines.filter((m) => !sameMachine(m, host));
+    return parsed.sessions.map((x) => ({
+      ...x,
+      machine: host,
+      openAt: x.openAt.map((seat) => (seat === '?' && others.length === 1 ? others[0]! : seat)),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `vdx ai --watch`: the cmux tab that gives every tmux session of the machines no terminal here shows a tab of its
+ * own (crystal cmux-sidebar-all-tmux-sessions, DL #2, #3). Only in a cmux tab outside tmux: cmux answers its own tabs.
+ */
+export function runAiWatch(deps: AiDeps, passes?: number, detach = false): number {
+  if (!cmuxSurface(deps.env)) {
+    deps.log(
+      `vdx ai --watch: runs in a cmux tab of its own, outside tmux — cmux answers only its own tabs` +
+        (deps.env['TMUX'] ? ' (this is a tmux pane)' : ''),
+    );
+    return EXIT_USAGE;
+  }
+  const stateFile = path.join(deps.home, '.local', 'state', 'vdx', 'watch.json');
+  const cmux = deps.cmux ?? runCmux(deps.env);
+  // From a line in `~/.zshrc`: the watcher's tab, once; nothing while it runs.
+  if (detach) return startWatch({ cmux, log: deps.log, stateFile, pidAlive, now: Date.now });
+  const here = hostLabel(deps.env);
+  let machines: string[] = [];
+  try {
+    const profile = resolveEnvironmentPath(deps.env, deps.home);
+    if (profile) machines = loadEnvironment(profile).session?.machines ?? [];
+  } catch {
+    // a profile that does not read: this machine alone
+  }
+  const all = [here, ...machines.filter((m) => !sameMachine(m, here))];
+  return watch(
+    {
+      here,
+      seat: seatLabel(deps.env),
+      machines: all,
+      seatVar: SEAT_MARK_ENV_VAR,
+      passMs: 5_000,
+      remoteEvery: 3,
+      warmMs: 30_000,
+      passes,
+    },
+    {
+      cmux,
+      local: () => watchedSessionsHere(deps, here),
+      remote: (host) => watchedSessionsThere(deps, host, all),
+      log: deps.log,
+      sleep: deps.sleep,
+      now: Date.now,
+      // Beside the cmux tabs' records (tabs.ts): this machine's, not synced.
+      stateFile,
+      pidAlive,
+      pid: process.pid,
+    },
+  );
 }
 
 /** `this session runs Claude Code 2.1.294 — 2.1.304 is installed; plugins updated since it loaded them: vdm 2.54.0`. */
